@@ -35,7 +35,7 @@ rustup toolchain install nightly
 rustup target add wasm32-unknown-unknown
 
 # Start the dev server
-trunk serve
+trunk serve web/index.html
 ```
 
 Open [http://localhost:8080](http://localhost:8080).
