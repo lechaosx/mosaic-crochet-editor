@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mosaic Crochet</title>
+  <link data-trunk rel="rust" data-no-hash />
+  <link data-trunk rel="css" href="style.css" />
+  <link data-trunk rel="copy-file" href="main.js" />
+</head>
+<body>
+  <aside id="sidebar">
+    <div class="control-group">
+      <label>Mode</label>
+      <select id="mode">
+        <option value="row">Row</option>
+        <option value="round">Round</option>
+      </select>
+    </div>
+
+    <div id="row-controls">
+      <div class="control-group">
+        <label>Width  <input type="number" id="width"  value="16" min="2" max="64"></label>
+        <label>Height <input type="number" id="height" value="16" min="2" max="64"></label>
+      </div>
+    </div>
+
+    <div id="round-controls" hidden>
+      <div class="control-group">
+        <label>Sub-mode
+          <select id="sub-mode">
+            <option value="full">Full</option>
+            <option value="half">Half</option>
+            <option value="quarter">Quarter</option>
+          </select>
+        </label>
+        <label>Inner Width  <input type="number" id="inner-width"  value="3" min="0" max="32"></label>
+        <label>Inner Height <input type="number" id="inner-height" value="3" min="0" max="32"></label>
+        <label>Rounds       <input type="number" id="rounds"       value="5" min="1" max="32"></label>
+      </div>
+    </div>
+
+    <button id="apply">New Pattern</button>
+    <hr>
+    <div class="control-group">
+      <label>Tool</label>
+      <div class="tool-buttons">
+        <button id="tool-pencil" class="tool active" title="Pencil (P)">✏️</button>
+        <button id="tool-fill"   class="tool"        title="Fill (F)">🪣</button>
+      </div>
+      <div class="tool-buttons">
+        <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
+        <button id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Colors</label>
+      <div class="swatches">
+        <div class="swatch-item">
+          <label title="Left click color">
+            <input type="color" id="color-a" value="#000000">
+            <div id="swatch-a" class="swatch"></div>
+          </label>
+          <span>Left</span>
+        </div>
+        <div class="swatch-item">
+          <label title="Right click color">
+            <input type="color" id="color-b" value="#ffffff">
+            <div id="swatch-b" class="swatch"></div>
+          </label>
+          <span>Right</span>
+        </div>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Symmetry</label>
+      <div class="tool-buttons">
+        <button id="sym-vertical"   class="tool" title="Vertical">↔</button>
+        <button id="sym-horizontal" class="tool" title="Horizontal">↕</button>
+        <button id="sym-central"    class="tool" title="Central">⊕</button>
+        <button id="sym-diag1"      class="tool" title="Diagonal ╲">╲</button>
+        <button id="sym-diag2"      class="tool" title="Diagonal ╱">╱</button>
+      </div>
+    </div>
+    <button id="export">Export Pattern</button>
+    <hr>
+    <div id="status" class="status"></div>
+  </aside>
+
+  <main>
+    <canvas id="canvas"></canvas>
+  </main>
+
+  <div id="export-modal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Export Pattern</span>
+        <button id="modal-close">✕</button>
+      </div>
+      <div id="export-warning" class="export-warning" hidden>
+        ⚠ Pattern has invalid placements (red pixels). Export may be incorrect.
+      </div>
+      <div class="modal-options">
+        <label><input type="checkbox" id="alternate"> Alternate direction</label>
+      </div>
+      <textarea id="export-text" readonly spellcheck="false"></textarea>
+      <div class="modal-footer">
+        <button id="modal-copy">Copy to clipboard</button>
+        <button id="modal-download">Download .txt</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
