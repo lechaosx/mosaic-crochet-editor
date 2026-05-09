@@ -16,13 +16,12 @@ pub fn export_row_at(
     canvas_size: IVec2,
     alternate:   bool,
     row_index:   usize,
-    memo:        &mut pattern::CompressMemo,
 ) -> String {
     let mut flat: Vec<SequenceItem> = walk::row_walk_at(canvas_size, row_index)
         .map(|coord| SequenceItem::Stitch(stitch_from_highlight(highlights, coord)))
         .collect();
     if alternate && row_index % 2 == 1 { flat.reverse(); }
-    let compressed = pattern::compress(&flat, memo);
+    let compressed = pattern::compress(&flat);
     format!("Row {}: {}", row_index + 1, pattern::to_string(&compressed))
 }
 
@@ -34,7 +33,6 @@ pub fn export_round_at(
     rounds:       i32,
     alternate:    bool,
     round_index:  usize,
-    memo:         &mut pattern::CompressMemo,
 ) -> String {
     let round = round_index as i32 + 1;
 
@@ -67,11 +65,11 @@ pub fn export_round_at(
             SequenceItem::Stitch(group[0])
         } else {
             let inner: Vec<SequenceItem> = group.iter().map(|&s| SequenceItem::Stitch(s)).collect();
-            SequenceItem::group(pattern::compress(&inner, memo))
+            SequenceItem::group(pattern::compress(&inner))
         }
     }).collect();
 
     if alternate && round_index % 2 == 1 { flat.reverse(); }
-    let compressed = pattern::compress(&flat, memo);
+    let compressed = pattern::compress(&flat);
     format!("Round {}: {}", round_index + 1, pattern::to_string(&compressed))
 }

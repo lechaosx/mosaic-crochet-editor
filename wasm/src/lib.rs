@@ -1,12 +1,7 @@
-use std::cell::RefCell;
 use glam::IVec2;
-use mosaic_crochet_core::{common, export, pattern, tools};
+use mosaic_crochet_core::{common, export, tools};
 use ndarray::Array2;
 use wasm_bindgen::prelude::*;
-
-thread_local! {
-    static EXPORT_MEMO: RefCell<pattern::CompressMemo> = RefCell::new(pattern::CompressMemo::new());
-}
 
 enum ExportMode {
     Row { canvas_size: IVec2, alternate: bool },
@@ -29,15 +24,12 @@ impl ExportSession {
         if self.index >= self.total { return None; }
         let i = self.index;
         self.index += 1;
-        Some(EXPORT_MEMO.with(|memo| {
-            let mut memo = memo.borrow_mut();
-            match &self.mode {
-                ExportMode::Row { canvas_size, alternate } =>
-                    export::export_row_at(&self.highlights, *canvas_size, *alternate, i, &mut memo),
-                ExportMode::Round { canvas_size, virtual_size, offset, rounds, alternate } =>
-                    export::export_round_at(&self.highlights, *canvas_size, *virtual_size, *offset, *rounds, *alternate, i, &mut memo),
-            }
-        }))
+        Some(match &self.mode {
+            ExportMode::Row { canvas_size, alternate } =>
+                export::export_row_at(&self.highlights, *canvas_size, *alternate, i),
+            ExportMode::Round { canvas_size, virtual_size, offset, rounds, alternate } =>
+                export::export_round_at(&self.highlights, *canvas_size, *virtual_size, *offset, *rounds, *alternate, i),
+        })
     }
 }
 
