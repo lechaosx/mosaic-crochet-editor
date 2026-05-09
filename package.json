@@ -1,10 +1,10 @@
 {
   "workspaces": ["wasm", "web"],
   "scripts": {
-    "build:wasm": "wasm-pack build wasm --target bundler",
+    "build:wasm": "wasm-pack build wasm --target bundler --no-default-features",
     "build:web":  "bun run --cwd web build",
     "build":      "bun run build:wasm && bun run build:web",
-    "dev:rust":   "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler'",
+    "dev:rust":   "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler --dev'",
     "dev:web":    "bun run --cwd web dev",
     "dev":        "bun run dev:rust & bun run dev:web"
   }
