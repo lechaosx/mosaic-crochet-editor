@@ -42,112 +42,127 @@ impl SequenceItem {
 #[derive(Clone, Copy)]
 enum Decision {
     Literal,
-    Split  { k: usize },
-    Repeat { period: usize },
+    Split  { k: u32 },
+    Repeat { period: u32 },
 }
 
-fn is_repeat(items: &[SequenceItem], period: usize) -> bool {
-    items.chunks(period).all(|chunk| chunk == &items[..period])
-}
-
-/// Per-call cache: indexed by `start * stride + len`, where `stride = n + 1`.
-/// `(start, len)` uniquely identifies a subslice of the top-level input.
-struct PosCache {
-    table:  Vec<Option<(u32, Decision)>>,
-    stride: usize,
-}
-
-impl PosCache {
-    fn new(n: usize) -> Self {
-        let stride = n + 1;
-        Self { table: vec![None; stride * stride], stride }
-    }
-    #[inline] fn idx(&self, start: usize, len: usize) -> usize { start * self.stride + len }
-    #[inline] fn get(&self, start: usize, len: usize) -> Option<(u32, Decision)> { self.table[self.idx(start, len)] }
-    #[inline] fn set(&mut self, start: usize, len: usize, v: (u32, Decision)) {
-        let i = self.idx(start, len);
-        self.table[i] = Some(v);
-    }
-}
-
-fn solve_cost(
-    items: &[SequenceItem],
-    start: usize,
-    len:   usize,
-    cache: &mut PosCache,
-) -> u32 {
-    if let Some((cost, _)) = cache.get(start, len) {
-        return cost;
-    }
-
-    if len <= 1 {
-        cache.set(start, len, (len as u32, Decision::Literal));
-        return len as u32;
-    }
-
-    let slice = &items[start..start + len];
-    if slice[1..].iter().all(|x| x == &slice[0]) {
-        let inner = solve_cost(items, start, 1, cache);
-        cache.set(start, len, (inner, Decision::Repeat { period: 1 }));
-        return inner;
-    }
-
-    let mut best_cost = len as u32;
-    let mut best_dec  = Decision::Literal;
-
-    for k in 1..len {
-        let cost = solve_cost(items, start, k, cache) + solve_cost(items, start + k, len - k, cache);
-        if cost < best_cost {
-            best_cost = cost;
-            best_dec  = Decision::Split { k };
-        }
-    }
-
-    for period in 1..=(len / 2) {
-        if len % period == 0 && is_repeat(slice, period) {
-            let inner = solve_cost(items, start, period, cache);
-            if inner < best_cost {
-                best_cost = inner;
-                best_dec  = Decision::Repeat { period };
+/// LCE table: `lce[i * n + j]` (for `i < j`) is the length of the longest
+/// shared prefix between the suffixes `items[i..]` and `items[j..]`. Built
+/// in O(n²) via the recurrence
+///   lce(i,j) = if items[i] == items[j] then 1 + lce(i+1, j+1) else 0.
+/// With this table, periodicity is one read: `items[s..s+len]` is
+/// `period`-periodic iff `len % period == 0 && lce(s, s+period) >= len-period`.
+fn build_lce(items: &[SequenceItem]) -> Vec<u32> {
+    let n = items.len();
+    let mut lce = vec![0u32; n * n];
+    for i in (0..n).rev() {
+        for j in ((i + 1)..n).rev() {
+            if items[i] == items[j] {
+                let next = if i + 1 < n && j + 1 < n {
+                    lce[(i + 1) * n + (j + 1)]
+                } else { 0 };
+                lce[i * n + j] = next + 1;
             }
         }
     }
+    lce
+}
 
-    cache.set(start, len, (best_cost, best_dec));
-    best_cost
+/// Bottom-up DP filling `cost` and `dec` tables in increasing-length order.
+/// Each cell `(start, len)` reads only cells with strictly smaller `len`,
+/// so a single forward pass suffices.
+///
+/// Per cell:
+/// - Period checks first (cheap O(L/2) with LCE) — produces a tight upper
+///   bound on `best_cost`, which then lets the split loop prune aggressively.
+/// - Splits second, with branch-and-bound: skip when `left >= best_cost`
+///   (the right child would only push the total higher).
+fn solve(
+    n:      usize,
+    lce:    &[u32],
+    stride: usize,
+) -> (Vec<u32>, Vec<Decision>) {
+    let table_size = stride * stride;
+    let mut cost = vec![0u32;             table_size];
+    let mut dec  = vec![Decision::Literal; table_size];
+
+    for start in 0..n {
+        cost[start * stride + 1] = 1;
+    }
+
+    for len in 2..=n {
+        for start in 0..=(n - len) {
+            let mut best_cost = len as u32;
+            let mut best_dec  = Decision::Literal;
+
+            let need_base = len as u32;
+            for period in 1..=(len / 2) {
+                if len % period != 0 { continue; }
+                let need = need_base - period as u32;
+                if lce[start * n + (start + period)] < need { continue; }
+                let inner_cost = cost[start * stride + period];
+                if inner_cost < best_cost {
+                    best_cost = inner_cost;
+                    best_dec  = Decision::Repeat { period: period as u32 };
+                }
+            }
+
+            for k in 1..len {
+                let left = cost[start * stride + k];
+                if left >= best_cost { continue; }
+                let right = cost[(start + k) * stride + (len - k)];
+                let total = left + right;
+                if total < best_cost {
+                    best_cost = total;
+                    best_dec  = Decision::Split { k: k as u32 };
+                }
+            }
+
+            cost[start * stride + len] = best_cost;
+            dec [start * stride + len] = best_dec;
+        }
+    }
+
+    (cost, dec)
 }
 
 fn reconstruct(
-    items:   &[SequenceItem],
-    start:   usize,
-    len:     usize,
-    cache:   &PosCache,
+    items:  &[SequenceItem],
+    start:  usize,
+    len:    usize,
+    dec:    &[Decision],
+    stride: usize,
 ) -> Vec<SequenceItem> {
     if len == 0 { return Vec::new(); }
 
-    let (_, dec) = cache.get(start, len).expect("solve_cost must populate every reachable slice");
-    match dec {
+    match dec[start * stride + len] {
         Decision::Literal => items[start..start + len].to_vec(),
         Decision::Split { k } => {
-            let mut out = reconstruct(items, start, k, cache);
-            out.extend(reconstruct(items, start + k, len - k, cache));
+            let k = k as usize;
+            let mut out = reconstruct(items, start, k, dec, stride);
+            out.extend(reconstruct(items, start + k, len - k, dec, stride));
             out
         }
-        Decision::Repeat { period } => vec![SequenceItem::repeat(
-            reconstruct(items, start, period, cache),
-            len / period,
-        )],
+        Decision::Repeat { period } => {
+            let period = period as usize;
+            vec![SequenceItem::repeat(
+                reconstruct(items, start, period, dec, stride),
+                len / period,
+            )]
+        }
     }
 }
 
-/// Maximum-compression DP. The subproblem cache is keyed by `(start, len)`
-/// over the input, so each lookup is O(1) and the DP runs in O(n³) time.
+/// Maximum-compression DP. Iterative bottom-up over `(start, len)` cells.
+/// Periods are O(1) per check (LCE table); splits prune via branch-and-bound
+/// against the current best. Overall O(n³) with a tight constant.
 pub fn compress(items: &[SequenceItem]) -> Vec<SequenceItem> {
     let n = items.len();
     if n == 0 { return Vec::new(); }
-    let mut cache = PosCache::new(n);
-    solve_cost(items, 0, n, &mut cache);
-    reconstruct(items, 0, n, &cache)
+    let stride = n + 1;
+    let lce = build_lce(items);
+    let (_, dec) = solve(n, &lce, stride);
+    reconstruct(items, 0, n, &dec, stride)
 }
 
 /// Renders an item as one syntactic token: a bare stitch ("sc") or a
