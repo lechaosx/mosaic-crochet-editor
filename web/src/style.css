@@ -20,10 +20,11 @@ body {
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
 
 #topbar {
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px 6px;
+  gap: 2px 4px;
   padding: 4px 8px;
   background: #252525;
   border-bottom: 1px solid #333;
@@ -31,17 +32,22 @@ body {
   width: 100%;
 }
 
+.bar-center {
+  display: contents;
+}
+
+.bar-spacer-flex { flex: 1; min-width: 8px; }
+
 .bar-group {
   display: flex;
   align-items: center;
   gap: 4px;
-  border-left: 1px solid #444;
-  padding-left: 6px;
 }
 
-.bar-group:first-child {
-  border-left: none;
-  padding-left: 0;
+.bar-group + .bar-group {
+  border-left: 1px solid #3a3a3a;
+  padding-left: 6px;
+  margin-left: 2px;
 }
 
 .bar-sep {
@@ -51,9 +57,8 @@ body {
   margin: 0 4px;
 }
 
-.bar-spacer {
-  flex: 1;
-}
+.bar-spacer       { flex: 1; }
+.bar-spacer-flex  { flex: 1; min-width: 0; }
 
 /* ── Canvas area ─────────────────────────────────────────────────────────── */
 
@@ -68,6 +73,10 @@ main {
 
 canvas {
   image-rendering: pixelated;
+}
+
+canvas.animated {
+  transition: transform 0.25s ease;
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -156,7 +165,7 @@ input[type="checkbox"] { margin-right: 6px; }
 #swatch-b { background: #ffffff; }
 
 input[type="range"] {
-  width: 64px;
+  width: 96px;
   cursor: pointer;
   accent-color: #888;
 }
@@ -166,13 +175,19 @@ input[type="range"] {
 
 /* ── Status bar ──────────────────────────────────────────────────────────── */
 
+#statusbar {
+  position: fixed;
+  bottom: 6px;
+  right: 10px;
+  pointer-events: none;
+  z-index: 10;
+}
+
 .status {
   font-size: 12px;
   color: #666;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  text-align: right;
-  min-width: 140px;
 }
 
 /* ── Modals ──────────────────────────────────────────────────────────────── */

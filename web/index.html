@@ -58,19 +58,35 @@
       <button id="export">Export</button>
     </div>
     <div class="bar-group">
-      <button id="tool-pencil" class="tool" title="Pencil (P)">✏️</button>
-      <button id="tool-fill"   class="tool"        title="Fill (F)">🪣</button>
-      <button id="tool-eraser" class="tool"        title="Eraser (E)">🧹</button>
-      <div class="bar-sep"></div>
       <button id="btn-undo" title="Undo (Ctrl+Z)">↩</button>
       <button id="btn-redo" title="Redo (Ctrl+Y)">↪</button>
     </div>
-    <div class="bar-group">
-      <input type="color" id="color-a" value="#000000">
-      <div id="swatch-a" class="swatch active-swatch" title="Click to select — double-click to change color"></div>
-      <div id="swatch-b" class="swatch"               title="Click to select — double-click to change color"></div>
-      <input type="color" id="color-b" value="#ffffff">
+
+    <div class="bar-spacer-flex"></div>
+    <!-- Centre -->
+    <div class="bar-center">
+      <div class="bar-group">
+        <button id="tool-pencil" class="tool" title="Pencil (P)">✏️</button>
+        <button id="tool-fill"   class="tool" title="Fill (F)">🪣</button>
+        <button id="tool-eraser" class="tool" title="Eraser (E)">🧹</button>
+      </div>
+      <div class="bar-group">
+        <button id="sym-vertical"   class="tool" title="Vertical">↔</button>
+        <button id="sym-horizontal" class="tool" title="Horizontal">↕</button>
+        <button id="sym-central"    class="tool" title="Central">⊕</button>
+        <button id="sym-diag1"      class="tool" title="Diagonal ╲">╲</button>
+        <button id="sym-diag2"      class="tool" title="Diagonal ╱">╱</button>
+      </div>
+      <div class="bar-group">
+        <input type="color" id="color-a" value="#000000">
+        <div id="swatch-a" class="swatch active-swatch" title="Click to select — double-click to change color"></div>
+        <div id="swatch-b" class="swatch"               title="Click to select — double-click to change color"></div>
+        <input type="color" id="color-b" value="#ffffff">
+      </div>
     </div>
+    <div class="bar-spacer-flex"></div>
+
+    <!-- Right: highlights | rotation -->
     <div class="bar-group">
       <input type="color" id="hl-overlay-color" value="#0000ff">
       <div id="swatch-hl-overlay" class="swatch" title="Overlay color — double-click to change"></div>
@@ -79,20 +95,19 @@
       <input type="range" id="hl-opacity" value="50" min="0" max="100" title="Highlight opacity">
     </div>
     <div class="bar-group">
-      <button id="sym-vertical"   class="tool" title="Vertical">↔</button>
-      <button id="sym-horizontal" class="tool" title="Horizontal">↕</button>
-      <button id="sym-central"    class="tool" title="Central">⊕</button>
-      <button id="sym-diag1"      class="tool" title="Diagonal ╲">╲</button>
-      <button id="sym-diag2"      class="tool" title="Diagonal ╱">╱</button>
+      <button id="rotate-ccw" class="tool" title="Rotate counter-clockwise">↺</button>
+      <button id="rotate-cw"  class="tool" title="Rotate clockwise">↻</button>
     </div>
-    <div class="bar-spacer"></div>
-    <div id="status" class="status"></div>
   </header>
 
   <main>
     <canvas id="canvas"></canvas>
   </main>
 
+
+  <footer id="statusbar">
+    <div id="status" class="status"></div>
+  </footer>
 
   <div id="export-modal" class="modal" hidden>
     <div class="modal-content">

@@ -60,6 +60,7 @@ function saveSession() {
         state, pixels, colorInputA.value, colorInputB.value,
         activeTool, primaryColor, [...directlyActive],
         hlOverlayColorInput.value, hlInvalidColorInput.value, parseInt(hlOpacityInput.value),
+        canvasRotation,
     );
 }
 
@@ -73,6 +74,23 @@ function doRecomputeAndRender() {
     if (state) updateStatus(highlights, null, null);
     doRender();
 }
+
+// ── Canvas rotation ───────────────────────────────────────────────────────────
+
+let canvasRotation = 0; // degrees, unbounded to keep shortest-arc transitions
+
+function applyRotation() {
+    canvas.style.transform = canvasRotation ? `rotate(${canvasRotation}deg)` : "";
+    saveSession();
+}
+
+function rotate(delta: number) {
+    canvasRotation += delta;
+    applyRotation();
+}
+
+el("rotate-cw").addEventListener("click",  () => rotate(45));
+el("rotate-ccw").addEventListener("click", () => rotate(-45));
 
 // ── Drawing state ─────────────────────────────────────────────────────────────
 
@@ -90,9 +108,22 @@ function strokeChanged(): boolean {
 
 function paint(pointer: PointerLike) {
     if (!state || !pixels) return;
-    const rect = canvas.getBoundingClientRect();
-    const x    = Math.floor((pointer.clientX - rect.left) / pixelSize);
-    const y    = Math.floor((pointer.clientY - rect.top)  / pixelSize);
+    const rect    = canvas.getBoundingClientRect();
+    let x: number, y: number;
+    if (canvasRotation === 0) {
+        x = Math.floor((pointer.clientX - rect.left) / pixelSize);
+        y = Math.floor((pointer.clientY - rect.top)  / pixelSize);
+    } else {
+        const cx  = rect.left + rect.width  / 2;
+        const cy  = rect.top  + rect.height / 2;
+        const dx  = pointer.clientX - cx;
+        const dy  = pointer.clientY - cy;
+        const rad = -(canvasRotation % 360) * Math.PI / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        x = Math.floor((dx * cos - dy * sin + canvas.width  / 2) / pixelSize);
+        y = Math.floor((dx * sin + dy * cos + canvas.height / 2) / pixelSize);
+    }
     const { canvasWidth, canvasHeight } = state;
 
     if (x < 0 || x >= canvasWidth || y < 0 || y >= canvasHeight) return;
@@ -472,6 +503,7 @@ el("btn-load").addEventListener("click", async () => {
         loadedState, loadedPixels, colorA, colorB,
         activeTool, primaryColor, [...directlyActive],
         hlOverlayColorInput.value, hlInvalidColorInput.value, parseInt(hlOpacityInput.value),
+        canvasRotation,
     );
     setBaseline();
 });
@@ -486,6 +518,9 @@ function initWithState(saved: LocalState) {
     hlOverlayColorInput.value = saved.hlOverlayColor;
     hlInvalidColorInput.value = saved.hlInvalidColor;
     hlOpacityInput.value      = String(saved.hlOpacity);
+    canvasRotation = saved.canvasRotation;
+    canvas.style.transform = canvasRotation ? `rotate(${canvasRotation}deg)` : "";
+    requestAnimationFrame(() => requestAnimationFrame(() => canvas.classList.add("animated")));
 
     applyColors();
     applyHighlightColors();
@@ -499,7 +534,9 @@ function initWithState(saved: LocalState) {
     historyReset(saved.pixels); updateHistoryButtons();
     updateDiagonalButtons(saved.state.canvasWidth, saved.state.canvasHeight);
     setBaseline();
+    updateStatus(highlights, null, null);
     doRender();
+    requestAnimationFrame(() => requestAnimationFrame(() => canvas.classList.add("animated")));
 }
 
 applyColors();
@@ -519,5 +556,6 @@ if (saved) {
         updateDiagonalButtons(state.canvasWidth, state.canvasHeight);
     }
     setBaseline();
+    updateStatus(highlights, null, null);
     doRender();
 }
