@@ -21,35 +21,29 @@ See [FEATURES.md](FEATURES.md) for details.
 
 - [Nix](https://nixos.org/) with flakes enabled
 
-### Steps
+### First-time setup
 
 ```sh
-git clone <repo>
-cd mosaic-crochet-web
-
 # Enter the dev shell (installs rustup, wasm-pack, bun, cargo-watch)
 nix develop
 
-# Install the nightly Rust toolchain (first time only)
+# Install the nightly Rust toolchain
 rustup toolchain install nightly
-rustup target add wasm32-unknown-unknown
 
 # Install JS dependencies
 bun install
-
-# Build the WASM package
-bun run build:wasm
-
-# Start the Vite dev server
-bun run dev:web
 ```
 
-Open [http://localhost:5173](http://localhost:5173).
+### Development
 
-For Rust hot reload, run in a separate terminal:
 ```sh
-bun run dev:rust
+bun run dev
 ```
+
+This starts both the Rust watcher and the Vite dev server in parallel. Open [http://localhost:5173](http://localhost:5173).
+
+- **TypeScript changes** reload instantly via Vite HMR.
+- **Rust changes** trigger a WASM rebuild (takes a few seconds), after which Vite reloads the page automatically.
 
 ### Production build
 
