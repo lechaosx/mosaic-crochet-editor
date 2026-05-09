@@ -12,14 +12,11 @@
       <div id="new-pattern-wrapper">
         <button id="new-pattern">New</button>
         <div id="new-pattern-widget" hidden>
-          <div class="widget-row">
-            <label>Mode</label>
-            <select id="mode">
-              <option value="row">Row</option>
-              <option value="round">Round</option>
-            </select>
+          <div class="widget-radios">
+            <label class="radio-label"><input type="radio" name="np-mode" value="row" checked> Row</label>
+            <label class="radio-label"><input type="radio" name="np-mode" value="round"> Round</label>
           </div>
-          <div id="row-controls">
+          <div id="row-controls" class="widget-fields">
             <div class="widget-row">
               <label>Width</label>
               <input type="number" id="width"  value="16" min="2">
@@ -29,14 +26,11 @@
               <input type="number" id="height" value="16" min="2">
             </div>
           </div>
-          <div id="round-controls" hidden>
-            <div class="widget-row">
-              <label>Sub-mode</label>
-              <select id="sub-mode">
-                <option value="full">Full</option>
-                <option value="half">Half</option>
-                <option value="quarter">Quarter</option>
-              </select>
+          <div id="round-controls" class="widget-fields" hidden>
+            <div class="widget-radios">
+              <label class="radio-label"><input type="radio" name="np-submode" value="full" checked> Full</label>
+              <label class="radio-label"><input type="radio" name="np-submode" value="half"> Half</label>
+              <label class="radio-label"><input type="radio" name="np-submode" value="quarter"> Quarter</label>
             </div>
             <div class="widget-row">
               <label>Inner width</label>

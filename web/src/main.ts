@@ -75,22 +75,65 @@ function doRecomputeAndRender() {
     doRender();
 }
 
-// ── Canvas rotation ───────────────────────────────────────────────────────────
+// ── Canvas transform (rotation + pan) ────────────────────────────────────────
 
-let canvasRotation = 0; // degrees, unbounded to keep shortest-arc transitions
+let canvasRotation = 0;
+let panX = 0;
+let panY = 0;
 
-function applyRotation() {
-    canvas.style.transform = canvasRotation ? `rotate(${canvasRotation}deg)` : "";
-    saveSession();
+function buildTransform(): string {
+    const parts: string[] = [];
+    if (panX || panY) parts.push(`translate(${panX}px, ${panY}px)`);
+    if (canvasRotation) parts.push(`rotate(${canvasRotation}deg)`);
+    return parts.join(" ");
+}
+
+function applyTransform() {
+    canvas.style.transform = buildTransform();
 }
 
 function rotate(delta: number) {
     canvasRotation += delta;
-    applyRotation();
+    applyTransform();
+    saveSession();
 }
 
 el("rotate-cw").addEventListener("click",  () => rotate(45));
 el("rotate-ccw").addEventListener("click", () => rotate(-45));
+
+// ── Pan (middle mouse drag) ───────────────────────────────────────────────────
+
+let panning   = false;
+let panStartX = 0;
+let panStartY = 0;
+let panOriginX = 0;
+let panOriginY = 0;
+
+document.querySelector("main")!.addEventListener("mousedown", e => {
+    if (e.button === 1) {
+        e.preventDefault();
+        panning    = true;
+        panStartX  = e.clientX;
+        panStartY  = e.clientY;
+        panOriginX = panX;
+        panOriginY = panY;
+        canvas.classList.remove("animated");
+    }
+});
+
+window.addEventListener("mousemove", e => {
+    if (!panning) return;
+    panX = panOriginX + (e.clientX - panStartX);
+    panY = panOriginY + (e.clientY - panStartY);
+    applyTransform();
+});
+
+window.addEventListener("mouseup", e => {
+    if (e.button === 1 && panning) {
+        panning = false;
+        requestAnimationFrame(() => canvas.classList.add("animated"));
+    }
+});
 
 // ── Drawing state ─────────────────────────────────────────────────────────────
 
@@ -363,6 +406,9 @@ function openWidget() {
     widgetOpen     = true;
     widgetOpenedAt = Date.now();
     newPatternWidget.hidden = false;
+    panX = 0; panY = 0;
+    setPixelSize(16);
+    applyTransform();
     applyAndRender();
 }
 
@@ -385,14 +431,20 @@ document.addEventListener("click", () => {
     if (widgetOpen && Date.now() - widgetOpenedAt > 300) closeWidget();
 });
 
-el("mode").addEventListener("change", e => {
-    const mode = (e.target as HTMLSelectElement).value;
-    el("row-controls").hidden   = mode !== "row";
-    el("round-controls").hidden = mode !== "round";
-    if (widgetOpen) applyAndRender();
+document.querySelectorAll<HTMLInputElement>('[name="np-mode"]').forEach(radio => {
+    radio.addEventListener("change", () => {
+        const mode = radio.value;
+        el("row-controls").hidden   = mode !== "row";
+        el("round-controls").hidden = mode !== "round";
+        if (widgetOpen) applyAndRender();
+    });
 });
 
-["width", "height", "inner-width", "inner-height", "rounds", "sub-mode"].forEach(id => {
+document.querySelectorAll<HTMLInputElement>('[name="np-submode"]').forEach(radio => {
+    radio.addEventListener("change", () => { if (widgetOpen) applyAndRender(); });
+});
+
+["width", "height", "inner-width", "inner-height", "rounds"].forEach(id => {
     el(id).addEventListener("input",  () => { if (widgetOpen) applyAndRender(); });
     el(id).addEventListener("change", () => { if (widgetOpen) applyAndRender(); });
 });
@@ -491,6 +543,7 @@ el("btn-load").addEventListener("click", async () => {
     colorInputA.value = colorA;
     colorInputB.value = colorB;
     applyColors();
+    syncUiToState(loadedState);
 
     recomputeHighlights();
     if (state) {
@@ -498,14 +551,9 @@ el("btn-load").addEventListener("click", async () => {
         historyReset(loadedPixels); updateHistoryButtons();
         updateDiagonalButtons(state.canvasWidth, state.canvasHeight);
     }
-    doRender();
-    saveToLocalStorage(
-        loadedState, loadedPixels, colorA, colorB,
-        activeTool, primaryColor, [...directlyActive],
-        hlOverlayColorInput.value, hlInvalidColorInput.value, parseInt(hlOpacityInput.value),
-        canvasRotation,
-    );
     setBaseline();
+    saveSession();
+    doRender();
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -519,8 +567,9 @@ function initWithState(saved: LocalState) {
     hlInvalidColorInput.value = saved.hlInvalidColor;
     hlOpacityInput.value      = String(saved.hlOpacity);
     canvasRotation = saved.canvasRotation;
-    canvas.style.transform = canvasRotation ? `rotate(${canvasRotation}deg)` : "";
-    requestAnimationFrame(() => requestAnimationFrame(() => canvas.classList.add("animated")));
+    panX = 0;
+    panY = 0;
+    applyTransform();
 
     applyColors();
     applyHighlightColors();
