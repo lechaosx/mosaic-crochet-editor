@@ -129,6 +129,11 @@ input[type="color"] {
   border-color: #aaa;
 }
 
+.swatch.active-swatch {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px #fff;
+}
+
 .status {
   font-size: 12px;
   color: #888;

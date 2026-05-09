@@ -54,8 +54,9 @@ let state:      PatternState | null = null;
 let pixels:     Uint8Array | null   = null;
 let highlights: Uint8Array | null   = null;
 let pixelSize   = 16;
-let painting    = false;
-let paintColor  = 1;
+let painting     = false;
+let primaryColor   = 1;  // selected primary color (swatch)
+let strokeColor  = 1;  // color used for the current stroke
 let activeTool: Tool = "pencil";
 
 const COLORS: (string | null)[] = [
@@ -387,11 +388,11 @@ function paint(pointer: PointerLike) {
     if (pixels[y * canvasWidth + x] === 0) return;
 
     if (activeTool === "fill") {
-        floodFill(x, y, paintColor);
+        floodFill(x, y, strokeColor);
     } else {
         for (const [sx, sy] of symmetricCoords(x, y)) {
             if (pixels[sy * canvasWidth + sx] !== 0) {
-                pixels[sy * canvasWidth + sx] = paintColor;
+                pixels[sy * canvasWidth + sx] = strokeColor;
             }
         }
     }
@@ -424,7 +425,8 @@ canvas.addEventListener("mousemove", e => {
 canvas.addEventListener("mouseleave", () => updateStatus(null, null));
 
 canvas.addEventListener("mousedown", e => {
-    paintColor = e.button === 2 ? 2 : 1;
+    if (e.button !== 0 && e.button !== 2) return;
+    strokeColor = e.button === 2 ? (primaryColor === 1 ? 2 : 1) : primaryColor;
     historySave();
     painting = true;
     paint(e);
@@ -576,8 +578,29 @@ function applyColors() {
     if (state) render();
 }
 
-colorInputA.addEventListener("input", applyColors);
-colorInputB.addEventListener("input", applyColors);
+function selectColor(color: number) {
+    primaryColor = color;
+    swatchA.classList.toggle("active-swatch", color === 1);
+    swatchB.classList.toggle("active-swatch", color === 2);
+}
+
+function setupSwatch(swatchEl: HTMLElement, colorInput: HTMLInputElement, color: number) {
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+    swatchEl.addEventListener("click",     () => selectColor(color));
+    swatchEl.addEventListener("dblclick",  () => colorInput.click());
+
+    swatchEl.addEventListener("mousedown", () => {
+        longPressTimer = setTimeout(() => colorInput.click(), 600);
+    });
+    swatchEl.addEventListener("mouseup",    () => { if (longPressTimer) clearTimeout(longPressTimer); });
+    swatchEl.addEventListener("mouseleave", () => { if (longPressTimer) clearTimeout(longPressTimer); });
+
+    colorInput.addEventListener("input", applyColors);
+}
+
+setupSwatch(swatchA, colorInputA, 1);
+setupSwatch(swatchB, colorInputB, 2);
 
 // ── Mode switching ────────────────────────────────────────────────────────────
 
