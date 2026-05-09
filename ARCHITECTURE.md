@@ -9,10 +9,10 @@
 ```
 mosaic-crochet-web/
 ├── core/          ← pure Rust logic (walk, pattern, highlight computation)
-├── wasm/          ← Rust → WASM binding layer + stable JS surface
+├── wasm/          ← Rust → WASM binding layer
 │   ├── Cargo.toml
-│   ├── package.json   ("name": "@mosaic/wasm")
-│   ├── src/           Rust source + src/index.js shim + src/index.d.ts
+│   ├── package.json   ("name": "@mosaic/wasm", points into pkg/)
+│   ├── src/lib.rs     wasm-bindgen entry points only
 │   └── pkg/           wasm-pack output (gitignored, internal)
 ├── web/           ← Vite + TypeScript application
 ├── Cargo.toml     ← Rust workspace (members: core, wasm)
@@ -43,9 +43,7 @@ Workspace membership is source-driven, not artifact-driven. `pkg/` is internal t
 Pure Rust library. No WASM dependencies. Contains all domain logic: walk generators, pattern compression, highlight computation. Testable with plain `cargo test`. — **your decision** (split from wasm to enable native testing)
 
 ### `wasm`
-Thin binding layer. Depends on `core`. Exposes wasm-bindgen entry points. Has a stable JS surface:
-- `src/index.js` — re-exports from `pkg/`; isolates consumers from wasm-pack output shape changes. — **Claude's choice**
-- `src/index.d.ts` — TypeScript declarations; consumers never reference `pkg/` directly. — **Claude's choice**
+Thin binding layer. Depends on `core`. Contains only `src/lib.rs` with wasm-bindgen entry points. `package.json` points `main` and `types` directly to `pkg/` output — justified since `pkg/` is an internal detail within the same package boundary. — **Claude's choice**
 
 ### `web`
 Vite + TypeScript application. Depends on `@mosaic/wasm` by workspace name — no filesystem paths. — **joint**
