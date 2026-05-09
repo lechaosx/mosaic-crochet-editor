@@ -7,94 +7,92 @@
   <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
-  <aside id="sidebar">
-    <button id="new-pattern">New Pattern</button>
-    <hr>
-    <div class="control-group">
-      <label>Tool</label>
-      <div class="tool-buttons">
-        <button id="tool-pencil" class="tool active" title="Pencil (P)">✏️</button>
-        <button id="tool-fill"   class="tool"        title="Fill (F)">🪣</button>
-      </div>
-      <div class="tool-buttons">
-        <button id="btn-undo" title="Undo (Ctrl+Z)">↩ Undo</button>
-        <button id="btn-redo" title="Redo (Ctrl+Y)">↪ Redo</button>
-      </div>
-    </div>
-    <div class="control-group">
-      <label>Colors</label>
-      <div class="swatches">
-        <div class="swatch-item">
-          <input type="color" id="color-a" value="#000000">
-          <div id="swatch-a" class="swatch active-swatch" title="Click to select · Double-click to change color"></div>
-          <span>Primary</span>
-        </div>
-        <div class="swatch-item">
-          <input type="color" id="color-b" value="#ffffff">
-          <div id="swatch-b" class="swatch" title="Click to select · Double-click to change color"></div>
-          <span>Secondary</span>
-        </div>
-      </div>
-    </div>
-    <div class="control-group">
-      <label>Symmetry</label>
-      <div class="tool-buttons">
-        <button id="sym-vertical"   class="tool" title="Vertical">↔</button>
-        <button id="sym-horizontal" class="tool" title="Horizontal">↕</button>
-        <button id="sym-central"    class="tool" title="Central">⊕</button>
-        <button id="sym-diag1"      class="tool" title="Diagonal ╲">╲</button>
-        <button id="sym-diag2"      class="tool" title="Diagonal ╱">╱</button>
-      </div>
-    </div>
-    <button id="export">Export Pattern</button>
-    <hr>
-    <div id="status" class="status"></div>
-  </aside>
-
-  <main>
-    <canvas id="canvas"></canvas>
-  </main>
-
-  <div id="new-pattern-modal" class="modal" hidden>
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title">New Pattern</span>
-        <button id="new-pattern-close">✕</button>
-      </div>
-      <div class="modal-options" style="flex-direction: column; gap: 12px;">
-        <div class="control-group">
-          <label>Mode</label>
-          <select id="mode">
-            <option value="row">Row</option>
-            <option value="round">Round</option>
-          </select>
-        </div>
-        <div id="row-controls">
-          <div class="control-group">
-            <label>Width  <input type="number" id="width"  value="16" min="2" max="64"></label>
-            <label>Height <input type="number" id="height" value="16" min="2" max="64"></label>
+  <header id="topbar">
+    <div class="bar-group">
+      <div id="new-pattern-wrapper">
+        <button id="new-pattern">New</button>
+        <div id="new-pattern-widget" hidden>
+          <div class="widget-row">
+            <label>Mode</label>
+            <select id="mode">
+              <option value="row">Row</option>
+              <option value="round">Round</option>
+            </select>
           </div>
-        </div>
-        <div id="round-controls" hidden>
-          <div class="control-group">
-            <label>Sub-mode
+          <div id="row-controls">
+            <div class="widget-row">
+              <label>Width</label>
+              <input type="number" id="width"  value="16" min="2">
+            </div>
+            <div class="widget-row">
+              <label>Height</label>
+              <input type="number" id="height" value="16" min="2">
+            </div>
+          </div>
+          <div id="round-controls" hidden>
+            <div class="widget-row">
+              <label>Sub-mode</label>
               <select id="sub-mode">
                 <option value="full">Full</option>
                 <option value="half">Half</option>
                 <option value="quarter">Quarter</option>
               </select>
-            </label>
-            <label>Inner Width  <input type="number" id="inner-width"  value="3" min="0" max="32"></label>
-            <label>Inner Height <input type="number" id="inner-height" value="3" min="0" max="32"></label>
-            <label>Rounds       <input type="number" id="rounds"       value="5" min="1" max="32"></label>
+            </div>
+            <div class="widget-row">
+              <label>Inner width</label>
+              <input type="number" id="inner-width"  value="3" min="0">
+            </div>
+            <div class="widget-row">
+              <label>Inner height</label>
+              <input type="number" id="inner-height" value="3" min="0">
+            </div>
+            <div class="widget-row">
+              <label>Rounds</label>
+              <input type="number" id="rounds"       value="5" min="1">
+            </div>
           </div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button id="apply">Create</button>
-      </div>
+      <button id="btn-load">Load</button>
+      <button id="btn-save">Save</button>
+      <button id="export">Export</button>
     </div>
-  </div>
+    <div class="bar-group">
+      <button id="tool-pencil" class="tool" title="Pencil (P)">✏️</button>
+      <button id="tool-fill"   class="tool"        title="Fill (F)">🪣</button>
+      <button id="tool-eraser" class="tool"        title="Eraser (E)">🧹</button>
+      <div class="bar-sep"></div>
+      <button id="btn-undo" title="Undo (Ctrl+Z)">↩</button>
+      <button id="btn-redo" title="Redo (Ctrl+Y)">↪</button>
+    </div>
+    <div class="bar-group">
+      <input type="color" id="color-a" value="#000000">
+      <div id="swatch-a" class="swatch active-swatch" title="Click to select — double-click to change color"></div>
+      <div id="swatch-b" class="swatch"               title="Click to select — double-click to change color"></div>
+      <input type="color" id="color-b" value="#ffffff">
+    </div>
+    <div class="bar-group">
+      <input type="color" id="hl-overlay-color" value="#0000ff">
+      <div id="swatch-hl-overlay" class="swatch" title="Overlay color — double-click to change"></div>
+      <input type="color" id="hl-invalid-color" value="#ff0000">
+      <div id="swatch-hl-invalid" class="swatch" title="Invalid color — double-click to change"></div>
+      <input type="range" id="hl-opacity" value="50" min="0" max="100" title="Highlight opacity">
+    </div>
+    <div class="bar-group">
+      <button id="sym-vertical"   class="tool" title="Vertical">↔</button>
+      <button id="sym-horizontal" class="tool" title="Horizontal">↕</button>
+      <button id="sym-central"    class="tool" title="Central">⊕</button>
+      <button id="sym-diag1"      class="tool" title="Diagonal ╲">╲</button>
+      <button id="sym-diag2"      class="tool" title="Diagonal ╱">╱</button>
+    </div>
+    <div class="bar-spacer"></div>
+    <div id="status" class="status"></div>
+  </header>
+
+  <main>
+    <canvas id="canvas"></canvas>
+  </main>
+
 
   <div id="export-modal" class="modal" hidden>
     <div class="modal-content">
@@ -110,8 +108,21 @@
       </div>
       <textarea id="export-text" readonly spellcheck="false"></textarea>
       <div class="modal-footer">
-        <button id="modal-copy">Copy to clipboard</button>
+        <button id="modal-copy">Copy</button>
         <button id="modal-download">Download .txt</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dirty-modal" class="modal" hidden>
+    <div class="modal-content modal-content--narrow">
+      <div class="modal-header">
+        <span class="modal-title">Unsaved Changes</span>
+      </div>
+      <p class="modal-message">You have unsaved changes.</p>
+      <div class="modal-footer">
+        <button id="dirty-cancel">Cancel</button>
+        <button id="dirty-discard" class="btn-angry">Discard</button>
       </div>
     </div>
   </div>

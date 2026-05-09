@@ -1,6 +1,43 @@
 use std::collections::{HashSet, VecDeque};
+use crate::common;
 
 // Symmetry mask bits: V=1, H=2, C=4, D1=8, D2=16
+
+// Returns the natural (initialisation) color of a pixel — same formula used in
+// initialize_row_pattern and initialize_round_pattern.
+pub fn natural_color_row(height: i32, y: i32) -> u8 {
+    common::get_color_index(height - 1 - y)
+}
+
+pub fn natural_color_round(virtual_size_x: i32, virtual_size_y: i32, rounds: i32, virtual_x: i32, virtual_y: i32) -> u8 {
+    use glam::IVec2;
+    let virtual_size  = IVec2::new(virtual_size_x, virtual_size_y);
+    let virtual_coord = IVec2::new(virtual_x, virtual_y);
+    let round_from_edge = common::get_round_from_edge(virtual_size, virtual_coord);
+    if round_from_edge >= rounds {
+        common::COLOR_TRANSPARENT
+    } else {
+        common::get_color_index(rounds - 1 - round_from_edge)
+    }
+}
+
+pub fn erase_pixel_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, mask: u8) -> Vec<u8> {
+    let color = natural_color_row(height, y);
+    paint_pixel(pixels, width, height, x, y, color, mask)
+}
+
+pub fn erase_pixel_round(pixels: &[u8], canvas_width: i32, canvas_height: i32, x: i32, y: i32,
+                          virtual_size_x: i32, virtual_size_y: i32, offset_x: i32, offset_y: i32,
+                          rounds: i32, mask: u8) -> Vec<u8> {
+    let mut result = pixels.to_vec();
+    for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, mask) {
+        if result[(sy * canvas_width + sx) as usize] == common::COLOR_TRANSPARENT { continue; }
+        let vx = sx + offset_x;
+        let vy = sy + offset_y;
+        result[(sy * canvas_width + sx) as usize] = natural_color_round(virtual_size_x, virtual_size_y, rounds, vx, vy);
+    }
+    result
+}
 
 fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, mask: u8) -> Vec<(i32, i32)> {
     let d1_offset = (width - height).div_euclid(2);

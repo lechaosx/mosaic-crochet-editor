@@ -89,6 +89,8 @@ export function updateStatus(highlights: Uint8Array | null, x: number | null, y:
     if (!highlights) return;
     const validCount   = highlights.filter(h => h === 3).length;
     const invalidCount = highlights.filter(h => h === 4).length;
-    const coordText    = x !== null ? `Cursor: ${x}, ${y}<br>` : "";
-    el("status").innerHTML = `${coordText}Overlays: ${validCount}<br>Invalid: ${invalidCount}`;
+    const coord = x !== null ? `${x}, ${y}` : "";
+    const overlays = `${validCount} overlay${validCount !== 1 ? "s" : ""}`;
+    const invalid  = invalidCount > 0 ? `  ${invalidCount} invalid` : "";
+    el("status").textContent = [coord, overlays + invalid].filter(Boolean).join("  ·  ");
 }

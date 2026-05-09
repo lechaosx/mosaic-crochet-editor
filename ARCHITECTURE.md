@@ -8,72 +8,78 @@
 
 ```
 mosaic-crochet-web/
-├── core/          ← pure Rust logic (walk, pattern, highlight computation)
+├── core/          ← pure Rust logic (walk, pattern, highlight computation, drawing tools)
 ├── wasm/          ← Rust → WASM binding layer
 │   ├── Cargo.toml
-│   ├── package.json   ("name": "@mosaic/wasm", points into pkg/)
+│   ├── package.json   ("name": "@mosaic/wasm")
 │   ├── src/lib.rs     wasm-bindgen entry points only
 │   └── pkg/           wasm-pack output (gitignored, internal)
 ├── web/           ← Vite + TypeScript application
-├── Cargo.toml     ← Rust workspace (members: core, wasm)
-├── package.json   ← JS workspace (members: wasm, web)
+│   └── src/
+│       ├── main.ts      orchestration and event wiring
+│       ├── pattern.ts   WASM calls, pattern state
+│       ├── render.ts    canvas rendering, pixel size, colors
+│       ├── symmetry.ts  closure computation, orbit, button state
+│       ├── history.ts   undo/redo stack
+│       ├── storage.ts   localStorage + file save/load
+│       ├── types.ts     shared TypeScript types
+│       └── dom.ts       el(), inputValue(), inputInt()
+├── Cargo.toml     ← Rust workspace (core, wasm)
+├── package.json   ← JS workspace (wasm, web)
 ├── rust-toolchain.toml
 └── flake.nix
 ```
 
-Workspace membership is source-driven, not artifact-driven. `pkg/` is internal to `wasm/` and never a workspace member. — **your correction**
+Workspace membership is source-driven, not artifact-driven. `pkg/` is internal to `wasm/`. — **your correction**
 
 ---
 
 ## Language & Runtime
 
-- **Rust → WASM** for all computation; **TypeScript** for the browser surface. — **your decision** (switched from plain JS; originally ruled out TypeScript, then reconsidered)
+- **Rust → WASM** for computation; **TypeScript** for the browser. — **your decision**
 - **Nightly Rust, edition 2024** — required for `gen` blocks. — **your decision**
-- **`gen` blocks** to port Lua coroutine-based walk generators directly. — **your decision**
-- **Vite** as dev server. Justified by in-memory TypeScript compilation with no disk artifacts during dev. — **joint**
-- **Bun** for package management and script running. — **your decision**
-- **wasm-pack `--target bundler`** — produces named ESM exports consumed directly by Vite; no init function needed, WASM loading handled automatically by `vite-plugin-wasm`. — **Claude's choice**
-- **`base: "./"` in vite.config.ts** — relative asset paths so the site works on GitHub Pages subpaths. — **Claude's choice**
+- **Vite** as dev server — in-memory TypeScript compilation, no disk artifacts during dev. — **joint**
+- **Bun** for package management. — **your decision**
+- **wasm-pack `--target bundler`** — named ESM exports, WASM loading via `vite-plugin-wasm`. — **Claude's choice**
+- **`base: "./"` in vite.config.ts** — relative asset paths for GitHub Pages. — **Claude's choice**
 
 ---
 
 ## Package Boundaries
 
 ### `core`
-Pure Rust library. No WASM dependencies. Contains all domain logic: walk generators, pattern compression, highlight computation. Testable with plain `cargo test`. — **your decision** (split from wasm to enable native testing)
+Pure Rust. No WASM dependencies. Walk generators, pattern compression, highlight computation, symmetric paint/fill/erase. Testable with `cargo test`. — **your decision**
+
+Key modules:
+- `walk.rs` — row/round walk generators using nightly `gen` blocks, 5-segment structure
+- `pattern.rs` — DP compression with content-keyed `CompressMemo` shared across all rows
+- `common.rs` — highlight computation, color utilities, `filter`/`map`
+- `export.rs` — 4-stage export pipeline (virtual→physical, window, classify, group-by-parent)
+- `tools.rs` — `paint_pixel`, `flood_fill`, `erase_pixel_row/round` with symmetry mask
 
 ### `wasm`
-Thin binding layer. Depends on `core`. Contains only `src/lib.rs` with wasm-bindgen entry points. `package.json` points `main` and `types` directly to `pkg/` output — justified since `pkg/` is an internal detail within the same package boundary. — **Claude's choice**
+Thin binding layer. `src/lib.rs` only. `package.json` points `main`/`types` to `pkg/`. — **Claude's choice**
 
 ### `web`
-Vite + TypeScript application. Depends on `@mosaic/wasm` by workspace name — no filesystem paths. — **joint**
+Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. Modules:
+- `pattern.ts` owns `state`, `pixels`, `highlights`
+- `render.ts` owns `pixelSize`, `COLORS`, `canvas`/`ctx`
+- `symmetry.ts` owns `directlyActive`; functions receive dimensions as parameters
+- `history.ts` owns snapshot array; `historySave` / `historyUndo` / `historyRedo` take/return `Uint8Array`
+- `storage.ts` is pure serialization — no orchestration
+
+— **joint** (structure evolved through design review)
 
 ---
 
-## Rust Modules (in `core`)
+## Key Design Decisions
 
-### `walk.rs`
-Row and round walk generators using nightly `gen` blocks. Five `Segment` structs (start, step vector, count). Round starts one pixel right of TL corner so the full corner group stays together. — **your decision**
-
-### `pattern.rs`
-Maximum-compression DP (O(n³) time, O(n²) space). Content-keyed memoization (`Vec<String>` cache key) so identical subsequences share results across all rows and rounds. `CompressMemo` newtype passed in by caller so it persists across the whole export. — **your decision** ("not overkill, this makes export faster"); content-keyed cache — **Claude's choice**
-
-### `common.rs`
-Row and round highlight computation. `filter`, `map` iterator utilities. — **your decision** ("filter and map can be moved to common")
-
-### `export.rs`
-Four-stage pipeline: virtual→physical conversion, window filter, stitch classification, group-by-parent formatting. — **your decision (pipeline structure)**
-
----
-
-## TypeScript (`web/src/main.ts`)
-
-- **Discriminated union** (`RowState | RoundState`) for pattern state — TypeScript narrows correctly when accessing round-only fields. — **Claude's choice**
-- **`el<T>(id)`** typed DOM helper — avoids scattered null assertions. — **Claude's choice**
-- **Symmetry closure** computed via iterative group-theory rules. — **Claude's choice**; diagonal disable condition `(W−H) % 2 ≠ 0` — **your decision**
-- **Orbit computation** expands a pixel into its full orbit under enabled transforms via BFS. — **Claude's choice**
-- **Diagonal transforms** use integer arithmetic to guarantee `f(f(p)) = p`. — **Claude's choice**
-- **localStorage** auto-save on every stroke and new pattern. — **Claude's choice**
+- **Module ownership**: each module declares its own `let` state, exported for reading; setters provided for cross-module writes. — **your correction**
+- **Parameter passing**: functions receive what they need (state dimensions, closure set) rather than importing mutable state directly. — **your decision**
+- **Symmetry mask**: TypeScript computes the closure, converts to a `u8` bitmask, passes to Rust tools. — **Claude's choice**
+- **Dirty detection**: computed by diffing `pixels` against `baselinePixels` snapshot, not a stored boolean. Drawing and erasing back to original = clean. — **your decision**
+- **Stroke optimization**: pre-stroke snapshot compared on mouseup; if unchanged, no history entry and no session save. — **Claude's choice**
+- **Diagonal transforms**: integer arithmetic (`floor((W−H)/2)` offset) guarantees `f(f(p)) = p`. Diagonals disabled when `(W−H) % 2 ≠ 0`. — **your decision (condition); Claude's choice (algorithm)**
 
 ---
 
@@ -81,16 +87,15 @@ Four-stage pipeline: virtual→physical conversion, window filter, stitch classi
 
 ```json
 {
-  "build:wasm": "wasm-pack build wasm --target bundler",
-  "build:web":  "vite build web",
+  "build:wasm": "wasm-pack build wasm --target bundler --no-default-features",
+  "build:web":  "bun run --cwd web build",
   "build":      "bun run build:wasm && bun run build:web",
-  "dev:rust":   "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler'",
-  "dev:web":    "vite web",
-  "dev":        "bun run dev:rust & bun run dev:web"
+  "dev:rust":   "cargo-watch ... 'wasm-pack build wasm --target bundler --dev'",
+  "dev:web":    "bun run --cwd web dev"
 }
 ```
 
-Build order is mandatory: `core` → `wasm` → `web`. `bun install` works before any build since workspace membership is based on `package.json` presence, not `pkg/` existence. — **Claude's choice**; mandatory ordering identified by — **your correction**
+`--dev` flag keeps debug symbols, skips `wasm-opt`, compiles faster. `--no-default-features` strips `console_error_panic_hook` from release builds. — **Claude's choice**
 
 ---
 
@@ -103,4 +108,4 @@ Build order is mandatory: `core` → `wasm` → `web`. `bun install` works befor
 
 ## CI / CD
 
-GitHub Actions: push to `master` → install deps → `build:wasm` → `build:web` → deploy `web/dist/` to GitHub Pages via `actions/deploy-pages`. — **Claude's choice**; no custom packaging step — **your decision**
+GitHub Actions: push to `master` → `build:wasm` → `build:web` → deploy `web/dist/` to GitHub Pages. — **Claude's choice**; no custom packaging — **your decision**

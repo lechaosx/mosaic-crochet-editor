@@ -139,3 +139,16 @@ pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color
 pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y: i32, fill_color: u8, symmetry_mask: u8) -> Vec<u8> {
     tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, symmetry_mask)
 }
+
+#[wasm_bindgen]
+pub fn erase_pixel_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u8> {
+    tools::erase_pixel_row(pixels, width, height, x, y, symmetry_mask)
+}
+
+#[wasm_bindgen]
+pub fn erase_pixel_round(pixels: &[u8], canvas_width: i32, canvas_height: i32, x: i32, y: i32,
+                          virtual_size_x: i32, virtual_size_y: i32, offset_x: i32, offset_y: i32,
+                          rounds: i32, symmetry_mask: u8) -> Vec<u8> {
+    tools::erase_pixel_round(pixels, canvas_width, canvas_height, x, y,
+                              virtual_size_x, virtual_size_y, offset_x, offset_y, rounds, symmetry_mask)
+}
