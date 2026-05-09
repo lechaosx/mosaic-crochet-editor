@@ -51,10 +51,10 @@ Workspace membership is source-driven, not artifact-driven. `pkg/` is internal t
 Pure Rust. No WASM dependencies. Walk generators, pattern compression, highlight computation, symmetric paint/fill/erase. Testable with `cargo test`. — **your decision**
 
 Key modules:
-- `walk.rs` — row/round walk generators using nightly `gen` blocks, 5-segment structure
-- `pattern.rs` — DP compression with content-keyed `CompressMemo` shared across all rows
+- `walk.rs` — `row_walk_at(size, row_index)` / `round_walk_at(size, rounds, round)` produce a single row/round using nightly `gen` blocks, 5-segment structure for rounds. — **your decision (generators); Claude's choice (per-index entry points)**
+- `pattern.rs` — DP compression with content-keyed `CompressMemo`. Public types are `Stitch` (`Sc`/`Oc`/`Ch`) and `SequenceItem { Stitch, Group, RepeatGroup }` — strings only appear at the final `to_string` emit. Internally `CompressMemo` interns each unique `SequenceItem` to a `u32` so the DP runs on `Vec<u32>`, keeping memo keys cheap to hash/clone/compare. Memo stores `(cost, Decision)` only; the output tree is rebuilt at the end via back-pointer reconstruction so cached lookups are O(1). Uniform-run short-circuit collapses all-equal slices in O(n). — **your decision (typed end-to-end, no strings in pipeline); Claude's choice (hidden interner for DP perf; cost+back-pointer; short-circuit)**
 - `common.rs` — highlight computation, color utilities, `filter`/`map`
-- `export.rs` — 4-stage export pipeline (virtual→physical, window, classify, group-by-parent); returns a lazy `gen` iterator yielding one line at a time. — **your decision (generators)**
+- `export.rs` — 4-stage export pipeline (virtual→physical, window, classify, group-by-parent) exposed as `export_row_at` / `export_round_at` that compute one line per call. Stitches flow through as `pattern::Stitch`; compound parent groups are wrapped as `SequenceItem::Group(inner_compressed)`. The wasm `ExportSession` calls these per `next()` rather than restarting a generator each time. — **your decision (line-at-a-time streaming, typed pipeline); Claude's choice (per-index entry points)**
 - `tools.rs` — `paint_pixel`, `flood_fill`, `erase_pixel_row/round` with symmetry mask
 
 ### `wasm`
