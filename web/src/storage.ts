@@ -1,4 +1,4 @@
-import { el } from "./dom";
+import { el, setRadio } from "./dom";
 import { PatternState } from "./types";
 
 const LS_KEY       = "mosaic-pattern-v2";
@@ -73,7 +73,7 @@ export function loadFromLocalStorage(): LocalState | null {
 
 // Sync DOM inputs with current state so the New Pattern widget shows correct values
 export function syncUiToState(state: PatternState) {
-    (el<HTMLSelectElement>("mode")).value = state.mode;
+    setRadio("np-mode", state.mode);
     el("row-controls").hidden   = state.mode !== "row";
     el("round-controls").hidden = state.mode !== "round";
 
@@ -86,7 +86,7 @@ export function syncUiToState(state: PatternState) {
         const subMode = state.offsetX === 0 && state.offsetY === 0
             ? "full"
             : state.canvasWidth === state.virtualWidth ? "half" : "quarter";
-        (el<HTMLSelectElement>("sub-mode")).value    = subMode;
+        setRadio("np-submode", subMode);
         (el<HTMLInputElement>("inner-width")).value  = String(innerWidth);
         (el<HTMLInputElement>("inner-height")).value = String(innerHeight);
         (el<HTMLInputElement>("rounds")).value       = String(state.rounds);

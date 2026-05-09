@@ -36,8 +36,6 @@ body {
   display: contents;
 }
 
-.bar-spacer-flex { flex: 1; min-width: 8px; }
-
 .bar-group {
   display: flex;
   align-items: center;
@@ -50,15 +48,7 @@ body {
   margin-left: 2px;
 }
 
-.bar-sep {
-  width: 1px;
-  height: 20px;
-  background: #444;
-  margin: 0 4px;
-}
-
-.bar-spacer       { flex: 1; }
-.bar-spacer-flex  { flex: 1; min-width: 0; }
+.bar-spacer-flex { flex: 1; min-width: 0; }
 
 /* ── Canvas area ─────────────────────────────────────────────────────────── */
 
@@ -232,11 +222,45 @@ input[type="range"] {
   border-radius: 6px;
   padding: 10px;
   z-index: 50;
-  min-width: 180px;
+  min-width: 200px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+}
+
+.widget-radios {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+}
+
+.radio-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #aaa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.radio-label:has(input:checked) {
+  color: #eee;
+}
+
+.radio-label input[type="radio"] {
+  cursor: pointer;
+  margin: 0;
+}
+
+.widget-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-top: 1px solid #3a3a3a;
+  padding-top: 6px;
 }
 
 .widget-row {

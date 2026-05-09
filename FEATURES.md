@@ -74,6 +74,18 @@ Scroll anywhere in the canvas area to zoom in/out. — **your decision (area); C
 
 ---
 
+## Canvas Rotation
+
+Two buttons in the top-right of the toolbar rotate the canvas view ±45°. Rotation accumulates unbounded (no wrap-around) to avoid a fast reverse-spin when crossing 360°. Rotation persists across refreshes. — **your decision (feature, accumulation); Claude's choice (placement)**
+
+---
+
+## Pan
+
+Middle-mouse drag pans the canvas freely. Pan resets to center when opening the New Pattern widget. Pan is not persisted across refreshes. — **your decision (reset on New); Claude's choice (middle-mouse)**
+
+---
+
 ## Real-time Highlights
 
 As you draw, the highlight overlay updates:
@@ -113,7 +125,7 @@ Clicking **Export** opens a modal. The pattern text appears line by line as it i
 ## Save / Load
 
 - **Save** — downloads the pattern as a `.mcw` file (JSON). On browsers with the File System Access API (Chrome/Edge), opens a native save dialog and resets the dirty baseline on success. On others (Firefox) the file downloads immediately with no confirmation possible. — **Claude's choice**
-- **Load** — opens a file picker and restores the complete pattern including colors and symmetry. — **your decision**
+- **Load** — opens a file picker and restores the complete pattern including colors and symmetry. Opening the New Pattern widget after a load shows the loaded pattern's dimensions as defaults. — **your decision**
 - Both operations prompt to **Discard** or **Cancel** if there are unsaved changes. — **your decision**
 - **Dirty detection** is computed by diffing current pixels against the baseline snapshot, not a stored flag — drawing a pixel then erasing it is not dirty. — **your decision**
 
