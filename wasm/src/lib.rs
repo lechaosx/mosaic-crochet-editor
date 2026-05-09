@@ -1,7 +1,45 @@
+use std::cell::RefCell;
 use glam::IVec2;
-use mosaic_crochet_core::{common, export, tools};
+use mosaic_crochet_core::{common, export, pattern, tools};
 use ndarray::Array2;
 use wasm_bindgen::prelude::*;
+
+thread_local! {
+    static EXPORT_MEMO: RefCell<pattern::CompressMemo> = RefCell::new(pattern::CompressMemo::new());
+}
+
+enum ExportMode {
+    Row { canvas_size: IVec2, alternate: bool },
+    Round { canvas_size: IVec2, virtual_size: IVec2, offset: IVec2, rounds: i32, alternate: bool },
+}
+
+#[wasm_bindgen]
+pub struct ExportSession {
+    highlights: Array2<u8>,
+    mode:       ExportMode,
+    index:      usize,
+    total:      usize,
+}
+
+#[wasm_bindgen]
+impl ExportSession {
+    pub fn total(&self) -> usize { self.total }
+
+    pub fn next(&mut self) -> Option<String> {
+        if self.index >= self.total { return None; }
+        let i = self.index;
+        self.index += 1;
+        EXPORT_MEMO.with(|memo| {
+            let mut memo = memo.borrow_mut();
+            match &self.mode {
+                ExportMode::Row { canvas_size, alternate } =>
+                    export::export_row_pattern(&self.highlights, *canvas_size, *alternate, &mut memo).nth(i),
+                ExportMode::Round { canvas_size, virtual_size, offset, rounds, alternate } =>
+                    export::export_round_pattern(&self.highlights, *canvas_size, *virtual_size, *offset, *rounds, *alternate, &mut memo).nth(i),
+            }
+        })
+    }
+}
 
 #[wasm_bindgen(start)]
 fn init() {
@@ -58,15 +96,13 @@ pub fn compute_round_highlights(
 }
 
 #[wasm_bindgen]
-pub fn export_row_pattern(
-    highlights: &[u8],
-    width:      i32,
-    height:     i32,
-    alternate:  bool,
-) -> String {
-    let canvas_size = IVec2::new(width, height);
-    let highlights  = to_array2(highlights, width, height);
-    export::export_row_pattern(&highlights, canvas_size, alternate)
+pub fn export_start_row(highlights: &[u8], width: i32, height: i32, alternate: bool) -> ExportSession {
+    ExportSession {
+        highlights:  to_array2(highlights, width, height),
+        mode:        ExportMode::Row { canvas_size: IVec2::new(width, height), alternate },
+        index:       0,
+        total:       (height - 1).max(0) as usize,
+    }
 }
 
 #[wasm_bindgen]
@@ -112,7 +148,7 @@ pub fn initialize_round_pattern(
 }
 
 #[wasm_bindgen]
-pub fn export_round_pattern(
+pub fn export_start_round(
     highlights:     &[u8],
     canvas_width:   i32,
     canvas_height:  i32,
@@ -122,12 +158,18 @@ pub fn export_round_pattern(
     offset_y:       i32,
     rounds:         i32,
     alternate:      bool,
-) -> String {
-    let canvas_size  = IVec2::new(canvas_width,  canvas_height);
-    let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset       = IVec2::new(offset_x,      offset_y);
-    let highlights   = to_array2(highlights, canvas_width, canvas_height);
-    export::export_round_pattern(&highlights, canvas_size, virtual_size, offset, rounds, alternate)
+) -> ExportSession {
+    ExportSession {
+        highlights:  to_array2(highlights, canvas_width, canvas_height),
+        mode:        ExportMode::Round {
+            canvas_size:  IVec2::new(canvas_width,  canvas_height),
+            virtual_size: IVec2::new(virtual_width, virtual_height),
+            offset:       IVec2::new(offset_x,      offset_y),
+            rounds, alternate,
+        },
+        index: 0,
+        total: rounds as usize,
+    }
 }
 
 #[wasm_bindgen]

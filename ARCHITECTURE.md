@@ -54,11 +54,15 @@ Key modules:
 - `walk.rs` — row/round walk generators using nightly `gen` blocks, 5-segment structure
 - `pattern.rs` — DP compression with content-keyed `CompressMemo` shared across all rows
 - `common.rs` — highlight computation, color utilities, `filter`/`map`
-- `export.rs` — 4-stage export pipeline (virtual→physical, window, classify, group-by-parent)
+- `export.rs` — 4-stage export pipeline (virtual→physical, window, classify, group-by-parent); returns a lazy `gen` iterator yielding one line at a time. — **your decision (generators)**
 - `tools.rs` — `paint_pixel`, `flood_fill`, `erase_pixel_row/round` with symmetry mask
 
 ### `wasm`
 Thin binding layer. `src/lib.rs` only. `package.json` points `main`/`types` to `pkg/`. — **Agent's choice**
+
+Key WASM-level decisions:
+- **`ExportSession`** — `#[wasm_bindgen]` struct; JS owns the object, calls `.next()` to pull one line at a time from WASM heap, calls `.free()` when done. Avoids global session state. — **your decision**
+- **`EXPORT_MEMO`** — `thread_local!` `RefCell<CompressMemo>`; persists for the entire WASM module lifetime so repeated exports reuse cached compression results. — **your decision**
 
 ### `web`
 Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. Modules:
