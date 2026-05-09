@@ -1,5 +1,5 @@
 use glam::IVec2;
-use mosaic_crochet_core::{common, export};
+use mosaic_crochet_core::{common, export, tools};
 use ndarray::Array2;
 use wasm_bindgen::prelude::*;
 
@@ -128,4 +128,14 @@ pub fn export_round_pattern(
     let offset       = IVec2::new(offset_x,      offset_y);
     let highlights   = to_array2(highlights, canvas_width, canvas_height);
     export::export_round_pattern(&highlights, canvas_size, virtual_size, offset, rounds, alternate)
+}
+
+#[wasm_bindgen]
+pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, symmetry_mask: u8) -> Vec<u8> {
+    tools::paint_pixel(pixels, width, height, x, y, color, symmetry_mask)
+}
+
+#[wasm_bindgen]
+pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y: i32, fill_color: u8, symmetry_mask: u8) -> Vec<u8> {
+    tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, symmetry_mask)
 }

@@ -8,37 +8,7 @@
 </head>
 <body>
   <aside id="sidebar">
-    <div class="control-group">
-      <label>Mode</label>
-      <select id="mode">
-        <option value="row">Row</option>
-        <option value="round">Round</option>
-      </select>
-    </div>
-
-    <div id="row-controls">
-      <div class="control-group">
-        <label>Width  <input type="number" id="width"  value="16" min="2" max="64"></label>
-        <label>Height <input type="number" id="height" value="16" min="2" max="64"></label>
-      </div>
-    </div>
-
-    <div id="round-controls" hidden>
-      <div class="control-group">
-        <label>Sub-mode
-          <select id="sub-mode">
-            <option value="full">Full</option>
-            <option value="half">Half</option>
-            <option value="quarter">Quarter</option>
-          </select>
-        </label>
-        <label>Inner Width  <input type="number" id="inner-width"  value="3" min="0" max="32"></label>
-        <label>Inner Height <input type="number" id="inner-height" value="3" min="0" max="32"></label>
-        <label>Rounds       <input type="number" id="rounds"       value="5" min="1" max="32"></label>
-      </div>
-    </div>
-
-    <button id="apply">New Pattern</button>
+    <button id="new-pattern">New Pattern</button>
     <hr>
     <div class="control-group">
       <label>Tool</label>
@@ -84,6 +54,47 @@
   <main>
     <canvas id="canvas"></canvas>
   </main>
+
+  <div id="new-pattern-modal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">New Pattern</span>
+        <button id="new-pattern-close">✕</button>
+      </div>
+      <div class="modal-options" style="flex-direction: column; gap: 12px;">
+        <div class="control-group">
+          <label>Mode</label>
+          <select id="mode">
+            <option value="row">Row</option>
+            <option value="round">Round</option>
+          </select>
+        </div>
+        <div id="row-controls">
+          <div class="control-group">
+            <label>Width  <input type="number" id="width"  value="16" min="2" max="64"></label>
+            <label>Height <input type="number" id="height" value="16" min="2" max="64"></label>
+          </div>
+        </div>
+        <div id="round-controls" hidden>
+          <div class="control-group">
+            <label>Sub-mode
+              <select id="sub-mode">
+                <option value="full">Full</option>
+                <option value="half">Half</option>
+                <option value="quarter">Quarter</option>
+              </select>
+            </label>
+            <label>Inner Width  <input type="number" id="inner-width"  value="3" min="0" max="32"></label>
+            <label>Inner Height <input type="number" id="inner-height" value="3" min="0" max="32"></label>
+            <label>Rounds       <input type="number" id="rounds"       value="5" min="1" max="32"></label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="apply">Create</button>
+      </div>
+    </div>
+  </div>
 
   <div id="export-modal" class="modal" hidden>
     <div class="modal-content">

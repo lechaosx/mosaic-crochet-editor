@@ -7,4 +7,12 @@ export default defineConfig({
     build: {
         target: "esnext",
     },
+    optimizeDeps: {
+        exclude: ["@mosaic/wasm"],
+    },
+    server: {
+        watch: {
+            ignored: (path: string) => path.includes("node_modules") && !path.includes("@mosaic"),
+        },
+    },
 });
