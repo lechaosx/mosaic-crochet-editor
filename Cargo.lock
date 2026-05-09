@@ -37,10 +37,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "mosaic-crochet-web"
+name = "mosaic-crochet-core"
 version = "0.1.0"
 dependencies = [
  "glam",
+ "ndarray",
+]
+
+[[package]]
+name = "mosaic-crochet-wasm"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "mosaic-crochet-core",
  "ndarray",
  "wasm-bindgen",
 ]

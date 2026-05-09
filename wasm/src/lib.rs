@@ -1,13 +1,7 @@
-#![feature(gen_blocks)]
-
 use glam::IVec2;
+use mosaic_crochet_core::{common, export};
 use ndarray::Array2;
 use wasm_bindgen::prelude::*;
-
-mod common;
-mod export;
-mod pattern;
-mod walk;
 
 fn to_array2(flat: &[u8], width: i32, height: i32) -> Array2<u8> {
     Array2::from_shape_vec(
@@ -17,7 +11,7 @@ fn to_array2(flat: &[u8], width: i32, height: i32) -> Array2<u8> {
 }
 
 fn from_array2(grid: Array2<u8>) -> Vec<u8> {
-    grid.into_raw_vec()
+    grid.into_raw_vec_and_offset().0
 }
 
 #[wasm_bindgen]

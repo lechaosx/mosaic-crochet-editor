@@ -27,28 +27,37 @@ See [FEATURES.md](FEATURES.md) for details.
 git clone <repo>
 cd mosaic-crochet-web
 
-# Enter the dev shell (installs rustup, trunk, cargo-watch)
+# Enter the dev shell (installs rustup, wasm-pack, bun, cargo-watch)
 nix develop
 
 # Install the nightly Rust toolchain (first time only)
 rustup toolchain install nightly
 rustup target add wasm32-unknown-unknown
 
-# Start the dev server
-trunk serve web/index.html
+# Install JS dependencies
+bun install
+
+# Build the WASM package
+bun run build:wasm
+
+# Start the Vite dev server
+bun run dev:web
 ```
 
-Open [http://localhost:8080](http://localhost:8080).
+Open [http://localhost:5173](http://localhost:5173).
 
-Trunk watches both Rust and JS files and hot-reloads on change.
+For Rust hot reload, run in a separate terminal:
+```sh
+bun run dev:rust
+```
 
 ### Production build
 
 ```sh
-trunk build --release
+bun run build
 ```
 
-Output is in `dist/`.
+Output is in `web/dist/`.
 
 ## Deployment
 

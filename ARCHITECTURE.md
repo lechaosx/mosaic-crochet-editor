@@ -4,47 +4,74 @@
 
 ---
 
+## Repo Structure
+
+```
+mosaic-crochet-web/
+├── core/          ← pure Rust logic (walk, pattern, highlight computation)
+├── wasm/          ← Rust → WASM binding layer + stable JS surface
+│   ├── Cargo.toml
+│   ├── package.json   ("name": "@mosaic/wasm")
+│   ├── src/           Rust source + src/index.js shim + src/index.d.ts
+│   └── pkg/           wasm-pack output (gitignored, internal)
+├── web/           ← Vite + TypeScript application
+├── Cargo.toml     ← Rust workspace (members: core, wasm)
+├── package.json   ← JS workspace (members: wasm, web)
+├── rust-toolchain.toml
+└── flake.nix
+```
+
+Workspace membership is source-driven, not artifact-driven. `pkg/` is internal to `wasm/` and never a workspace member. — **your correction**
+
+---
+
 ## Language & Runtime
 
-- **Rust → WASM** for all computation; **plain JavaScript** for the browser surface. — **your decision** (you explicitly ruled out TypeScript)
+- **Rust → WASM** for all computation; **TypeScript** for the browser surface. — **your decision** (switched from plain JS; originally ruled out TypeScript, then reconsidered)
 - **Nightly Rust, edition 2024** — required for `gen` blocks. — **your decision**
 - **`gen` blocks** to port Lua coroutine-based walk generators directly. — **your decision**
-- **Trunk** as WASM bundler and dev server. No Node, no npm, no Vite. — **joint**
-- WASM bindings accessed via `window.wasmBindings`; `main.js` waits for `TrunkApplicationStarted` event. — **Claude's choice** (race-condition fix)
+- **Vite** as dev server. Justified by in-memory TypeScript compilation with no disk artifacts during dev. — **joint**
+- **Bun** for package management and script running. — **your decision**
+- **wasm-pack `--target bundler`** — produces named ESM exports consumed directly by Vite; no init function needed, WASM loading handled automatically by `vite-plugin-wasm`. — **Claude's choice**
+- **`base: "./"` in vite.config.ts** — relative asset paths so the site works on GitHub Pages subpaths. — **Claude's choice**
 
 ---
 
-## Dependencies
+## Package Boundaries
 
-- **`glam`** (`IVec2`) — Vec2 from cargo instead of a custom implementation. — **your decision**; specific crate choice — **joint**
-- **`ndarray`** (`Array2<u8>`) — 2D pixel and highlight buffers. — **joint** (you noted drawing would need 2D data anyway)
-- **`wasm-bindgen`** — JS/WASM interop; pixel buffers cross the boundary as flat `Uint8Array`. — **Claude's choice**
+### `core`
+Pure Rust library. No WASM dependencies. Contains all domain logic: walk generators, pattern compression, highlight computation. Testable with plain `cargo test`. — **your decision** (split from wasm to enable native testing)
+
+### `wasm`
+Thin binding layer. Depends on `core`. Exposes wasm-bindgen entry points. Has a stable JS surface:
+- `src/index.js` — re-exports from `pkg/`; isolates consumers from wasm-pack output shape changes. — **Claude's choice**
+- `src/index.d.ts` — TypeScript declarations; consumers never reference `pkg/` directly. — **Claude's choice**
+
+### `web`
+Vite + TypeScript application. Depends on `@mosaic/wasm` by workspace name — no filesystem paths. — **joint**
 
 ---
 
-## Rust Modules
+## Rust Modules (in `core`)
 
 ### `walk.rs`
-Row and round walk generators. Five `Segment` structs (start, step vector, count) replacing separate corners + sides tables. — **your decision (segment structure)**. Round starts one pixel right of TL corner so the full corner group stays together. — **your decision**
+Row and round walk generators using nightly `gen` blocks. Five `Segment` structs (start, step vector, count). Round starts one pixel right of TL corner so the full corner group stays together. — **your decision**
 
 ### `pattern.rs`
-Maximum-compression DP (O(n³) time, O(n²) space). Content-keyed memoization (`Vec<String>` cache key) so identical subsequences across all rows and rounds share results. — **Claude's choice**. Memo passed in by caller (`CompressMemo` newtype) so it persists across the whole export. — **your decision** ("not overkill, this makes export faster")
+Maximum-compression DP (O(n³) time, O(n²) space). Content-keyed memoization (`Vec<String>` cache key) so identical subsequences share results across all rows and rounds. `CompressMemo` newtype passed in by caller so it persists across the whole export. — **your decision** ("not overkill, this makes export faster"); content-keyed cache — **Claude's choice**
 
 ### `common.rs`
-Pure row and round highlight computation. `filter`, `map` iterator utilities moved here. — **your decision** ("filter and map can be moved to common")
+Row and round highlight computation. `filter`, `map` iterator utilities. — **your decision** ("filter and map can be moved to common")
 
 ### `export.rs`
-Four-stage pipeline: virtual→physical conversion, window filter, stitch classification, group-by-parent formatting. — **your decision (pipeline structure)**. Foundation ring detection (0 inner hole → `sc` instead of `ch`). — **Claude's choice** (documented as limitation instead, per your decision)
-
-### `lib.rs`
-wasm-bindgen entry points. Pixel buffers converted between flat `&[u8]` and `Array2<u8>`. — **Claude's choice**
+Four-stage pipeline: virtual→physical conversion, window filter, stitch classification, group-by-parent formatting. — **your decision (pipeline structure)**
 
 ---
 
-## JavaScript (`main.js`)
+## TypeScript (`web/src/main.ts`)
 
-Single ES module, no framework. — **your decision**
-
+- **Discriminated union** (`RowState | RoundState`) for pattern state — TypeScript narrows correctly when accessing round-only fields. — **Claude's choice**
+- **`el<T>(id)`** typed DOM helper — avoids scattered null assertions. — **Claude's choice**
 - **Symmetry closure** computed via iterative group-theory rules. — **Claude's choice**; diagonal disable condition `(W−H) % 2 ≠ 0` — **your decision**
 - **Orbit computation** expands a pixel into its full orbit under enabled transforms via BFS. — **Claude's choice**
 - **Diagonal transforms** use integer arithmetic to guarantee `f(f(p)) = p`. — **Claude's choice**
@@ -52,13 +79,30 @@ Single ES module, no framework. — **your decision**
 
 ---
 
+## Build Pipeline
+
+```json
+{
+  "build:wasm": "wasm-pack build wasm --target bundler",
+  "build:web":  "vite build web",
+  "build":      "bun run build:wasm && bun run build:web",
+  "dev:rust":   "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler'",
+  "dev:web":    "vite web",
+  "dev":        "bun run dev:rust & bun run dev:web"
+}
+```
+
+Build order is mandatory: `core` → `wasm` → `web`. `bun install` works before any build since workspace membership is based on `package.json` presence, not `pkg/` existence. — **Claude's choice**; mandatory ordering identified by — **your correction**
+
+---
+
 ## Dev Environment
 
-- **`flake.nix`** with rustup, trunk, cargo-watch; no Nix overlay needed. — **joint**
-- **`rust-toolchain.toml`**: nightly, `wasm32-unknown-unknown`, standard components. — **Claude's choice**
+- **`flake.nix`**: rustup, wasm-pack, bun, cargo-watch. — **joint**
+- **`rust-toolchain.toml`**: nightly, `wasm32-unknown-unknown`. — **Claude's choice**
 
 ---
 
 ## CI / CD
 
-GitHub Actions: push to `master` → trunk build → deploy to GitHub Pages via `actions/deploy-pages`. Source zip attached automatically; no custom packaging step. — **your decision** (you removed the custom packaging). Cargo cache keyed by `Cargo.lock`. — **Claude's choice**
+GitHub Actions: push to `master` → install deps → `build:wasm` → `build:web` → deploy `web/dist/` to GitHub Pages via `actions/deploy-pages`. — **Claude's choice**; no custom packaging step — **your decision**

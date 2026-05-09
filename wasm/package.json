@@ -1,0 +1,7 @@
+{
+  "name": "@mosaic/wasm",
+  "version": "0.1.0",
+  "type": "module",
+  "main":  "./pkg/mosaic_crochet_wasm.js",
+  "types": "./pkg/mosaic_crochet_wasm.d.ts"
+}
