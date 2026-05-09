@@ -72,11 +72,21 @@ fn build_lce(items: &[SequenceItem]) -> Vec<u32> {
 /// Each cell `(start, len)` reads only cells with strictly smaller `len`,
 /// so a single forward pass suffices.
 ///
-/// Per cell:
-/// - Period checks first (cheap O(L/2) with LCE) — produces a tight upper
-///   bound on `best_cost`, which then lets the split loop prune aggressively.
-/// - Splits second, with branch-and-bound: skip when `left >= best_cost`
-///   (the right child would only push the total higher).
+/// Per cell, work is ordered most-promising-first and aggressively pruned:
+/// - Periods iterate 1..=len/2. The first valid period in iteration order is
+///   the fundamental period `q` of the slice; by Fine–Wilf any other valid
+///   period is a multiple `kq` of it, and `cost[start, kq] = cost[start, q]`,
+///   so we `break` after the first hit — larger valid periods can't improve
+///   the inner cost.
+/// - If `best_cost == 1` after the period (or before) we're at the floor;
+///   any non-empty slice has cost ≥ 1.
+/// - Splits run second only if `best_cost > 2` — a split is two non-empty
+///   children each with cost ≥ 1, so total ≥ 2; if `best_cost <= 2` no
+///   split can beat it, skip the loop entirely.
+/// - Within the split loop, branch-and-bound is tightened from the naive
+///   `left >= best_cost` to `left + 1 >= best_cost`. The `+1` is the floor
+///   on `cost(right)`, letting us prune one step earlier (e.g. when
+///   `best_cost == 3` we can drop splits with `left == 2` immediately).
 fn solve(
     n:      usize,
     lce:    &[u32],
@@ -92,6 +102,7 @@ fn solve(
 
     for len in 2..=n {
         for start in 0..=(n - len) {
+            let cell = start * stride + len;
             let mut best_cost = len as u32;
             let mut best_dec  = Decision::Literal;
 
@@ -105,21 +116,24 @@ fn solve(
                     best_cost = inner_cost;
                     best_dec  = Decision::Repeat { period: period as u32 };
                 }
+                break;
             }
 
-            for k in 1..len {
-                let left = cost[start * stride + k];
-                if left >= best_cost { continue; }
-                let right = cost[(start + k) * stride + (len - k)];
-                let total = left + right;
-                if total < best_cost {
-                    best_cost = total;
-                    best_dec  = Decision::Split { k: k as u32 };
+            if best_cost > 2 {
+                for k in 1..len {
+                    let left = cost[start * stride + k];
+                    if left + 1 >= best_cost { continue; }
+                    let right = cost[(start + k) * stride + (len - k)];
+                    let total = left + right;
+                    if total < best_cost {
+                        best_cost = total;
+                        best_dec  = Decision::Split { k: k as u32 };
+                    }
                 }
             }
 
-            cost[start * stride + len] = best_cost;
-            dec [start * stride + len] = best_dec;
+            cost[cell] = best_cost;
+            dec [cell] = best_dec;
         }
     }
 
