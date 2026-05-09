@@ -84,7 +84,7 @@ As you draw, the highlight overlay updates:
 
 ## New Pattern
 
-Clicking **New** opens an inline widget anchored to the button. Settings update the main canvas live. Clicking outside commits. — **your decision**
+Clicking **New** opens an inline widget anchored to the button. Every settings change immediately updates the canvas and commits (baseline reset, history reset, session saved). Clicking outside just closes the widget. — **your decision**
 
 - If the current pattern has unsaved changes, a Discard / Cancel dialog appears first. — **your decision**
 
@@ -92,10 +92,10 @@ Clicking **New** opens an inline widget anchored to the button. Settings update 
 
 ## Export
 
-Clicking **Export** opens a modal with the pattern in a scrollable textarea. — **your decision**
+Clicking **Export** opens a modal. The pattern text appears line by line as it is generated, with a live progress counter in the header. Closing the modal cancels generation immediately. — **your decision (line-by-line, cancellation); Claude's choice (progress counter)**
 
-- **Alternate direction** checkbox re-renders text immediately on toggle. — **your decision**
-- **Copy to clipboard** and **Download .txt** buttons. — **Claude's choice / your decision**
+- **Alternate direction** toggle below the modal header; re-generates immediately on change. — **your decision**
+- **Copy to clipboard** and **Download .txt** buttons; disabled while generating. — **Claude's choice / your decision**
 - Warning banner when invalid placements exist; export is not blocked. — **Claude's choice**
 
 ### Stitch notation
@@ -112,7 +112,7 @@ Clicking **Export** opens a modal with the pattern in a scrollable textarea. —
 
 ## Save / Load
 
-- **Save** — downloads the pattern as a `.mcw` file (JSON). On browsers with the File System Access API (Chrome/Edge), opens a native save dialog; on others downloads immediately. — **Claude's choice**
+- **Save** — downloads the pattern as a `.mcw` file (JSON). On browsers with the File System Access API (Chrome/Edge), opens a native save dialog and resets the dirty baseline on success. On others (Firefox) the file downloads immediately with no confirmation possible. — **Claude's choice**
 - **Load** — opens a file picker and restores the complete pattern including colors and symmetry. — **your decision**
 - Both operations prompt to **Discard** or **Cancel** if there are unsaved changes. — **your decision**
 - **Dirty detection** is computed by diffing current pixels against the baseline snapshot, not a stored flag — drawing a pixel then erasing it is not dirty. — **your decision**

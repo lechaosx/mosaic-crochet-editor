@@ -1,4 +1,5 @@
-import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round, export_row_pattern, export_round_pattern } from "@mosaic/wasm";
+import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
+         export_start_row, export_start_round, ExportSession } from "@mosaic/wasm";
 import { PointerLike, Tool, PatternState } from "./types";
 import { el } from "./dom";
 import { canvas } from "./render";
@@ -371,33 +372,63 @@ const exportModal    = el("export-modal");
 const exportTextarea = el<HTMLTextAreaElement>("export-text");
 const alternateCheck = el<HTMLInputElement>("alternate");
 
-function generateExportText(): string {
-    if (!state || !highlights) return "";
+function createExportSession(): ExportSession | null {
+    if (!state || !highlights) return null;
     const alternate = alternateCheck.checked;
     const { canvasWidth, canvasHeight } = state;
     if (state.mode === "row") {
-        return export_row_pattern(highlights, canvasWidth, canvasHeight, alternate);
+        return export_start_row(highlights, canvasWidth, canvasHeight, alternate);
     } else {
         const { virtualWidth, virtualHeight, offsetX, offsetY, rounds } = state;
-        return export_round_pattern(
-            highlights, canvasWidth, canvasHeight,
-            virtualWidth, virtualHeight, offsetX, offsetY, rounds, alternate
-        );
+        return export_start_round(highlights, canvasWidth, canvasHeight,
+            virtualWidth, virtualHeight, offsetX, offsetY, rounds, alternate);
     }
 }
 
+let exportCancelled = false;
+
+async function renderExport() {
+    exportCancelled = false;
+    el<HTMLButtonElement>("modal-copy").disabled     = true;
+    el<HTMLButtonElement>("modal-download").disabled = true;
+    exportTextarea.value = "";
+    const progressEl = el("export-progress");
+    progressEl.hidden = false;
+
+    const session = createExportSession();
+    if (!session) { progressEl.hidden = true; return; }
+
+    const total = session.total();
+    let count = 0;
+    let line: string | undefined;
+    while ((line = session.next()) !== undefined) {
+        if (exportCancelled) { session.free(); progressEl.hidden = true; return; }
+        exportTextarea.value += (exportTextarea.value ? "\n" : "") + line;
+        progressEl.textContent = `Generating… ${++count} / ${total}`;
+        await new Promise<void>(r => requestAnimationFrame(() => r()));
+    }
+
+    session.free();
+    progressEl.hidden = true;
+    el<HTMLButtonElement>("modal-copy").disabled     = false;
+    el<HTMLButtonElement>("modal-download").disabled = false;
+}
+
+function cancelExport() { exportCancelled = true; }
+
 el("export").addEventListener("click", () => {
-    exportTextarea.value = generateExportText();
     el("export-warning").hidden = !highlights?.some(h => h === 4);
     exportModal.hidden = false;
+    renderExport();
 });
 
 alternateCheck.addEventListener("change", () => {
-    if (!exportModal.hidden) exportTextarea.value = generateExportText();
+    if (!exportModal.hidden) { cancelExport(); renderExport(); }
 });
 
-el("modal-close").addEventListener("click", () => { exportModal.hidden = true; });
-exportModal.addEventListener("click", e => { if (e.target === exportModal) exportModal.hidden = true; });
+function closeExportModal() { cancelExport(); exportModal.hidden = true; }
+el("modal-close").addEventListener("click", closeExportModal);
+exportModal.addEventListener("click", e => { if (e.target === exportModal) closeExportModal(); });
 
 el("modal-copy").addEventListener("click", () => {
     navigator.clipboard.writeText(exportTextarea.value);

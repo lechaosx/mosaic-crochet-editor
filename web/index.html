@@ -98,13 +98,16 @@
     <div class="modal-content">
       <div class="modal-header">
         <span class="modal-title">Export Pattern</span>
+        <div id="export-progress" class="export-progress" hidden></div>
         <button id="modal-close">✕</button>
       </div>
+      <label class="toggle-label">
+        <input type="checkbox" id="alternate">
+        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        Alternate direction
+      </label>
       <div id="export-warning" class="export-warning" hidden>
         ⚠ Pattern has invalid placements (red pixels). Export may be incorrect.
-      </div>
-      <div class="modal-options">
-        <label><input type="checkbox" id="alternate"> Alternate direction</label>
       </div>
       <textarea id="export-text" readonly spellcheck="false"></textarea>
       <div class="modal-footer">
