@@ -29,15 +29,15 @@ impl ExportSession {
         if self.index >= self.total { return None; }
         let i = self.index;
         self.index += 1;
-        EXPORT_MEMO.with(|memo| {
+        Some(EXPORT_MEMO.with(|memo| {
             let mut memo = memo.borrow_mut();
             match &self.mode {
                 ExportMode::Row { canvas_size, alternate } =>
-                    export::export_row_pattern(&self.highlights, *canvas_size, *alternate, &mut memo).nth(i),
+                    export::export_row_at(&self.highlights, *canvas_size, *alternate, i, &mut memo),
                 ExportMode::Round { canvas_size, virtual_size, offset, rounds, alternate } =>
-                    export::export_round_pattern(&self.highlights, *canvas_size, *virtual_size, *offset, *rounds, *alternate, &mut memo).nth(i),
+                    export::export_round_at(&self.highlights, *canvas_size, *virtual_size, *offset, *rounds, *alternate, i, &mut memo),
             }
-        })
+        }))
     }
 }
 
