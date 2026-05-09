@@ -17,6 +17,7 @@ interface LocalSave {
     hlOverlayColor: string;
     hlInvalidColor: string;
     hlOpacity:      number;
+    canvasRotation: number;
 }
 
 export interface LocalState {
@@ -30,6 +31,7 @@ export interface LocalState {
     hlOverlayColor: string;
     hlInvalidColor: string;
     hlOpacity:      number;
+    canvasRotation: number;
 }
 
 export function saveToLocalStorage(
@@ -37,11 +39,12 @@ export function saveToLocalStorage(
     colorA: string, colorB: string,
     activeTool: string, primaryColor: number, symmetry: string[],
     hlOverlayColor: string, hlInvalidColor: string, hlOpacity: number,
+    canvasRotation: number,
 ) {
     const data: LocalSave = {
         state, pixels: Array.from(pixels), colorA, colorB,
         activeTool, primaryColor, symmetry,
-        hlOverlayColor, hlInvalidColor, hlOpacity,
+        hlOverlayColor, hlInvalidColor, hlOpacity, canvasRotation,
     };
     localStorage.setItem(LS_KEY, JSON.stringify(data));
 }
@@ -63,6 +66,7 @@ export function loadFromLocalStorage(): LocalState | null {
             hlOverlayColor: data.hlOverlayColor ?? "#0000ff",
             hlInvalidColor: data.hlInvalidColor ?? "#ff0000",
             hlOpacity:      data.hlOpacity      ?? 50,
+            canvasRotation: data.canvasRotation ?? 0,
         };
     } catch { localStorage.removeItem(LS_KEY); return null; }
 }
