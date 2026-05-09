@@ -1,0 +1,11 @@
+{
+  "workspaces": ["wasm", "web"],
+  "scripts": {
+    "build:wasm": "wasm-pack build wasm --target bundler",
+    "build:web":  "vite build web",
+    "build":      "bun run build:wasm && bun run build:web",
+    "dev:rust":   "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler'",
+    "dev:web":    "vite web",
+    "dev":        "bun run dev:rust & bun run dev:web"
+  }
+}

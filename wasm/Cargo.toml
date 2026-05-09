@@ -1,0 +1,14 @@
+[package]
+name    = "mosaic-crochet-wasm"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+mosaic-crochet-core = { path = "../core" }
+wasm-bindgen        = { workspace = true }
+glam                = { workspace = true }
+ndarray             = { workspace = true }
+

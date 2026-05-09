@@ -37,13 +37,22 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install trunk
-        uses: jetli/trunk-action@v0.5.0
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
         with:
           version: latest
 
-      - name: Build
-        run: trunk build --release
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install JS dependencies
+        run: bun install
+
+      - name: Build WASM
+        run: bun run build:wasm
+
+      - name: Build web
+        run: bun run build:web
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
@@ -51,7 +60,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: web/dist
 
       - name: Deploy
         id: deployment
