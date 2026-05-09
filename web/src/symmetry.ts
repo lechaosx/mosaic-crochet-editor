@@ -8,6 +8,7 @@ export const SYM_KEY: Record<string, SymKey> = {
 };
 
 export let directlyActive = new Set<SymKey>();
+export function setDirectlyActive(keys: SymKey[]) { directlyActive = new Set(keys); }
 
 export function computeClosure(active: Set<SymKey>, diagonals: boolean): Set<SymKey> {
     let V = active.has("V"), H = active.has("H"), C = active.has("C"),

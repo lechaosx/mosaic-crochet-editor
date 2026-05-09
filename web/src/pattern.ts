@@ -11,7 +11,8 @@ export let state:      PatternState | null = null;
 export let pixels:     Uint8Array   | null = null;
 export let highlights: Uint8Array   | null = null;
 
-export function setPixels(p: Uint8Array) { pixels = p; }
+export function setPixels(p: Uint8Array)      { pixels = p; }
+export function setState(s: PatternState)     { state  = s; }
 
 function computeRoundDimensions(innerWidth: number, innerHeight: number, rounds: number, subMode: string) {
     const virtualWidth  = innerWidth  + rounds * 2;
@@ -46,6 +47,27 @@ export function applySettings() {
             virtualWidth, virtualHeight,
             dims.offsetX, dims.offsetY, rounds
         ).slice();
+    }
+}
+
+export function previewPattern(): { pixels: Uint8Array; state: PatternState } | null {
+    const mode = inputValue("mode");
+    if (mode === "row") {
+        const width  = inputInt("width");
+        const height = inputInt("height");
+        return { pixels: initialize_row_pattern(width, height), state: { mode, canvasWidth: width, canvasHeight: height } };
+    } else {
+        const innerWidth  = inputInt("inner-width");
+        const innerHeight = inputInt("inner-height");
+        const rounds      = inputInt("rounds");
+        const subMode     = inputValue("sub-mode");
+        const virtualWidth  = innerWidth  + rounds * 2;
+        const virtualHeight = innerHeight + rounds * 2;
+        const dims = computeRoundDimensions(innerWidth, innerHeight, rounds, subMode);
+        return {
+            pixels: initialize_round_pattern(dims.canvasWidth, dims.canvasHeight, virtualWidth, virtualHeight, dims.offsetX, dims.offsetY, rounds),
+            state: { mode: "round", ...dims, virtualWidth, virtualHeight, rounds },
+        };
     }
 }
 

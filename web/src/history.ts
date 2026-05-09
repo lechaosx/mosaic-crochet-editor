@@ -14,14 +14,17 @@ export function historyReset(pixels: Uint8Array) {
     historySave(pixels);
 }
 
+export function canUndo(): boolean { return index > 0; }
+export function canRedo(): boolean { return index < snapshots.length - 1; }
+
 export function historyUndo(): Uint8Array | null {
-    if (index <= 0) return null;
+    if (!canUndo()) return null;
     index--;
     return snapshots[index].slice();
 }
 
 export function historyRedo(): Uint8Array | null {
-    if (index >= snapshots.length - 1) return null;
+    if (!canRedo()) return null;
     index++;
     return snapshots[index].slice();
 }
