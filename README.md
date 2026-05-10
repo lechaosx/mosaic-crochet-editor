@@ -2,6 +2,8 @@
 
 A browser-based design tool for inset mosaic crochet patterns. Draw pixel patterns, get real-time stitch validation, and export human-readable crochet instructions.
 
+**▶ [Try it now](https://lechaosx.github.io/mosaic-crochet-editor/)** — no install, runs in your browser.
+
 Companion to the [Aseprite plugin](../aseprite/data/extensions/aseprite-mosaic-crochet).
 
 For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHITECTURE.md](ARCHITECTURE.md) (technical).
