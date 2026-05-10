@@ -157,7 +157,36 @@ export function setRotationImmediate(deg: number) {
 
 export function render(state: PatternState, pixels: Uint8Array, highlights: Uint8Array) {
     lastState = state; lastPixels = pixels; lastHighlights = highlights;
+    updateFavicon(state, pixels);
     rerender();
+}
+
+// ── Favicon ───────────────────────────────────────────────────────────────────
+const FAVICON_SIZE = 32;
+const faviconCanvas = document.createElement("canvas");
+faviconCanvas.width  = FAVICON_SIZE;
+faviconCanvas.height = FAVICON_SIZE;
+const faviconCtx = faviconCanvas.getContext("2d")!;
+
+function updateFavicon(state: PatternState, pixels: Uint8Array) {
+    const { canvasWidth: W, canvasHeight: H } = state;
+    const scale = Math.min(FAVICON_SIZE / W, FAVICON_SIZE / H);
+    const px    = Math.max(1, Math.floor(scale));
+    const offX  = Math.floor((FAVICON_SIZE - W * scale) / 2);
+    const offY  = Math.floor((FAVICON_SIZE - H * scale) / 2);
+
+    faviconCtx.clearRect(0, 0, FAVICON_SIZE, FAVICON_SIZE);
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const p = pixels[y * W + x];
+            if (p === 0) continue;
+            faviconCtx.fillStyle = COLORS[p] ?? "#333";
+            faviconCtx.fillRect(offX + Math.floor(x * scale), offY + Math.floor(y * scale), px, px);
+        }
+    }
+
+    const link = document.getElementById("favicon") as HTMLLinkElement | null;
+    if (link) link.href = faviconCanvas.toDataURL("image/png");
 }
 
 function rerender() {
