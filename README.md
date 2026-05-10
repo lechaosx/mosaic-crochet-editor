@@ -113,6 +113,14 @@ Starts the Rust watcher and the Vite dev server in parallel. Open [http://localh
 - TypeScript changes reload instantly via Vite HMR.
 - Rust changes trigger a WASM rebuild (a few seconds), after which Vite reloads the page.
 
+### Tests
+
+```sh
+cargo test
+```
+
+Runs the pure-Rust unit tests in `core/` (highlight computation, walk generators, pattern compression).
+
 ### Production build
 
 ```sh
