@@ -55,8 +55,7 @@ pub fn export_round_at(
         if !walk::window(physical_coord, canvas_size) { continue; }
 
         let stitch = if walk::is_corner_coord(physical_coord, offset, virtual_size) {
-            let parent_rfe = common::get_round_from_edge(virtual_size, virtual_parent);
-            if parent_rfe >= rounds { Stitch::Sc } else { Stitch::Ch }
+            Stitch::Ch
         } else {
             stitch_from_highlight(highlights, physical_coord)
         };
@@ -81,4 +80,39 @@ pub fn export_round_at(
     if alternate && round_index % 2 == 1 { flat.reverse(); }
     let compressed = pattern::compress(&flat);
     format!("Round {}: {}", round_index + 1, pattern::to_string(&compressed))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn v(x: i32, y: i32) -> IVec2 { IVec2::new(x, y) }
+
+    /// Natural (unmodified) pixel grid for a round pattern — no highlights set.
+    fn no_highlights(w: i32, h: i32) -> Array2<u8> {
+        Array2::zeros((h as usize, w as usize))
+    }
+
+    // ── Round export ─────────────────────────────────────────────────────────
+
+    // innerW=1, innerH=1, rounds=2 → virtual 5×5, canvas 5×5, offset (0,0).
+    // Round 1 (innermost, round_index=0): 8 stitches, all sharing the same
+    // parent point (2,2) which lies inside the inner hole.
+    //   Walk order: non-corner sc, corner ch, non-corner sc, corner ch, ...
+    //   Pattern = [sc, ch] × 4 → wrapped as one group → ([sc, ch] × 4).
+    #[test]
+    fn round_1_inner_1x1_hole() {
+        let hl = no_highlights(5, 5);
+        let result = export_round_at(&hl, v(5,5), v(5,5), v(0,0), 2, false, 0);
+        assert_eq!(result, "Round 1: ([sc, ch] × 4)");
+    }
+
+    // Zero inner hole (innerW=0, innerH=0, rounds=1) → virtual 2×2, canvas 2×2.
+    // All 4 pixels are corners → (ch × 4).  Replace with 4 sc into a magic ring.
+    #[test]
+    fn round_1_zero_inner_hole() {
+        let hl = no_highlights(2, 2);
+        let result = export_round_at(&hl, v(2,2), v(2,2), v(0,0), 1, false, 0);
+        assert_eq!(result, "Round 1: (ch × 4)");
+    }
 }
