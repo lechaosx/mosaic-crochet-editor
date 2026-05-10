@@ -4,7 +4,36 @@ A browser-based design tool for inset mosaic crochet patterns. Draw pixel patter
 
 **▶ [Try it now](https://lechaosx.github.io/mosaic-crochet-editor/)** — no install, runs in your browser.
 
-Companion to the [Aseprite plugin](../aseprite/data/extensions/aseprite-mosaic-crochet).
+Companion to the [Aseprite plugin](https://github.com/lechaosx/aseprite-mosaic-crochet) for the same workflow inside Aseprite.
+
+---
+
+<table>
+<tr>
+<td><img src="doc/screenshot.png" alt="Web editor with a round pattern and overlay highlights"></td>
+<td><img src="doc/photo.jpg" alt="Finished crocheted square"></td>
+</tr>
+</table>
+
+```
+Round 1: ([sc, ch] × 4)
+Round 2: [(sc, ch, sc), oc] × 4
+Round 3: [(sc, ch, sc), oc, sc, oc] × 4
+Round 4: [(sc, ch, sc), oc, [sc, oc] × 2] × 4
+Round 5: [(sc, ch, sc), oc, [sc, oc] × 3] × 4
+Round 6: [(sc, ch, sc), oc, [sc × 3, oc] × 2] × 4
+Round 7: [(sc, ch, sc), [oc, sc] × 2, sc × 3, [sc, oc] × 2] × 4
+Round 8: [(sc, ch, sc), oc, [sc × 3, oc] × 3] × 4
+Round 9: [(sc, ch, sc), oc, sc × 4, [sc, oc] × 2, sc × 5, oc] × 4
+Round 10: [(sc, ch, sc), oc, [sc × 7, oc] × 2] × 4
+Round 11: [(sc, ch, sc), oc, sc × 17, oc] × 4
+Round 12: [(sc, ch, sc), sc, [sc, oc, sc × 2] × 5] × 4
+Round 13: [(sc, ch, sc), oc, sc × 2, [sc, oc] × 8, sc × 3, oc] × 4
+Round 14: [(sc, ch, sc), oc, sc × 2, [sc × 3, oc] × 4, sc × 5, oc] × 4
+Round 15: [(sc, ch, sc), sc × 27] × 4
+```
+
+---
 
 For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHITECTURE.md](ARCHITECTURE.md) (technical).
 
