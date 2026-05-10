@@ -72,25 +72,17 @@ input  { font: inherit; color: inherit; }
    Toolbar
    ────────────────────────────────────────────────────────────────────────── */
 .toolbar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas: "left center right";
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  column-gap: var(--space-3);
-  row-gap: var(--space-1);
+  justify-content: space-between;       /* distribute groups evenly per row */
+  row-gap: var(--space-2);
+  column-gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   background: var(--bg-1);
   border-bottom: var(--border);
   flex-shrink: 0;
 }
-
-.tb-section {
-  display: flex;
-  align-items: center;
-}
-.tb-left   { grid-area: left;   }
-.tb-center { grid-area: center; justify-self: center; }
-.tb-right  { grid-area: right;  justify-self: end; }
 
 .tb-group {
   display: flex;
@@ -98,22 +90,26 @@ input  { font: inherit; color: inherit; }
   gap: var(--space-1);
 }
 
-.tb-group + .tb-group {
-  margin-inline-start: var(--space-3);
-  padding-inline-start: var(--space-3);
-  border-inline-start: var(--border);
-}
+/* Wide screen: all 5 groups on a single row. DOM order: file → tools → sym
+   → colours → hl-rot. tb-break is hidden so it doesn't take a slot. */
+.tb-break { display: none; }
 
-/* Narrow viewports: file/undo stay top-left, highlights/rotate stay top-right,
-   the central drawing tools wrap to a second row underneath. */
+.g-file   { order: 1; }
+.g-tools  { order: 2; }
+.g-sym    { order: 3; }
+.g-colors { order: 4; }
+.g-hlrot  { order: 5; }
+
+/* Narrow viewports: re-order so file/hl-rot share row 1 and the drawing
+   tools wrap to row 2. tb-break is a 100%-wide invisible flex item that
+   forces wrap before the centre groups. */
 @media (max-width: 60rem) {
-  .toolbar {
-    grid-template-columns: 1fr auto;
-    grid-template-areas:
-      "left   right"
-      "center center";
-  }
-  .tb-center { justify-self: center; }
+  .g-file   { order: 1; }
+  .g-hlrot  { order: 2; }
+  .tb-break { order: 3; display: block; flex-basis: 100%; height: 0; }
+  .g-tools  { order: 4; }
+  .g-sym    { order: 5; }
+  .g-colors { order: 6; }
 }
 
 .tb-spacer { flex: 1 1 0; min-width: 0; }
