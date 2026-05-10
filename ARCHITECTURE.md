@@ -1,8 +1,8 @@
-# Architecture
+# Technical Decisions
 
-**Your decision** = decided by you. **Claude's choice** = suggested and decided by Claude. **Joint** = discussed and decided together.
+This file records the technical decisions behind the codebase: structure, module boundaries, algorithm choices, library/runtime picks. Implementation specifics (math formulas, function signatures, step-by-step algorithms) live in source-code comments. User-facing behaviour and product decisions live in [FEATURES.md](FEATURES.md). Setup and usage are in [README.md](README.md).
 
-This file captures **decisions and structure**. Implementation specifics live next to the code, in module/function comments.
+**your decision** = decided by the user. **Claude's choice** = proposed and implemented without explicit instruction. **joint** = discussed and decided together.
 
 ---
 
@@ -71,12 +71,10 @@ Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. Module ownership:
 ## Cross-Cutting Decisions
 
 ### Render & coordinate model
-- Canvas is **viewport-sized**; the pattern is positioned via `ctx.setTransform`. Backing store sized by `clientWidth × clientHeight × dpr` so transient CSS transforms don't corrupt resize calculations.
-- **All transforms (pan, zoom, rotation) live in ctx.** No CSS transform on the canvas. The matrix order makes the rotation pivot the **pattern centre**, so panned patterns rotate in place. — **your decision** (pattern-centre pivot); **Claude's choice** (ctx-only).
-- A separate `visualRotation` (animated) is distinct from `view.rotation` (target/persisted), so painting during a rotation animation hits the pixel that's actually on screen. — **Claude's choice**
-- Rotation animation is rAF-driven (250 ms ease-out cubic). The same loop fades the top-of-pattern indicator in while a rotation is running and out when it settles. — **Claude's choice**
-- `fitToView` uses the rotated AABB so a rotated pattern still fits entirely on auto-fit (new pattern / load / refresh). — **Claude's choice**
-- Symmetry guides extend one pattern pixel beyond pattern bounds, drawn in pattern coordinates so they rotate with the canvas. — **Claude's choice**
+- Canvas is sized to the viewport; the pattern is positioned via `ctx.setTransform`, not via CSS transforms on the element. — **Claude's choice**
+- All transforms (pan, zoom, rotation) go through ctx. The matrix is built so that the rotation pivot is the pattern centre. — **your decision** (pattern-centre pivot); **Claude's choice** (ctx-only).
+- `visualRotation` (animated) is kept separate from `view.rotation` (target/persisted) so painting mid-animation hits the pixel that's actually on screen. — **Claude's choice**
+- Rotation animation runs in a single rAF loop alongside the indicator opacity. — **Claude's choice**
 
 ### Gestures
 Pointer-event state machine — one path for mouse, pen, touch:
@@ -98,8 +96,8 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - Swatches use a unified `bindLongPress` helper for click-to-select / long-press-to-edit on any pointer type, plus `dblclick` for desktop double-click. — **Claude's choice**
 
 ### Toolbar layout
-- Five groups in two `<div class="tb-row">` wrappers; `display: contents` flattens them in wide mode so the row wrappers vanish and CSS `order` controls the visual sequence. In narrow mode each wrapper becomes a full-width flex container — exactly two visible rows, each `space-between`-distributed. — **Claude's choice**
-- Both breakpoints (single-row → two-row, and the start of shrinking) come from **measurement** at runtime: each group's intrinsic width is sampled at full size and at 2/3 size, fitting a linear `width(scale)` from those two samples. Shrinking starts only when content actually overflows; browser page-zoom triggers the same response as a smaller native viewport. — **your decision** (layout shape, distribution, auto-shrink); **Claude's choice** (measure-driven, two-scale fit).
+- Two `<div class="tb-row">` wrappers around the five groups, switched between `display: contents` (wide) and full-width flex containers (narrow). — **Claude's choice**
+- Breakpoints derived at runtime from each group's measured intrinsic width at two scales (full and 2/3), not hard-coded. — **Claude's choice**
 
 ### Styling
 - CSS custom-property tokens (`--space-*`, `--radius-*`, `--font-*`, `--bg-*`, `--fg-*`, `--accent`, `--hit`).
@@ -107,12 +105,12 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - The toolbar's `--hit` and `--font-base` are JS-set (from measured widths). Everything else uses the rem tokens. — **Claude's choice**
 
 ### Data flow & state
-- **Module ownership**: each module owns its `let` state, exported for reading; setters provided for cross-module writes. — **your correction**
-- **Parameter passing**: functions receive what they need rather than reaching into mutable module state. — **your decision**
-- **Symmetry mask**: TypeScript computes the closure, hands a `u8` bitmask to Rust tools. — **Claude's choice**
-- **Dirty detection**: pixel-array diff against a baseline snapshot, not a stored boolean. Drawing then erasing back to the original = clean. — **your decision**
-- **Stroke optimisation**: pre-stroke snapshot compared on stroke end; if unchanged, no history entry, no session save. — **Claude's choice**
-- **Diagonal symmetries**: integer arithmetic guarantees `f(f(p)) = p`; diagonals disabled when `(W − H) % 2 ≠ 0`. — **your decision** (condition); **Claude's choice** (algorithm).
+- Module ownership: each module owns its `let` state, exported for reading; setters for cross-module writes. — **your correction**
+- Parameter passing: functions receive what they need rather than reaching into mutable module state. — **your decision**
+- Symmetry mask: TS computes the closure, passes a `u8` bitmask to Rust. — **Claude's choice**
+- Dirty detection: pixel-array diff against a baseline snapshot. — **your decision**
+- Stroke optimisation: pre-stroke snapshot compared on stroke end; unchanged → no history entry, no session save. — **Claude's choice**
+- Diagonal symmetries: integer arithmetic for `f(f(p)) = p`. — **Claude's choice**
 
 ---
 

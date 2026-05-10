@@ -11,17 +11,17 @@
   <header class="toolbar" id="toolbar">
     <div class="tb-row">
       <div class="tb-group g-file">
-        <button class="btn" id="btn-new" popovertarget="new-pattern-widget" aria-haspopup="dialog" aria-expanded="false">New</button>
-        <button class="btn" id="btn-load">Load</button>
-        <button class="btn" id="btn-save">Save</button>
-        <button class="btn" id="btn-export">Export</button>
-        <button class="btn" id="btn-undo" title="Undo (Ctrl+Z)">Undo</button>
-        <button class="btn" id="btn-redo" title="Redo (Ctrl+Y)">Redo</button>
+        <button class="btn" id="btn-new"    popovertarget="new-pattern-widget" aria-haspopup="dialog" aria-expanded="false" title="New pattern">New</button>
+        <button class="btn" id="btn-load"   title="Load .mcw file">Load</button>
+        <button class="btn" id="btn-save"   title="Save as .mcw file">Save</button>
+        <button class="btn" id="btn-export" title="Export pattern as text">Export</button>
+        <button class="btn" id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
+        <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y)">Redo</button>
       </div>
       <div class="tb-group g-hlrot">
         <button class="btn btn--icon" id="btn-hl-toggle" popovertarget="hl-popover" title="Highlight settings" aria-label="Highlight settings" aria-haspopup="dialog">⊙</button>
-        <button class="btn btn--icon" id="rotate-ccw" title="Rotate counter-clockwise" aria-label="Rotate counter-clockwise">↺</button>
-        <button class="btn btn--icon" id="rotate-cw"  title="Rotate clockwise"          aria-label="Rotate clockwise">↻</button>
+        <button class="btn btn--icon" id="rotate-ccw" title="Rotate counter-clockwise (Shift+R)" aria-label="Rotate counter-clockwise">↺</button>
+        <button class="btn btn--icon" id="rotate-cw"  title="Rotate clockwise (R)"               aria-label="Rotate clockwise">↻</button>
       </div>
     </div>
 
@@ -34,18 +34,18 @@
       </div>
 
       <div class="tb-group g-sym" aria-label="Symmetry">
-        <button class="btn btn--icon" id="sym-vertical"   title="Vertical"      aria-label="Vertical symmetry">↔</button>
-        <button class="btn btn--icon" id="sym-horizontal" title="Horizontal"    aria-label="Horizontal symmetry">↕</button>
-        <button class="btn btn--icon" id="sym-central"    title="Central"       aria-label="Central symmetry">⊕</button>
-        <button class="btn btn--icon" id="sym-diag1"      title="Diagonal ╲"    aria-label="Diagonal symmetry">╲</button>
-        <button class="btn btn--icon" id="sym-diag2"      title="Anti-diagonal ╱" aria-label="Anti-diagonal symmetry">╱</button>
+        <button class="btn btn--icon" id="sym-vertical"   title="Vertical mirror (V)"     aria-label="Vertical symmetry">↔</button>
+        <button class="btn btn--icon" id="sym-horizontal" title="Horizontal mirror (H)"   aria-label="Horizontal symmetry">↕</button>
+        <button class="btn btn--icon" id="sym-central"    title="Central symmetry (C)"    aria-label="Central symmetry">⊕</button>
+        <button class="btn btn--icon" id="sym-diag1"      title="Diagonal ╲ (D)"          aria-label="Diagonal symmetry">╲</button>
+        <button class="btn btn--icon" id="sym-diag2"      title="Anti-diagonal ╱ (A)"     aria-label="Anti-diagonal symmetry">╱</button>
       </div>
 
       <div class="tb-group g-colors" aria-label="Colours">
-        <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" aria-label="Primary colour (long-press to edit)">
+        <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Primary colour (1) — double-click or long-press to edit" aria-label="Primary colour">
           <input type="color" id="color-a" value="#000000" tabindex="-1">
         </div>
-        <div id="swatch-b" class="swatch" tabindex="0" role="button" aria-label="Secondary colour (long-press to edit)">
+        <div id="swatch-b" class="swatch" tabindex="0" role="button" title="Secondary colour (2) — double-click or long-press to edit" aria-label="Secondary colour">
           <input type="color" id="color-b" value="#ffffff" tabindex="-1">
         </div>
       </div>

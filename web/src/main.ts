@@ -230,11 +230,29 @@ document.addEventListener("keydown", e => {
         return;
     }
     const k = e.key.toLowerCase();
-    if (k === "p") setTool("pencil");
+    // tools
+    if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
     else if (k === "e") setTool("eraser");
     else if (k === "i") setTool("invert");
+    // symmetry axes
+    else if (k === "v") toggleSym("V");
+    else if (k === "h") toggleSym("H");
+    else if (k === "c") toggleSym("C");
+    else if (k === "d") toggleSym("D1");
+    else if (k === "a") toggleSym("D2");
+    // rotation
+    else if (k === "r") rotate(e.shiftKey ? -45 : 45);
+    // primary colour selection
+    else if (k === "1") setPrimary(1);
+    else if (k === "2") setPrimary(2);
 });
+
+function rotate(delta: number) {
+    view.rotation += delta;
+    applyRotation();
+    saveSession();
+}
 
 /* ─── Init ──────────────────────────────────────────────────────────────── */
 function init() {
@@ -246,7 +264,7 @@ function init() {
         onHighlightChange: applyHighlightsFromInputs,
         onUndo: undo,
         onRedo: redo,
-        onRotate: (delta) => { view.rotation += delta; applyRotation(); saveSession(); },
+        onRotate: rotate,
         onNewClick,
         onNewApply: recreateFromInputs,
         onSave,
