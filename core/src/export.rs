@@ -6,14 +6,6 @@
 //! grouping by parent (compound stitches). Stitches flow through as typed
 //! `pattern::Stitch` and `SequenceItem` values; strings only appear at the
 //! final emit.
-//!
-//! `export_round_at` does an extra **edge-aware** preprocess: a stretch of
-//! consecutive single-stitch groups between two corner increases is one
-//! "edge". Each edge is compressed in isolation so its internal runs collapse
-//! to `RepeatGroup` tokens before the top-level DP sees them. For a typical
-//! sc-only round the top-level DP then sees ~8 items (4 edges + 4 corners)
-//! instead of ~4·E + 4 raw stitches — round-100 export drops from ~1.6 s to
-//! ~60 µs.
 
 use glam::IVec2;
 use ndarray::Array2;

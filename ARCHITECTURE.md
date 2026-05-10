@@ -37,11 +37,11 @@ Workspace membership is source-driven. — **your correction**
 Pure logic, no WASM deps, testable with `cargo test`. Each source file's `//!` doc comment explains its own algorithm:
 - `walk.rs` — row/round walk generators (gen blocks, 5-segment round structure).
 - `pattern.rs` — DP-based stitch-sequence compression (LCE table, period-first + branch-and-bound splits).
-- `export.rs` — 4-stage per-line export, with edge-aware preprocessing for rounds.
+- `export.rs` — 4-stage per-line export (virtual→physical, window, classify, group-by-parent).
 - `tools.rs` — symmetric paint / fill / eraser, plus the orbit walker.
 - `common.rs` — highlight computation, colour utilities.
 
-— **your decision** (typed end-to-end, line-at-a-time streaming, no strings in the export pipeline). **Claude's choice** (LCE table, edge-aware preprocess, orbit-based tools, row-eraser fix that uses each orbit cell's own y).
+— **your decision** (typed end-to-end, line-at-a-time streaming, no strings in the export pipeline). **Claude's choice** (LCE table, orbit-based tools, row-eraser fix that uses each orbit cell's own y).
 
 ### `wasm`
 Thin binding layer — `src/lib.rs` only. — **Claude's choice**
