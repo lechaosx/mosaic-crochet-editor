@@ -77,7 +77,15 @@ export function fitToView(state: PatternState) {
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     const margin = 0.92;
-    view.zoom = clampZoom(margin * Math.min(rect.width / state.canvasWidth, rect.height / state.canvasHeight));
+    // Account for current rotation: a rotated W×H rectangle has an axis-aligned
+    // bounding box of size (W·|cos θ| + H·|sin θ|, W·|sin θ| + H·|cos θ|).
+    const rad = view.rotation * Math.PI / 180;
+    const c = Math.abs(Math.cos(rad));
+    const s = Math.abs(Math.sin(rad));
+    const W = state.canvasWidth, H = state.canvasHeight;
+    const aabbW = W * c + H * s;
+    const aabbH = W * s + H * c;
+    view.zoom = clampZoom(margin * Math.min(rect.width / aabbW, rect.height / aabbH));
     view.panX = 0;
     view.panY = 0;
 }
