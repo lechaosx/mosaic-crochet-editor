@@ -1,11 +1,4 @@
 import { SymKey } from "./types";
-import { el } from "./dom";
-
-export const SYM_IDS = ["sym-vertical", "sym-horizontal", "sym-central", "sym-diag1", "sym-diag2"];
-export const SYM_KEY: Record<string, SymKey> = {
-    "sym-vertical": "V", "sym-horizontal": "H", "sym-central": "C",
-    "sym-diag1": "D1", "sym-diag2": "D2",
-};
 
 export let directlyActive = new Set<SymKey>();
 export function setDirectlyActive(keys: SymKey[]) { directlyActive = new Set(keys); }
@@ -54,21 +47,10 @@ export function getSymmetryMask(canvasWidth: number, canvasHeight: number): numb
     return closureToMask(computeClosure(directlyActive, diagonalsAvailable(canvasWidth, canvasHeight)));
 }
 
-export function updateSymmetryButtons(canvasWidth: number, canvasHeight: number) {
-    const closure = computeClosure(directlyActive, diagonalsAvailable(canvasWidth, canvasHeight));
-    Object.entries(SYM_KEY).forEach(([id, key]) => {
-        const btn = el<HTMLButtonElement>(id);
-        btn.classList.toggle("active",  directlyActive.has(key));
-        btn.classList.toggle("implied", !directlyActive.has(key) && closure.has(key));
-    });
-}
-
-export function updateDiagonalButtons(canvasWidth: number, canvasHeight: number) {
-    const available = diagonalsAvailable(canvasWidth, canvasHeight);
-    (["sym-diag1", "sym-diag2"] as const).forEach(id => {
-        const btn = el<HTMLButtonElement>(id);
-        btn.disabled = !available;
-        if (!available) directlyActive.delete(SYM_KEY[id]);
-    });
-    updateSymmetryButtons(canvasWidth, canvasHeight);
+// When the canvas dimensions change, drop diagonals if no longer available.
+export function ensureDiagonalsValid(canvasWidth: number, canvasHeight: number) {
+    if (!diagonalsAvailable(canvasWidth, canvasHeight)) {
+        directlyActive.delete("D1");
+        directlyActive.delete("D2");
+    }
 }

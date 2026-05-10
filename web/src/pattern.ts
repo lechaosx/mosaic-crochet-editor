@@ -5,7 +5,7 @@ import {
     initialize_round_pattern,
 } from "@mosaic/wasm";
 import { PatternState } from "./types";
-import { inputInt, radioValue } from "./dom";
+import { readClampedInt, radioValue } from "./dom";
 
 export let state:      PatternState | null = null;
 export let pixels:     Uint8Array   | null = null;
@@ -29,14 +29,14 @@ function computeRoundDimensions(innerWidth: number, innerHeight: number, rounds:
 export function applySettings() {
     const mode = radioValue("np-mode");
     if (mode === "row") {
-        const width  = inputInt("width");
-        const height = inputInt("height");
+        const width  = readClampedInt("width",  2);
+        const height = readClampedInt("height", 2);
         state  = { mode, canvasWidth: width, canvasHeight: height };
         pixels = initialize_row_pattern(width, height).slice();
     } else {
-        const innerWidth  = inputInt("inner-width");
-        const innerHeight = inputInt("inner-height");
-        const rounds      = inputInt("rounds");
+        const innerWidth  = readClampedInt("inner-width",  0);
+        const innerHeight = readClampedInt("inner-height", 0);
+        const rounds      = readClampedInt("rounds",       1);
         const subMode     = radioValue("np-submode");
         const virtualWidth  = innerWidth  + rounds * 2;
         const virtualHeight = innerHeight + rounds * 2;

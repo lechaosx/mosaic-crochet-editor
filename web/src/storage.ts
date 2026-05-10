@@ -1,4 +1,3 @@
-import { el, setRadio } from "./dom";
 import { PatternState } from "./types";
 
 const LS_KEY       = "mosaic-pattern-v2";
@@ -7,13 +6,13 @@ const FILE_VERSION = 1;
 // ── localStorage (session persistence) ───────────────────────────────────────
 
 interface LocalSave {
-    state:               PatternState;
-    pixels:              number[];
-    colorA:              string;
-    colorB:              string;
-    activeTool:          string;
-    primaryColor:        number;
-    symmetry:            string[];
+    state:          PatternState;
+    pixels:         number[];
+    colorA:         string;
+    colorB:         string;
+    activeTool:     string;
+    primaryColor:   number;
+    symmetry:       string[];
     hlOverlayColor: string;
     hlInvalidColor: string;
     hlOpacity:      number;
@@ -71,28 +70,6 @@ export function loadFromLocalStorage(): LocalState | null {
     } catch { localStorage.removeItem(LS_KEY); return null; }
 }
 
-// Sync DOM inputs with current state so the New Pattern widget shows correct values
-export function syncUiToState(state: PatternState) {
-    setRadio("np-mode", state.mode);
-    el("row-controls").hidden   = state.mode !== "row";
-    el("round-controls").hidden = state.mode !== "round";
-
-    if (state.mode === "row") {
-        (el<HTMLInputElement>("width")).value  = String(state.canvasWidth);
-        (el<HTMLInputElement>("height")).value = String(state.canvasHeight);
-    } else {
-        const innerWidth  = state.virtualWidth  - state.rounds * 2;
-        const innerHeight = state.virtualHeight - state.rounds * 2;
-        const subMode = state.offsetX === 0 && state.offsetY === 0
-            ? "full"
-            : state.canvasWidth === state.virtualWidth ? "half" : "quarter";
-        setRadio("np-submode", subMode);
-        (el<HTMLInputElement>("inner-width")).value  = String(innerWidth);
-        (el<HTMLInputElement>("inner-height")).value = String(innerHeight);
-        (el<HTMLInputElement>("rounds")).value       = String(state.rounds);
-    }
-}
-
 // ── File save / load ──────────────────────────────────────────────────────────
 
 interface SaveFile {
@@ -109,7 +86,11 @@ export async function saveToFile(state: PatternState, pixels: Uint8Array, colorA
 
     if ("showSaveFilePicker" in window) {
         try {
-            const handle = await (window as any).showSaveFilePicker({
+            const handle = await (window as unknown as {
+                showSaveFilePicker: (opts: object) => Promise<{
+                    createWritable: () => Promise<{ write: (s: string) => Promise<void>; close: () => Promise<void> }>
+                }>
+            }).showSaveFilePicker({
                 suggestedName: "pattern.mcw",
                 types: [{ description: "Mosaic Crochet Pattern", accept: { "application/json": [".mcw"] } }],
             });
