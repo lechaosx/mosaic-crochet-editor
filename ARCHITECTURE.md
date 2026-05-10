@@ -67,22 +67,23 @@ Key WASM-level decisions:
 Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. Modules:
 - `main.ts`     orchestration only — dirty tracking, paint/undo/redo/save/load/export glue
 - `pattern.ts`  owns `state`, `pixels`, `highlights`
-- `render.ts`   owns `view` (`panX`, `panY`, `zoom`, `rotation`), `COLORS`, `canvas`/`ctx`; renders via `ctx.setTransform(matrix)` on a viewport-sized canvas; provides `screenToPattern` and `fitToView`
+- `render.ts`   owns `view` (`panX`, `panY`, `zoom`, `rotation`), `visualRotation`, `COLORS`, `canvas`/`ctx`; renders via `ctx.setTransform(matrix)` on a viewport-sized canvas; drives the rAF loop for rotation animation and indicator opacity; provides `screenToPattern`, `fitToView`, `applyRotation`, `setRotationImmediate`
 - `gesture.ts`  pointer-event gesture state machine (paint / pinch-pan-zoom / middle-pan)
-- `ui.ts`       all toolbar wiring (tools, swatches, swap, symmetry, highlights popover, new-pattern popover, rotate, dialogs); exposes `mountUI` returning a `UIHandle` of state-update setters
+- `ui.ts`       all toolbar wiring (tools, swatches, symmetry, highlights popover, new-pattern popover, rotate, dialogs) and `mountToolbarLayout` for measure-driven responsive sizing; exposes `mountUI` returning a `UIHandle` of state-update setters
 - `symmetry.ts` owns `directlyActive`; functions receive dimensions as parameters; pure logic only, no DOM
 - `history.ts`  owns snapshot array; `historySave` / `historyUndo` / `historyRedo` take/return `Uint8Array`
 - `storage.ts`  pure serialisation — no orchestration, no DOM
+- `dom.ts`      tiny helpers — `el<T>()`, `inputInt`, `radioValue`, `setRadio`, plus `readClampedInt` / `clampInputDisplay` for new-pattern input normalisation
 
 — **joint** (structure); **Claude's choice** (per-module ownership of `gesture.ts` and `ui.ts`)
 
 ### Render & Coordinate Model
 
-- The `<canvas>` is sized to the viewport (CSS 100% × 100% inside `.canvas-area`, with backing store at `rect × devicePixelRatio`). — **Claude's choice**
-- **Hybrid transform**: pan + zoom go through `ctx.setTransform(matrix)`; rotation goes through CSS `transform: rotate(…deg)` on the canvas element with a 250 ms transition. This buys a free, GPU-accelerated rotation animation. The cost is one inverse-rotation step (`rotateDeltaIntoInternal`) when converting client-space gesture deltas to canvas-internal pan. — **joint** (your call to use CSS for rotation; Claude's design of the inverse-rotation helper)
-- `view` holds `panX`, `panY` (CSS px in canvas-internal coords), `zoom` (CSS px per pattern pixel), and `rotation` (degrees). The single forward `DOMMatrix` collapses scale + pan + dpr. `screenToPattern` inverse-rotates the cursor offset around canvas centre, then applies the matrix inverse. — **Claude's choice**
-- A small triangle is drawn above y=0 in pattern coords as a top-of-pattern indicator; it rotates with the canvas through the same CSS transform. `fitToView` reserves ~1.8 pattern pixels above y=0 for it and shifts pan down so the union (pattern + indicator) stays centred. — **Claude's choice**
-- `setRotationImmediate()` restores rotation on session load by temporarily disabling the CSS transition for one frame so the page doesn't spin from 0° on every refresh. — **Claude's choice**
+- The `<canvas>` is sized to the viewport (CSS 100% × 100% inside `.canvas-area`, with backing store at `clientWidth × clientHeight × devicePixelRatio`). `clientWidth`/`Height` are layout-based, so a resize that fires while CSS transforms are active is still safe. — **Claude's choice**
+- **All transforms via ctx**: `view` holds `panX`, `panY` (CSS px), `zoom` (CSS px per pattern pixel), and `rotation` (degrees, target). A separate `visualRotation` is the value actually rendered each frame. The forward `DOMMatrix` is `T_outer · R · S · T_centre`, so the rotation pivot is the **pattern centre** — panned patterns rotate in place rather than sweeping around the viewport. `screenToPattern` is just the matrix inverse, no extra rotation step needed. — **your decision (pattern-centre pivot); Claude's choice (matrix order, separate visualRotation)**
+- **Rotation animation**: each rotate-button click sets `view.rotation` to the new target. A single rAF loop in `render.ts` animates `visualRotation` from current to target with a 250 ms ease-out cubic; the same loop animates `topIndicatorOpacity` toward 1 while a rotation is in-flight and toward 0 when idle (fixed fade rate so overlapping clicks don't blink). Painting during the animation hits the pixel that's actually visible, since the matrix uses `visualRotation`. — **Claude's choice**
+- A small accent triangle drawn above y=0 in pattern coords is the top-of-pattern indicator; it rotates with the matrix and is alpha-blended by `topIndicatorOpacity`. — **Claude's choice**
+- `setRotationImmediate(deg)` snaps both `view.rotation` and `visualRotation` to the saved value on session load, with `topIndicatorOpacity = 0`, so refreshing doesn't spin the canvas from 0°. — **Claude's choice**
 - `ResizeObserver(canvas)` rebinds the backing store and re-renders on layout/DPR changes. — **Claude's choice**
 
 ### Gestures
@@ -103,8 +104,31 @@ Wheel zoom is anchored at the cursor; pinch zoom is anchored at the two-finger m
 
 - `ui.ts` exposes `mountUI(callbacks): UIHandle`. Callbacks fire from DOM events; the handle's setters are called by `main.ts` to push state into the DOM (active tool, history-button enabled state, symmetry highlight/implied state, etc.). No reactive framework. — **Claude's choice**
 - Modals are native `<dialog>` (`showModal()` / `close(returnValue)`) with backdrop click-to-close. The dirty-confirm dialog returns its decision via `returnValue` (`"discard"` / `"cancel"`). — **Claude's choice**
-- The new-pattern picker and the highlight settings panel use the native HTML `popover` attribute, which provides light-dismiss for free. JS sets fixed-position coords against the anchor button on each open. — **Claude's choice**
-- A unified `bindLongPress(el, onClick, onLong)` helper drives swatch click-to-select / long-press-to-edit on mouse, pen, and touch via pointer events. — **Claude's choice**
+- The new-pattern picker and the highlight settings panel use the native HTML `popover` attribute, which provides light-dismiss for free. The triggering buttons carry `popovertarget` so light-dismiss doesn't fire when clicking them; their click handlers `preventDefault()` the auto-toggle so we can run the dirty-confirm flow before opening. JS sets fixed-position coords against the anchor button on each open. — **Claude's choice**
+- A unified `bindLongPress(el, onClick, onLong)` helper drives swatch click-to-select / long-press-to-edit on mouse, pen, and touch via pointer events. Swatches additionally have a `dblclick` listener so desktop users can double-click to edit. — **Claude's choice**
+
+### Toolbar Layout
+
+The toolbar holds five groups, wrapped in two `<div class="tb-row">` containers:
+
+- Row wrapper 1 holds **file/history** + **highlights/rotation**.
+- Row wrapper 2 holds **tools** + **symmetry** + **colours**.
+
+`.tb-row { display: contents }` removes the wrappers from the layout in wide mode, so all five groups participate directly in the toolbar's flex with `justify-content: space-between`. CSS `order` (1‥5) sets the visual sequence: file, tools, sym, colours, hl-rot.
+
+In narrow mode (`.toolbar--narrow`), each `tb-row` becomes its own `display: flex; flex: 0 0 100%` container, so the toolbar wraps to exactly two visible rows, each independently distributed with `space-between`.
+
+`mountToolbarLayout()` in `ui.ts` derives the breakpoints from measurements rather than hard-coded values:
+
+1. Temporarily strips the `toolbar--narrow` class so all groups participate in the toolbar's flex layout directly.
+2. Measures each group's `offsetWidth` twice — once with full-size tokens (`--hit: 36px`, `--font-base: 14px`), once at the minimum scale (`× 2/3`).
+3. Computes three thresholds:
+   - `bpSingleRow_full = padding + 4·gap + Σ widths_full`
+   - `bpTwoRow_full = max(file + gap + hl-rot, tools + 2·gap + sym + colours)` at full
+   - `bpTwoRow_min` = same at min scale
+4. On every resize, toggles `.toolbar--narrow` when `vp < bpSingleRow_full` and writes `--hit / --hit-sm / --font-base` inline as a linear interpolation between `(bpTwoRow_min, 2/3·full)` and `(bpTwoRow_full, full)`. Above `bpTwoRow_full` the values clamp to full size, so wider screens are pixel-identical to a non-scaling toolbar.
+
+Because we have two real measurements rather than a single linear assumption, the scale formula handles fixed components (padding, inter-button gaps, etc.) correctly: shrinking starts the moment a row would otherwise overflow at full size, and the toolbar reaches its 2/3 floor exactly when content + fixed parts max out. Re-measure runs on `document.fonts.ready` to refresh once webfonts resolve. — **your decision (layout shape, distribution, auto-shrink); Claude's choice (display:contents wrappers, two-scale measurement, JS-driven linear interpolation)**
 
 ### Styling
 
@@ -112,10 +136,11 @@ Wheel zoom is anchored at the cursor; pinch zoom is anchored at the two-finger m
 
 - **rem** for typography and spacing tokens
 - **em** within self-scaling components
-- **px** only for borders and shadows
+- **px** only for borders, shadows, and JS-set toolbar tokens (which are derived from measured widths)
 - **%, fr, vw, vh, dvh** for responsive layout
-- **clamp()** for fluid hit targets (`--hit: clamp(2.25rem, 6vw, 2.75rem)`)
 - No 62.5% root-font hack
+
+`--hit` and `--font-base` on the toolbar are written in JS by `mountToolbarLayout()` (see above), not via static `clamp()`. Everywhere else uses the rem-based root tokens.
 
 — **your decision (units)**
 

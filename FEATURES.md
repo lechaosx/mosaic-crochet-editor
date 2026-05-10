@@ -28,7 +28,7 @@ Draw a rectangular pattern worked in concentric rounds from the outside in.
 - Strokes that change nothing are silently ignored — no history entry, no dirty mark. — **Claude's choice**
 
 ### Color Pickers
-Click either color swatch to select it as active. Long-press (mouse or touch, ~500 ms) opens the native color picker. Right-click on desktop still paints with the secondary colour. — **your decision (click-to-select); Claude's choice (unified pointer long-press, dropping double-click)**
+Click either color swatch to select it as active. Double-click (desktop) or long-press (touch / mouse, ~500 ms) opens the native color picker. Right-click on desktop still paints with the secondary colour. — **your decision (click-to-select, double-click + long-press); Claude's choice (unified pointer long-press)**
 
 ### Eraser Tool
 Restores pixels to their underlying alternating color — the same formula used to initialize the pattern. Works with symmetry. — **your decision**
@@ -76,7 +76,7 @@ Scroll wheel anywhere in the canvas area zooms in/out, anchored at the cursor. O
 
 ## Canvas Rotation
 
-Two buttons in the top-right of the toolbar rotate the canvas view ±45° with a 250 ms ease-out CSS animation. Rotation accumulates unbounded (no wrap-around) to avoid a fast reverse-spin when crossing 360°. Rotation persists across refreshes (restored without animating from 0°). A small accent-coloured triangle is drawn just above the top edge of the pattern so the user can always tell which way is "up" through any rotation. — **your decision (feature, accumulation, animation); Claude's choice (top-indicator, CSS-transform-driven animation)**
+Two rotate buttons (in the highlights/rotation group) rotate the canvas view ±45° with a 250 ms ease-out animation around the **pattern centre** (not the canvas centre, so panned patterns don't sweep around the viewport). Rotation accumulates unbounded (no wrap-around) so successive clicks always feel the same direction. Rotation persists across refreshes (restored without re-animating). A small accent-coloured triangle just above the top edge of the pattern fades in while a rotation animation is running and fades out when it settles, so the user can see which way is "up" mid-spin. — **your decision (feature, accumulation, animation, pattern-centre pivot); Claude's choice (rAF-driven animation with separate visualRotation, fade-in/out indicator)**
 
 ---
 
@@ -143,4 +143,16 @@ Single-finger drag draws (paint / fill / eraser, with active symmetry). Two-fing
 
 ## Highlight Settings
 
-Highlight overlay/invalid colour and opacity live in a popover triggered by the **⊙** button in the toolbar. Long-press the small swatches inside to change colours. — **Claude's choice (popover placement so the inputs no longer crowd the toolbar)**
+Highlight overlay/invalid colour and opacity live in a popover triggered by the **⊙** button (in the same toolbar group as the rotation buttons). Tap the small swatches inside to open the colour picker; the opacity slider is below. — **Claude's choice (popover placement so the inputs no longer crowd the toolbar)**
+
+---
+
+## Toolbar Layout
+
+The toolbar holds five groups: **file/history** (New, Load, Save, Export, Undo, Redo), **tools** (Pencil, Fill, Eraser), **symmetry** (5 axes), **colours** (two swatches), **highlights/rotation** (⊙, ↺, ↻).
+
+- **Wide screen** — single row, groups distributed with `space-between`. Visual order: file, tools, symmetry, colours, highlights/rotation.
+- **Narrow screen** — two rows, each with its own `space-between` distribution: row 1 holds **file** + **highlights/rotation**, row 2 holds **tools** + **symmetry** + **colours**.
+- **Very narrow** — when even the two-row layout would overflow, button height and font size shrink linearly down to two-thirds of full size.
+
+Both breakpoints (single-row → two-row, and the start of the shrink) are derived at runtime from each group's actually-measured intrinsic width, so wrapping and shrinking happen exactly when content stops fitting — never sooner. — **your decision (layout shape, distribution, auto-shrink); Claude's choice (measure-driven thresholds)**

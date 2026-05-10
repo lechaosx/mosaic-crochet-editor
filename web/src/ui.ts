@@ -313,11 +313,103 @@ export function mountUI(cb: UICallbacks): UIHandle {
         };
     }
 
+    mountToolbarLayout();
+
     return {
         setTool, setPrimary, setColors, setHighlights, setSymmetry, setDiagonalEnabled,
         setHistory, syncNewInputs, closeNew: () => npWidget.hidePopover(),
         confirmDirty, openExport,
     };
+}
+
+// ─── Toolbar layout ──────────────────────────────────────────────────────────
+// Each group is measured at full scale (--hit 2.25rem, --font-base 0.875rem)
+// and at the minimum scale (2/3 those). From those two samples we derive:
+//   • bpSingleRow_full — vp where all 5 groups fit on one row at full size
+//   • bpTwoRow_full    — vp where the wider of the two narrow rows fits at full size
+//   • bpTwoRow_min     — same, at minimum scale
+// Layout decisions:
+//   • narrow-class on when vp < bpSingleRow_full
+//   • shrink linearly between (bpTwoRow_min, 2/3) and (bpTwoRow_full, 1) so
+//     the toolbar fits exactly when content (incl. fixed padding/gap) overflows.
+const FULL_HIT = 36, FULL_HIT_SM = 28, FULL_FONT = 14;
+const MIN_SCALE = 2 / 3;
+
+function mountToolbarLayout() {
+    const toolbar  = document.getElementById("toolbar") as HTMLElement;
+    const groupSel = [".g-file", ".g-tools", ".g-sym", ".g-colors", ".g-hlrot"] as const;
+    type Widths = Record<typeof groupSel[number], number>;
+
+    let bpSingleRow_full = Infinity;
+    let bpTwoRow_full    = 0;
+    let bpTwoRow_min     = 0;
+
+    function measureAtScale(scale: number): Widths {
+        toolbar.style.setProperty("--hit",       `${FULL_HIT * scale}px`);
+        toolbar.style.setProperty("--hit-sm",    `${FULL_HIT_SM * scale}px`);
+        toolbar.style.setProperty("--font-base", `${FULL_FONT * scale}px`);
+        void toolbar.offsetHeight;
+        return Object.fromEntries(
+            groupSel.map(s => [s, (document.querySelector(s) as HTMLElement).offsetWidth])
+        ) as Widths;
+    }
+
+    function thresholds(w: Widths, padding: number, gap: number) {
+        return {
+            singleRow: padding + 4 * gap +
+                w[".g-file"] + w[".g-tools"] + w[".g-sym"] + w[".g-colors"] + w[".g-hlrot"],
+            twoRow: Math.max(
+                padding + gap     + w[".g-file"]  + w[".g-hlrot"],
+                padding + 2 * gap + w[".g-tools"] + w[".g-sym"] + w[".g-colors"],
+            ),
+        };
+    }
+
+    function measure() {
+        // Measure outside the narrow layout so all 5 groups participate
+        // directly in the toolbar's flex layout (display: contents on tb-row).
+        const wasNarrow = toolbar.classList.contains("toolbar--narrow");
+        toolbar.classList.remove("toolbar--narrow");
+
+        const w_full = measureAtScale(1);
+        const w_min  = measureAtScale(MIN_SCALE);
+
+        const cs = getComputedStyle(toolbar);
+        const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+        const gap     = parseFloat(cs.columnGap) || 0;
+
+        const tFull = thresholds(w_full, padding, gap);
+        const tMin  = thresholds(w_min,  padding, gap);
+        bpSingleRow_full = tFull.singleRow;
+        bpTwoRow_full    = tFull.twoRow;
+        bpTwoRow_min     = tMin.twoRow;
+
+        if (wasNarrow) toolbar.classList.add("toolbar--narrow");
+    }
+
+    function applyLayout() {
+        const vp = window.innerWidth;
+        toolbar.classList.toggle("toolbar--narrow", vp < bpSingleRow_full);
+
+        let scale = 1;
+        if (vp < bpTwoRow_full) {
+            const span = Math.max(1, bpTwoRow_full - bpTwoRow_min);
+            scale = MIN_SCALE + (1 - MIN_SCALE) * (vp - bpTwoRow_min) / span;
+            scale = Math.max(MIN_SCALE, Math.min(1, scale));
+        }
+        toolbar.style.setProperty("--hit",       `${FULL_HIT    * scale}px`);
+        toolbar.style.setProperty("--hit-sm",    `${FULL_HIT_SM * scale}px`);
+        toolbar.style.setProperty("--font-base", `${FULL_FONT   * scale}px`);
+    }
+
+    function update() { measure(); applyLayout(); }
+
+    update();
+    window.addEventListener("resize", applyLayout);
+
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(update);
+    }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
