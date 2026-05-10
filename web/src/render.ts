@@ -222,7 +222,8 @@ function renderSymmetryGuides(state: PatternState) {
     if (closure.size === 0) return;
 
     const cx = W / 2, cy = H / 2;
-    const ext = Math.max(W, H);
+    const overhang = 1;                       // pattern pixels each axis pokes past the pattern
+    const ovhDiag  = overhang / Math.SQRT2;   // along-line equivalent for the diagonals
     const lw = 1.6 / (view.zoom * dpr);
     const dash = 8 / (view.zoom * dpr);
     const dashGap = dash * 0.55;
@@ -239,10 +240,30 @@ function renderSymmetryGuides(state: PatternState) {
     ctx.save();
     ctx.lineWidth = lw;
     ctx.setLineDash([dash, dashGap]);
-    if (closure.has("V"))  draw(cx, 0, cx, H, d("V"));
-    if (closure.has("H"))  draw(0, cy, W, cy, d("H"));
-    if (closure.has("D1")) draw(cx - ext, cy - ext, cx + ext, cy + ext, d("D1"));
-    if (closure.has("D2")) draw(cx + ext, cy - ext, cx - ext, cy + ext, d("D2"));
+
+    if (closure.has("V")) draw(cx, -overhang, cx, H + overhang, d("V"));
+    if (closure.has("H")) draw(-overhang, cy, W + overhang, cy, d("H"));
+
+    if (closure.has("D1")) {
+        // D1 axis (x − y = (W−H)/2). Compute the endpoints where it exits
+        // the pattern, then extend by `overhang` along the line direction.
+        const off  = (W - H) / 2;
+        const yMin = Math.max(0, -off);
+        const yMax = Math.min(H, W - off);
+        draw(yMin + off - ovhDiag, yMin - ovhDiag,
+             yMax + off + ovhDiag, yMax + ovhDiag, d("D1"));
+    }
+    if (closure.has("D2")) {
+        // D2 axis. In pixel-index coords it's `x + y = (W+H−2)/2`; we draw in
+        // render coords (each pixel spans [n, n+1]) where both x and y shift by
+        // +0.5, so the axis equation becomes x + y = (W+H)/2.
+        const sum  = (W + H) / 2;
+        const yMin = Math.max(0, sum - W);
+        const yMax = Math.min(H, sum);
+        draw(sum - yMin + ovhDiag, yMin - ovhDiag,
+             sum - yMax - ovhDiag, yMax + ovhDiag, d("D2"));
+    }
+
     if (closure.has("C")) {
         ctx.setLineDash([]);
         ctx.fillStyle = d("C") ? "rgba(255, 80, 180, 0.95)" : "rgba(255, 80, 180, 0.45)";
