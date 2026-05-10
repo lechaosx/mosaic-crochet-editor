@@ -22,8 +22,13 @@ pub fn natural_color_round(virtual_size_x: i32, virtual_size_y: i32, rounds: i32
 }
 
 pub fn erase_pixel_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, mask: u8) -> Vec<u8> {
-    let color = natural_color_row(height, y);
-    paint_pixel(pixels, width, height, x, y, color, mask)
+    let mut result = pixels.to_vec();
+    for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
+        let idx = (sy * width + sx) as usize;
+        if result[idx] == common::COLOR_TRANSPARENT { continue; }
+        result[idx] = natural_color_row(height, sy);
+    }
+    result
 }
 
 pub fn erase_pixel_round(pixels: &[u8], canvas_width: i32, canvas_height: i32, x: i32, y: i32,

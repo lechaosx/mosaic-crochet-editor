@@ -1,610 +1,303 @@
 import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
-         export_start_row, export_start_round, ExportSession } from "@mosaic/wasm";
-import { PointerLike, Tool, PatternState } from "./types";
-import { el } from "./dom";
-import { canvas } from "./render";
+         export_start_row, export_start_round } from "@mosaic/wasm";
+import { Tool } from "./types";
+import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate } from "./render";
 import { state, pixels, highlights, setPixels, setState, applySettings, recomputeHighlights } from "./pattern";
 import { historySave, historyReset, historyUndo, historyRedo, canUndo, canRedo } from "./history";
-import { SYM_IDS, SYM_KEY, directlyActive, setDirectlyActive, updateSymmetryButtons, updateDiagonalButtons, getSymmetryMask } from "./symmetry";
-import { pixelSize, COLORS, render, resizeCanvas, updateStatus, setPixelSize } from "./render";
-import { saveToLocalStorage, loadFromLocalStorage, syncUiToState, saveToFile, loadFromFile, LocalState } from "./storage";
+import { SymKey } from "./types";
+import { directlyActive, setDirectlyActive, computeClosure, diagonalsAvailable, getSymmetryMask, ensureDiagonalsValid } from "./symmetry";
+import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LocalState } from "./storage";
+import { mountUI, UIHandle } from "./ui";
+import { mountGestures } from "./gesture";
 
-// ── Dirty tracking ────────────────────────────────────────────────────────────
-
-let baselinePixels: Uint8Array | null = null;
+/* ─── Drawing & dirty state ────────────────────────────────────────────────── */
+let primaryColor: 1 | 2 = 1;
+let strokeColor:  1 | 2 = 1;
+let activeTool: Tool = "pencil";
+let baseline:    Uint8Array | null = null;
+let preStroke:   Uint8Array | null = null;
+let ui: UIHandle;
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
 }
+const isDirty   = () => !!pixels && !!baseline && !arraysEqual(pixels, baseline);
+const setBaseline = () => { baseline = pixels?.slice() ?? null; };
 
-function isDirty(): boolean {
-    return !!pixels && !!baselinePixels && !arraysEqual(pixels, baselinePixels);
+/* ─── Render shorthand ─────────────────────────────────────────────────────── */
+function reRender()      { if (state && pixels && highlights) render(state, pixels, highlights); }
+function reHighlight()   { recomputeHighlights(); if (highlights) updateStatus(highlights, null, null); reRender(); }
+function reSymmetry() {
+    if (!state) return;
+    const { canvasWidth: W, canvasHeight: H } = state;
+    ensureDiagonalsValid(W, H);
+    const closure = computeClosure(directlyActive, diagonalsAvailable(W, H));
+    ui.setSymmetry(directlyActive, closure);
+    ui.setDiagonalEnabled(diagonalsAvailable(W, H));
 }
 
-function setBaseline() {
-    baselinePixels = pixels?.slice() ?? null;
-}
-
-function confirmIfDirty(): Promise<boolean> {
-    if (!isDirty()) return Promise.resolve(true);
-    const modal = el("dirty-modal");
-    modal.hidden = false;
-    return new Promise(resolve => {
-        function close(result: boolean) {
-            modal.hidden = true;
-            el("dirty-discard").removeEventListener("click", onDiscard);
-            el("dirty-cancel").removeEventListener("click",  onCancel);
-            modal.removeEventListener("click", onBg);
-            resolve(result);
-        }
-        const onDiscard = () => close(true);
-        const onCancel  = () => close(false);
-        const onBg = (e: Event) => { if (e.target === modal) close(false); };
-        el("dirty-discard").addEventListener("click", onDiscard, { once: true });
-        el("dirty-cancel").addEventListener("click",  onCancel,  { once: true });
-        modal.addEventListener("click", onBg);
-    });
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function doRender() {
-    if (state && pixels && highlights) render(state, pixels, highlights);
-}
-
+/* ─── Persistence ─────────────────────────────────────────────────────────── */
 function saveSession() {
     if (!state || !pixels) return;
     saveToLocalStorage(
-        state, pixels, colorInputA.value, colorInputB.value,
+        state, pixels,
+        getColorHex(1), getColorHex(2),
         activeTool, primaryColor, [...directlyActive],
-        hlOverlayColorInput.value, hlInvalidColorInput.value, parseInt(hlOpacityInput.value),
-        canvasRotation,
+        getHlOverlay(), getHlInvalid(), getHlOpacity(),
+        view.rotation,
     );
 }
 
-function doHistorySave() {
-    historySave(pixels!);
-    updateHistoryButtons();
-}
+const getColorHex  = (slot: 1 | 2) => (document.getElementById(slot === 1 ? "color-a" : "color-b") as HTMLInputElement).value;
+const getHlOverlay = () => (document.getElementById("hl-overlay-color") as HTMLInputElement).value;
+const getHlInvalid = () => (document.getElementById("hl-invalid-color") as HTMLInputElement).value;
+const getHlOpacity = () => parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
 
-function doRecomputeAndRender() {
-    recomputeHighlights();
-    if (state) updateStatus(highlights, null, null);
-    doRender();
-}
-
-// ── Canvas transform (rotation + pan) ────────────────────────────────────────
-
-let canvasRotation = 0;
-let panX = 0;
-let panY = 0;
-
-function buildTransform(): string {
-    const parts: string[] = [];
-    if (panX || panY) parts.push(`translate(${panX}px, ${panY}px)`);
-    if (canvasRotation) parts.push(`rotate(${canvasRotation}deg)`);
-    return parts.join(" ");
-}
-
-function applyTransform() {
-    canvas.style.transform = buildTransform();
-}
-
-function rotate(delta: number) {
-    canvasRotation += delta;
-    applyTransform();
-    saveSession();
-}
-
-el("rotate-cw").addEventListener("click",  () => rotate(45));
-el("rotate-ccw").addEventListener("click", () => rotate(-45));
-
-// ── Pan (middle mouse drag) ───────────────────────────────────────────────────
-
-let panning   = false;
-let panStartX = 0;
-let panStartY = 0;
-let panOriginX = 0;
-let panOriginY = 0;
-
-document.querySelector("main")!.addEventListener("mousedown", e => {
-    if (e.button === 1) {
-        e.preventDefault();
-        panning    = true;
-        panStartX  = e.clientX;
-        panStartY  = e.clientY;
-        panOriginX = panX;
-        panOriginY = panY;
-        canvas.classList.remove("animated");
-    }
-});
-
-window.addEventListener("mousemove", e => {
-    if (!panning) return;
-    panX = panOriginX + (e.clientX - panStartX);
-    panY = panOriginY + (e.clientY - panStartY);
-    applyTransform();
-});
-
-window.addEventListener("mouseup", e => {
-    if (e.button === 1 && panning) {
-        panning = false;
-        requestAnimationFrame(() => canvas.classList.add("animated"));
-    }
-});
-
-// ── Drawing state ─────────────────────────────────────────────────────────────
-
-let painting          = false;
-let primaryColor      = 1;
-let strokeColor       = 1;
-let activeTool: Tool  = "pencil";
-let preStrokePixels: Uint8Array | null = null;
-
-function strokeChanged(): boolean {
-    return !!preStrokePixels && !!pixels && !arraysEqual(preStrokePixels, pixels);
-}
-
-// ── Paint ─────────────────────────────────────────────────────────────────────
-
-function paint(pointer: PointerLike) {
+/* ─── Paint ────────────────────────────────────────────────────────────────── */
+function paintAt(clientX: number, clientY: number) {
     if (!state || !pixels) return;
-    const rect    = canvas.getBoundingClientRect();
-    let x: number, y: number;
-    if (canvasRotation === 0) {
-        x = Math.floor((pointer.clientX - rect.left) / pixelSize);
-        y = Math.floor((pointer.clientY - rect.top)  / pixelSize);
-    } else {
-        const cx  = rect.left + rect.width  / 2;
-        const cy  = rect.top  + rect.height / 2;
-        const dx  = pointer.clientX - cx;
-        const dy  = pointer.clientY - cy;
-        const rad = -(canvasRotation % 360) * Math.PI / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-        x = Math.floor((dx * cos - dy * sin + canvas.width  / 2) / pixelSize);
-        y = Math.floor((dx * sin + dy * cos + canvas.height / 2) / pixelSize);
-    }
-    const { canvasWidth, canvasHeight } = state;
+    const { x, y } = screenToPattern(state, clientX, clientY);
+    const { canvasWidth: W, canvasHeight: H } = state;
+    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    if (pixels[y * W + x] === 0) return;
 
-    if (x < 0 || x >= canvasWidth || y < 0 || y >= canvasHeight) return;
-    if (pixels[y * canvasWidth + x] === 0) return;
-
-    const mask = getSymmetryMask(canvasWidth, canvasHeight);
+    const mask = getSymmetryMask(W, H);
     if (activeTool === "fill") {
-        setPixels(flood_fill(pixels, canvasWidth, canvasHeight, x, y, strokeColor, mask));
+        setPixels(flood_fill(pixels, W, H, x, y, strokeColor, mask));
     } else if (activeTool === "eraser") {
         if (state.mode === "row") {
-            setPixels(erase_pixel_row(pixels, canvasWidth, canvasHeight, x, y, mask));
+            setPixels(erase_pixel_row(pixels, W, H, x, y, mask));
         } else {
-            const { virtualWidth, virtualHeight, offsetX, offsetY, rounds } = state;
-            setPixels(erase_pixel_round(pixels, canvasWidth, canvasHeight, x, y,
-                virtualWidth, virtualHeight, offsetX, offsetY, rounds, mask));
+            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
+            setPixels(erase_pixel_round(pixels, W, H, x, y, vw, vh, ox, oy, rounds, mask));
         }
     } else {
-        setPixels(paint_pixel(pixels, canvasWidth, canvasHeight, x, y, strokeColor, mask));
+        setPixels(paint_pixel(pixels, W, H, x, y, strokeColor, mask));
     }
     recomputeHighlights();
     updateStatus(highlights, x, y);
-    doRender();
+    reRender();
 }
 
-// ── Canvas events ─────────────────────────────────────────────────────────────
-
-canvas.addEventListener("mousemove", e => {
-    if (!state) return;
-    const rect = canvas.getBoundingClientRect();
-    updateStatus(highlights,
-        Math.floor((e.clientX - rect.left) / pixelSize),
-        Math.floor((e.clientY - rect.top)  / pixelSize),
-    );
-});
-canvas.addEventListener("mouseleave", () => updateStatus(highlights, null, null));
-
-function startStroke() {
-    preStrokePixels = pixels?.slice() ?? null;
-    painting = true;
-}
-
-function endStroke() {
-    if (!painting) return;
-    if (strokeChanged()) { doHistorySave(); saveSession(); }
-    preStrokePixels = null;
-    painting = false;
-}
-
-canvas.addEventListener("mousedown", e => {
-    if (e.button !== 0 && e.button !== 2) return;
-    strokeColor = e.button === 2 ? (primaryColor === 1 ? 2 : 1) : primaryColor;
-    startStroke();
-    paint(e);
-});
-canvas.addEventListener("mousemove",   e => { if (painting) paint(e); });
-canvas.addEventListener("mouseup",     () => endStroke());
-canvas.addEventListener("mouseleave",  () => endStroke());
-canvas.addEventListener("contextmenu", e => e.preventDefault());
-
-canvas.addEventListener("touchstart", e => {
-    e.preventDefault();
-    startStroke();
-    paint(e.touches[0]);
-}, { passive: false });
-canvas.addEventListener("touchmove", e => {
-    e.preventDefault();
-    if (painting) paint(e.touches[0]);
-}, { passive: false });
-canvas.addEventListener("touchend", () => endStroke());
-
-document.querySelector("main")!.addEventListener("wheel", e => {
-    e.preventDefault();
-    setPixelSize(pixelSize + (e.deltaY < 0 ? 2 : -2));
-    if (state) resizeCanvas(state);
-    doRender();
-}, { passive: false });
-
-// ── Undo / Redo ───────────────────────────────────────────────────────────────
-
-function updateHistoryButtons() {
-    el<HTMLButtonElement>("btn-undo").disabled = !canUndo();
-    el<HTMLButtonElement>("btn-redo").disabled = !canRedo();
-}
-
-function undo() {
-    const p = historyUndo();
-    if (p) { setPixels(p); doRecomputeAndRender(); updateHistoryButtons(); }
-}
-
-function redo() {
-    const p = historyRedo();
-    if (p) { setPixels(p); doRecomputeAndRender(); updateHistoryButtons(); }
-}
-
-el("btn-undo").addEventListener("click", undo);
-el("btn-redo").addEventListener("click", redo);
-
-document.addEventListener("keydown", e => {
-    if (!e.ctrlKey) return;
-    if (e.key === "z") { e.preventDefault(); undo(); }
-    if (e.key === "y" || (e.shiftKey && e.key === "Z")) { e.preventDefault(); redo(); }
-});
-
-document.addEventListener("keydown", e => {
-    if ((e.target as HTMLElement).tagName === "INPUT") return;
-    if (e.key === "p" || e.key === "P") setTool("pencil");
-    if (e.key === "f" || e.key === "F") setTool("fill");
-});
-
-// ── Tool selector ─────────────────────────────────────────────────────────────
-
-function setTool(tool: Tool) {
-    activeTool = tool;
-    el("tool-pencil").classList.toggle("active", tool === "pencil");
-    el("tool-fill").classList.toggle("active",   tool === "fill");
-    el("tool-eraser").classList.toggle("active", tool === "eraser");
+/* ─── UI callbacks → state mutations ──────────────────────────────────────── */
+function setTool(t: Tool) { activeTool = t; ui.setTool(t); saveSession(); }
+function setPrimary(slot: 1 | 2) { primaryColor = slot; ui.setPrimary(slot); saveSession(); }
+function applyColorsFromInputs() {
+    COLORS[1] = getColorHex(1);
+    COLORS[2] = getColorHex(2);
+    ui.setColors(getColorHex(1), getColorHex(2));
+    reRender();
     saveSession();
 }
-
-el("tool-pencil").addEventListener("click", () => setTool("pencil"));
-el("tool-fill").addEventListener("click",   () => setTool("fill"));
-el("tool-eraser").addEventListener("click", () => setTool("eraser"));
-
-document.addEventListener("keydown", e => {
-    if ((e.target as HTMLElement).tagName === "INPUT") return;
-    if (e.key === "e" || e.key === "E") setTool("eraser");
-});
-
-// ── Highlight colors ──────────────────────────────────────────────────────────
-
-const hlOverlayColorInput = el<HTMLInputElement>("hl-overlay-color");
-const hlInvalidColorInput = el<HTMLInputElement>("hl-invalid-color");
-const hlOpacityInput      = el<HTMLInputElement>("hl-opacity");
-const swatchHlOverlay     = el("swatch-hl-overlay");
-const swatchHlInvalid     = el("swatch-hl-invalid");
-
-function hexToRgba(hex: string, opacityPercent: number): string {
+function applyHighlightsFromInputs() {
+    const opacity = getHlOpacity();
+    COLORS[3] = hexRgba(getHlOverlay(), opacity);
+    COLORS[4] = hexRgba(getHlInvalid(), opacity);
+    ui.setHighlights(getHlOverlay(), getHlInvalid(), opacity);
+    reRender();
+    saveSession();
+}
+function hexRgba(hex: string, opacityPct: number): string {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);
     const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${(opacityPercent / 100).toFixed(2)})`;
+    return `rgba(${r}, ${g}, ${b}, ${(opacityPct / 100).toFixed(2)})`;
 }
 
-function applyHighlightColors() {
-    const opacity = parseInt(hlOpacityInput.value);
-    COLORS[3] = hexToRgba(hlOverlayColorInput.value, opacity);
-    COLORS[4] = hexToRgba(hlInvalidColorInput.value, opacity);
-    swatchHlOverlay.style.background = hlOverlayColorInput.value;
-    swatchHlInvalid.style.background = hlInvalidColorInput.value;
-    doRender();
+function toggleSym(k: SymKey) {
+    if (directlyActive.has(k)) directlyActive.delete(k);
+    else directlyActive.add(k);
+    reSymmetry();
     saveSession();
+    reRender();
 }
 
-function setupHighlightSwatch(swatchEl: HTMLElement, colorInput: HTMLInputElement) {
-    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-    swatchEl.addEventListener("dblclick",  () => colorInput.click());
-    swatchEl.addEventListener("mousedown", () => { longPressTimer = setTimeout(() => colorInput.click(), 600); });
-    swatchEl.addEventListener("mouseup",    () => { if (longPressTimer) clearTimeout(longPressTimer); });
-    swatchEl.addEventListener("mouseleave", () => { if (longPressTimer) clearTimeout(longPressTimer); });
-    colorInput.addEventListener("input", applyHighlightColors);
-}
-
-setupHighlightSwatch(swatchHlOverlay, hlOverlayColorInput);
-setupHighlightSwatch(swatchHlInvalid, hlInvalidColorInput);
-hlOpacityInput.addEventListener("input", applyHighlightColors);
-
-// ── Color swatches ────────────────────────────────────────────────────────────
-
-const colorInputA = el<HTMLInputElement>("color-a");
-const colorInputB = el<HTMLInputElement>("color-b");
-const swatchA     = el("swatch-a");
-const swatchB     = el("swatch-b");
-
-function applyColors() {
-    COLORS[1] = colorInputA.value;
-    COLORS[2] = colorInputB.value;
-    swatchA.style.background = colorInputA.value;
-    swatchB.style.background = colorInputB.value;
-    doRender();
-}
-
-function selectColor(color: number) {
-    primaryColor = color;
-    swatchA.classList.toggle("active-swatch", color === 1);
-    swatchB.classList.toggle("active-swatch", color === 2);
-    saveSession();
-}
-
-function setupSwatch(swatchEl: HTMLElement, colorInput: HTMLInputElement, color: number) {
-    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
-    swatchEl.addEventListener("click",     () => selectColor(color));
-    swatchEl.addEventListener("dblclick",  () => colorInput.click());
-    swatchEl.addEventListener("mousedown", () => { longPressTimer = setTimeout(() => colorInput.click(), 600); });
-    swatchEl.addEventListener("mouseup",    () => { if (longPressTimer) clearTimeout(longPressTimer); });
-    swatchEl.addEventListener("mouseleave", () => { if (longPressTimer) clearTimeout(longPressTimer); });
-    colorInput.addEventListener("input", applyColors);
-}
-
-setupSwatch(swatchA, colorInputA, 1);
-setupSwatch(swatchB, colorInputB, 2);
-
-// ── Symmetry buttons ──────────────────────────────────────────────────────────
-
-SYM_IDS.forEach(id => {
-    el(id).addEventListener("click", () => {
-        const key = SYM_KEY[id];
-        if (directlyActive.has(key)) directlyActive.delete(key);
-        else                         directlyActive.add(key);
-        if (state) updateSymmetryButtons(state.canvasWidth, state.canvasHeight);
-        saveSession();
-        doRender();
-    });
-});
-
-// ── New pattern widget ────────────────────────────────────────────────────────
-
-const newPatternWidget  = el("new-pattern-widget");
-const newPatternWrapper = el("new-pattern-wrapper");
-let   widgetOpen     = false;
-let   widgetOpenedAt = 0;
-
-function applyAndRender() {
+/* ─── New pattern ────────────────────────────────────────────────────────── */
+function recreateFromInputs() {
     applySettings();
     recomputeHighlights();
     if (state) {
-        resizeCanvas(state);
-        updateDiagonalButtons(state.canvasWidth, state.canvasHeight);
+        view.panX = 0; view.panY = 0;
+        fitToView(state);
+        reSymmetry();
     }
     setBaseline();
-    historyReset(pixels!); updateHistoryButtons();
+    historyReset(pixels!); ui.setHistory(canUndo(), canRedo());
     saveSession();
-    doRender();
+    reRender();
 }
 
-function openWidget() {
-    if (widgetOpen) return;
-    widgetOpen     = true;
-    widgetOpenedAt = Date.now();
-    newPatternWidget.hidden = false;
-    panX = 0; panY = 0;
-    setPixelSize(16);
-    applyTransform();
-    applyAndRender();
+async function onNewClick(): Promise<boolean> { return !isDirty() || ui.confirmDirty(); }
+
+/* ─── Undo / redo ────────────────────────────────────────────────────────── */
+function undo() {
+    const p = historyUndo(); if (!p) return;
+    setPixels(p); reHighlight(); ui.setHistory(canUndo(), canRedo()); saveSession();
+}
+function redo() {
+    const p = historyRedo(); if (!p) return;
+    setPixels(p); reHighlight(); ui.setHistory(canUndo(), canRedo()); saveSession();
 }
 
-function closeWidget() {
-    if (!widgetOpen) return;
-    widgetOpen = false;
-    newPatternWidget.hidden = true;
-}
-
-el("new-pattern").addEventListener("click", async e => {
-    e.stopPropagation();
-    if (widgetOpen) { closeWidget(); return; }
-    if (!await confirmIfDirty()) return;
-    openWidget();
-});
-
-newPatternWidget.addEventListener("click", e => e.stopPropagation());
-
-document.addEventListener("click", () => {
-    if (widgetOpen && Date.now() - widgetOpenedAt > 300) closeWidget();
-});
-
-document.querySelectorAll<HTMLInputElement>('[name="np-mode"]').forEach(radio => {
-    radio.addEventListener("change", () => {
-        const mode = radio.value;
-        el("row-controls").hidden   = mode !== "row";
-        el("round-controls").hidden = mode !== "round";
-        if (widgetOpen) applyAndRender();
-    });
-});
-
-document.querySelectorAll<HTMLInputElement>('[name="np-submode"]').forEach(radio => {
-    radio.addEventListener("change", () => { if (widgetOpen) applyAndRender(); });
-});
-
-["width", "height", "inner-width", "inner-height", "rounds"].forEach(id => {
-    el(id).addEventListener("input",  () => { if (widgetOpen) applyAndRender(); });
-    el(id).addEventListener("change", () => { if (widgetOpen) applyAndRender(); });
-});
-
-// ── Export modal ──────────────────────────────────────────────────────────────
-
-const exportModal    = el("export-modal");
-const exportTextarea = el<HTMLTextAreaElement>("export-text");
-const alternateCheck = el<HTMLInputElement>("alternate");
-
-function createExportSession(): ExportSession | null {
-    if (!state || !highlights) return null;
-    const alternate = alternateCheck.checked;
-    const { canvasWidth, canvasHeight } = state;
-    if (state.mode === "row") {
-        return export_start_row(highlights, canvasWidth, canvasHeight, alternate);
-    } else {
-        const { virtualWidth, virtualHeight, offsetX, offsetY, rounds } = state;
-        return export_start_round(highlights, canvasWidth, canvasHeight,
-            virtualWidth, virtualHeight, offsetX, offsetY, rounds, alternate);
-    }
-}
-
-let exportCancelled = false;
-
-async function renderExport() {
-    exportCancelled = false;
-    el<HTMLButtonElement>("modal-copy").disabled     = true;
-    el<HTMLButtonElement>("modal-download").disabled = true;
-    exportTextarea.value = "";
-    const progressEl = el("export-progress");
-    progressEl.hidden = false;
-
-    const session = createExportSession();
-    if (!session) { progressEl.hidden = true; return; }
-
-    const total = session.total();
-    let count = 0;
-    let line: string | undefined;
-    while ((line = session.next()) !== undefined) {
-        if (exportCancelled) { session.free(); progressEl.hidden = true; return; }
-        exportTextarea.value += (exportTextarea.value ? "\n" : "") + line;
-        progressEl.textContent = `Generating… ${++count} / ${total}`;
-        await new Promise<void>(r => requestAnimationFrame(() => r()));
-    }
-
-    session.free();
-    progressEl.hidden = true;
-    el<HTMLButtonElement>("modal-copy").disabled     = false;
-    el<HTMLButtonElement>("modal-download").disabled = false;
-}
-
-function cancelExport() { exportCancelled = true; }
-
-el("export").addEventListener("click", () => {
-    el("export-warning").hidden = !highlights?.some(h => h === 4);
-    exportModal.hidden = false;
-    renderExport();
-});
-
-alternateCheck.addEventListener("change", () => {
-    if (!exportModal.hidden) { cancelExport(); renderExport(); }
-});
-
-function closeExportModal() { cancelExport(); exportModal.hidden = true; }
-el("modal-close").addEventListener("click", closeExportModal);
-exportModal.addEventListener("click", e => { if (e.target === exportModal) closeExportModal(); });
-
-el("modal-copy").addEventListener("click", () => {
-    navigator.clipboard.writeText(exportTextarea.value);
-});
-
-el("modal-download").addEventListener("click", () => {
-    const blob = new Blob([exportTextarea.value], { type: "text/plain" });
-    const url  = URL.createObjectURL(blob);
-    Object.assign(document.createElement("a"), { href: url, download: "pattern.txt" }).click();
-    URL.revokeObjectURL(url);
-});
-
-// ── Save / Load ───────────────────────────────────────────────────────────────
-
-el("btn-save").addEventListener("click", () => {
+/* ─── Save / load ────────────────────────────────────────────────────────── */
+async function onSave() {
     if (!state || !pixels) return;
-    saveToFile(state, pixels, colorInputA.value, colorInputB.value);
-});
-
-el("btn-load").addEventListener("click", async () => {
-    if (!await confirmIfDirty()) return;
-    const loaded = await loadFromFile();
-    if (!loaded) return;
-    const { state: loadedState, pixels: loadedPixels, colorA, colorB } = loaded;
-
-    setState(loadedState);
-    setPixels(loadedPixels);
-
-    colorInputA.value = colorA;
-    colorInputB.value = colorB;
-    applyColors();
-    syncUiToState(loadedState);
-
+    await saveToFile(state, pixels, getColorHex(1), getColorHex(2));
+}
+async function onLoad() {
+    if (isDirty() && !await ui.confirmDirty()) return;
+    const loaded = await loadFromFile(); if (!loaded) return;
+    setState(loaded.state);
+    setPixels(loaded.pixels);
+    (document.getElementById("color-a") as HTMLInputElement).value = loaded.colorA;
+    (document.getElementById("color-b") as HTMLInputElement).value = loaded.colorB;
+    applyColorsFromInputs();
+    ui.syncNewInputs(loaded.state);
     recomputeHighlights();
     if (state) {
-        resizeCanvas(state);
-        historyReset(loadedPixels); updateHistoryButtons();
-        updateDiagonalButtons(state.canvasWidth, state.canvasHeight);
+        fitToView(state);
+        view.panX = 0; view.panY = 0;
+        reSymmetry();
     }
+    historyReset(loaded.pixels); ui.setHistory(canUndo(), canRedo());
     setBaseline();
     saveSession();
-    doRender();
-});
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-
-function initWithState(saved: LocalState) {
-    setState(saved.state);
-    setPixels(saved.pixels);
-    colorInputA.value = saved.colorA;
-    colorInputB.value = saved.colorB;
-    hlOverlayColorInput.value = saved.hlOverlayColor;
-    hlInvalidColorInput.value = saved.hlInvalidColor;
-    hlOpacityInput.value      = String(saved.hlOpacity);
-    canvasRotation = saved.canvasRotation;
-    panX = 0;
-    panY = 0;
-    applyTransform();
-
-    applyColors();
-    applyHighlightColors();
-    syncUiToState(saved.state);
-    setDirectlyActive(saved.symmetry as any);
-    setTool(saved.activeTool as any);
-    selectColor(saved.primaryColor);
-    updateSymmetryButtons(saved.state.canvasWidth, saved.state.canvasHeight);
-    recomputeHighlights();
-    resizeCanvas(saved.state);
-    historyReset(saved.pixels); updateHistoryButtons();
-    updateDiagonalButtons(saved.state.canvasWidth, saved.state.canvasHeight);
-    setBaseline();
-    updateStatus(highlights, null, null);
-    doRender();
-    requestAnimationFrame(() => requestAnimationFrame(() => canvas.classList.add("animated")));
+    reRender();
 }
 
-applyColors();
-applyHighlightColors();
+/* ─── Export ─────────────────────────────────────────────────────────────── */
+async function onExport() {
+    if (!state || !highlights) return;
+    const dlg = ui.openExport();
+    let cancelled = false;
+    dlg.onClose(() => { cancelled = true; });
+    dlg.setWarning(highlights.some(h => h === 4));
 
-const saved = loadFromLocalStorage();
-if (saved) {
-    initWithState(saved);
-} else {
+    const startSession = (alt: boolean) => {
+        if (!state || !highlights) return null;
+        const { canvasWidth: W, canvasHeight: H } = state;
+        if (state.mode === "row") return export_start_row(highlights, W, H, alt);
+        const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
+        return export_start_round(highlights, W, H, vw, vh, ox, oy, rounds, alt);
+    };
+
+    let runId = 0;
+    const run = async () => {
+        const myRun = ++runId;
+        dlg.setBusy(true);
+        dlg.clearText();
+        const session = startSession(dlg.alternate());
+        if (!session) { dlg.endProgress(); return; }
+        const total = session.total();
+        let count = 0;
+        let line: string | undefined;
+        while ((line = session.next()) !== undefined) {
+            if (cancelled || myRun !== runId) { session.free(); dlg.endProgress(); return; }
+            dlg.appendLine(line);
+            dlg.setProgress(++count, total);
+            await new Promise<void>(r => requestAnimationFrame(() => r()));
+        }
+        session.free();
+        dlg.endProgress();
+        dlg.setBusy(false);
+    };
+
+    dlg.onAlternate(run);
+    run();
+}
+
+/* ─── Keyboard shortcuts ────────────────────────────────────────────────── */
+document.addEventListener("keydown", e => {
+    const t = e.target as HTMLElement;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    if (e.ctrlKey || e.metaKey) {
+        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+        else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
+        return;
+    }
+    const k = e.key.toLowerCase();
+    if (k === "p") setTool("pencil");
+    else if (k === "f") setTool("fill");
+    else if (k === "e") setTool("eraser");
+});
+
+/* ─── Init ──────────────────────────────────────────────────────────────── */
+function init() {
+    ui = mountUI({
+        onTool: setTool,
+        onPrimaryColor: setPrimary,
+        onColorChange: applyColorsFromInputs,
+        onSym: toggleSym,
+        onHighlightChange: applyHighlightsFromInputs,
+        onUndo: undo,
+        onRedo: redo,
+        onRotate: (delta) => { view.rotation += delta; applyRotation(); saveSession(); },
+        onNewClick,
+        onNewApply: recreateFromInputs,
+        onSave,
+        onLoad,
+        onExport,
+    });
+
+    mountGestures({
+        getState:     () => state,
+        primaryColor: () => primaryColor,
+        onPaintStart: (color) => { strokeColor = color; preStroke = pixels?.slice() ?? null; },
+        onPaintAt:    paintAt,
+        onPaintEnd:   () => {
+            if (preStroke && pixels && !arraysEqual(preStroke, pixels)) {
+                historySave(pixels);
+                ui.setHistory(canUndo(), canRedo());
+                saveSession();
+            }
+            preStroke = null;
+        },
+        onHover: (x, y) => updateStatus(highlights, x, y),
+        onView:  reRender,
+        onViewSettle: saveSession,
+    });
+
+    const saved = loadFromLocalStorage();
+    if (saved) restoreSession(saved); else freshSession();
+}
+
+function restoreSession(saved: LocalState) {
+    setState(saved.state);
+    setPixels(saved.pixels);
+    (document.getElementById("color-a") as HTMLInputElement).value = saved.colorA;
+    (document.getElementById("color-b") as HTMLInputElement).value = saved.colorB;
+    (document.getElementById("hl-overlay-color") as HTMLInputElement).value = saved.hlOverlayColor;
+    (document.getElementById("hl-invalid-color") as HTMLInputElement).value = saved.hlInvalidColor;
+    (document.getElementById("hl-opacity") as HTMLInputElement).value = String(saved.hlOpacity);
+    setRotationImmediate(saved.canvasRotation);
+    applyColorsFromInputs();
+    applyHighlightsFromInputs();
+    ui.syncNewInputs(saved.state);
+    setDirectlyActive(saved.symmetry as SymKey[]);
+    setTool(saved.activeTool as Tool);
+    setPrimary(saved.primaryColor as 1 | 2);
+    if (state) { fitToView(state); reSymmetry(); }
+    recomputeHighlights();
+    historyReset(saved.pixels); ui.setHistory(canUndo(), canRedo());
+    setBaseline();
+    updateStatus(highlights, null, null);
+    reRender();
+}
+
+function freshSession() {
     applySettings();
     recomputeHighlights();
     setTool("pencil");
-    selectColor(1);
-    if (state) {
-        resizeCanvas(state);
-        historyReset(pixels!); updateHistoryButtons();
-        updateDiagonalButtons(state.canvasWidth, state.canvasHeight);
-    }
+    setPrimary(1);
+    if (state) { fitToView(state); reSymmetry(); }
+    historyReset(pixels!); ui.setHistory(canUndo(), canRedo());
+    applyColorsFromInputs();
+    applyHighlightsFromInputs();
     setBaseline();
     updateStatus(highlights, null, null);
-    doRender();
+    reRender();
 }
+
+init();

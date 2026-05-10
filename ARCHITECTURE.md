@@ -65,13 +65,59 @@ Key WASM-level decisions:
 
 ### `web`
 Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. Modules:
-- `pattern.ts` owns `state`, `pixels`, `highlights`
-- `render.ts` owns `pixelSize`, `COLORS`, `canvas`/`ctx`
-- `symmetry.ts` owns `directlyActive`; functions receive dimensions as parameters
-- `history.ts` owns snapshot array; `historySave` / `historyUndo` / `historyRedo` take/return `Uint8Array`
-- `storage.ts` is pure serialization — no orchestration
+- `main.ts`     orchestration only — dirty tracking, paint/undo/redo/save/load/export glue
+- `pattern.ts`  owns `state`, `pixels`, `highlights`
+- `render.ts`   owns `view` (`panX`, `panY`, `zoom`, `rotation`), `COLORS`, `canvas`/`ctx`; renders via `ctx.setTransform(matrix)` on a viewport-sized canvas; provides `screenToPattern` and `fitToView`
+- `gesture.ts`  pointer-event gesture state machine (paint / pinch-pan-zoom / middle-pan)
+- `ui.ts`       all toolbar wiring (tools, swatches, swap, symmetry, highlights popover, new-pattern popover, rotate, dialogs); exposes `mountUI` returning a `UIHandle` of state-update setters
+- `symmetry.ts` owns `directlyActive`; functions receive dimensions as parameters; pure logic only, no DOM
+- `history.ts`  owns snapshot array; `historySave` / `historyUndo` / `historyRedo` take/return `Uint8Array`
+- `storage.ts`  pure serialisation — no orchestration, no DOM
 
-— **joint** (structure evolved through design review)
+— **joint** (structure); **Claude's choice** (per-module ownership of `gesture.ts` and `ui.ts`)
+
+### Render & Coordinate Model
+
+- The `<canvas>` is sized to the viewport (CSS 100% × 100% inside `.canvas-area`, with backing store at `rect × devicePixelRatio`). — **Claude's choice**
+- **Hybrid transform**: pan + zoom go through `ctx.setTransform(matrix)`; rotation goes through CSS `transform: rotate(…deg)` on the canvas element with a 250 ms transition. This buys a free, GPU-accelerated rotation animation. The cost is one inverse-rotation step (`rotateDeltaIntoInternal`) when converting client-space gesture deltas to canvas-internal pan. — **joint** (your call to use CSS for rotation; Claude's design of the inverse-rotation helper)
+- `view` holds `panX`, `panY` (CSS px in canvas-internal coords), `zoom` (CSS px per pattern pixel), and `rotation` (degrees). The single forward `DOMMatrix` collapses scale + pan + dpr. `screenToPattern` inverse-rotates the cursor offset around canvas centre, then applies the matrix inverse. — **Claude's choice**
+- A small triangle is drawn above y=0 in pattern coords as a top-of-pattern indicator; it rotates with the canvas through the same CSS transform. `fitToView` reserves ~1.8 pattern pixels above y=0 for it and shifts pan down so the union (pattern + indicator) stays centred. — **Claude's choice**
+- `setRotationImmediate()` restores rotation on session load by temporarily disabling the CSS transition for one frame so the page doesn't spin from 0° on every refresh. — **Claude's choice**
+- `ResizeObserver(canvas)` rebinds the backing store and re-renders on layout/DPR changes. — **Claude's choice**
+
+### Gestures
+
+`gesture.ts` is a small pointer-event state machine:
+
+| Mode           | Trigger                                          | Behaviour                                  |
+|----------------|--------------------------------------------------|--------------------------------------------|
+| `idle`         | no active pointers                               | hover updates status                       |
+| `paint`        | first non-middle pointer down                    | paint stroke; right-click → secondary col. |
+| `gesture`      | second pointer down (during `paint` or `idle`)   | pinch-zoom + pan, anchored at midpoint     |
+| `gesture-end`  | one of two pointers released                     | latch until last pointer also released     |
+| `middle-pan`   | mouse middle button down                         | pan only                                   |
+
+Wheel zoom is anchored at the cursor; pinch zoom is anchored at the two-finger midpoint. The pan correction `panX_new = dx − f·(dx − panX)` is rotation-invariant since uniform scale commutes with rotation. — **Claude's choice**
+
+### UI Layer
+
+- `ui.ts` exposes `mountUI(callbacks): UIHandle`. Callbacks fire from DOM events; the handle's setters are called by `main.ts` to push state into the DOM (active tool, history-button enabled state, symmetry highlight/implied state, etc.). No reactive framework. — **Claude's choice**
+- Modals are native `<dialog>` (`showModal()` / `close(returnValue)`) with backdrop click-to-close. The dirty-confirm dialog returns its decision via `returnValue` (`"discard"` / `"cancel"`). — **Claude's choice**
+- The new-pattern picker and the highlight settings panel use the native HTML `popover` attribute, which provides light-dismiss for free. JS sets fixed-position coords against the anchor button on each open. — **Claude's choice**
+- A unified `bindLongPress(el, onClick, onLong)` helper drives swatch click-to-select / long-press-to-edit on mouse, pen, and touch via pointer events. — **Claude's choice**
+
+### Styling
+
+`web/src/style.css` is built around CSS custom-property design tokens (`--space-*`, `--radius-*`, `--font-*`, `--bg-*`, `--fg-*`, `--accent`, `--hit`). Sizing rules:
+
+- **rem** for typography and spacing tokens
+- **em** within self-scaling components
+- **px** only for borders and shadows
+- **%, fr, vw, vh, dvh** for responsive layout
+- **clamp()** for fluid hit targets (`--hit: clamp(2.25rem, 6vw, 2.75rem)`)
+- No 62.5% root-font hack
+
+— **your decision (units)**
 
 ---
 

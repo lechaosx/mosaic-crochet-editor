@@ -2,142 +2,161 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#1f1f22">
   <title>Mosaic Crochet</title>
   <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
-  <header id="topbar">
-    <div class="bar-group">
-      <div id="new-pattern-wrapper">
-        <button id="new-pattern">New</button>
-        <div id="new-pattern-widget" hidden>
-          <div class="widget-radios">
-            <label class="radio-label"><input type="radio" name="np-mode" value="row" checked> Row</label>
-            <label class="radio-label"><input type="radio" name="np-mode" value="round"> Round</label>
-          </div>
-          <div id="row-controls" class="widget-fields">
-            <div class="widget-row">
-              <label>Width</label>
-              <input type="number" id="width"  value="16" min="2">
-            </div>
-            <div class="widget-row">
-              <label>Height</label>
-              <input type="number" id="height" value="16" min="2">
-            </div>
-          </div>
-          <div id="round-controls" class="widget-fields" hidden>
-            <div class="widget-radios">
-              <label class="radio-label"><input type="radio" name="np-submode" value="full" checked> Full</label>
-              <label class="radio-label"><input type="radio" name="np-submode" value="half"> Half</label>
-              <label class="radio-label"><input type="radio" name="np-submode" value="quarter"> Quarter</label>
-            </div>
-            <div class="widget-row">
-              <label>Inner width</label>
-              <input type="number" id="inner-width"  value="3" min="0">
-            </div>
-            <div class="widget-row">
-              <label>Inner height</label>
-              <input type="number" id="inner-height" value="3" min="0">
-            </div>
-            <div class="widget-row">
-              <label>Rounds</label>
-              <input type="number" id="rounds"       value="5" min="1">
-            </div>
-          </div>
+  <header class="toolbar" id="toolbar">
+    <div class="tb-section tb-left">
+      <div class="tb-group">
+        <button class="btn" id="btn-new" popovertarget="new-pattern-widget" aria-haspopup="dialog" aria-expanded="false">New</button>
+        <button class="btn" id="btn-load">Load</button>
+        <button class="btn" id="btn-save">Save</button>
+        <button class="btn" id="btn-export">Export</button>
+      </div>
+      <div class="tb-group">
+        <button class="btn btn--icon" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+        <button class="btn btn--icon" id="btn-redo" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
+      </div>
+    </div>
+
+    <div class="tb-section tb-center">
+      <div class="tb-group" role="radiogroup" aria-label="Tool">
+        <button class="btn btn--icon" id="tool-pencil" title="Pencil (P)" aria-label="Pencil">✏️</button>
+        <button class="btn btn--icon" id="tool-fill"   title="Fill (F)"   aria-label="Fill">🪣</button>
+        <button class="btn btn--icon" id="tool-eraser" title="Eraser (E)" aria-label="Eraser">🧹</button>
+      </div>
+      <div class="tb-group" aria-label="Symmetry">
+        <button class="btn btn--icon" id="sym-vertical"   title="Vertical"      aria-label="Vertical symmetry">↔</button>
+        <button class="btn btn--icon" id="sym-horizontal" title="Horizontal"    aria-label="Horizontal symmetry">↕</button>
+        <button class="btn btn--icon" id="sym-central"    title="Central"       aria-label="Central symmetry">⊕</button>
+        <button class="btn btn--icon" id="sym-diag1"      title="Diagonal ╲"    aria-label="Diagonal symmetry">╲</button>
+        <button class="btn btn--icon" id="sym-diag2"      title="Anti-diagonal ╱" aria-label="Anti-diagonal symmetry">╱</button>
+      </div>
+      <div class="tb-group" aria-label="Colours">
+        <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" aria-label="Primary colour (long-press to edit)">
+          <input type="color" id="color-a" value="#000000" tabindex="-1">
+        </div>
+        <div id="swatch-b" class="swatch" tabindex="0" role="button" aria-label="Secondary colour (long-press to edit)">
+          <input type="color" id="color-b" value="#ffffff" tabindex="-1">
         </div>
       </div>
-      <button id="btn-load">Load</button>
-      <button id="btn-save">Save</button>
-      <button id="export">Export</button>
-    </div>
-    <div class="bar-group">
-      <button id="btn-undo" title="Undo (Ctrl+Z)">↩</button>
-      <button id="btn-redo" title="Redo (Ctrl+Y)">↪</button>
     </div>
 
-    <div class="bar-spacer-flex"></div>
-    <!-- Centre -->
-    <div class="bar-center">
-      <div class="bar-group">
-        <button id="tool-pencil" class="tool" title="Pencil (P)">✏️</button>
-        <button id="tool-fill"   class="tool" title="Fill (F)">🪣</button>
-        <button id="tool-eraser" class="tool" title="Eraser (E)">🧹</button>
+    <div class="tb-section tb-right">
+      <div class="tb-group">
+        <button class="btn btn--icon" id="btn-hl-toggle" popovertarget="hl-popover" title="Highlight settings" aria-label="Highlight settings" aria-haspopup="dialog">⊙</button>
       </div>
-      <div class="bar-group">
-        <button id="sym-vertical"   class="tool" title="Vertical">↔</button>
-        <button id="sym-horizontal" class="tool" title="Horizontal">↕</button>
-        <button id="sym-central"    class="tool" title="Central">⊕</button>
-        <button id="sym-diag1"      class="tool" title="Diagonal ╲">╲</button>
-        <button id="sym-diag2"      class="tool" title="Diagonal ╱">╱</button>
+      <div class="tb-group">
+        <button class="btn btn--icon" id="rotate-ccw" title="Rotate counter-clockwise" aria-label="Rotate counter-clockwise">↺</button>
+        <button class="btn btn--icon" id="rotate-cw"  title="Rotate clockwise"          aria-label="Rotate clockwise">↻</button>
       </div>
-      <div class="bar-group">
-        <input type="color" id="color-a" value="#000000">
-        <div id="swatch-a" class="swatch active-swatch" title="Click to select — double-click to change color"></div>
-        <div id="swatch-b" class="swatch"               title="Click to select — double-click to change color"></div>
-        <input type="color" id="color-b" value="#ffffff">
-      </div>
-    </div>
-    <div class="bar-spacer-flex"></div>
-
-    <!-- Right: highlights | rotation -->
-    <div class="bar-group">
-      <input type="color" id="hl-overlay-color" value="#0000ff">
-      <div id="swatch-hl-overlay" class="swatch" title="Overlay color — double-click to change"></div>
-      <input type="color" id="hl-invalid-color" value="#ff0000">
-      <div id="swatch-hl-invalid" class="swatch" title="Invalid color — double-click to change"></div>
-      <input type="range" id="hl-opacity" value="50" min="0" max="100" title="Highlight opacity">
-    </div>
-    <div class="bar-group">
-      <button id="rotate-ccw" class="tool" title="Rotate counter-clockwise">↺</button>
-      <button id="rotate-cw"  class="tool" title="Rotate clockwise">↻</button>
     </div>
   </header>
 
-  <main>
+  <main class="canvas-area">
     <canvas id="canvas"></canvas>
+    <div id="status" class="status"></div>
   </main>
 
-
-  <footer id="statusbar">
-    <div id="status" class="status"></div>
-  </footer>
-
-  <div id="export-modal" class="modal" hidden>
-    <div class="modal-content">
-      <div class="modal-header">
-        <span class="modal-title">Export Pattern</span>
-        <div id="export-progress" class="export-progress" hidden></div>
-        <button id="modal-close">✕</button>
+  <!-- ── Highlight settings popover ────────────────────────────────── -->
+  <div id="hl-popover" popover>
+    <div class="popover-row">
+      <span class="popover-label">Overlay</span>
+      <div id="swatch-hl-overlay" class="swatch swatch--small" tabindex="0" role="button" aria-label="Overlay colour">
+        <input type="color" id="hl-overlay-color" value="#0000ff" tabindex="-1">
       </div>
-      <label class="toggle-label">
+    </div>
+    <div class="popover-row">
+      <span class="popover-label">Invalid</span>
+      <div id="swatch-hl-invalid" class="swatch swatch--small" tabindex="0" role="button" aria-label="Invalid colour">
+        <input type="color" id="hl-invalid-color" value="#ff0000" tabindex="-1">
+      </div>
+    </div>
+    <div class="popover-row">
+      <span class="popover-label">Opacity</span>
+      <input type="range" id="hl-opacity" value="50" min="0" max="100" aria-label="Highlight opacity">
+    </div>
+  </div>
+
+  <!-- ── New-pattern popover ─────────────────────────────────────────── -->
+  <div id="new-pattern-widget" popover>
+    <div class="segmented">
+      <label><input type="radio" name="np-mode" value="row" checked> Row</label>
+      <label><input type="radio" name="np-mode" value="round"> Round</label>
+    </div>
+
+    <div id="row-controls" class="field-group">
+      <div class="field-row">
+        <label for="width">Width</label>
+        <input type="number" id="width" value="16" min="2">
+      </div>
+      <div class="field-row">
+        <label for="height">Height</label>
+        <input type="number" id="height" value="16" min="2">
+      </div>
+    </div>
+
+    <div id="round-controls" class="field-group" hidden>
+      <div class="segmented">
+        <label><input type="radio" name="np-submode" value="full" checked> Full</label>
+        <label><input type="radio" name="np-submode" value="half"> Half</label>
+        <label><input type="radio" name="np-submode" value="quarter"> Quarter</label>
+      </div>
+      <div class="field-row">
+        <label for="inner-width">Inner W</label>
+        <input type="number" id="inner-width" value="3" min="0">
+      </div>
+      <div class="field-row">
+        <label for="inner-height">Inner H</label>
+        <input type="number" id="inner-height" value="3" min="0">
+      </div>
+      <div class="field-row">
+        <label for="rounds">Rounds</label>
+        <input type="number" id="rounds" value="5" min="1">
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Export dialog ──────────────────────────────────────────────── -->
+  <dialog id="export-dialog" aria-labelledby="export-title">
+    <div class="dlg-header">
+      <span class="dlg-title" id="export-title">Export pattern</span>
+      <span id="export-progress" class="dlg-progress" hidden></span>
+      <button class="dlg-close" id="export-close" aria-label="Close" type="button">✕</button>
+    </div>
+    <div class="dlg-body">
+      <label class="toggle">
         <input type="checkbox" id="alternate">
-        <span class="toggle-track"><span class="toggle-thumb"></span></span>
+        <span class="toggle-track"></span>
         Alternate direction
       </label>
-      <div id="export-warning" class="export-warning" hidden>
+      <div id="export-warning" class="warning" hidden>
         ⚠ Pattern has invalid placements (red pixels). Export may be incorrect.
       </div>
-      <textarea id="export-text" readonly spellcheck="false"></textarea>
-      <div class="modal-footer">
-        <button id="modal-copy">Copy</button>
-        <button id="modal-download">Download .txt</button>
-      </div>
+      <textarea id="export-text" rows="20" readonly spellcheck="false"></textarea>
     </div>
-  </div>
+    <div class="dlg-footer">
+      <button class="btn" id="export-copy" type="button">Copy</button>
+      <button class="btn" id="export-download" type="button">Download .txt</button>
+    </div>
+  </dialog>
 
-  <div id="dirty-modal" class="modal" hidden>
-    <div class="modal-content modal-content--narrow">
-      <div class="modal-header">
-        <span class="modal-title">Unsaved Changes</span>
-      </div>
-      <p class="modal-message">You have unsaved changes.</p>
-      <div class="modal-footer">
-        <button id="dirty-cancel">Cancel</button>
-        <button id="dirty-discard" class="btn-angry">Discard</button>
-      </div>
+  <!-- ── Dirty confirm dialog ──────────────────────────────────────── -->
+  <dialog id="dirty-dialog" class="dlg--narrow" aria-labelledby="dirty-title">
+    <div class="dlg-header">
+      <span class="dlg-title" id="dirty-title">Unsaved changes</span>
     </div>
-  </div>
+    <div class="dlg-body">
+      <p class="dlg-message">You have unsaved changes.</p>
+    </div>
+    <div class="dlg-footer">
+      <button class="btn" id="dirty-cancel" type="button">Cancel</button>
+      <button class="btn btn--danger" id="dirty-discard" type="button">Discard</button>
+    </div>
+  </dialog>
 
   <script type="module" src="./src/main.ts"></script>
 </body>

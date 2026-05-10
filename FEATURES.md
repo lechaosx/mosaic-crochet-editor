@@ -28,7 +28,7 @@ Draw a rectangular pattern worked in concentric rounds from the outside in.
 - Strokes that change nothing are silently ignored — no history entry, no dirty mark. — **Claude's choice**
 
 ### Color Pickers
-Click either color swatch to select it as active. Double-click or long-press to open the native color picker. — **your decision**
+Click either color swatch to select it as active. Long-press (mouse or touch, ~500 ms) opens the native color picker. Right-click on desktop still paints with the secondary colour. — **your decision (click-to-select); Claude's choice (unified pointer long-press, dropping double-click)**
 
 ### Eraser Tool
 Restores pixels to their underlying alternating color — the same formula used to initialize the pattern. Works with symmetry. — **your decision**
@@ -70,19 +70,19 @@ Overlay (valid stitch position) and invalid placement highlights have configurab
 
 ## Zoom
 
-Scroll anywhere in the canvas area to zoom in/out. — **your decision (area); Claude's choice (scroll-to-zoom)**
+Scroll wheel anywhere in the canvas area zooms in/out, anchored at the cursor. On touch devices, two-finger pinch zooms anchored at the gesture midpoint. Zoom is auto-fit to the viewport on each new pattern, file load, or page refresh. — **your decision (zoom); Claude's choice (cursor anchoring, pinch zoom, auto-fit on load)**
 
 ---
 
 ## Canvas Rotation
 
-Two buttons in the top-right of the toolbar rotate the canvas view ±45°. Rotation accumulates unbounded (no wrap-around) to avoid a fast reverse-spin when crossing 360°. Rotation persists across refreshes. — **your decision (feature, accumulation); Claude's choice (placement)**
+Two buttons in the top-right of the toolbar rotate the canvas view ±45° with a 250 ms ease-out CSS animation. Rotation accumulates unbounded (no wrap-around) to avoid a fast reverse-spin when crossing 360°. Rotation persists across refreshes (restored without animating from 0°). A small accent-coloured triangle is drawn just above the top edge of the pattern so the user can always tell which way is "up" through any rotation. — **your decision (feature, accumulation, animation); Claude's choice (top-indicator, CSS-transform-driven animation)**
 
 ---
 
 ## Pan
 
-Middle-mouse drag pans the canvas freely. Pan resets to center when opening the New Pattern widget. Pan is not persisted across refreshes. — **your decision (reset on New); Claude's choice (middle-mouse)**
+Middle-mouse drag pans the canvas freely on desktop. On touch devices, two-finger drag pans (combined with pinch-zoom in the same gesture). Pan resets to center when opening the New Pattern widget or loading a file. Pan is not persisted across refreshes. — **your decision (reset on New); Claude's choice (middle-mouse, two-finger touch)**
 
 ---
 
@@ -96,7 +96,7 @@ As you draw, the highlight overlay updates:
 
 ## New Pattern
 
-Clicking **New** opens an inline widget anchored to the button. Every settings change immediately updates the canvas and commits (baseline reset, history reset, session saved). Clicking outside just closes the widget. — **your decision**
+Clicking **New** opens a popover anchored to the button (uses the native HTML `popover` attribute, so it light-dismisses on outside click and Esc). Every settings change immediately updates the canvas and commits (baseline reset, history reset, session saved). — **your decision (behaviour); Claude's choice (native popover)**
 
 - If the current pattern has unsaved changes, a Discard / Cancel dialog appears first. — **your decision**
 
@@ -139,4 +139,8 @@ Tool, color, symmetry, and pixel state auto-save to `localStorage` and restore o
 
 ## Touch Support
 
-Touch events are mapped to drawing. — **Claude's choice**
+Single-finger drag draws (paint / fill / eraser, with active symmetry). Two-finger drag pans + pinch-zooms in one gesture. Long-press on a swatch opens the native colour picker. The whole UI uses pointer events, so touch, pen, and mouse share one code path. — **Claude's choice (gesture model, pointer-event unification)**
+
+## Highlight Settings
+
+Highlight overlay/invalid colour and opacity live in a popover triggered by the **⊙** button in the toolbar. Long-press the small swatches inside to change colours. — **Claude's choice (popover placement so the inputs no longer crowd the toolbar)**
