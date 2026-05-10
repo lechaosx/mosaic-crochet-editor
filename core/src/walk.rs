@@ -1,3 +1,8 @@
+//! Walk generators. Each call yields the cells of a single row (row mode) or
+//! a single round (round mode) so the export pipeline can stream output. Uses
+//! nightly `gen` blocks. Round walks have a 5-segment structure (4 edges +
+//! start corner) that the exporter relies on for its edge-aware preprocess.
+
 use glam::IVec2;
 
 pub fn row_walk_at(size: IVec2, row_index: usize) -> impl Iterator<Item = IVec2> {

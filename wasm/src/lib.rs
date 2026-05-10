@@ -186,3 +186,11 @@ pub fn erase_pixel_round(pixels: &[u8], canvas_width: i32, canvas_height: i32, x
     tools::erase_pixel_round(pixels, canvas_width, canvas_height, x, y,
                               virtual_size_x, virtual_size_y, offset_x, offset_y, rounds, symmetry_mask)
 }
+
+#[wasm_bindgen]
+pub fn symmetric_orbit_indices(canvas_width: i32, canvas_height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u32> {
+    tools::symmetric_orbit(x, y, canvas_width, canvas_height, symmetry_mask)
+        .into_iter()
+        .map(|(sx, sy)| (sy * canvas_width + sx) as u32)
+        .collect()
+}

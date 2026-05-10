@@ -1,3 +1,13 @@
+//! Drawing tools.
+//!
+//! Each tool walks the *symmetric orbit* of the click point under the active
+//! symmetry mask (`symmetric_orbit`, BFS over up to five reflections) and
+//! writes per-orbit-cell. Importantly, `erase_pixel_row` computes the natural
+//! row colour at *each orbit cell's own y*, not at the click's y — without
+//! that, mirrored erases would smear the click row's colour across the whole
+//! orbit. The orbit walker is also exported through wasm so the TS-side Invert
+//! tool can reuse it for per-stroke deduping.
+
 use std::collections::{HashSet, VecDeque};
 use crate::common;
 
@@ -44,7 +54,7 @@ pub fn erase_pixel_round(pixels: &[u8], canvas_width: i32, canvas_height: i32, x
     result
 }
 
-fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, mask: u8) -> Vec<(i32, i32)> {
+pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, mask: u8) -> Vec<(i32, i32)> {
     let d1_offset = (width - height).div_euclid(2);
     let d2_sum    = (width + height - 2) / 2;
 

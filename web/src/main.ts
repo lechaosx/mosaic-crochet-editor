@@ -1,5 +1,5 @@
 import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
-         export_start_row, export_start_round } from "@mosaic/wasm";
+         export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool } from "./types";
 import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate } from "./render";
 import { state, pixels, highlights, setPixels, setState, applySettings, recomputeHighlights } from "./pattern";
@@ -16,6 +16,7 @@ let strokeColor:  1 | 2 = 1;
 let activeTool: Tool = "pencil";
 let baseline:    Uint8Array | null = null;
 let preStroke:   Uint8Array | null = null;
+let invertVisited: Set<number> | null = null;
 let ui: UIHandle;
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -73,6 +74,17 @@ function paintAt(clientX: number, clientY: number) {
             const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
             setPixels(erase_pixel_round(pixels, W, H, x, y, vw, vh, ox, oy, rounds, mask));
         }
+    } else if (activeTool === "invert") {
+        const next = pixels.slice();
+        const indices = symmetric_orbit_indices(W, H, x, y, mask);
+        for (const idx of indices) {
+            if (invertVisited!.has(idx)) continue;
+            invertVisited!.add(idx);
+            const cur = next[idx];
+            if      (cur === 1) next[idx] = 2;
+            else if (cur === 2) next[idx] = 1;
+        }
+        setPixels(next);
     } else {
         setPixels(paint_pixel(pixels, W, H, x, y, strokeColor, mask));
     }
@@ -221,6 +233,7 @@ document.addEventListener("keydown", e => {
     if (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
     else if (k === "e") setTool("eraser");
+    else if (k === "i") setTool("invert");
 });
 
 /* ─── Init ──────────────────────────────────────────────────────────────── */
@@ -244,7 +257,11 @@ function init() {
     mountGestures({
         getState:     () => state,
         primaryColor: () => primaryColor,
-        onPaintStart: (color) => { strokeColor = color; preStroke = pixels?.slice() ?? null; },
+        onPaintStart: (color) => {
+            strokeColor   = color;
+            preStroke     = pixels?.slice() ?? null;
+            invertVisited = activeTool === "invert" ? new Set<number>() : null;
+        },
         onPaintAt:    paintAt,
         onPaintEnd:   () => {
             if (preStroke && pixels && !arraysEqual(preStroke, pixels)) {
@@ -253,6 +270,18 @@ function init() {
                 saveSession();
             }
             preStroke = null;
+            invertVisited = null;
+        },
+        onPaintCancel: () => {
+            // Two-finger gesture started — revert the partial stroke.
+            if (preStroke) {
+                setPixels(preStroke);
+                recomputeHighlights();
+                updateStatus(highlights, null, null);
+                reRender();
+            }
+            preStroke = null;
+            invertVisited = null;
         },
         onHover: (x, y) => updateStatus(highlights, x, y),
         onView:  reRender,

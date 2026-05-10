@@ -81,7 +81,10 @@ export interface ExportDialog {
 export function mountUI(cb: UICallbacks): UIHandle {
     /* ── Tool buttons ─────────────────────────────────────────────────── */
     const toolButtons: Record<Tool, HTMLButtonElement> = {
-        pencil: el("tool-pencil"), fill: el("tool-fill"), eraser: el("tool-eraser"),
+        pencil: el("tool-pencil"),
+        fill:   el("tool-fill"),
+        eraser: el("tool-eraser"),
+        invert: el("tool-invert"),
     };
     (Object.keys(toolButtons) as Tool[]).forEach(t =>
         toolButtons[t].addEventListener("click", () => cb.onTool(t))
@@ -327,13 +330,18 @@ export function mountUI(cb: UICallbacks): UIHandle {
 // and at the minimum scale (2/3 those). From those two samples we derive:
 //   • bpSingleRow_full — vp where all 5 groups fit on one row at full size
 //   • bpTwoRow_full    — vp where the wider of the two narrow rows fits at full size
-//   • bpTwoRow_min     — same, at minimum scale
+//   • bpTwoRow_min     — same at min scale (2/3 of full)
 // Layout decisions:
 //   • narrow-class on when vp < bpSingleRow_full
-//   • shrink linearly between (bpTwoRow_min, 2/3) and (bpTwoRow_full, 1) so
-//     the toolbar fits exactly when content (incl. fixed padding/gap) overflows.
+//   • below bpTwoRow_full, scale solves exactly for `width(scale) = vp`. The
+//     two measurements give a linear `width(scale) = fixed + variable·scale`,
+//     so the scale needed to fit any vp is `(vp − fixed) / variable`. No
+//     floor: extreme zoom is the user's call.
 const FULL_HIT = 36, FULL_HIT_SM = 28, FULL_FONT = 14;
-const MIN_SCALE = 2 / 3;
+// Second measurement point for the linear width(scale) model — not a clamp.
+// Picking 2/3 gives a span wide enough that the linear approximation stays
+// accurate for any scale we'd realistically need at runtime.
+const LO_SAMPLE = 2 / 3;
 
 function mountToolbarLayout() {
     const toolbar  = document.getElementById("toolbar") as HTMLElement;
@@ -372,7 +380,7 @@ function mountToolbarLayout() {
         toolbar.classList.remove("toolbar--narrow");
 
         const w_full = measureAtScale(1);
-        const w_min  = measureAtScale(MIN_SCALE);
+        const w_min  = measureAtScale(LO_SAMPLE);
 
         const cs = getComputedStyle(toolbar);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
@@ -393,9 +401,13 @@ function mountToolbarLayout() {
 
         let scale = 1;
         if (vp < bpTwoRow_full) {
-            const span = Math.max(1, bpTwoRow_full - bpTwoRow_min);
-            scale = MIN_SCALE + (1 - MIN_SCALE) * (vp - bpTwoRow_min) / span;
-            scale = Math.max(MIN_SCALE, Math.min(1, scale));
+            // Linear width(scale) = fixed + variable·scale, derived from the two
+            // measurements (full at scale 1, min at scale 2/3). Solve for the
+            // scale that makes width(scale) == vp.
+            const variable = 3 * (bpTwoRow_full - bpTwoRow_min);
+            const fixed    = bpTwoRow_full - variable;
+            scale = variable > 0 ? (vp - fixed) / variable : 1;
+            scale = Math.min(1, Math.max(0, scale));
         }
         toolbar.style.setProperty("--hit",       `${FULL_HIT    * scale}px`);
         toolbar.style.setProperty("--hit-sm",    `${FULL_HIT_SM * scale}px`);

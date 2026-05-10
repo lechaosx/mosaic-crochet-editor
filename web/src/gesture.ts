@@ -6,14 +6,15 @@ interface Pointer { x: number; y: number; button: number; type: string; }
 type Mode = "idle" | "paint" | "gesture" | "gesture-end" | "middle-pan";
 
 export interface GestureCallbacks {
-    getState:    () => PatternState | null;
-    primaryColor: () => 1 | 2;
-    onPaintStart: (color: 1 | 2) => void;
-    onPaintAt:    (clientX: number, clientY: number) => void;
-    onPaintEnd:   () => void;
-    onHover:      (x: number | null, y: number | null) => void;
-    onView:       () => void;     // re-render after view change
-    onViewSettle: () => void;     // persist view (after wheel/middle-pan/rotate)
+    getState:      () => PatternState | null;
+    primaryColor:  () => 1 | 2;
+    onPaintStart:  (color: 1 | 2) => void;
+    onPaintAt:     (clientX: number, clientY: number) => void;
+    onPaintEnd:    () => void;     // commit stroke (record history if changed)
+    onPaintCancel: () => void;     // discard stroke (revert to pre-stroke pixels)
+    onHover:       (x: number | null, y: number | null) => void;
+    onView:        () => void;     // re-render after view change
+    onViewSettle:  () => void;     // persist view (after wheel/middle-pan/rotate)
 }
 
 function zoomAt(clientX: number, clientY: number, factor: number) {
@@ -40,7 +41,11 @@ export function mountGestures(cb: GestureCallbacks) {
     function distance() { const [a, b] = pts(); return Math.hypot(a.x - b.x, a.y - b.y); }
 
     function startGesture() {
-        if (mode === "paint") cb.onPaintEnd();
+        // A second pointer means the user is starting a pan/zoom gesture, not
+        // a paint — discard whatever the first pointer drew (the dot from
+        // pointerdown, anything from move events) so we don't leave stray
+        // marks behind.
+        if (mode === "paint") cb.onPaintCancel();
         gestMid  = midpoint();
         gestDist = distance();
         mode = "gesture";
