@@ -204,3 +204,258 @@ pub fn to_string(seq: &[SequenceItem]) -> String {
     .collect::<Vec<_>>()
     .join(", ")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    fn sc()  -> SequenceItem { SequenceItem::Stitch(Stitch::Sc) }
+    fn oc()  -> SequenceItem { SequenceItem::Stitch(Stitch::Oc) }
+    fn rep(items: Vec<SequenceItem>, count: usize) -> SequenceItem {
+        SequenceItem::repeat(items, count)
+    }
+
+    /// Expand a compressed sequence back to a flat list (mirrors Lua `flatten`).
+    fn flatten(seq: &[SequenceItem]) -> Vec<SequenceItem> {
+        let mut r = Vec::new();
+        for item in seq {
+            match item {
+                SequenceItem::Stitch(_) | SequenceItem::Group(_) => r.push(item.clone()),
+                SequenceItem::RepeatGroup(data) => {
+                    let inner = flatten(&data.items);
+                    for _ in 0..data.count { r.extend_from_slice(&inner); }
+                }
+            }
+        }
+        r
+    }
+
+    fn eq(got: &[SequenceItem], expected: &[SequenceItem]) {
+        assert_eq!(
+            to_string(got), to_string(expected),
+            "\n  got:      {}\n  expected: {}",
+            to_string(got), to_string(expected),
+        );
+    }
+
+    // ── compress: basics ─────────────────────────────────────────────────────
+
+    #[test]
+    fn compress_empty() { assert!(compress(&[]).is_empty()); }
+
+    #[test]
+    fn compress_single_sc() { eq(&compress(&[sc()]), &[sc()]); }
+
+    #[test]
+    fn compress_single_oc() { eq(&compress(&[oc()]), &[oc()]); }
+
+    #[test]
+    fn compress_same_type_collapses() {
+        eq(&compress(&[sc(),sc(),sc(),sc()]), &[rep(vec![sc()], 4)]);
+    }
+
+    #[test]
+    fn compress_two_different_no_grouping() {
+        eq(&compress(&[sc(),oc()]), &[sc(),oc()]);
+    }
+
+    #[test]
+    fn compress_three_non_repeating() {
+        eq(&compress(&[sc(),sc(),oc()]), &[rep(vec![sc()],2), oc()]);
+    }
+
+    // ── compress: boundary-merge cases ───────────────────────────────────────
+
+    #[test]
+    fn compress_sc_oc_sc_x3_boundary_merge() {
+        // [sc,oc,sc]×3: trailing sc and leading sc of adjacent periods merge in naive RLE
+        let flat = flatten(&[rep(vec![sc(),oc(),sc()], 3)]);
+        eq(&compress(&flat), &[rep(vec![sc(),oc(),sc()], 3)]);
+    }
+
+    #[test]
+    fn compress_oc_sc_oc_x3_boundary_merge() {
+        let flat = flatten(&[rep(vec![oc(),sc(),oc()], 3)]);
+        eq(&compress(&flat), &[rep(vec![oc(),sc(),oc()], 3)]);
+    }
+
+    #[test]
+    fn compress_sc_oc_sc_oc_x2_boundary_merge() {
+        // period=2 beats period=4 with count=2
+        let flat = flatten(&[rep(vec![sc(),oc(),sc(),oc()], 2)]);
+        eq(&compress(&flat), &[rep(vec![sc(),oc()], 4)]);
+    }
+
+    // ── compress: clean periods (no boundary merge) ───────────────────────────
+
+    #[test]
+    fn compress_alternating_sc_oc_x12() {
+        let flat = flatten(&[rep(vec![sc(),oc()], 12)]);
+        eq(&compress(&flat), &[rep(vec![sc(),oc()], 12)]);
+    }
+
+    #[test]
+    fn compress_checker_2sc_2oc_x4() {
+        let flat = flatten(&[rep(vec![sc(),sc(),oc(),oc()], 4)]);
+        eq(&compress(&flat), &[rep(vec![rep(vec![sc()],2),rep(vec![oc()],2)], 4)]);
+    }
+
+    #[test]
+    fn compress_3sc_oc_x3() {
+        let flat = flatten(&[rep(vec![sc(),sc(),sc(),oc()], 3)]);
+        eq(&compress(&flat), &[rep(vec![rep(vec![sc()],3),oc()], 3)]);
+    }
+
+    #[test]
+    fn compress_period_count_2_saves_one_token() {
+        let flat = flatten(&[rep(vec![sc(),sc(),oc(),oc()], 2)]);
+        eq(&compress(&flat), &[rep(vec![rep(vec![sc()],2),rep(vec![oc()],2)], 2)]);
+    }
+
+    // ── compress: prefix / suffix ─────────────────────────────────────────────
+
+    #[test]
+    fn compress_unique_prefix_then_repeat() {
+        let input = flatten(&[rep(vec![sc()],3), rep(vec![oc(),sc()],4)]);
+        eq(&compress(&input), &[rep(vec![sc()],3), rep(vec![oc(),sc()],4)]);
+    }
+
+    #[test]
+    fn compress_repeat_then_unique_suffix() {
+        let input = flatten(&[rep(vec![sc(),oc()],4), rep(vec![sc()],3)]);
+        eq(&compress(&input), &[rep(vec![sc(),oc()],4), rep(vec![sc()],3)]);
+    }
+
+    #[test]
+    fn compress_two_separate_repeat_groups() {
+        let input = flatten(&[rep(vec![sc(),oc()],3), rep(vec![rep(vec![sc()],2),rep(vec![oc()],2)],2)]);
+        eq(&compress(&input), &[rep(vec![sc(),oc()],3), rep(vec![rep(vec![sc()],2),rep(vec![oc()],2)],2)]);
+    }
+
+    // ── compress: nested repeats ──────────────────────────────────────────────
+
+    #[test]
+    fn compress_nested_sc_oc_x3_then_oc_x3() {
+        let flat = flatten(&[rep(vec![sc(),oc(),sc(),oc(),sc(),oc(),oc()], 3)]);
+        eq(&compress(&flat), &[rep(vec![rep(vec![sc(),oc()],3),oc()], 3)]);
+    }
+
+    #[test]
+    fn compress_nested_sc_oc_x4_then_oc_x2() {
+        let flat = flatten(&[rep(vec![sc(),oc(),sc(),oc(),sc(),oc(),sc(),oc(),oc()], 2)]);
+        eq(&compress(&flat), &[rep(vec![rep(vec![sc(),oc()],4),oc()], 2)]);
+    }
+
+    // ── compress: non-divisible length ───────────────────────────────────────
+
+    #[test]
+    fn compress_7_chars_split_at_leftmost() {
+        let input = vec![sc(),oc(),sc(),oc(),sc(),oc(),sc()];
+        eq(&compress(&input), &[sc(), rep(vec![oc(),sc()], 3)]);
+    }
+
+    #[test]
+    fn compress_period5_beats_naive_split() {
+        let flat = flatten(&[rep(vec![sc(),rep(vec![oc(),sc()],2)], 2)]);
+        eq(&compress(&flat), &[rep(vec![sc(),rep(vec![oc(),sc()],2)], 2)]);
+    }
+
+    // ── compress: edge cases ─────────────────────────────────────────────────
+
+    #[test]
+    fn compress_all_sc_single_leaf() {
+        let flat = flatten(&[rep(vec![sc()], 10)]);
+        eq(&compress(&flat), &[rep(vec![sc()], 10)]);
+    }
+
+    #[test]
+    fn compress_count_10_repeat() {
+        let flat = flatten(&[rep(vec![sc(),oc()], 10)]);
+        eq(&compress(&flat), &[rep(vec![sc(),oc()], 10)]);
+    }
+
+    #[test]
+    fn compress_count_is_integer_not_float() {
+        let result = compress(&flatten(&[rep(vec![sc(),oc()], 3)]));
+        assert!(!to_string(&result).contains('.'));
+    }
+
+    #[test]
+    fn compress_nested_inner_over_flat_inner() {
+        // period 5, count 2: [[sc,oc]×2, oc]×2 cheaper than literal
+        let flat = flatten(&[rep(vec![sc(),oc(),sc(),oc(),oc()], 2)]);
+        eq(&compress(&flat), &[rep(vec![rep(vec![sc(),oc()],2),oc()], 2)]);
+    }
+
+    // ── roundtrip: no information lost ───────────────────────────────────────
+
+    #[test]
+    fn roundtrip_sc_oc_sc_x3() {
+        let flat = flatten(&[rep(vec![sc(),oc(),sc()], 3)]);
+        assert_eq!(flatten(&compress(&flat)), flat);
+    }
+
+    #[test]
+    fn roundtrip_diagonal_stripe_x3() {
+        let flat = flatten(&[rep(vec![sc(),oc(),sc(),sc(),oc(),oc(),sc(),oc()], 3)]);
+        assert_eq!(flatten(&compress(&flat)), flat);
+    }
+
+    #[test]
+    fn roundtrip_all_sc() {
+        let flat = flatten(&[rep(vec![sc()], 20)]);
+        assert_eq!(flatten(&compress(&flat)), flat);
+    }
+
+    #[test]
+    fn roundtrip_alternating_x15() {
+        let flat = flatten(&[rep(vec![sc(),oc()], 15)]);
+        assert_eq!(flatten(&compress(&flat)), flat);
+    }
+
+    #[test]
+    fn roundtrip_nested_pattern_x3() {
+        let flat = flatten(&[rep(vec![sc(),oc(),sc(),oc(),sc(),oc(),oc()], 3)]);
+        assert_eq!(flatten(&compress(&flat)), flat);
+    }
+
+    // ── to_string ─────────────────────────────────────────────────────────────
+
+    #[test]
+    fn to_string_single_stitch() {
+        assert_eq!(to_string(&[sc()]), "sc");
+        assert_eq!(to_string(&[oc()]), "oc");
+    }
+
+    #[test]
+    fn to_string_flat_sequence() {
+        assert_eq!(to_string(&[sc(),oc(),sc()]), "sc, oc, sc");
+    }
+
+    #[test]
+    fn to_string_single_stitch_repeat() {
+        assert_eq!(to_string(&[rep(vec![sc()], 3)]), "sc × 3");
+        assert_eq!(to_string(&[rep(vec![oc()], 10)]), "oc × 10");
+    }
+
+    #[test]
+    fn to_string_shallow_repeat_group() {
+        assert_eq!(to_string(&[rep(vec![sc(),oc()], 4)]), "[sc, oc] × 4");
+    }
+
+    #[test]
+    fn to_string_nested_repeat_group() {
+        let inner = rep(vec![sc(),oc()], 2);
+        let outer = rep(vec![inner, sc()], 3);
+        assert_eq!(to_string(&[outer]), "[[sc, oc] × 2, sc] × 3");
+    }
+
+    #[test]
+    fn to_string_mixed_flat_and_grouped() {
+        let item = rep(vec![oc(), rep(vec![sc()], 2)], 3);
+        assert_eq!(to_string(&[sc(), item, oc()]), "sc, [oc, sc × 2] × 3, oc");
+    }
+}
