@@ -54,9 +54,10 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## History
 
 - Up to 64 history states per session. — **Claude's choice**
-- Each new pattern starts with a clean history. — **your decision**
-- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v1`). On refresh the saved stack is restored as-is; only `New pattern` and file `Load` clear it. — **your decision**
-- Dirty detection diffs current pixels against a baseline snapshot, not a stored flag — drawing then erasing back to the original is clean. — **your decision**
+- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v2`). On refresh the saved stack is restored as-is. — **your decision**
+- Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
+- Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
+- Redundant snapshots (same packed pixels + same state + same colours as the head) are skipped. — **Claude's choice**
 
 ## Persistence
 
@@ -88,8 +89,17 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; tools + symmetry + colours on row 2), each row distributed with `space-between`. — **your decision**
 - When even the two-row layout would overflow, button height and font size shrink to fit. The two breakpoints come from runtime measurements of each group's intrinsic width — they kick in exactly when content stops fitting, never sooner. — **your decision** (auto-shrink); **Claude's choice** (measure-driven)
 
-## New-pattern dialog
+## Pattern popover
 
-- Opens as a popover anchored to the **New** button; light-dismisses on outside click and Esc. — **your decision**
-- Settings update the canvas live as they change. — **your decision**
+- Single **Pattern** toolbar button — handles both "create from scratch" and "edit in place" via the same popover (no separate New button). Mode toggle (row/round), dimensions, submode all editable; light-dismiss on outside click and Esc. — **your decision**
+- Live preview as inputs change. Painted cells are preserved across resizing / submode toggles where they map (row: bottom-anchored vertically, centre-anchored horizontally; round: centre-anchored in virtual space). Mode switch (row↔round) is inherently a wipe. — **your decision**
+- Live preview always derives from the pre-edit snapshot, so destructive scrubbing is reversible without committing: reduce rounds to 1 and back to 20 brings the original pattern back. — **your decision**
+- **Keep painted** toggle: on by default, the user can flip it off to force a wipe even when preservation is possible. Disabled automatically for inherently-destructive changes (mode switch, inner-W/H change). — **your decision**
+- Closing the popover (Esc, click outside, or clicking the canvas) commits the current preview to history. Undo (Ctrl+Z) is the universal revert — no Cancel/Apply buttons, no lossy confirmation modal. — **your decision**
+- Live preview always re-derives from the head, so destructive scrubbing (rounds 20 → 1 → 20, full → quarter → full) brings the original pattern back without losing data, even while the popover is open. — **your decision**
+- **Wipe** toggle: user preference (default off = preserve painted). Disabled with a visibly greyed appearance for inherently destructive changes (mode switch, inner-W/H change); the disabled state forces wipe but doesn't alter the checked value, so when the user backs out of the destructive change their preference takes over again and the preview restores to painted unless they explicitly checked Wipe. — **your decision**
 - Numeric inputs typed below the field's minimum are normalised on blur. — **your decision**
+
+## Load
+
+- File picker → loads the picked `.mcw` → pushes a snapshot. Reverting is via undo (Ctrl+Z), which now restores the prior state, pixels *and* colours together. No separate revert bar. — **your decision**
