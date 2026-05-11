@@ -126,6 +126,33 @@ function overlayPreserved(
 }
 
 
+// A cell is *always* invalid if there's no way for it to be correctly placed —
+// it has nowhere to overlay against. The same conditions the Rust highlight
+// computation marks as INVALID regardless of pixel value:
+//   • row mode — outermost rows (y == 0 or y == H-1)
+//   • round mode — outermost ring (rfe == 0) or any diagonal pixel (dx == dy)
+// Hole positions don't count (mask irrelevant inside the hole).
+export function isAlwaysInvalid(s: PatternState, x: number, y: number): boolean {
+    if (s.mode === "row") return y === 0 || y === s.canvasHeight - 1;
+    const vx = x + s.offsetX, vy = y + s.offsetY;
+    const dx = Math.min(vx, s.virtualWidth  - 1 - vx);
+    const dy = Math.min(vy, s.virtualHeight - 1 - vy);
+    const rfe = Math.min(dx, dy);
+    if (rfe >= s.rounds) return false;
+    return rfe === 0 || dx === dy;
+}
+
+// The "should-be" colour for each cell — same array `initialize_*_pattern`
+// would return. Used by the Lock-invalid post-filter to know what's "correct".
+export function naturalPatternFor(s: PatternState): Uint8Array {
+    return s.mode === "row"
+        ? initialize_row_pattern(s.canvasWidth, s.canvasHeight)
+        : initialize_round_pattern(
+              s.canvasWidth, s.canvasHeight, s.virtualWidth, s.virtualHeight,
+              s.offsetX, s.offsetY, s.rounds,
+          );
+}
+
 export function recomputeHighlights() {
     if (!state || !pixels) return;
     const { canvasWidth, canvasHeight } = state;
