@@ -1,5 +1,5 @@
 import { Tool, SymKey, PatternState } from "./types";
-import { el, setRadio, clampInputDisplay } from "./dom";
+import { el, setRadio, clampInputDisplay, radioValue, readClampedInt } from "./dom";
 
 // ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
@@ -38,6 +38,7 @@ export interface UICallbacks {
     onTool:            (t: Tool) => void;
     onPrimaryColor:    (slot: 1 | 2) => void;
     onColorChange:     () => void;
+    onColorCommit:     () => void;
     onSym:             (k: SymKey) => void;
     onHighlightChange: () => void;
     onLabelsVisibleChange: () => void;
@@ -45,8 +46,9 @@ export interface UICallbacks {
     onUndo:            () => void;
     onRedo:            () => void;
     onRotate:          (delta: number) => void;
-    onNewClick:        () => Promise<boolean>;
-    onNewApply:        () => void;
+    onEditOpen:        () => void;
+    onEditChange:      () => void;
+    onEditClose:       () => void;
     onSave:            () => void;
     onLoad:            () => void;
     onExport:          () => void;
@@ -60,9 +62,8 @@ export interface UIHandle {
     setSymmetry:        (direct: Set<SymKey>, closure: Set<SymKey>) => void;
     setDiagonalEnabled: (enabled: boolean) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
-    syncNewInputs:      (s: PatternState) => void;
-    closeNew:           () => void;
-    confirmDirty:       () => Promise<boolean>;
+    syncEditInputs:     (s: PatternState) => void;
+    closeEdit:          () => void;
     openExport:         () => ExportDialog;
 }
 
@@ -107,8 +108,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
     bindLongPress(swatchB, () => cb.onPrimaryColor(2), () => colorB.click());
     swatchA.addEventListener("dblclick", () => colorA.click());
     swatchB.addEventListener("dblclick", () => colorB.click());
-    colorA.addEventListener("input", cb.onColorChange);
-    colorB.addEventListener("input", cb.onColorChange);
+    colorA.addEventListener("input",  cb.onColorChange);
+    colorB.addEventListener("input",  cb.onColorChange);
+    // `change` fires when the picker closes — that's the user's "I'm done"
+    // signal and the right moment to push a history snapshot.
+    colorA.addEventListener("change", cb.onColorCommit);
+    colorB.addEventListener("change", cb.onColorCommit);
 
     function setPrimary(slot: 1 | 2) {
         swatchA.classList.toggle("swatch--active", slot === 1);
@@ -184,86 +189,104 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el("btn-load")  .addEventListener("click", cb.onLoad);
     el("btn-export").addEventListener("click", cb.onExport);
 
-    /* ── New-pattern popover ─────────────────────────────────────────── */
-    const npWidget = el("new-pattern-widget");
-    const btnNew = el<HTMLButtonElement>("btn-new");
+    /* ── Pattern (Edit) popover ──────────────────────────────────────── */
+    const editWidget = el("edit-pattern-widget");
+    const btnEdit    = el<HTMLButtonElement>("btn-edit");
 
-    btnNew.addEventListener("click", async e => {
-        // Browser would auto-toggle via popovertarget; intercept so we can run
-        // the dirty-confirm flow before opening.
+    btnEdit.addEventListener("click", e => {
         e.preventDefault();
-        if (npWidget.matches(":popover-open")) { npWidget.hidePopover(); return; }
-        if (!await cb.onNewClick()) return;
-        positionPopover(npWidget, btnNew, "left");
-        npWidget.showPopover();
-        cb.onNewApply();
+        if (editWidget.matches(":popover-open")) { editWidget.hidePopover(); return; }
+        positionPopover(editWidget, btnEdit, "left");
+        editWidget.showPopover();
+        cb.onEditOpen();
     });
 
-    document.querySelectorAll<HTMLInputElement>('[name="np-mode"]').forEach(radio => {
+    let editOpenState: PatternState | null = null;
+
+    // "Keep painted" is forced off (and disabled) for changes that don't
+    // meaningfully preserve content — mode switch, inner-dim change. The user
+    // still gets a checkbox state they can re-enable by undoing the input.
+    function refreshWipeAvailability() {
+        if (!editOpenState) return;
+        const newMode = radioValue("edit-mode");
+        let force = newMode !== editOpenState.mode;
+        if (!force && newMode === "round" && editOpenState.mode === "round") {
+            const oldInnerW = editOpenState.virtualWidth  - editOpenState.rounds * 2;
+            const oldInnerH = editOpenState.virtualHeight - editOpenState.rounds * 2;
+            const newInnerW = readClampedInt("edit-inner-width",  0);
+            const newInnerH = readClampedInt("edit-inner-height", 0);
+            force = newInnerW !== oldInnerW || newInnerH !== oldInnerH;
+        }
+        // Disable only — never overwrite the user's preference. The actual
+        // preserve behaviour is `checked && !disabled` (computed downstream).
+        el<HTMLInputElement>("edit-wipe").disabled = force;
+    }
+
+    document.querySelectorAll<HTMLInputElement>('[name="edit-mode"]').forEach(radio => {
         radio.addEventListener("change", () => {
             const mode = radio.value;
-            el("row-controls").hidden   = mode !== "row";
-            el("round-controls").hidden = mode !== "round";
-            if (npWidget.matches(":popover-open")) cb.onNewApply();
+            el("edit-row-controls")  .hidden = mode !== "row";
+            el("edit-round-controls").hidden = mode !== "round";
+            refreshWipeAvailability();
+            if (editWidget.matches(":popover-open")) cb.onEditChange();
         });
     });
-    document.querySelectorAll<HTMLInputElement>('[name="np-submode"]').forEach(radio => {
+    document.querySelectorAll<HTMLInputElement>('[name="edit-submode"]').forEach(radio => {
         radio.addEventListener("change", () => {
-            if (npWidget.matches(":popover-open")) cb.onNewApply();
+            if (editWidget.matches(":popover-open")) cb.onEditChange();
         });
     });
-    const NUM_INPUTS: { id: string; min: number }[] = [
-        { id: "width",        min: 2 },
-        { id: "height",       min: 2 },
-        { id: "inner-width",  min: 0 },
-        { id: "inner-height", min: 0 },
-        { id: "rounds",       min: 1 },
+    const EDIT_INPUTS: { id: string; min: number }[] = [
+        { id: "edit-width",        min: 2 },
+        { id: "edit-height",       min: 2 },
+        { id: "edit-inner-width",  min: 0 },
+        { id: "edit-inner-height", min: 0 },
+        { id: "edit-rounds",       min: 1 },
     ];
-    NUM_INPUTS.forEach(({ id, min }) => {
-        const apply = () => { if (npWidget.matches(":popover-open")) cb.onNewApply(); };
+    EDIT_INPUTS.forEach(({ id, min }) => {
+        const apply = () => {
+            refreshWipeAvailability();
+            if (editWidget.matches(":popover-open")) cb.onEditChange();
+        };
         el(id).addEventListener("input", apply);
         el(id).addEventListener("change", () => {
             clampInputDisplay(id, min);
             apply();
         });
     });
+    el<HTMLInputElement>("edit-wipe").addEventListener("change", () => {
+        if (editWidget.matches(":popover-open")) cb.onEditChange();
+    });
 
-    function syncNewInputs(s: PatternState) {
-        setRadio("np-mode", s.mode);
-        el("row-controls").hidden   = s.mode !== "row";
-        el("round-controls").hidden = s.mode !== "round";
+    // Light-dismiss (Esc, outside click) is the commit path — onEditClose
+    // pushes the current preview onto history. Undo (Ctrl+Z) is the revert.
+    editWidget.addEventListener("toggle", e => {
+        if ((e as ToggleEvent).newState === "closed") cb.onEditClose();
+    });
+
+    function syncEditInputs(s: PatternState) {
+        editOpenState = s;
+        setRadio("edit-mode", s.mode);
+        el("edit-row-controls")  .hidden = s.mode !== "row";
+        el("edit-round-controls").hidden = s.mode !== "round";
         if (s.mode === "row") {
-            el<HTMLInputElement>("width").value  = String(s.canvasWidth);
-            el<HTMLInputElement>("height").value = String(s.canvasHeight);
+            el<HTMLInputElement>("edit-width") .value = String(s.canvasWidth);
+            el<HTMLInputElement>("edit-height").value = String(s.canvasHeight);
         } else {
             const innerW = s.virtualWidth  - s.rounds * 2;
             const innerH = s.virtualHeight - s.rounds * 2;
             const sub = s.offsetX === 0 && s.offsetY === 0
                 ? "full"
                 : s.canvasWidth === s.virtualWidth ? "half" : "quarter";
-            setRadio("np-submode", sub);
-            el<HTMLInputElement>("inner-width") .value = String(innerW);
-            el<HTMLInputElement>("inner-height").value = String(innerH);
-            el<HTMLInputElement>("rounds")      .value = String(s.rounds);
+            setRadio("edit-submode", sub);
+            el<HTMLInputElement>("edit-inner-width") .value = String(innerW);
+            el<HTMLInputElement>("edit-inner-height").value = String(innerH);
+            el<HTMLInputElement>("edit-rounds")      .value = String(s.rounds);
         }
-    }
-
-    /* ── Dialogs ─────────────────────────────────────────────────────── */
-    const dirtyDlg = el<HTMLDialogElement>("dirty-dialog");
-    el("dirty-cancel") .addEventListener("click", () => dirtyDlg.close("cancel"));
-    el("dirty-discard").addEventListener("click", () => dirtyDlg.close("discard"));
-    bindBackdropClose(dirtyDlg);
-
-    function confirmDirty(): Promise<boolean> {
-        return new Promise(resolve => {
-            const handler = () => {
-                dirtyDlg.removeEventListener("close", handler);
-                resolve(dirtyDlg.returnValue === "discard");
-            };
-            dirtyDlg.addEventListener("close", handler);
-            dirtyDlg.returnValue = "cancel";
-            dirtyDlg.showModal();
-        });
+        // Each fresh popover open resets the user preference to "preserve"
+        // (i.e. Wipe unchecked).
+        el<HTMLInputElement>("edit-wipe").checked = false;
+        refreshWipeAvailability();
     }
 
     /* ── Export dialog ───────────────────────────────────────────────── */
@@ -324,8 +347,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     return {
         setTool, setPrimary, setColors, setHighlights, setSymmetry, setDiagonalEnabled,
-        setHistory, syncNewInputs, closeNew: () => npWidget.hidePopover(),
-        confirmDirty, openExport,
+        setHistory,
+        syncEditInputs, closeEdit: () => editWidget.hidePopover(),
+        openExport,
     };
 }
 

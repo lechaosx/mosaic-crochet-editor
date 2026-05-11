@@ -12,7 +12,7 @@
   <header class="toolbar" id="toolbar">
     <div class="tb-row">
       <div class="tb-group g-file">
-        <button class="btn" id="btn-new"    popovertarget="new-pattern-widget" aria-haspopup="dialog" aria-expanded="false" title="New pattern">New</button>
+        <button class="btn" id="btn-edit"   popovertarget="edit-pattern-widget" aria-haspopup="dialog" aria-expanded="false" title="Pattern dimensions">Pattern</button>
         <button class="btn" id="btn-load"   title="Load .mcw file">Load</button>
         <button class="btn" id="btn-save"   title="Save as .mcw file">Save</button>
         <button class="btn" id="btn-export" title="Export pattern as text">Export</button>
@@ -88,43 +88,49 @@
     </label>
   </div>
 
-  <!-- ── New-pattern popover ─────────────────────────────────────────── -->
-  <div id="new-pattern-widget" popover>
+  <!-- ── Pattern (Edit) popover ──────────────────────────────────────── -->
+  <div id="edit-pattern-widget" popover>
     <div class="segmented">
-      <label><input type="radio" name="np-mode" value="row" checked> Row</label>
-      <label><input type="radio" name="np-mode" value="round"> Round</label>
+      <label><input type="radio" name="edit-mode" value="row" checked> Row</label>
+      <label><input type="radio" name="edit-mode" value="round"> Round</label>
     </div>
 
-    <div id="row-controls" class="field-group">
+    <div id="edit-row-controls" class="field-group">
       <div class="field-row">
-        <label for="width">Width</label>
-        <input type="number" id="width" value="16" min="2">
+        <label for="edit-width">Width</label>
+        <input type="number" id="edit-width" value="16" min="2">
       </div>
       <div class="field-row">
-        <label for="height">Height</label>
-        <input type="number" id="height" value="16" min="2">
+        <label for="edit-height">Height</label>
+        <input type="number" id="edit-height" value="16" min="2">
       </div>
     </div>
 
-    <div id="round-controls" class="field-group" hidden>
+    <div id="edit-round-controls" class="field-group" hidden>
       <div class="segmented">
-        <label><input type="radio" name="np-submode" value="full" checked> Full</label>
-        <label><input type="radio" name="np-submode" value="half"> Half</label>
-        <label><input type="radio" name="np-submode" value="quarter"> Quarter</label>
+        <label><input type="radio" name="edit-submode" value="full" checked> Full</label>
+        <label><input type="radio" name="edit-submode" value="half"> Half</label>
+        <label><input type="radio" name="edit-submode" value="quarter"> Quarter</label>
       </div>
       <div class="field-row">
-        <label for="inner-width">Inner W</label>
-        <input type="number" id="inner-width" value="3" min="0">
+        <label for="edit-inner-width">Inner W</label>
+        <input type="number" id="edit-inner-width" value="3" min="0">
       </div>
       <div class="field-row">
-        <label for="inner-height">Inner H</label>
-        <input type="number" id="inner-height" value="3" min="0">
+        <label for="edit-inner-height">Inner H</label>
+        <input type="number" id="edit-inner-height" value="3" min="0">
       </div>
       <div class="field-row">
-        <label for="rounds">Rounds</label>
-        <input type="number" id="rounds" value="5" min="1">
+        <label for="edit-rounds">Rounds</label>
+        <input type="number" id="edit-rounds" value="5" min="1">
       </div>
     </div>
+
+    <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on (disabled) for mode switches and inner-dimension changes.">
+      <input type="checkbox" id="edit-wipe">
+      <span class="toggle-track"></span>
+      Wipe
+    </label>
   </div>
 
   <!-- ── Export dialog ──────────────────────────────────────────────── -->
@@ -148,20 +154,6 @@
     <div class="dlg-footer">
       <button class="btn" id="export-copy" type="button">Copy</button>
       <button class="btn" id="export-download" type="button">Download .txt</button>
-    </div>
-  </dialog>
-
-  <!-- ── Dirty confirm dialog ──────────────────────────────────────── -->
-  <dialog id="dirty-dialog" class="dlg--narrow" aria-labelledby="dirty-title">
-    <div class="dlg-header">
-      <span class="dlg-title" id="dirty-title">Unsaved changes</span>
-    </div>
-    <div class="dlg-body">
-      <p class="dlg-message">You have unsaved changes.</p>
-    </div>
-    <div class="dlg-footer">
-      <button class="btn" id="dirty-cancel" type="button">Cancel</button>
-      <button class="btn btn--danger" id="dirty-discard" type="button">Discard</button>
     </div>
   </dialog>
 

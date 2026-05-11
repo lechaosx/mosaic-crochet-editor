@@ -292,13 +292,21 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 /* Popovers default to display:none from the UA stylesheet; only opt in when open. */
 #new-pattern-widget:popover-open,
+#edit-pattern-widget:popover-open,
 #hl-popover:popover-open {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-#new-pattern-widget { min-width: 16rem; }
+#new-pattern-widget,
+#edit-pattern-widget { min-width: 16rem; }
+
+.popover-footer {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
 
 .popover-row {
   display: flex;
@@ -504,6 +512,10 @@ dialog::backdrop {
 
 .toggle input:checked + .toggle-track             { background: var(--accent-soft); }
 .toggle input:checked + .toggle-track::after      { left: calc(100% - 1.0625rem); background: var(--accent); }
+
+.toggle:has(input:disabled) { cursor: not-allowed; color: var(--fg-2); opacity: 0.55; }
+.toggle input:disabled + .toggle-track             { background: var(--bg-3); }
+.toggle input:disabled + .toggle-track::after      { background: var(--fg-3, var(--fg-2)); }
 
 @keyframes pulse {
   from { opacity: 0.4; }

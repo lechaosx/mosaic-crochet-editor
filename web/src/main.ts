@@ -1,9 +1,9 @@
 import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
-import { Tool } from "./types";
+import { Tool, PatternState } from "./types";
 import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightAsSymbols } from "./render";
-import { state, pixels, highlights, setPixels, setState, applySettings, recomputeHighlights } from "./pattern";
-import { historySave, historyReset, historyEnsureInitialized, historyUndo, historyRedo, canUndo, canRedo } from "./history";
+import { state, pixels, highlights, setPixels, setState, applyEditSettings, recomputeHighlights } from "./pattern";
+import { historySave, historyReset, historyEnsureInitialized, historyPeek, historyUndo, historyRedo, canUndo, canRedo } from "./history";
 import { SymKey } from "./types";
 import { directlyActive, setDirectlyActive, computeClosure, diagonalsAvailable, getSymmetryMask, ensureDiagonalsValid } from "./symmetry";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LocalState } from "./storage";
@@ -14,7 +14,6 @@ import { mountGestures } from "./gesture";
 let primaryColor: 1 | 2 = 1;
 let strokeColor:  1 | 2 = 1;
 let activeTool: Tool = "pencil";
-let baseline:    Uint8Array | null = null;
 let preStroke:   Uint8Array | null = null;
 let invertVisited: Set<number> | null = null;
 let ui: UIHandle;
@@ -24,8 +23,6 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
 }
-const isDirty   = () => !!pixels && !!baseline && !arraysEqual(pixels, baseline);
-const setBaseline = () => { baseline = pixels?.slice() ?? null; };
 
 /* ─── Render shorthand ─────────────────────────────────────────────────────── */
 function reRender()      { if (state && pixels && highlights) render(state, pixels, highlights); }
@@ -106,6 +103,14 @@ function applyColorsFromInputs() {
     reRender();
     saveSession();
 }
+// Push a history snapshot when the user *commits* a colour (closes the
+// picker), not on every drag — undo can then walk back through colour changes
+// alongside paint strokes.
+function onColorCommit() {
+    if (!pixels) return;
+    historySave(pixels, getColorHex(1), getColorHex(2));
+    ui.setHistory(canUndo(), canRedo());
+}
 function applyHighlightsFromInputs() {
     const opacity = getHlOpacity();
     COLORS[3] = hexRgba(getHlOverlay(), opacity);
@@ -137,32 +142,50 @@ function toggleSym(k: SymKey) {
     reRender();
 }
 
-/* ─── New pattern ────────────────────────────────────────────────────────── */
-function recreateFromInputs() {
-    applySettings();
+/* ─── Pattern (Edit) ─────────────────────────────────────────────────────── */
+// No separate snapshot — the history head is already the pre-edit state.
+// Live preview mutates `state` / `pixels` in memory without touching history;
+// Apply pushes the new state as the new head; Cancel / light-dismiss just
+// restores from the (unchanged) head.
+function onEditOpen() {
+    if (!state) return;
+    ui.syncEditInputs(state);
+}
+function onEditChange() {
+    // Always derive the preview from the head (= pre-edit state), so reducing
+    // and then restoring a value (e.g. rounds 1 → 20) brings the original
+    // pattern back instead of permanently losing the trimmed cells.
+    const head = historyPeek();
+    applyEditSettings(head ?? undefined);
     recomputeHighlights();
-    if (state) {
-        view.panX = 0; view.panY = 0;
-        fitToView(state);
-        reSymmetry();
-    }
-    setBaseline();
-    historyReset(pixels!); ui.setHistory(canUndo(), canRedo());
-    saveSession();
+    if (state) { fitToView(state); reSymmetry(); }
     reRender();
 }
-
-async function onNewClick(): Promise<boolean> { return !isDirty() || ui.confirmDirty(); }
+// Light-dismiss / Esc / outside-click commits the live-previewed state to
+// history. Undo (Ctrl+Z) is the universal revert path — no Cancel/Apply
+// buttons. Dedup inside `historySave` skips no-op commits.
+function onEditClose() {
+    if (!state || !pixels) return;
+    historySave(pixels, getColorHex(1), getColorHex(2));
+    ui.setHistory(canUndo(), canRedo());
+    saveSession();
+}
 
 /* ─── Undo / redo ────────────────────────────────────────────────────────── */
-function undo() {
-    const p = historyUndo(); if (!p) return;
-    setPixels(p); reHighlight(); ui.setHistory(canUndo(), canRedo()); saveSession();
+function applyRestored(r: { state: PatternState; pixels: Uint8Array; colorA: string; colorB: string }) {
+    setState(r.state);
+    setPixels(r.pixels);
+    (document.getElementById("color-a") as HTMLInputElement).value = r.colorA;
+    (document.getElementById("color-b") as HTMLInputElement).value = r.colorB;
+    applyColorsFromInputs();
+    reHighlight();
+    if (state) { fitToView(state); reSymmetry(); }
+    ui.syncEditInputs(r.state);
+    ui.setHistory(canUndo(), canRedo());
+    saveSession();
 }
-function redo() {
-    const p = historyRedo(); if (!p) return;
-    setPixels(p); reHighlight(); ui.setHistory(canUndo(), canRedo()); saveSession();
-}
+function undo() { const r = historyUndo(); if (r) applyRestored(r); }
+function redo() { const r = historyRedo(); if (r) applyRestored(r); }
 
 /* ─── Save / load ────────────────────────────────────────────────────────── */
 async function onSave() {
@@ -170,22 +193,23 @@ async function onSave() {
     await saveToFile(state, pixels, getColorHex(1), getColorHex(2));
 }
 async function onLoad() {
-    if (isDirty() && !await ui.confirmDirty()) return;
     const loaded = await loadFromFile(); if (!loaded) return;
     setState(loaded.state);
     setPixels(loaded.pixels);
     (document.getElementById("color-a") as HTMLInputElement).value = loaded.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = loaded.colorB;
     applyColorsFromInputs();
-    ui.syncNewInputs(loaded.state);
+    ui.syncEditInputs(loaded.state);
     recomputeHighlights();
     if (state) {
         fitToView(state);
         view.panX = 0; view.panY = 0;
         reSymmetry();
     }
-    historyReset(loaded.pixels); ui.setHistory(canUndo(), canRedo());
-    setBaseline();
+    // Push the loaded snapshot — Ctrl+Z restores the previous pattern, colours
+    // and dims together (snapshots are dim- and colour-aware).
+    historySave(loaded.pixels, loaded.colorA, loaded.colorB);
+    ui.setHistory(canUndo(), canRedo());
     saveSession();
     reRender();
 }
@@ -271,6 +295,7 @@ function init() {
         onTool: setTool,
         onPrimaryColor: setPrimary,
         onColorChange: applyColorsFromInputs,
+        onColorCommit,
         onSym: toggleSym,
         onHighlightChange: applyHighlightsFromInputs,
         onLabelsVisibleChange: applyLabelsVisibleFromInput,
@@ -278,8 +303,9 @@ function init() {
         onUndo: undo,
         onRedo: redo,
         onRotate: rotate,
-        onNewClick,
-        onNewApply: recreateFromInputs,
+        onEditOpen,
+        onEditChange,
+        onEditClose,
         onSave,
         onLoad,
         onExport,
@@ -296,7 +322,7 @@ function init() {
         onPaintAt:    paintAt,
         onPaintEnd:   () => {
             if (preStroke && pixels && !arraysEqual(preStroke, pixels)) {
-                historySave(pixels);
+                historySave(pixels, getColorHex(1), getColorHex(2));
                 ui.setHistory(canUndo(), canRedo());
                 saveSession();
             }
@@ -338,30 +364,28 @@ function restoreSession(saved: LocalState) {
     applyHighlightsFromInputs();
     applyLabelsVisibleFromInput();
     applyHlSymbolsFromInput();
-    ui.syncNewInputs(saved.state);
+    ui.syncEditInputs(saved.state);
     setDirectlyActive(saved.symmetry as SymKey[]);
     setTool(saved.activeTool as Tool);
     setPrimary(saved.primaryColor as 1 | 2);
     if (state) { fitToView(state); reSymmetry(); }
     recomputeHighlights();
-    historyEnsureInitialized(saved.pixels); ui.setHistory(canUndo(), canRedo());
-    setBaseline();
+    historyEnsureInitialized(saved.pixels, saved.colorA, saved.colorB); ui.setHistory(canUndo(), canRedo());
     updateStatus(highlights, null, null);
     reRender();
 }
 
 function freshSession() {
-    applySettings();
+    applyEditSettings();   // reads defaults from the Pattern popover's HTML
     recomputeHighlights();
     setTool("pencil");
     setPrimary(1);
     if (state) { fitToView(state); reSymmetry(); }
-    historyReset(pixels!); ui.setHistory(canUndo(), canRedo());
+    historyReset(pixels!, getColorHex(1), getColorHex(2)); ui.setHistory(canUndo(), canRedo());
     applyColorsFromInputs();
     applyHighlightsFromInputs();
     applyLabelsVisibleFromInput();
     applyHlSymbolsFromInput();
-    setBaseline();
     updateStatus(highlights, null, null);
     reRender();
 }
