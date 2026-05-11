@@ -40,6 +40,7 @@ export interface UICallbacks {
     onColorChange:     () => void;
     onSym:             (k: SymKey) => void;
     onHighlightChange: () => void;
+    onLabelsVisibleChange: () => void;
     onUndo:            () => void;
     onRedo:            () => void;
     onRotate:          (delta: number) => void;
@@ -155,6 +156,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     hlOverlayCol.addEventListener("input", cb.onHighlightChange);
     hlInvalidCol.addEventListener("input", cb.onHighlightChange);
     hlOpacity   .addEventListener("input", cb.onHighlightChange);
+    el<HTMLInputElement>("labels-on").addEventListener("change", cb.onLabelsVisibleChange);
 
     function setHighlights(overlay: string, invalid: string, opacity: number) {
         hlOverlayCol.value = overlay;

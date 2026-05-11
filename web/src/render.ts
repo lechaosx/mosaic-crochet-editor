@@ -1,4 +1,4 @@
-import { PatternState, SymKey } from "./types";
+import { PatternState, RowState, RoundState, SymKey } from "./types";
 import { computeClosure, diagonalsAvailable, directlyActive } from "./symmetry";
 
 export const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -31,6 +31,9 @@ let dpr = 1;
 let lastState: PatternState | null = null;
 let lastPixels: Uint8Array | null = null;
 let lastHighlights: Uint8Array | null = null;
+let labelsVisible = true;
+
+export function setLabelsVisible(v: boolean) { labelsVisible = v; rerender(); }
 
 export function clampZoom(z: number) { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)); }
 
@@ -227,7 +230,74 @@ function rerender() {
     ctx.stroke();
 
     renderSymmetryGuides(state);
+    if (labelsVisible) {
+        if (state.mode === "row") renderRowLabels(state);
+        else                       renderRoundLabels(state, pixels);
+    }
     if (topIndicatorOpacity > 0.001) renderTopIndicator(state);
+}
+
+// Labels are positioned in pattern coords (so they pan/zoom/rotate with the
+// pattern) but drawn in screen coords (so the glyphs themselves stay upright
+// regardless of canvas rotation).
+const LABEL_FONT = `ui-monospace, "SF Mono", Menlo, monospace`;
+
+// Row labels in the left gutter — row 1 at the bottom (mosaic convention).
+function renderRowLabels(state: RowState) {
+    const cell = view.zoom * dpr;
+    const { canvasHeight: H } = state;
+    const m = buildMatrix(state);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `${cell * 0.5}px ${LABEL_FONT}`;
+    ctx.fillStyle  = "rgba(210, 210, 220, 0.75)";
+    ctx.textAlign  = "right";
+    ctx.textBaseline = "middle";
+    for (let y = 0; y < H; y++) {
+        const p = m.transformPoint({ x: -0.25, y: y + 0.5 });
+        ctx.fillText(String(H - y), p.x, p.y);
+    }
+    ctx.restore();
+}
+
+// Round labels — innermost ring numbered 1 (mosaic convention). Placement:
+//   • full     — inside the top-left corner cell of each ring: ring r at (r, r).
+//   • half/qtr — above the canvas in the top gutter, centred on column r.
+function renderRoundLabels(state: RoundState, pixels: Uint8Array) {
+    const cell = view.zoom * dpr;
+    const { canvasWidth: W, canvasHeight: H, rounds, offsetY } = state;
+    const isFull = offsetY === 0;
+    const m = buildMatrix(state);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = `${cell * (isFull ? 0.55 : 0.5)}px ${LABEL_FONT}`;
+    ctx.textAlign  = "center";
+    ctx.textBaseline = "middle";
+    if (isFull) {
+        ctx.lineWidth = Math.max(2, cell * 0.12);
+        ctx.lineJoin  = "round";
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.9)";
+        ctx.fillStyle   = "rgba(255, 255, 255, 0.95)";
+    } else {
+        ctx.fillStyle = "rgba(210, 210, 220, 0.75)";
+    }
+    for (let r = 0; r < rounds; r++) {
+        let cx: number, cy: number;
+        if (isFull) {
+            const px = r, py = r;
+            if (px >= W || py >= H) continue;
+            if (pixels[py * W + px] === 0) continue;
+            cx = px + 0.5; cy = py + 0.5;
+        } else {
+            if (r >= W) continue;
+            cx = r + 0.5; cy = -0.3;
+        }
+        const label = String(rounds - r);
+        const p = m.transformPoint({ x: cx, y: cy });
+        if (isFull) ctx.strokeText(label, p.x, p.y);
+        ctx.fillText(label, p.x, p.y);
+    }
+    ctx.restore();
 }
 
 function renderTopIndicator(state: PatternState) {
