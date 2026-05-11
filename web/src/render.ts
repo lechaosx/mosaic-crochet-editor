@@ -32,8 +32,10 @@ let lastState: PatternState | null = null;
 let lastPixels: Uint8Array | null = null;
 let lastHighlights: Uint8Array | null = null;
 let labelsVisible = true;
+let highlightAsSymbols = true;
 
-export function setLabelsVisible(v: boolean) { labelsVisible = v; rerender(); }
+export function setLabelsVisible    (v: boolean) { labelsVisible      = v; rerender(); }
+export function setHighlightAsSymbols(v: boolean) { highlightAsSymbols = v; rerender(); }
 
 export function clampZoom(z: number) { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)); }
 
@@ -212,10 +214,12 @@ function rerender() {
             if (p === 0) continue;
             ctx.fillStyle = COLORS[p] ?? "#333";
             ctx.fillRect(x, y, 1, 1);
-            const h = highlights[row + x];
-            if (h !== 0) {
-                ctx.fillStyle = COLORS[h] ?? "";
-                ctx.fillRect(x, y, 1, 1);
+            if (!highlightAsSymbols) {
+                const h = highlights[row + x];
+                if (h !== 0) {
+                    ctx.fillStyle = COLORS[h] ?? "";
+                    ctx.fillRect(x, y, 1, 1);
+                }
             }
         }
     }
@@ -229,12 +233,40 @@ function rerender() {
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
+    if (highlightAsSymbols) renderHighlightSymbols(W, H, pixels, highlights);
+
     renderSymmetryGuides(state);
     if (labelsVisible) {
         if (state.mode === "row") renderRowLabels(state);
         else                       renderRoundLabels(state, pixels);
     }
     if (topIndicatorOpacity > 0.001) renderTopIndicator(state);
+}
+
+// Symbol overlay: ✕ in each highlight's own colour — overlay (state 3) and
+// invalid (state 4) both render as an X, the colour distinguishes them.
+// Batched into one path per colour so we issue a single stroke per group.
+function renderHighlightSymbols(W: number, H: number, pixels: Uint8Array, highlights: Uint8Array) {
+    ctx.save();
+    ctx.lineCap  = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 0.16;
+
+    for (const state of [3, 4] as const) {
+        ctx.strokeStyle = COLORS[state] ?? "";
+        ctx.beginPath();
+        for (let y = 0; y < H; y++) {
+            const row = y * W;
+            for (let x = 0; x < W; x++) {
+                if (pixels[row + x] === 0 || highlights[row + x] !== state) continue;
+                ctx.moveTo(x + 0.24, y + 0.24); ctx.lineTo(x + 0.76, y + 0.76);
+                ctx.moveTo(x + 0.76, y + 0.24); ctx.lineTo(x + 0.24, y + 0.76);
+            }
+        }
+        ctx.stroke();
+    }
+
+    ctx.restore();
 }
 
 // Labels are positioned in pattern coords (so they pan/zoom/rotate with the

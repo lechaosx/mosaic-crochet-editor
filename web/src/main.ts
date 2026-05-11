@@ -1,7 +1,7 @@
 import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool } from "./types";
-import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible } from "./render";
+import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightAsSymbols } from "./render";
 import { state, pixels, highlights, setPixels, setState, applySettings, recomputeHighlights } from "./pattern";
 import { historySave, historyReset, historyUndo, historyRedo, canUndo, canRedo } from "./history";
 import { SymKey } from "./types";
@@ -47,7 +47,7 @@ function saveSession() {
         getColorHex(1), getColorHex(2),
         activeTool, primaryColor, [...directlyActive],
         getHlOverlay(), getHlInvalid(), getHlOpacity(),
-        getLabelsVisible(),
+        getLabelsVisible(), getHlSymbols(),
         view.rotation,
     );
 }
@@ -56,7 +56,8 @@ const getColorHex     = (slot: 1 | 2) => (document.getElementById(slot === 1 ? "
 const getHlOverlay    = () => (document.getElementById("hl-overlay-color") as HTMLInputElement).value;
 const getHlInvalid    = () => (document.getElementById("hl-invalid-color") as HTMLInputElement).value;
 const getHlOpacity      = () => parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
-const getLabelsVisible  = () => (document.getElementById("labels-on") as HTMLInputElement).checked;
+const getLabelsVisible  = () => (document.getElementById("labels-on")  as HTMLInputElement).checked;
+const getHlSymbols      = () => (document.getElementById("hl-symbols") as HTMLInputElement).checked;
 
 /* ─── Paint ────────────────────────────────────────────────────────────────── */
 function paintAt(clientX: number, clientY: number) {
@@ -115,6 +116,10 @@ function applyHighlightsFromInputs() {
 }
 function applyLabelsVisibleFromInput() {
     setLabelsVisible(getLabelsVisible());
+    saveSession();
+}
+function applyHlSymbolsFromInput() {
+    setHighlightAsSymbols(getHlSymbols());
     saveSession();
 }
 function hexRgba(hex: string, opacityPct: number): string {
@@ -269,6 +274,7 @@ function init() {
         onSym: toggleSym,
         onHighlightChange: applyHighlightsFromInputs,
         onLabelsVisibleChange: applyLabelsVisibleFromInput,
+        onHlSymbolsChange: applyHlSymbolsFromInput,
         onUndo: undo,
         onRedo: redo,
         onRotate: rotate,
@@ -326,10 +332,12 @@ function restoreSession(saved: LocalState) {
     (document.getElementById("hl-invalid-color") as HTMLInputElement).value = saved.hlInvalidColor;
     (document.getElementById("hl-opacity") as HTMLInputElement).value = String(saved.hlOpacity);
     (document.getElementById("labels-on")  as HTMLInputElement).checked = saved.labelsVisible;
+    (document.getElementById("hl-symbols") as HTMLInputElement).checked = saved.hlSymbols;
     setRotationImmediate(saved.canvasRotation);
     applyColorsFromInputs();
     applyHighlightsFromInputs();
     applyLabelsVisibleFromInput();
+    applyHlSymbolsFromInput();
     ui.syncNewInputs(saved.state);
     setDirectlyActive(saved.symmetry as SymKey[]);
     setTool(saved.activeTool as Tool);
@@ -352,6 +360,7 @@ function freshSession() {
     applyColorsFromInputs();
     applyHighlightsFromInputs();
     applyLabelsVisibleFromInput();
+    applyHlSymbolsFromInput();
     setBaseline();
     updateStatus(highlights, null, null);
     reRender();
