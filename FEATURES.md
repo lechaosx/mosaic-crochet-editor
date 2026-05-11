@@ -33,6 +33,14 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Live overlay during drawing — blue for valid overlay positions, red for invalid placements. — **your decision**
 - Overlay/invalid colour and opacity are user-configurable, in a popover behind the **⊙** button. — **your decision** (configurability); **Claude's choice** (popover placement)
 
+## Labels
+
+- Row labels in the left gutter; row 1 at the bottom (mosaic convention). — **your decision**
+- Round labels: innermost ring numbered 1, outermost = R. — **your decision**
+- Round placement: full mode → top-left corner cell of each ring; half/quarter → above the canvas, centred on column r. — **your decision**
+- Glyphs stay upright regardless of canvas rotation; positions follow the pattern's pan/zoom/rotation. — **your decision**
+- Toggleable via a switch in the highlight popover. — **your decision**
+
 ## View
 
 - Auto-fit zoom on every new pattern, file load, or refresh — accounts for the current rotation's bounding box so a rotated pattern still fits. — **Claude's choice**
