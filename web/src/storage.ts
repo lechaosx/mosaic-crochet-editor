@@ -24,7 +24,7 @@ function b64ToU8(s: string): Uint8Array {
     return u8;
 }
 
-function packPixels(pixels: Uint8Array): string {
+export function packPixels(pixels: Uint8Array): string {
     const out = new Uint8Array(Math.ceil(pixels.length / 8));
     for (let i = 0; i < pixels.length; i++) {
         if (pixels[i] === 2) out[i >> 3] |= 1 << (i & 7);
@@ -35,7 +35,7 @@ function packPixels(pixels: Uint8Array): string {
 // positions as 0) and overwrite non-hole cells with the saved A/B bit. This
 // keeps the hole geometry as a single Rust-side source of truth — no TS-side
 // reimplementation of `get_round_from_edge`.
-function unpackPixels(s: string, state: PatternState): Uint8Array {
+export function unpackPixels(s: string, state: PatternState): Uint8Array {
     const out = state.mode === "row"
         ? initialize_row_pattern(state.canvasWidth, state.canvasHeight)
         : initialize_round_pattern(

@@ -3,7 +3,7 @@ import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
 import { Tool } from "./types";
 import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightAsSymbols } from "./render";
 import { state, pixels, highlights, setPixels, setState, applySettings, recomputeHighlights } from "./pattern";
-import { historySave, historyReset, historyUndo, historyRedo, canUndo, canRedo } from "./history";
+import { historySave, historyReset, historyEnsureInitialized, historyUndo, historyRedo, canUndo, canRedo } from "./history";
 import { SymKey } from "./types";
 import { directlyActive, setDirectlyActive, computeClosure, diagonalsAvailable, getSymmetryMask, ensureDiagonalsValid } from "./symmetry";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LocalState } from "./storage";
@@ -344,7 +344,7 @@ function restoreSession(saved: LocalState) {
     setPrimary(saved.primaryColor as 1 | 2);
     if (state) { fitToView(state); reSymmetry(); }
     recomputeHighlights();
-    historyReset(saved.pixels); ui.setHistory(canUndo(), canRedo());
+    historyEnsureInitialized(saved.pixels); ui.setHistory(canUndo(), canRedo());
     setBaseline();
     updateStatus(highlights, null, null);
     reRender();
