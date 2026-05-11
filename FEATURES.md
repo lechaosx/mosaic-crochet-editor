@@ -32,6 +32,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Live overlay during drawing — blue for valid overlay positions, red for invalid placements. — **your decision**
 - Overlay/invalid colour and opacity are user-configurable, in a popover behind the **⊙** button. — **your decision** (configurability); **Claude's choice** (popover placement)
+- Rendered as ✕ symbols in the highlight colour by default; a toggle in the popover switches to a solid colour fill. — **your decision**
 
 ## Labels
 
