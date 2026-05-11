@@ -104,6 +104,11 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - **rem** for typography/spacing; **em** for self-scaling components; **px** only for borders, shadows, and JS-set toolbar tokens; **%, fr, vw, vh, dvh** for responsive. No 62.5% root-font hack. — **your decision**
 - The toolbar's `--hit` and `--font-base` are JS-set (from measured widths). Everything else uses the rem tokens. — **Claude's choice**
 
+### Pixel encoding
+- In memory: 3 values — 0 = inner hole (transparent sentinel), 1 = COLOR_A, 2 = COLOR_B. The sentinel doubles as the universal "skip this cell" guard (`!= 0`) across every tool. — **your decision**
+- On disk: 1 bit per cell (A=0, B=1). Save converts at the boundary; load rebuilds the 3-value array using geometry to fill the transparent sentinel. Hole bits in storage are arbitrary. — **your decision**
+- Save format `.mcw` and the `localStorage` payload are versioned. v2 = packed bits + base64. v1 (legacy `number[]` with the same 0/1/2 in-memory encoding) is still loadable; the BC path is marked in `storage.ts`. — **your decision**
+
 ### Data flow & state
 - Module ownership: each module owns its `let` state, exported for reading; setters for cross-module writes. — **your correction**
 - Parameter passing: functions receive what they need rather than reaching into mutable module state. — **your decision**
