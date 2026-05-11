@@ -55,6 +55,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Up to 64 history states per session. — **Claude's choice**
 - Each new pattern starts with a clean history. — **your decision**
+- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v1`). On refresh the saved stack is restored as-is; only `New pattern` and file `Load` clear it. — **your decision**
 - Dirty detection diffs current pixels against a baseline snapshot, not a stored flag — drawing then erasing back to the original is clean. — **your decision**
 
 ## Persistence
