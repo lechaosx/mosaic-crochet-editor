@@ -2,7 +2,7 @@ import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool, PatternState } from "./types";
 import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightAsSymbols } from "./render";
-import { state, pixels, highlights, setPixels, setState, applyEditSettings, recomputeHighlights } from "./pattern";
+import { state, pixels, highlights, setPixels, setState, applyEditSettings, isAlwaysInvalid, naturalPatternFor, recomputeHighlights } from "./pattern";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek, historyUndo, historyRedo, canUndo, canRedo } from "./history";
 import { SymKey } from "./types";
 import { directlyActive, setDirectlyActive, computeClosure, diagonalsAvailable, getSymmetryMask, ensureDiagonalsValid } from "./symmetry";
@@ -44,7 +44,7 @@ function saveSession() {
         getColorHex(1), getColorHex(2),
         activeTool, primaryColor, [...directlyActive],
         getHlOverlay(), getHlInvalid(), getHlOpacity(),
-        getLabelsVisible(), getHlSymbols(),
+        getLabelsVisible(), getHlSymbols(), getLockInvalid(),
         view.rotation,
     );
 }
@@ -53,8 +53,9 @@ const getColorHex     = (slot: 1 | 2) => (document.getElementById(slot === 1 ? "
 const getHlOverlay    = () => (document.getElementById("hl-overlay-color") as HTMLInputElement).value;
 const getHlInvalid    = () => (document.getElementById("hl-invalid-color") as HTMLInputElement).value;
 const getHlOpacity      = () => parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
-const getLabelsVisible  = () => (document.getElementById("labels-on")  as HTMLInputElement).checked;
-const getHlSymbols      = () => (document.getElementById("hl-symbols") as HTMLInputElement).checked;
+const getLabelsVisible  = () => (document.getElementById("labels-on")    as HTMLInputElement).checked;
+const getHlSymbols      = () => (document.getElementById("hl-symbols")   as HTMLInputElement).checked;
+const getLockInvalid    = () => (document.getElementById("lock-invalid") as HTMLInputElement).checked;
 
 /* ─── Paint ────────────────────────────────────────────────────────────────── */
 function paintAt(clientX: number, clientY: number) {
@@ -65,17 +66,19 @@ function paintAt(clientX: number, clientY: number) {
     if (pixels[y * W + x] === 0) return;
 
     const mask = getSymmetryMask(W, H);
+    const before = pixels;
+    let next: Uint8Array;
     if (activeTool === "fill") {
-        setPixels(flood_fill(pixels, W, H, x, y, strokeColor, mask));
+        next = flood_fill(pixels, W, H, x, y, strokeColor, mask);
     } else if (activeTool === "eraser") {
         if (state.mode === "row") {
-            setPixels(erase_pixel_row(pixels, W, H, x, y, mask));
+            next = erase_pixel_row(pixels, W, H, x, y, mask);
         } else {
             const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
-            setPixels(erase_pixel_round(pixels, W, H, x, y, vw, vh, ox, oy, rounds, mask));
+            next = erase_pixel_round(pixels, W, H, x, y, vw, vh, ox, oy, rounds, mask);
         }
     } else if (activeTool === "invert") {
-        const next = pixels.slice();
+        next = pixels.slice();
         const indices = symmetric_orbit_indices(W, H, x, y, mask);
         for (const idx of indices) {
             if (invertVisited!.has(idx)) continue;
@@ -84,13 +87,31 @@ function paintAt(clientX: number, clientY: number) {
             if      (cur === 1) next[idx] = 2;
             else if (cur === 2) next[idx] = 1;
         }
-        setPixels(next);
     } else {
-        setPixels(paint_pixel(pixels, W, H, x, y, strokeColor, mask));
+        next = paint_pixel(pixels, W, H, x, y, strokeColor, mask);
     }
+    if (getLockInvalid()) lockAlwaysInvalid(state, before, next);
+    setPixels(next);
     recomputeHighlights();
     updateStatus(highlights, x, y);
     reRender();
+}
+
+// Revert any always-invalid cell that the tool would have moved away from its
+// natural colour — but only if it was already correct. Wrong-coloured cells
+// can still be repainted (so the user can fix them).
+function lockAlwaysInvalid(s: PatternState, before: Uint8Array, after: Uint8Array) {
+    const natural = naturalPatternFor(s);
+    const W = s.canvasWidth, H = s.canvasHeight;
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const i = y * W + x;
+            if (!isAlwaysInvalid(s, x, y)) continue;
+            if (before[i] === natural[i] && after[i] !== natural[i]) {
+                after[i] = before[i];
+            }
+        }
+    }
 }
 
 /* ─── UI callbacks → state mutations ──────────────────────────────────────── */
@@ -126,6 +147,9 @@ function applyLabelsVisibleFromInput() {
 function applyHlSymbolsFromInput() {
     setHighlightAsSymbols(getHlSymbols());
     saveSession();
+}
+function applyLockInvalidFromInput() {
+    saveSession();   // no render impact; just persist
 }
 function hexRgba(hex: string, opacityPct: number): string {
     const r = parseInt(hex.slice(1, 3), 16);
@@ -300,6 +324,7 @@ function init() {
         onHighlightChange: applyHighlightsFromInputs,
         onLabelsVisibleChange: applyLabelsVisibleFromInput,
         onHlSymbolsChange: applyHlSymbolsFromInput,
+        onLockInvalidChange: applyLockInvalidFromInput,
         onUndo: undo,
         onRedo: redo,
         onRotate: rotate,
@@ -358,7 +383,8 @@ function restoreSession(saved: LocalState) {
     (document.getElementById("hl-invalid-color") as HTMLInputElement).value = saved.hlInvalidColor;
     (document.getElementById("hl-opacity") as HTMLInputElement).value = String(saved.hlOpacity);
     (document.getElementById("labels-on")  as HTMLInputElement).checked = saved.labelsVisible;
-    (document.getElementById("hl-symbols") as HTMLInputElement).checked = saved.hlSymbols;
+    (document.getElementById("hl-symbols")   as HTMLInputElement).checked = saved.hlSymbols;
+    (document.getElementById("lock-invalid") as HTMLInputElement).checked = saved.lockInvalid;
     setRotationImmediate(saved.canvasRotation);
     applyColorsFromInputs();
     applyHighlightsFromInputs();

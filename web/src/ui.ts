@@ -43,6 +43,7 @@ export interface UICallbacks {
     onHighlightChange: () => void;
     onLabelsVisibleChange: () => void;
     onHlSymbolsChange: () => void;
+    onLockInvalidChange: () => void;
     onUndo:            () => void;
     onRedo:            () => void;
     onRotate:          (delta: number) => void;
@@ -162,8 +163,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
     hlOverlayCol.addEventListener("input", cb.onHighlightChange);
     hlInvalidCol.addEventListener("input", cb.onHighlightChange);
     hlOpacity   .addEventListener("input", cb.onHighlightChange);
-    el<HTMLInputElement>("labels-on") .addEventListener("change", cb.onLabelsVisibleChange);
-    el<HTMLInputElement>("hl-symbols").addEventListener("change", cb.onHlSymbolsChange);
+    el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
+    el<HTMLInputElement>("hl-symbols")  .addEventListener("change", cb.onHlSymbolsChange);
+    el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
 
     function setHighlights(overlay: string, invalid: string, opacity: number) {
         hlOverlayCol.value = overlay;
