@@ -3,6 +3,11 @@
 use glam::IVec2;
 use ndarray::Array2;
 
+// Pixel values stored at runtime: 0 = inner hole (transparent sentinel),
+// 1 = COLOR_A, 2 = COLOR_B. The transparent sentinel doubles as the universal
+// "this cell is a hole, don't touch" guard across every tool (`!= 0`).
+// On-disk storage uses a separate 1-bit-per-pixel packing and reconstructs the
+// hole sentinel from geometry on load — see `storage.ts`.
 pub const COLOR_TRANSPARENT:        u8 = 0;
 pub const COLOR_A:                  u8 = 1;
 pub const COLOR_B:                  u8 = 2;
