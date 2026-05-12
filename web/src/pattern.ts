@@ -1,15 +1,18 @@
 import {
-    compute_row_highlights,
-    compute_round_highlights,
+    build_highlight_plan_row,
+    build_highlight_plan_round,
     initialize_row_pattern,
     initialize_round_pattern,
 } from "@mosaic/wasm";
 import { PatternState } from "./types";
 import { readClampedInt, radioValue } from "./dom";
 
-export let state:      PatternState | null = null;
-export let pixels:     Uint8Array   | null = null;
-export let highlights: Uint8Array   | null = null;
+export let state:         PatternState | null = null;
+export let pixels:        Uint8Array   | null = null;
+// Flat Int16Array, stride 4: [type, dir, wrong_x, wrong_y, ...]. See
+// `build_highlight_plan_*` in core/src/common.rs for the record format and
+// the `PlanType` / `PlanDir` enums exported from `@mosaic/wasm`.
+export let highlightPlan: Int16Array   | null = null;
 
 export function setPixels(p: Uint8Array)      { pixels = p; }
 export function setState(s: PatternState)     { state  = s; }
@@ -143,24 +146,6 @@ export function isAlwaysInvalid(s: PatternState, x: number, y: number): boolean 
     return rfe === 0 || dx === dy;
 }
 
-// The cells one step *outward* from (x, y) — i.e. where the highlight marker
-// for a wrong cell at (x, y) gets drawn. Returns 1 outward for non-corner
-// cells; for round-mode corners (dx == dy) it returns 2 — one along each
-// perpendicular axis — because a corner's overlay attaches to two adjacent
-// outer cells. For boundary cells the returned coords land outside the
-// canvas; the render's matrix transform places the glyph in the gutter.
-export function outwardCells(s: PatternState, x: number, y: number): { x: number; y: number }[] {
-    if (s.mode === "row") return [{ x, y: y - 1 }];
-    const vx = x + s.offsetX, vy = y + s.offsetY;
-    const dx = Math.min(vx, s.virtualWidth  - 1 - vx);
-    const dy = Math.min(vy, s.virtualHeight - 1 - vy);
-    const sx = vx * 2 >= s.virtualWidth  ? -1 : 1;
-    const sy = vy * 2 >= s.virtualHeight ? -1 : 1;
-    if (dx === dy) return [{ x: x - sx, y }, { x, y: y - sy }];
-    if (dx < dy)   return [{ x: x - sx, y }];
-    return [{ x, y: y - sy }];
-}
-
 // The "should-be" colour for each cell — same array `initialize_*_pattern`
 // would return. Used by the Lock-invalid post-filter to know what's "correct".
 export function naturalPatternFor(s: PatternState): Uint8Array {
@@ -175,13 +160,11 @@ export function naturalPatternFor(s: PatternState): Uint8Array {
 export function recomputeHighlights() {
     if (!state || !pixels) return;
     const { canvasWidth, canvasHeight } = state;
-    if (state.mode === "row") {
-        highlights = compute_row_highlights(pixels, canvasWidth, canvasHeight).slice();
-    } else {
-        const { virtualWidth, virtualHeight, offsetX, offsetY, rounds } = state;
-        highlights = compute_round_highlights(
+    highlightPlan = state.mode === "row"
+        ? build_highlight_plan_row(pixels, canvasWidth, canvasHeight).slice()
+        : build_highlight_plan_round(
             pixels, canvasWidth, canvasHeight,
-            virtualWidth, virtualHeight, offsetX, offsetY, rounds
+            state.virtualWidth, state.virtualHeight,
+            state.offsetX, state.offsetY, state.rounds,
         ).slice();
-    }
 }

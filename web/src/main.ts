@@ -1,8 +1,8 @@
-import { paint_pixel, flood_fill,
+import { paint_pixel, flood_fill, PlanType,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool, PatternState } from "./types";
 import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightOpacity } from "./render";
-import { state, pixels, highlights, setPixels, setState, applyEditSettings, isAlwaysInvalid, naturalPatternFor, recomputeHighlights } from "./pattern";
+import { state, pixels, highlightPlan, setPixels, setState, applyEditSettings, isAlwaysInvalid, naturalPatternFor, recomputeHighlights } from "./pattern";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek, historyUndo, historyRedo, canUndo, canRedo } from "./history";
 import { SymKey } from "./types";
 import { directlyActive, setDirectlyActive, computeClosure, diagonalsAvailable, getSymmetryMask, ensureDiagonalsValid } from "./symmetry";
@@ -25,8 +25,8 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 /* ─── Render shorthand ─────────────────────────────────────────────────────── */
-function reRender()      { if (state && pixels && highlights) render(state, pixels, highlights); }
-function reHighlight()   { recomputeHighlights(); if (highlights) updateStatus(highlights, null, null); reRender(); }
+function reRender()      { if (state && pixels && highlightPlan) render(state, pixels, highlightPlan); }
+function reHighlight()   { recomputeHighlights(); if (highlightPlan) updateStatus(highlightPlan, null, null); reRender(); }
 function reSymmetry() {
     if (!state) return;
     const { canvasWidth: W, canvasHeight: H } = state;
@@ -135,7 +135,7 @@ function paintAt(clientX: number, clientY: number) {
     if (getLockInvalid()) lockAlwaysInvalid(state, before, next);
     setPixels(next);
     recomputeHighlights();
-    updateStatus(highlights, x, y);
+    updateStatus(highlightPlan, x, y);
     reRender();
 }
 
@@ -295,18 +295,23 @@ async function onLoad() {
 
 /* ─── Export ─────────────────────────────────────────────────────────────── */
 async function onExport() {
-    if (!state || !highlights) return;
+    if (!state || !pixels || !highlightPlan) return;
     const dlg = ui.openExport();
     let cancelled = false;
     dlg.onClose(() => { cancelled = true; });
-    dlg.setWarning(highlights.some(h => h === 4));
+    // Plan stride 4; element 0 is the type (PlanType.Valid / Invalid).
+    let hasInvalid = false;
+    for (let i = 0; i < highlightPlan.length; i += 4) {
+        if (highlightPlan[i] === PlanType.Invalid) { hasInvalid = true; break; }
+    }
+    dlg.setWarning(hasInvalid);
 
     const startSession = (alt: boolean) => {
-        if (!state || !highlights) return null;
+        if (!state || !pixels) return null;
         const { canvasWidth: W, canvasHeight: H } = state;
-        if (state.mode === "row") return export_start_row(highlights, W, H, alt);
+        if (state.mode === "row") return export_start_row(pixels, W, H, alt);
         const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
-        return export_start_round(highlights, W, H, vw, vh, ox, oy, rounds, alt);
+        return export_start_round(pixels, W, H, vw, vh, ox, oy, rounds, alt);
     };
 
     let runId = 0;
@@ -414,13 +419,13 @@ function init() {
             if (preStroke) {
                 setPixels(preStroke);
                 recomputeHighlights();
-                updateStatus(highlights, null, null);
+                updateStatus(highlightPlan, null, null);
                 reRender();
             }
             preStroke = null;
             invertVisited = null;
         },
-        onHover: (x, y) => updateStatus(highlights, x, y),
+        onHover: (x, y) => updateStatus(highlightPlan, x, y),
         onView:  reRender,
         onViewSettle: saveSession,
     });
@@ -448,7 +453,7 @@ function restoreSession(saved: LocalState) {
     if (state) { fitToView(state); reSymmetry(); }
     recomputeHighlights();
     historyEnsureInitialized(saved.pixels, saved.colorA, saved.colorB); ui.setHistory(canUndo(), canRedo());
-    updateStatus(highlights, null, null);
+    updateStatus(highlightPlan, null, null);
     reRender();
 }
 
@@ -462,7 +467,7 @@ function freshSession() {
     applyColorsFromInputs();
     applyHighlightsFromInputs();
     applyLabelsVisibleFromInput();
-    updateStatus(highlights, null, null);
+    updateStatus(highlightPlan, null, null);
     reRender();
 }
 
