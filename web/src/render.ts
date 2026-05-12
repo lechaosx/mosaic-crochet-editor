@@ -1,5 +1,5 @@
 import { PatternState, RowState, RoundState, SymKey } from "./types";
-import { outwardCells } from "./pattern";
+import { PlanType, PlanDir } from "@mosaic/wasm";
 import { computeClosure, diagonalsAvailable, directlyActive } from "./symmetry";
 
 export const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -39,8 +39,18 @@ const ZOOM_MAX = 96;
 let dpr = 1;
 let lastState: PatternState | null = null;
 let lastPixels: Uint8Array | null = null;
-let lastHighlights: Uint8Array | null = null;
+let lastPlan:   Int16Array | null = null;
 let labelsVisible = true;
+
+// `PlanDir` → outward offset in pattern coords. Single source of truth for the
+// direction enum decoding; the actual direction *selection* per cell happens
+// in Rust (`build_highlight_plan_*`).
+const DIR_VECTORS: Record<number, [number, number]> = {
+    [PlanDir.Up]:    [ 0, -1],
+    [PlanDir.Down]:  [ 0,  1],
+    [PlanDir.Left]:  [-1,  0],
+    [PlanDir.Right]: [ 1,  0],
+};
 
 export function setLabelsVisible  (v: boolean) { labelsVisible    = v; rerender(); }
 export function setHighlightOpacity(v: number) { highlightOpacity = Math.max(0, Math.min(1, v)); rerender(); }
@@ -168,8 +178,8 @@ export function setRotationImmediate(deg: number) {
     rerender();
 }
 
-export function render(state: PatternState, pixels: Uint8Array, highlights: Uint8Array) {
-    lastState = state; lastPixels = pixels; lastHighlights = highlights;
+export function render(state: PatternState, pixels: Uint8Array, plan: Int16Array) {
+    lastState = state; lastPixels = pixels; lastPlan = plan;
     updateFavicon(state, pixels);
     rerender();
 }
@@ -203,8 +213,8 @@ function updateFavicon(state: PatternState, pixels: Uint8Array) {
 }
 
 function rerender() {
-    if (!lastState || !lastPixels || !lastHighlights) return;
-    const state = lastState, pixels = lastPixels, highlights = lastHighlights;
+    if (!lastState || !lastPixels || !lastPlan) return;
+    const state = lastState, pixels = lastPixels, plan = lastPlan;
     const { canvasWidth: W, canvasHeight: H } = state;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -234,7 +244,7 @@ function rerender() {
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderHighlightSymbols(state, pixels, highlights);
+    renderHighlightSymbols(state, pixels, plan);
 
     renderSymmetryGuides(state);
     if (labelsVisible) {
@@ -244,21 +254,20 @@ function rerender() {
     if (topIndicatorOpacity > 0.001) renderTopIndicator(state);
 }
 
-// ✕ for overlay (state 3) — drawn in pattern coords (rotates with canvas; the
+// ✕ for VALID overlay — drawn in pattern coords (rotates with canvas; the
 //   shape is symmetric enough that this doesn't matter). Stroke colour is the
 //   *opposite* cell colour (A on B-cells, B on A-cells), so the glyph is
 //   visible against either palette and literally shows the colour that would
 //   land there if the overlay were applied.
 //
-// ! for invalid (state 4) — drawn in *screen* coords (always points down
-//   regardless of canvas rotation; like axis labels). Stroke + dot in the
-//   opposite cell colour, same colour as ✕ would use.
+// ! for INVALID — drawn in *screen* coords (always points down regardless of
+//   canvas rotation; like axis labels). Stroke + dot in the opposite cell
+//   colour, same colour as ✕ would use.
 //
-// Round-mode corners have *two* outward cells (one along each perpendicular
-// axis); the glyph is drawn on both. Each outward gets its own contrast
-// colour from its own pixel, so corner glyphs may differ in colour between
-// the two sides.
-function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, highlights: Uint8Array) {
+// Round-mode corners produce two plan records sharing the same wrong cell
+// with perpendicular directions; each is drawn independently so they may
+// differ in colour between the two sides.
+function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, plan: Int16Array) {
     const W = state.canvasWidth, H = state.canvasHeight;
     const A = COLORS[1] ?? "#000";
     const B = COLORS[2] ?? "#fff";
@@ -280,28 +289,26 @@ function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, highlig
     ctx.save();
     ctx.globalAlpha = highlightOpacity;
 
-    // ── ✕ overlays (state 3) — pattern coords, drawn at outward ──────────
+    // ── ✕ overlays — pattern coords, drawn at the outward cell ──────────
     ctx.lineCap  = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.16;
     for (const { display, glyph } of groups) {
         ctx.strokeStyle = glyph;
         ctx.beginPath();
-        for (let y = 0; y < H; y++) {
-            const row = y * W;
-            for (let x = 0; x < W; x++) {
-                if (highlights[row + x] !== 3) continue;
-                for (const o of outwardCells(state, x, y)) {
-                    if (outwardPixel(o.x, o.y, x, y) !== display) continue;
-                    ctx.moveTo(o.x + 0.24, o.y + 0.24); ctx.lineTo(o.x + 0.76, o.y + 0.76);
-                    ctx.moveTo(o.x + 0.76, o.y + 0.24); ctx.lineTo(o.x + 0.24, o.y + 0.76);
-                }
-            }
+        for (let i = 0; i < plan.length; i += 4) {
+            if (plan[i] !== PlanType.Valid) continue;
+            const wx = plan[i+2], wy = plan[i+3];
+            const [dx, dy] = DIR_VECTORS[plan[i+1]];
+            const ox = wx + dx, oy = wy + dy;
+            if (outwardPixel(ox, oy, wx, wy) !== display) continue;
+            ctx.moveTo(ox + 0.24, oy + 0.24); ctx.lineTo(ox + 0.76, oy + 0.76);
+            ctx.moveTo(ox + 0.76, oy + 0.24); ctx.lineTo(ox + 0.24, oy + 0.76);
         }
         ctx.stroke();
     }
 
-    // ── ! invalid (state 4) — screen coords, drawn at outward ────────────
+    // ── ! invalid — screen coords, drawn at the outward cell ────────────
     const m = buildMatrix(state);
     const cellPx  = view.zoom * dpr;
     const stemTop = cellPx * 0.28;
@@ -315,34 +322,30 @@ function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, highlig
     for (const { display, glyph } of groups) {
         ctx.strokeStyle = glyph;
         ctx.beginPath();
-        for (let y = 0; y < H; y++) {
-            const row = y * W;
-            for (let x = 0; x < W; x++) {
-                if (highlights[row + x] !== 4) continue;
-                for (const o of outwardCells(state, x, y)) {
-                    if (outwardPixel(o.x, o.y, x, y) !== display) continue;
-                    const p = m.transformPoint({ x: o.x + 0.5, y: o.y + 0.5 });
-                    ctx.moveTo(p.x, p.y - stemTop);
-                    ctx.lineTo(p.x, p.y + stemBot);
-                }
-            }
+        for (let i = 0; i < plan.length; i += 4) {
+            if (plan[i] !== PlanType.Invalid) continue;
+            const wx = plan[i+2], wy = plan[i+3];
+            const [dx, dy] = DIR_VECTORS[plan[i+1]];
+            const ox = wx + dx, oy = wy + dy;
+            if (outwardPixel(ox, oy, wx, wy) !== display) continue;
+            const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
+            ctx.moveTo(p.x, p.y - stemTop);
+            ctx.lineTo(p.x, p.y + stemBot);
         }
         ctx.stroke();
     }
     for (const { display, glyph } of groups) {
         ctx.fillStyle = glyph;
         ctx.beginPath();
-        for (let y = 0; y < H; y++) {
-            const row = y * W;
-            for (let x = 0; x < W; x++) {
-                if (highlights[row + x] !== 4) continue;
-                for (const o of outwardCells(state, x, y)) {
-                    if (outwardPixel(o.x, o.y, x, y) !== display) continue;
-                    const p = m.transformPoint({ x: o.x + 0.5, y: o.y + 0.5 });
-                    ctx.moveTo(p.x + dotR, p.y + dotY);
-                    ctx.arc(p.x, p.y + dotY, dotR, 0, Math.PI * 2);
-                }
-            }
+        for (let i = 0; i < plan.length; i += 4) {
+            if (plan[i] !== PlanType.Invalid) continue;
+            const wx = plan[i+2], wy = plan[i+3];
+            const [dx, dy] = DIR_VECTORS[plan[i+1]];
+            const ox = wx + dx, oy = wy + dy;
+            if (outwardPixel(ox, oy, wx, wy) !== display) continue;
+            const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
+            ctx.moveTo(p.x + dotR, p.y + dotY);
+            ctx.arc(p.x, p.y + dotY, dotR, 0, Math.PI * 2);
         }
         ctx.fill();
     }
@@ -495,13 +498,14 @@ function renderSymmetryGuides(state: PatternState) {
     ctx.restore();
 }
 
-export function updateStatus(highlights: Uint8Array | null, x: number | null, y: number | null) {
-    if (!highlights) return;
+export function updateStatus(plan: Int16Array | null, x: number | null, y: number | null) {
+    if (!plan) return;
+    // Corners emit two records sharing the same wrong cell — counted once each
+    // since each is a distinct visible glyph.
     let valid = 0, invalid = 0;
-    for (let i = 0; i < highlights.length; i++) {
-        const h = highlights[i];
-        if (h === 3) valid++;
-        else if (h === 4) invalid++;
+    for (let i = 0; i < plan.length; i += 4) {
+        if (plan[i] === PlanType.Valid) valid++;
+        else                            invalid++;
     }
     const coord = x !== null && y !== null ? `${x}, ${y}` : "";
     const overlays = `${valid} overlay${valid !== 1 ? "s" : ""}`;

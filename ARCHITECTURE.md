@@ -117,6 +117,11 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - Stroke optimisation: pre-stroke snapshot compared on stroke end; unchanged → no history entry, no session save. — **Claude's choice**
 - Diagonal symmetries: integer arithmetic for `f(f(p)) = p`. — **Claude's choice**
 
+### TS / Rust boundary
+- "No duplicated functionality" — geometry (`is_always_invalid_*`, `outward_cells_*`, `inward_cell_*`) lives once, in Rust core. TS holds plain data (pixels, render plan) and rendering concerns (canvas, glyph styling). — **your decision**
+- Highlight render plan: Rust emits a flat `Int16Array` with stride-4 records `[type, dir, wrong_x, wrong_y]` once per paint stroke. TS renderer iterates the plan and picks glyph / colour / opacity from presentation rules — those can change without touching Rust. Per-cell highlight `Uint8Array` lives only inside Rust (used by the export pipeline). — **joint**
+- Plan enum values: `PlanType` / `PlanDir` are `#[wasm_bindgen]` enums in `wasm/src/lib.rs` (autogenerates TS bindings). Core uses matching `u8` constants for the Vec<i16> writes; a compile-time `const _` assert verifies the discriminants stay in lockstep. — **joint**
+
 ---
 
 ## Build & CI
