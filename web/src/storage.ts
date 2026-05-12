@@ -70,11 +70,8 @@ interface LocalSaveV2 {
     activeTool:     string;
     primaryColor:   number;
     symmetry:       string[];
-    hlOverlayColor: string;
-    hlInvalidColor: string;
     hlOpacity:      number;
     labelsVisible:  boolean;
-    hlSymbols:      boolean;
     lockInvalid:    boolean;
     canvasRotation: number;
 }
@@ -104,11 +101,8 @@ export interface LocalState {
     activeTool:     string;
     primaryColor:   number;
     symmetry:       string[];
-    hlOverlayColor: string;
-    hlInvalidColor: string;
     hlOpacity:      number;
     labelsVisible:  boolean;
-    hlSymbols:      boolean;
     lockInvalid:    boolean;
     canvasRotation: number;
 }
@@ -117,16 +111,15 @@ export function saveToLocalStorage(
     state: PatternState, pixels: Uint8Array,
     colorA: string, colorB: string,
     activeTool: string, primaryColor: number, symmetry: string[],
-    hlOverlayColor: string, hlInvalidColor: string, hlOpacity: number,
-    labelsVisible: boolean, hlSymbols: boolean, lockInvalid: boolean,
+    hlOpacity: number,
+    labelsVisible: boolean, lockInvalid: boolean,
     canvasRotation: number,
 ) {
     const data: LocalSaveV2 = {
         version: LS_VERSION,
         state, pixels: packPixels(pixels), colorA, colorB,
         activeTool, primaryColor, symmetry,
-        hlOverlayColor, hlInvalidColor, hlOpacity,
-        labelsVisible, hlSymbols, lockInvalid, canvasRotation,
+        hlOpacity, labelsVisible, lockInvalid, canvasRotation,
     };
     localStorage.setItem(LS_KEY, JSON.stringify(data));
 }
@@ -152,11 +145,8 @@ export function loadFromLocalStorage(): LocalState | null {
             activeTool:     data.activeTool     ?? "pencil",
             primaryColor:   data.primaryColor   ?? 1,
             symmetry:       data.symmetry       ?? [],
-            hlOverlayColor: data.hlOverlayColor ?? "#0000ff",
-            hlInvalidColor: data.hlInvalidColor ?? "#ff0000",
-            hlOpacity:      data.hlOpacity      ?? 50,
+            hlOpacity:      data.hlOpacity      ?? 80,
             labelsVisible:  data.labelsVisible  ?? true,
-            hlSymbols:      data.hlSymbols      ?? true,
             lockInvalid:    ("lockInvalid" in data ? data.lockInvalid : false) ?? false,
             canvasRotation: data.canvasRotation ?? 0,
         };

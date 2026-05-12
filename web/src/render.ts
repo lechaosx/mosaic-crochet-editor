@@ -4,13 +4,21 @@ import { computeClosure, diagonalsAvailable, directlyActive } from "./symmetry";
 export const canvas = document.getElementById("canvas") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d", { alpha: false })!;
 
+// Pixel-value lookup. Indices 1/2 are the user-chosen colours A/B. Index 0
+// (transparent) is the inner-hole sentinel — we never look it up because the
+// render loop skips hole cells, but a `null` makes any accidental read fail
+// loud rather than silently paint the cell.
 export const COLORS: (string | null)[] = [
     null,                       // 0 transparent (inner hole)
-    "#000000",                  // 1 primary
-    "#ffffff",                  // 2 secondary
-    "rgba(0, 0, 255, 0.5)",     // 3 valid overlay
-    "rgba(255, 0, 0, 0.5)",     // 4 invalid placement
+    "#000000",                  // 1 primary  (colour A)
+    "#ffffff",                  // 2 secondary (colour B)
 ];
+
+// Highlight glyphs (✕ overlay, ! invalid) are auto-contrast — black on light
+// cells, white on dark — so they're visible against any colour pair the user
+// picks, without needing dedicated highlight colour pickers. `opacity` is the
+// only user-tunable.
+let highlightOpacity = 0.8;
 
 export const view = {
     panX: 0,        // CSS-px offset of pattern centre from canvas centre
@@ -32,10 +40,9 @@ let lastState: PatternState | null = null;
 let lastPixels: Uint8Array | null = null;
 let lastHighlights: Uint8Array | null = null;
 let labelsVisible = true;
-let highlightAsSymbols = true;
 
-export function setLabelsVisible    (v: boolean) { labelsVisible      = v; rerender(); }
-export function setHighlightAsSymbols(v: boolean) { highlightAsSymbols = v; rerender(); }
+export function setLabelsVisible  (v: boolean) { labelsVisible    = v; rerender(); }
+export function setHighlightOpacity(v: number) { highlightOpacity = Math.max(0, Math.min(1, v)); rerender(); }
 
 export function clampZoom(z: number) { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)); }
 
@@ -214,13 +221,6 @@ function rerender() {
             if (p === 0) continue;
             ctx.fillStyle = COLORS[p] ?? "#333";
             ctx.fillRect(x, y, 1, 1);
-            if (!highlightAsSymbols) {
-                const h = highlights[row + x];
-                if (h !== 0) {
-                    ctx.fillStyle = COLORS[h] ?? "";
-                    ctx.fillRect(x, y, 1, 1);
-                }
-            }
         }
     }
 
@@ -233,7 +233,7 @@ function rerender() {
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    if (highlightAsSymbols) renderHighlightSymbols(W, H, pixels, highlights);
+    renderHighlightSymbols(W, H, pixels, highlights);
 
     renderSymmetryGuides(state);
     if (labelsVisible) {
@@ -243,27 +243,63 @@ function rerender() {
     if (topIndicatorOpacity > 0.001) renderTopIndicator(state);
 }
 
-// Symbol overlay: ✕ in each highlight's own colour — overlay (state 3) and
-// invalid (state 4) both render as an X, the colour distinguishes them.
-// Batched into one path per colour so we issue a single stroke per group.
+// Highlight glyphs use the *opposite* pixel colour (A on B-cells, B on
+// A-cells) — guaranteed visible against either palette choice and visually
+// meaningful for overlays (the ✕ literally shows the colour that would land
+// there if you overlaid). ✕ = overlay (state 3), ! = invalid (state 4).
+// Grouped by (cell colour → glyph colour) so we batch one path per group.
 function renderHighlightSymbols(W: number, H: number, pixels: Uint8Array, highlights: Uint8Array) {
+    const groups: { color: string; pixVal: number }[] = [
+        { color: COLORS[2] ?? "#fff", pixVal: 1 },   // A-cell → draw with B
+        { color: COLORS[1] ?? "#000", pixVal: 2 },   // B-cell → draw with A
+    ];
+
     ctx.save();
+    ctx.globalAlpha = highlightOpacity;
     ctx.lineCap  = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.16;
 
-    for (const state of [3, 4] as const) {
-        ctx.strokeStyle = COLORS[state] ?? "";
+    // ✕ — overlay (highlight state 3)
+    for (const { color, pixVal } of groups) {
+        ctx.strokeStyle = color;
         ctx.beginPath();
         for (let y = 0; y < H; y++) {
             const row = y * W;
             for (let x = 0; x < W; x++) {
-                if (pixels[row + x] === 0 || highlights[row + x] !== state) continue;
+                if (pixels[row + x] !== pixVal || highlights[row + x] !== 3) continue;
                 ctx.moveTo(x + 0.24, y + 0.24); ctx.lineTo(x + 0.76, y + 0.76);
                 ctx.moveTo(x + 0.76, y + 0.24); ctx.lineTo(x + 0.24, y + 0.76);
             }
         }
         ctx.stroke();
+    }
+
+    // ! — invalid (highlight state 4). Vertical stroke + filled dot.
+    for (const { color, pixVal } of groups) {
+        ctx.strokeStyle = color;
+        ctx.beginPath();
+        for (let y = 0; y < H; y++) {
+            const row = y * W;
+            for (let x = 0; x < W; x++) {
+                if (pixels[row + x] !== pixVal || highlights[row + x] !== 4) continue;
+                ctx.moveTo(x + 0.5, y + 0.22); ctx.lineTo(x + 0.5, y + 0.58);
+            }
+        }
+        ctx.stroke();
+    }
+    for (const { color, pixVal } of groups) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        for (let y = 0; y < H; y++) {
+            const row = y * W;
+            for (let x = 0; x < W; x++) {
+                if (pixels[row + x] !== pixVal || highlights[row + x] !== 4) continue;
+                ctx.moveTo(x + 0.5 + 0.09, y + 0.78);
+                ctx.arc(x + 0.5, y + 0.78, 0.09, 0, Math.PI * 2);
+            }
+        }
+        ctx.fill();
     }
 
     ctx.restore();

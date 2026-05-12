@@ -1,7 +1,7 @@
 import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool, PatternState } from "./types";
-import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightAsSymbols } from "./render";
+import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightOpacity } from "./render";
 import { state, pixels, highlights, setPixels, setState, applyEditSettings, isAlwaysInvalid, naturalPatternFor, recomputeHighlights } from "./pattern";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek, historyUndo, historyRedo, canUndo, canRedo } from "./history";
 import { SymKey } from "./types";
@@ -43,19 +43,16 @@ function saveSession() {
         state, pixels,
         getColorHex(1), getColorHex(2),
         activeTool, primaryColor, [...directlyActive],
-        getHlOverlay(), getHlInvalid(), getHlOpacity(),
-        getLabelsVisible(), getHlSymbols(), getLockInvalid(),
+        getHlOpacity(),
+        getLabelsVisible(), getLockInvalid(),
         view.rotation,
     );
 }
 
 const getColorHex     = (slot: 1 | 2) => (document.getElementById(slot === 1 ? "color-a" : "color-b") as HTMLInputElement).value;
-const getHlOverlay    = () => (document.getElementById("hl-overlay-color") as HTMLInputElement).value;
-const getHlInvalid    = () => (document.getElementById("hl-invalid-color") as HTMLInputElement).value;
-const getHlOpacity      = () => parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
-const getLabelsVisible  = () => (document.getElementById("labels-on")    as HTMLInputElement).checked;
-const getHlSymbols      = () => (document.getElementById("hl-symbols")   as HTMLInputElement).checked;
-const getLockInvalid    = () => (document.getElementById("lock-invalid") as HTMLInputElement).checked;
+const getHlOpacity     = () => parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
+const getLabelsVisible = () => (document.getElementById("labels-on")    as HTMLInputElement).checked;
+const getLockInvalid   = () => (document.getElementById("lock-invalid") as HTMLInputElement).checked;
 
 /* ─── Paint ────────────────────────────────────────────────────────────────── */
 function paintAt(clientX: number, clientY: number) {
@@ -133,29 +130,15 @@ function onColorCommit() {
     ui.setHistory(canUndo(), canRedo());
 }
 function applyHighlightsFromInputs() {
-    const opacity = getHlOpacity();
-    COLORS[3] = hexRgba(getHlOverlay(), opacity);
-    COLORS[4] = hexRgba(getHlInvalid(), opacity);
-    ui.setHighlights(getHlOverlay(), getHlInvalid(), opacity);
-    reRender();
+    setHighlightOpacity(getHlOpacity() / 100);
     saveSession();
 }
 function applyLabelsVisibleFromInput() {
     setLabelsVisible(getLabelsVisible());
     saveSession();
 }
-function applyHlSymbolsFromInput() {
-    setHighlightAsSymbols(getHlSymbols());
-    saveSession();
-}
 function applyLockInvalidFromInput() {
     saveSession();   // no render impact; just persist
-}
-function hexRgba(hex: string, opacityPct: number): string {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${(opacityPct / 100).toFixed(2)})`;
 }
 
 function toggleSym(k: SymKey) {
@@ -323,7 +306,6 @@ function init() {
         onSym: toggleSym,
         onHighlightChange: applyHighlightsFromInputs,
         onLabelsVisibleChange: applyLabelsVisibleFromInput,
-        onHlSymbolsChange: applyHlSymbolsFromInput,
         onLockInvalidChange: applyLockInvalidFromInput,
         onUndo: undo,
         onRedo: redo,
@@ -379,17 +361,13 @@ function restoreSession(saved: LocalState) {
     setPixels(saved.pixels);
     (document.getElementById("color-a") as HTMLInputElement).value = saved.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = saved.colorB;
-    (document.getElementById("hl-overlay-color") as HTMLInputElement).value = saved.hlOverlayColor;
-    (document.getElementById("hl-invalid-color") as HTMLInputElement).value = saved.hlInvalidColor;
-    (document.getElementById("hl-opacity") as HTMLInputElement).value = String(saved.hlOpacity);
-    (document.getElementById("labels-on")  as HTMLInputElement).checked = saved.labelsVisible;
-    (document.getElementById("hl-symbols")   as HTMLInputElement).checked = saved.hlSymbols;
+    (document.getElementById("hl-opacity")   as HTMLInputElement).value   = String(saved.hlOpacity);
+    (document.getElementById("labels-on")    as HTMLInputElement).checked = saved.labelsVisible;
     (document.getElementById("lock-invalid") as HTMLInputElement).checked = saved.lockInvalid;
     setRotationImmediate(saved.canvasRotation);
     applyColorsFromInputs();
     applyHighlightsFromInputs();
     applyLabelsVisibleFromInput();
-    applyHlSymbolsFromInput();
     ui.syncEditInputs(saved.state);
     setDirectlyActive(saved.symmetry as SymKey[]);
     setTool(saved.activeTool as Tool);
@@ -411,7 +389,6 @@ function freshSession() {
     applyColorsFromInputs();
     applyHighlightsFromInputs();
     applyLabelsVisibleFromInput();
-    applyHlSymbolsFromInput();
     updateStatus(highlights, null, null);
     reRender();
 }
