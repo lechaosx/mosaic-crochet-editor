@@ -50,21 +50,24 @@ Thin binding layer — `src/lib.rs` only. — **Claude's choice**
 - **`symmetric_orbit_indices`** — exposes the BFS orbit walker so the TS Invert tool can dedupe orbit cells per stroke without re-implementing the walk in JS. — **Claude's choice**
 
 ### `web`
-Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. Module ownership:
+Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. State ownership and shape:
 
-| Module | Owns |
-|---|---|
-| `main.ts` | orchestration only — dirty tracking, paint/undo/save/load/export glue, per-stroke `invertVisited` set |
-| `pattern.ts` | `state`, `pixels`, `highlights` |
-| `render.ts` | `view` (pan / zoom / target rotation), `visualRotation`, `COLORS`, `canvas`/`ctx`; the rAF loop driving rotation animation and indicator opacity; `screenToPattern`, `fitToView`, `applyRotation`, `setRotationImmediate` |
-| `gesture.ts` | pointer-event state machine (paint / pinch-pan-zoom / middle-pan) |
-| `ui.ts` | toolbar wiring (tools, swatches, symmetry, popovers, dialogs) and `mountToolbarLayout` |
-| `symmetry.ts` | `directlyActive` + closure logic; pure, no DOM |
-| `history.ts` | undo/redo snapshot stack |
-| `storage.ts` | localStorage + file save/load serialisation |
-| `dom.ts` | small helpers |
+| Module | Owns | Shape |
+|---|---|---|
+| `store.ts` | `SessionState` (pattern, pixels, colours, tool, primary, symmetry, settings, rotation) + derived highlight plan | **class** (`Store`) — `commit(mutate, opts?)` is the only path that runs the recompute → render → history → persist → observers chain; the invariant justifies the class |
+| `main.ts` | `init()` orchestrates: constructs `Store` + `RendererState`, wires renderer/history/persistence/observers, mounts UI + gestures, keyboard. Stroke-scoped state (`preStroke`, `invertVisited`, `strokeColor`) lives in the `init()` closure | free function |
+| `render.ts` | `RendererState` struct (canvas, ctx, view pan/zoom, animation state, colour cache) + `render(r, store)`, `screenToPattern(r, …)`, `fitToView(r, …)`, `clampZoom`, `updateStatus` | **free functions + state struct** — no invariants, no resources to manage |
+| `gesture.ts` | pointer-event state machine. `mountGestures(r, callbacks)` takes the renderer state explicitly | free function |
+| `ui.ts` | toolbar wiring (tools, swatches, symmetry, popovers, dialogs) + `mountToolbarLayout` | free function returning a `UIHandle` |
+| `symmetry.ts` | pure helpers (`computeClosure`, `getSymmetryMask`, `pruneUnavailableDiagonals`); active-axis set is owned by `Store` | free functions |
+| `pattern.ts` | `applyEditSettings(source?)` — pure, returns a fresh `{ pattern, pixels }` for the caller to commit | free functions |
+| `history.ts` | undo/redo snapshot stack, localStorage-backed; takes/returns `SessionState` slices | free functions |
+| `storage.ts` | localStorage + file save/load serialisation; takes/returns `SessionState` | free functions |
+| `dom.ts` | small helpers | free functions |
 
-— **joint** (structure); **Claude's choice** (per-module ownership of `gesture.ts` and `ui.ts`).
+— **your decision** (single-owner Store + free functions everywhere else); **Claude's choice** (specific shape of `Store.commit` opts and `RendererState`).
+
+**Object policy:** an object (class) is only justified by an **invariant** (constraint on state that must be enforced — `Store.commit` is the only path for state mutation) or **RAII** (resource lifetime). Without one of those, prefer free functions with an explicit state argument. No module-level mutable singletons; no factory closures.
 
 ---
 
@@ -110,11 +113,14 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - Save format `.mcw` and the `localStorage` payload are versioned. v2 = packed bits + base64. v1 (legacy `number[]` with the same 0/1/2 in-memory encoding) is still loadable; the BC path is marked in `storage.ts`. — **your decision**
 
 ### Data flow & state
-- Module ownership: each module owns its `let` state, exported for reading; setters for cross-module writes. — **your correction**
-- Parameter passing: functions receive what they need rather than reaching into mutable module state. — **your decision**
+- Single mutable owner: `Store` (class, in `store.ts`) owns `SessionState`. Direct mutation of `store.state` is blocked at the type level (`Readonly<SessionState>`); all writes go through `store.commit(mutate, opts?)`. — **your decision**
+- `commit` runs the chain: recompute highlight plan → push history (if `history`) → render (via registered renderer) → persist (via registered persister) → run observers. Defaults: recompute on, render on, history off, persist on. — **joint**
+- Observers fire after every commit and replace the boilerplate of e.g. `ui.setHistory(canUndo(), canRedo())` repeated at every mutation site. — **Claude's choice**
+- Pass things in — never reach for them: every module receives its dependencies as arguments. No module-level mutable singletons; no factory closures that hide state. — **your decision**
+- Renderer state is data (`RendererState` struct) operated on by free functions. The renderer has no invariant to enforce, so no class. — **joint**
 - Symmetry mask: TS computes the closure, passes a `u8` bitmask to Rust. — **Claude's choice**
-- Dirty detection: pixel-array diff against a baseline snapshot. — **your decision**
-- Stroke optimisation: pre-stroke snapshot compared on stroke end; unchanged → no history entry, no session save. — **Claude's choice**
+- Dirty detection: pixel-array diff against a baseline snapshot (`preStroke`). — **your decision**
+- Stroke optimisation: pre-stroke snapshot compared on stroke end; unchanged → no history entry. — **Claude's choice**
 - Diagonal symmetries: integer arithmetic for `f(f(p)) = p`. — **Claude's choice**
 
 ### TS / Rust boundary

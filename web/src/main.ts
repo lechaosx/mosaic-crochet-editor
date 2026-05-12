@@ -4,23 +4,17 @@ import { paint_pixel, flood_fill, PlanType,
          clear_overlay_row, clear_overlay_round,
          lock_invalid_row, lock_invalid_round,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
-import { Tool, PatternState } from "./types";
-import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightOpacity } from "./render";
-import { state, pixels, highlightPlan, setPixels, setState, applyEditSettings, recomputeHighlights } from "./pattern";
-import { historySave, historyReset, historyEnsureInitialized, historyPeek, historyUndo, historyRedo, canUndo, canRedo } from "./history";
-import { SymKey } from "./types";
-import { directlyActive, setDirectlyActive, computeClosure, diagonalsAvailable, getSymmetryMask, ensureDiagonalsValid } from "./symmetry";
-import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LocalState } from "./storage";
+import { Tool, PatternState, SymKey } from "./types";
+import { makeViewport, makeRendererState, observeCanvasResize,
+         render, fitToView, screenToPattern, updateStatus } from "./render";
+import { applyEditSettings } from "./pattern";
+import { Store, SessionState } from "./store";
+import { historySave, historyReset, historyEnsureInitialized, historyPeek,
+         historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
+import { computeClosure, diagonalsAvailable, getSymmetryMask, pruneUnavailableDiagonals } from "./symmetry";
+import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "./storage";
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
-
-/* ─── Drawing & dirty state ────────────────────────────────────────────────── */
-let primaryColor: 1 | 2 = 1;
-let strokeColor:  1 | 2 = 1;
-let activeTool: Tool = "pencil";
-let preStroke:   Uint8Array | null = null;
-let invertVisited: Set<number> | null = null;
-let ui: UIHandle;
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -28,79 +22,96 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     return true;
 }
 
-/* ─── Render shorthand ─────────────────────────────────────────────────────── */
-function reRender()      { if (state && pixels && highlightPlan) render(state, pixels, highlightPlan); }
-function reHighlight()   { recomputeHighlights(); if (highlightPlan) updateStatus(highlightPlan, null, null); reRender(); }
-function reSymmetry() {
-    if (!state) return;
-    const { canvasWidth: W, canvasHeight: H } = state;
-    ensureDiagonalsValid(W, H);
-    const closure = computeClosure(directlyActive, diagonalsAvailable(W, H));
-    ui.setSymmetry(directlyActive, closure);
-    ui.setDiagonalEnabled(diagonalsAvailable(W, H));
+// Minimal sensible defaults — only used when no saved session exists. The
+// first thing on fresh-boot is `freshSession()`, which replaces these with
+// values read from the Edit popover defaults in the HTML.
+function defaultSession(): SessionState {
+    return {
+        pattern:       { mode: "row", canvasWidth: 9, canvasHeight: 9 },
+        pixels:        new Uint8Array(81),
+        colorA:        "#000000",
+        colorB:        "#ffffff",
+        activeTool:    "pencil",
+        primaryColor:  1,
+        symmetry:      new Set<SymKey>(),
+        hlOpacity:     100,
+        labelsVisible: true,
+        lockInvalid:   false,
+        rotation:      0,
+    };
 }
 
-/* ─── Persistence ─────────────────────────────────────────────────────────── */
-function saveSession() {
-    if (!state || !pixels) return;
-    saveToLocalStorage(
-        state, pixels,
-        getColorHex(1), getColorHex(2),
-        activeTool, primaryColor, [...directlyActive],
-        getHlOpacity(),
-        getLabelsVisible(), getLockInvalid(),
-        view.rotation,
-    );
-}
+const viewport = makeViewport(document.getElementById("canvas") as HTMLCanvasElement);
+const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
+const rs       = makeRendererState();
+const saved    = loadFromLocalStorage();
+const store    = new Store(saved ?? defaultSession());
 
-const getColorHex     = (slot: 1 | 2) => (document.getElementById(slot === 1 ? "color-a" : "color-b") as HTMLInputElement).value;
-const getHlOpacity     = () => parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
-const getLabelsVisible = () => (document.getElementById("labels-on")    as HTMLInputElement).checked;
-const getLockInvalid   = () => (document.getElementById("lock-invalid") as HTMLInputElement).checked;
+// Stroke-scoped — captured at pointerdown, cleared at pointerup. Module-level
+// because main.ts is the entry point (nothing imports from it); not a shared
+// singleton.
+let preStroke:     Uint8Array | null = null;
+let invertVisited: Set<number>| null = null;
+let strokeColor:   1 | 2              = 1;
 
-/* ─── Paint ────────────────────────────────────────────────────────────────── */
+observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, () => render(viewport, ctx, rs, store));
+
+// Renderer + side-effect channels (Store invokes them on every `commit`).
+store.setRenderer (s => render(viewport, ctx, rs, s));
+store.setHistoryFn(s => historySave(s));
+store.setPersistFn(s => saveToLocalStorage(s));
+
+// Observers — run after every commit. Replace the boilerplate of
+// `ui.setHistory(canUndo(), canRedo())` previously repeated at every site.
+store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
+store.addObserver(s => updateStatus(s.plan, null, null));
+
+/* ── Paint ─────────────────────────────────────────────────────────────────── */
 function paintAt(clientX: number, clientY: number) {
-    if (!state || !pixels) return;
-    const { x, y } = screenToPattern(state, clientX, clientY);
-    const { canvasWidth: W, canvasHeight: H } = state;
+    const { pattern, pixels } = store.state;
+    const { x, y } = screenToPattern(
+        viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, pattern, clientX, clientY,
+    );
+    const { canvasWidth: W, canvasHeight: H } = pattern;
     const inCanvas = x >= 0 && x < W && y >= 0 && y < H;
 
-    // The overlay tool is the only one that handles clicks in the gutter (just
-    // outside the canvas, where boundary ! markers render). Everything else
-    // wants an in-canvas, non-hole pixel.
-    if (!inCanvas && activeTool !== "overlay") return;
+    // The overlay tool is the only one that handles clicks in the gutter
+    // (just outside the canvas, where boundary ! markers render).
+    // Everything else wants an in-canvas, non-hole pixel.
+    if (!inCanvas && store.state.activeTool !== "overlay") return;
     if (inCanvas && pixels[y * W + x] === 0) return;
 
-    const mask = getSymmetryMask(W, H);
+    const mask   = getSymmetryMask(store.state.symmetry, W, H);
     const before = pixels;
     let next: Uint8Array;
-    if (activeTool === "fill") {
+    const tool = store.state.activeTool;
+    if (tool === "fill") {
         next = flood_fill(pixels, W, H, x, y, strokeColor, mask);
-    } else if (activeTool === "eraser") {
+    } else if (tool === "eraser") {
         // Left-click restores the natural alternating baseline; right-click
         // paints the opposite (deliberately wrong placements).
-        const invert = strokeColor !== primaryColor;
-        if (state.mode === "row") {
+        const invert = strokeColor !== store.state.primaryColor;
+        if (pattern.mode === "row") {
             next = paint_natural_row(pixels, W, H, x, y, mask, invert);
         } else {
-            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
+            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
             next = paint_natural_round(pixels, W, H, vw, vh, ox, oy, rounds, x, y, mask, invert);
         }
-    } else if (activeTool === "overlay") {
+    } else if (tool === "overlay") {
         // Right-click clears existing overlays / boundary ! markers; left-click
         // paints new ✕ overlays at the clicked cell.
-        const clear = strokeColor !== primaryColor;
-        if (state.mode === "row") {
+        const clear = strokeColor !== store.state.primaryColor;
+        if (pattern.mode === "row") {
             next = clear
                 ? clear_overlay_row(pixels, W, H, x, y, mask)
                 : paint_overlay_row(pixels, W, H, x, y, mask);
         } else {
-            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
+            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
             next = clear
                 ? clear_overlay_round(pixels, W, H, vw, vh, ox, oy, rounds, x, y, mask)
                 : paint_overlay_round(pixels, W, H, vw, vh, ox, oy, rounds, x, y, mask);
         }
-    } else if (activeTool === "invert") {
+    } else if (tool === "invert") {
         next = pixels.slice();
         const indices = symmetric_orbit_indices(W, H, x, y, mask);
         for (const idx of indices) {
@@ -113,152 +124,154 @@ function paintAt(clientX: number, clientY: number) {
     } else {
         next = paint_pixel(pixels, W, H, x, y, strokeColor, mask);
     }
-    if (getLockInvalid()) next = lockAlwaysInvalid(state, before, next);
-    setPixels(next);
-    recomputeHighlights();
-    updateStatus(highlightPlan, x, y);
-    reRender();
+    if (store.state.lockInvalid) next = lockAlwaysInvalid(pattern, before, next);
+    store.commit(s => { s.pixels = next; });
+    updateStatus(store.plan, x, y);
 }
 
-function lockAlwaysInvalid(s: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
-    return s.mode === "row"
-        ? lock_invalid_row(before, after, s.canvasWidth, s.canvasHeight)
+function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
+    return p.mode === "row"
+        ? lock_invalid_row(before, after, p.canvasWidth, p.canvasHeight)
         : lock_invalid_round(
             before, after,
-            s.canvasWidth, s.canvasHeight,
-            s.virtualWidth, s.virtualHeight,
-            s.offsetX, s.offsetY, s.rounds,
+            p.canvasWidth, p.canvasHeight,
+            p.virtualWidth, p.virtualHeight,
+            p.offsetX, p.offsetY, p.rounds,
           );
 }
 
-/* ─── UI callbacks → state mutations ──────────────────────────────────────── */
-function setTool(t: Tool) { activeTool = t; ui.setTool(t); saveSession(); }
-function setPrimary(slot: 1 | 2) { primaryColor = slot; ui.setPrimary(slot); saveSession(); }
-function applyColorsFromInputs() {
-    COLORS[1] = getColorHex(1);
-    COLORS[2] = getColorHex(2);
-    ui.setColors(getColorHex(1), getColorHex(2));
-    reRender();
-    saveSession();
+/* ── Symmetry ────────────────────────────────────────────────────────────── */
+function refreshSymmetryUi() {
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    const closure = computeClosure(store.state.symmetry, diagonalsAvailable(W, H));
+    ui.setSymmetry(store.state.symmetry, closure);
+    ui.setDiagonalEnabled(diagonalsAvailable(W, H));
 }
-// Push a history snapshot when the user *commits* a colour (closes the
-// picker), not on every drag — undo can then walk back through colour changes
-// alongside paint strokes.
-function onColorCommit() {
-    if (!pixels) return;
-    historySave(pixels, getColorHex(1), getColorHex(2));
-    ui.setHistory(canUndo(), canRedo());
-}
-function applyHighlightsFromInputs() {
-    setHighlightOpacity(getHlOpacity() / 100);
-    saveSession();
-}
-function applyLabelsVisibleFromInput() {
-    setLabelsVisible(getLabelsVisible());
-    saveSession();
-}
-function applyLockInvalidFromInput() {
-    saveSession();   // no render impact; just persist
-}
-
 function toggleSym(k: SymKey) {
-    if (directlyActive.has(k)) directlyActive.delete(k);
-    else directlyActive.add(k);
-    reSymmetry();
-    saveSession();
-    reRender();
+    store.commit(s => {
+        const next = new Set(s.symmetry);
+        if (next.has(k)) next.delete(k); else next.add(k);
+        s.symmetry = next;
+    }, { recompute: false });
+    refreshSymmetryUi();
 }
 
-/* ─── Pattern (Edit) ─────────────────────────────────────────────────────── */
+/* ── Tool / colour / settings handlers ─────────────────────────────────── */
+function setTool(t: Tool) {
+    store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
+    ui.setTool(t);
+}
+function setPrimary(slot: 1 | 2) {
+    store.commit(s => { s.primaryColor = slot; }, { recompute: false, render: false });
+    ui.setPrimary(slot);
+}
+function onColorInput() {
+    const a = (document.getElementById("color-a") as HTMLInputElement).value;
+    const b = (document.getElementById("color-b") as HTMLInputElement).value;
+    store.commit(s => { s.colorA = a; s.colorB = b; }, { recompute: false });
+    ui.setColors(a, b);
+}
+// `change` fires when the picker closes — that's the user's "I'm done" signal
+// and the right moment to push a history snapshot.
+function onColorCommit() {
+    store.commit(() => {}, { recompute: false, render: false, history: true });
+}
+function onHlOpacityInput() {
+    const v = parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
+    store.commit(s => { s.hlOpacity = v; }, { recompute: false });
+}
+function onLabelsToggle() {
+    const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
+    store.commit(s => { s.labelsVisible = v; }, { recompute: false });
+}
+function onLockInvalidToggle() {
+    const v = (document.getElementById("lock-invalid") as HTMLInputElement).checked;
+    store.commit(s => { s.lockInvalid = v; }, { recompute: false, render: false });
+}
+function rotate(delta: number) {
+    store.commit(s => { s.rotation += delta; }, { recompute: false });
+}
+
+/* ── Pattern (Edit) popover ─────────────────────────────────────────────── */
 // No separate snapshot — the history head is already the pre-edit state.
 // Live preview mutates `state` / `pixels` in memory without touching history;
-// Apply pushes the new state as the new head; Cancel / light-dismiss just
-// restores from the (unchanged) head.
+// light-dismiss (Esc / outside click) commits via `onEditClose`.
 function onEditOpen() {
-    if (!state) return;
-    ui.syncEditInputs(state);
+    ui.syncEditInputs(store.state.pattern);
 }
 function onEditChange() {
     // Always derive the preview from the head (= pre-edit state), so reducing
     // and then restoring a value (e.g. rounds 1 → 20) brings the original
-    // pattern back instead of permanently losing the trimmed cells.
-    const head = historyPeek();
-    applyEditSettings(head ?? undefined);
-    recomputeHighlights();
-    if (state) { fitToView(state); reSymmetry(); }
-    reRender();
+    // pattern back instead of permanently losing trimmed cells.
+    const head: Restored | null = historyPeek();
+    const { pattern, pixels } = applyEditSettings(head ?? undefined);
+    store.commit(s => {
+        s.pattern  = pattern;
+        s.pixels   = pixels;
+        s.symmetry = pruneUnavailableDiagonals(s.symmetry, pattern.canvasWidth, pattern.canvasHeight);
+    });
+    fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
+    refreshSymmetryUi();
 }
-// Light-dismiss / Esc / outside-click commits the live-previewed state to
-// history. Undo (Ctrl+Z) is the universal revert path — no Cancel/Apply
-// buttons. Dedup inside `historySave` skips no-op commits.
+// Light-dismiss commits the live-previewed state to history. Undo (Ctrl+Z) is
+// the universal revert path — no Cancel/Apply buttons. `historySave` dedupes
+// against the head so no-op edits don't grow it.
 function onEditClose() {
-    if (!state || !pixels) return;
-    historySave(pixels, getColorHex(1), getColorHex(2));
-    ui.setHistory(canUndo(), canRedo());
-    saveSession();
+    store.commit(() => {}, { recompute: false, render: false, history: true });
 }
 
-/* ─── Undo / redo ────────────────────────────────────────────────────────── */
-function applyRestored(r: { state: PatternState; pixels: Uint8Array; colorA: string; colorB: string }) {
-    setState(r.state);
-    setPixels(r.pixels);
+/* ── Undo / redo ─────────────────────────────────────────────────────────── */
+function applyRestored(r: Restored) {
+    store.replace(
+        { ...store.state, pattern: r.pattern, pixels: r.pixels, colorA: r.colorA, colorB: r.colorB },
+        { persist: true },
+    );
     (document.getElementById("color-a") as HTMLInputElement).value = r.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = r.colorB;
-    applyColorsFromInputs();
-    reHighlight();
-    if (state) { fitToView(state); reSymmetry(); }
-    ui.syncEditInputs(r.state);
-    ui.setHistory(canUndo(), canRedo());
-    saveSession();
+    ui.setColors(r.colorA, r.colorB);
+    ui.syncEditInputs(r.pattern);
+    fitToView(viewport.canvas, viewport.view, r.pattern, store.state.rotation);
+    refreshSymmetryUi();
 }
 function undo() { const r = historyUndo(); if (r) applyRestored(r); }
 function redo() { const r = historyRedo(); if (r) applyRestored(r); }
 
-/* ─── Save / load ────────────────────────────────────────────────────────── */
-async function onSave() {
-    if (!state || !pixels) return;
-    await saveToFile(state, pixels, getColorHex(1), getColorHex(2));
-}
+/* ── Save / load ─────────────────────────────────────────────────────────── */
+async function onSave() { await saveToFile(store.state); }
 async function onLoad() {
     const loaded = await loadFromFile(); if (!loaded) return;
-    setState(loaded.state);
-    setPixels(loaded.pixels);
+    store.replace(
+        { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
+          colorA: loaded.colorA, colorB: loaded.colorB },
+        { history: true, persist: true },
+    );
     (document.getElementById("color-a") as HTMLInputElement).value = loaded.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = loaded.colorB;
-    applyColorsFromInputs();
-    ui.syncEditInputs(loaded.state);
-    recomputeHighlights();
-    if (state) {
-        fitToView(state);
-        view.panX = 0; view.panY = 0;
-        reSymmetry();
-    }
-    // Push the loaded snapshot — Ctrl+Z restores the previous pattern, colours
-    // and dims together (snapshots are dim- and colour-aware).
-    historySave(loaded.pixels, loaded.colorA, loaded.colorB);
-    ui.setHistory(canUndo(), canRedo());
-    saveSession();
-    reRender();
+    ui.setColors(loaded.colorA, loaded.colorB);
+    ui.syncEditInputs(loaded.pattern);
+    fitToView(viewport.canvas, viewport.view, loaded.pattern, store.state.rotation);
+    viewport.view.panX = 0; viewport.view.panY = 0;
+    refreshSymmetryUi();
 }
 
-/* ─── Export ─────────────────────────────────────────────────────────────── */
+/* ── Export ──────────────────────────────────────────────────────────────── */
 async function onExport() {
-    if (!state || !pixels || !highlightPlan) return;
     const dlg = ui.openExport();
     let cancelled = false;
     dlg.onClose(() => { cancelled = true; });
     // Plan stride 4; element 0 is the type (PlanType.Valid / Invalid).
     let hasInvalid = false;
-    for (let i = 0; i < highlightPlan.length; i += 4) {
-        if (highlightPlan[i] === PlanType.Invalid) { hasInvalid = true; break; }
+    const plan = store.plan;
+    for (let i = 0; i < plan.length; i += 4) {
+        if (plan[i] === PlanType.Invalid) { hasInvalid = true; break; }
     }
     dlg.setWarning(hasInvalid);
 
     const startSession = (alt: boolean) => {
-        if (!state || !pixels) return null;
-        const { canvasWidth: W, canvasHeight: H } = state;
-        if (state.mode === "row") return export_start_row(pixels, W, H, alt);
-        const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
+        const { pattern, pixels } = store.state;
+        const { canvasWidth: W, canvasHeight: H } = pattern;
+        if (pattern.mode === "row") return export_start_row(pixels, W, H, alt);
+        const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
         return export_start_round(pixels, W, H, vw, vh, ox, oy, rounds, alt);
     };
 
@@ -268,7 +281,6 @@ async function onExport() {
         dlg.setBusy(true);
         dlg.clearText();
         const session = startSession(dlg.alternate());
-        if (!session) { dlg.endProgress(); return; }
         const total = session.total();
         let count = 0;
         let line: string | undefined;
@@ -276,7 +288,7 @@ async function onExport() {
             if (cancelled || myRun !== runId) { session.free(); dlg.endProgress(); return; }
             dlg.appendLine(line);
             dlg.setProgress(++count, total);
-            await new Promise<void>(r => requestAnimationFrame(() => r()));
+            await new Promise<void>(res => requestAnimationFrame(() => res()));
         }
         session.free();
         dlg.endProgress();
@@ -287,7 +299,63 @@ async function onExport() {
     run();
 }
 
-/* ─── Keyboard shortcuts ────────────────────────────────────────────────── */
+/* ── Mount UI + gestures ────────────────────────────────────────────────── */
+const ui: UIHandle = mountUI({
+    onTool: setTool,
+    onPrimaryColor: setPrimary,
+    onColorChange:  onColorInput,
+    onColorCommit,
+    onSym: toggleSym,
+    onHighlightChange:     onHlOpacityInput,
+    onLabelsVisibleChange: onLabelsToggle,
+    onLockInvalidChange:   onLockInvalidToggle,
+    onUndo: undo,
+    onRedo: redo,
+    onRotate: rotate,
+    onEditOpen, onEditChange, onEditClose,
+    onSave, onLoad, onExport,
+});
+
+// Wire client-coords → pattern-coords for gesture. Closes over `viewport`,
+// `rs.visualRotation`, and the current pattern from the store.
+const clientToPattern = (cx: number, cy: number) => {
+    const pattern = store.state.pattern;
+    const { x, y } = screenToPattern(
+        viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, pattern, cx, cy,
+    );
+    const inside = x >= 0 && y >= 0 && x < pattern.canvasWidth && y < pattern.canvasHeight;
+    return { x, y, inside };
+};
+
+mountGestures(viewport.canvas, viewport.view, clientToPattern, {
+    primaryColor: () => store.state.primaryColor,
+    onPaintStart: (color) => {
+        strokeColor   = color;
+        preStroke     = store.state.pixels.slice();
+        invertVisited = store.state.activeTool === "invert" ? new Set<number>() : null;
+    },
+    onPaintAt:    paintAt,
+    onPaintEnd:   () => {
+        if (preStroke && !arraysEqual(preStroke, store.state.pixels)) {
+            store.commit(() => {}, { recompute: false, render: false, history: true });
+        }
+        preStroke = null;
+        invertVisited = null;
+    },
+    onPaintCancel: () => {
+        // Two-finger gesture started — revert the partial stroke.
+        if (preStroke) {
+            const snap = preStroke;
+            store.commit(s => { s.pixels = snap; });
+        }
+        preStroke = null;
+        invertVisited = null;
+    },
+    onHover:      (x, y) => updateStatus(store.plan, x, y),
+    onView:       () => render(viewport, ctx, rs, store),
+});
+
+/* ── Keyboard shortcuts ──────────────────────────────────────────────────── */
 document.addEventListener("keydown", e => {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
@@ -297,126 +365,47 @@ document.addEventListener("keydown", e => {
         return;
     }
     const k = e.key.toLowerCase();
-    // tools
     if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
     else if (k === "e") setTool("eraser");
     else if (k === "o") setTool("overlay");
     else if (k === "i") setTool("invert");
-    // symmetry axes
     else if (k === "v") toggleSym("V");
     else if (k === "h") toggleSym("H");
     else if (k === "c") toggleSym("C");
     else if (k === "d") toggleSym("D1");
     else if (k === "a") toggleSym("D2");
-    // rotation
     else if (k === "r") rotate(e.shiftKey ? -45 : 45);
-    // primary colour selection
     else if (k === "1") setPrimary(1);
     else if (k === "2") setPrimary(2);
 });
 
-function rotate(delta: number) {
-    view.rotation += delta;
-    applyRotation();
-    saveSession();
+/* ── Initial DOM-input sync + first render ───────────────────────────────── */
+function syncDomInputs(s: Readonly<SessionState>) {
+    (document.getElementById("color-a") as HTMLInputElement).value = s.colorA;
+    (document.getElementById("color-b") as HTMLInputElement).value = s.colorB;
+    (document.getElementById("hl-opacity")   as HTMLInputElement).value   = String(s.hlOpacity);
+    (document.getElementById("labels-on")    as HTMLInputElement).checked = s.labelsVisible;
+    (document.getElementById("lock-invalid") as HTMLInputElement).checked = s.lockInvalid;
 }
 
-/* ─── Init ──────────────────────────────────────────────────────────────── */
-function init() {
-    ui = mountUI({
-        onTool: setTool,
-        onPrimaryColor: setPrimary,
-        onColorChange: applyColorsFromInputs,
-        onColorCommit,
-        onSym: toggleSym,
-        onHighlightChange: applyHighlightsFromInputs,
-        onLabelsVisibleChange: applyLabelsVisibleFromInput,
-        onLockInvalidChange: applyLockInvalidFromInput,
-        onUndo: undo,
-        onRedo: redo,
-        onRotate: rotate,
-        onEditOpen,
-        onEditChange,
-        onEditClose,
-        onSave,
-        onLoad,
-        onExport,
-    });
+syncDomInputs(store.state);
+ui.setTool(store.state.activeTool);
+ui.setPrimary(store.state.primaryColor);
+ui.setColors(store.state.colorA, store.state.colorB);
+ui.syncEditInputs(store.state.pattern);
+ui.setHistory(canUndo(), canRedo());
 
-    mountGestures({
-        getState:     () => state,
-        primaryColor: () => primaryColor,
-        onPaintStart: (color) => {
-            strokeColor   = color;
-            preStroke     = pixels?.slice() ?? null;
-            invertVisited = activeTool === "invert" ? new Set<number>() : null;
-        },
-        onPaintAt:    paintAt,
-        onPaintEnd:   () => {
-            if (preStroke && pixels && !arraysEqual(preStroke, pixels)) {
-                historySave(pixels, getColorHex(1), getColorHex(2));
-                ui.setHistory(canUndo(), canRedo());
-                saveSession();
-            }
-            preStroke = null;
-            invertVisited = null;
-        },
-        onPaintCancel: () => {
-            // Two-finger gesture started — revert the partial stroke.
-            if (preStroke) {
-                setPixels(preStroke);
-                recomputeHighlights();
-                updateStatus(highlightPlan, null, null);
-                reRender();
-            }
-            preStroke = null;
-            invertVisited = null;
-        },
-        onHover: (x, y) => updateStatus(highlightPlan, x, y),
-        onView:  reRender,
-        onViewSettle: saveSession,
-    });
-
-    const saved = loadFromLocalStorage();
-    if (saved) restoreSession(saved); else freshSession();
+if (saved) {
+    fitToView(viewport.canvas, viewport.view, store.state.pattern, store.state.rotation);
+    refreshSymmetryUi();
+    historyEnsureInitialized(store.state);
+    render(viewport, ctx, rs, store);
+} else {
+    const { pattern, pixels } = applyEditSettings();
+    store.commit(s => { s.pattern = pattern; s.pixels = pixels; });
+    fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
+    refreshSymmetryUi();
+    historyReset(store.state);
+    ui.setHistory(canUndo(), canRedo());
 }
-
-function restoreSession(saved: LocalState) {
-    setState(saved.state);
-    setPixels(saved.pixels);
-    (document.getElementById("color-a") as HTMLInputElement).value = saved.colorA;
-    (document.getElementById("color-b") as HTMLInputElement).value = saved.colorB;
-    (document.getElementById("hl-opacity")   as HTMLInputElement).value   = String(saved.hlOpacity);
-    (document.getElementById("labels-on")    as HTMLInputElement).checked = saved.labelsVisible;
-    (document.getElementById("lock-invalid") as HTMLInputElement).checked = saved.lockInvalid;
-    setRotationImmediate(saved.canvasRotation);
-    applyColorsFromInputs();
-    applyHighlightsFromInputs();
-    applyLabelsVisibleFromInput();
-    ui.syncEditInputs(saved.state);
-    setDirectlyActive(saved.symmetry as SymKey[]);
-    setTool(saved.activeTool as Tool);
-    setPrimary(saved.primaryColor as 1 | 2);
-    if (state) { fitToView(state); reSymmetry(); }
-    recomputeHighlights();
-    historyEnsureInitialized(saved.pixels, saved.colorA, saved.colorB); ui.setHistory(canUndo(), canRedo());
-    updateStatus(highlightPlan, null, null);
-    reRender();
-}
-
-function freshSession() {
-    applyEditSettings();   // reads defaults from the Pattern popover's HTML
-    recomputeHighlights();
-    setTool("pencil");
-    setPrimary(1);
-    if (state) { fitToView(state); reSymmetry(); }
-    historyReset(pixels!, getColorHex(1), getColorHex(2)); ui.setHistory(canUndo(), canRedo());
-    applyColorsFromInputs();
-    applyHighlightsFromInputs();
-    applyLabelsVisibleFromInput();
-    updateStatus(highlightPlan, null, null);
-    reRender();
-}
-
-init();

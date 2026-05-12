@@ -1,50 +1,18 @@
 import { PatternState, RowState, RoundState, SymKey } from "./types";
 import { PlanType, PlanDir } from "@mosaic/wasm";
-import { computeClosure, diagonalsAvailable, directlyActive } from "./symmetry";
+import { computeClosure, diagonalsAvailable } from "./symmetry";
+import { Store } from "./store";
 
-export const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-const ctx = canvas.getContext("2d", { alpha: false })!;
+const ZOOM_MIN     = 2;
+const ZOOM_MAX     = 96;
+const ROT_DURATION = 250;
+const FADE_RATE    = 1 / 0.18;   // per second
+const FAVICON_SIZE = 32;
+const LABEL_FONT   = `ui-monospace, "SF Mono", Menlo, monospace`;
 
-// Pixel-value lookup. Indices 1/2 are the user-chosen colours A/B. Index 0
-// (transparent) is the inner-hole sentinel — we never look it up because the
-// render loop skips hole cells, but a `null` makes any accidental read fail
-// loud rather than silently paint the cell.
-export const COLORS: (string | null)[] = [
-    null,                       // 0 transparent (inner hole)
-    "#000000",                  // 1 primary  (colour A)
-    "#ffffff",                  // 2 secondary (colour B)
-];
-
-// Highlight glyphs (✕ overlay, ! invalid) are auto-contrast — black on light
-// cells, white on dark — so they're visible against any colour pair the user
-// picks, without needing dedicated highlight colour pickers. `opacity` is the
-// only user-tunable.
-let highlightOpacity = 1.0;
-
-export const view = {
-    panX: 0,        // CSS-px offset of pattern centre from canvas centre
-    panY: 0,
-    zoom: 16,       // canvas CSS-px per pattern pixel
-    rotation: 0,    // degrees, accumulates unbounded — the *target* rotation
-};
-
-// Animated rotation actually drawn this frame. Distinct from view.rotation
-// (which is the logical target) so painting during a rotation animation hits
-// the pixel that's actually visible.
-let visualRotation = 0;
-
-const ZOOM_MIN = 2;
-const ZOOM_MAX = 96;
-
-let dpr = 1;
-let lastState: PatternState | null = null;
-let lastPixels: Uint8Array | null = null;
-let lastPlan:   Int16Array | null = null;
-let labelsVisible = true;
-
-// `PlanDir` → outward offset in pattern coords. Single source of truth for the
-// direction enum decoding; the actual direction *selection* per cell happens
-// in Rust (`build_highlight_plan_*`).
+// `PlanDir` → outward offset in pattern coords. Single source of truth for
+// the direction enum decoding; the actual direction *selection* per cell
+// happens in Rust (`build_highlight_plan_*`).
 const DIR_VECTORS: Record<number, [number, number]> = {
     [PlanDir.Up]:    [ 0, -1],
     [PlanDir.Down]:  [ 0,  1],
@@ -52,60 +20,127 @@ const DIR_VECTORS: Record<number, [number, number]> = {
     [PlanDir.Right]: [ 1,  0],
 };
 
-export function setLabelsVisible  (v: boolean) { labelsVisible    = v; rerender(); }
-export function setHighlightOpacity(v: number) { highlightOpacity = Math.max(0, Math.min(1, v)); rerender(); }
-
-export function clampZoom(z: number) { return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)); }
-
-function resizeBacking() {
-    dpr = window.devicePixelRatio || 1;
-    // clientWidth/Height are unaffected by CSS transforms — robust even if a
-    // resize fires while the canvas is mid-animation.
-    const w = Math.max(1, Math.round(canvas.clientWidth  * dpr));
-    const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
-    if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-    }
+// Coordinate-transform inputs: the three things that, together, define how
+// pattern-space and screen-space map to each other. `dpr` is mutated by the
+// canvas resize observer; `view` is mutated by gesture handlers. `ctx` is
+// drawing-specific and lives at the call site, not in this bundle.
+export interface ViewState { panX: number; panY: number; zoom: number; }
+export interface Viewport {
+    canvas: HTMLCanvasElement;
+    view:   ViewState;
+    dpr:    number;
 }
 
-new ResizeObserver(() => {
-    resizeBacking();
-    rerender();
-}).observe(canvas);
+export function makeViewport(canvas: HTMLCanvasElement): Viewport {
+    return {
+        canvas,
+        view: { panX: 0, panY: 0, zoom: 16 },
+        dpr:  window.devicePixelRatio || 1,
+    };
+}
 
-resizeBacking();
+// Hooks the canvas resize cycle: updates the canvas backing buffer and the
+// caller's dpr (via the `setDpr` callback), then calls `onResize` so the
+// caller can trigger a re-render.
+export function observeCanvasResize(
+    canvas: HTMLCanvasElement, setDpr: (v: number) => void, onResize: () => void,
+) {
+    function update() {
+        const dpr = window.devicePixelRatio || 1;
+        setDpr(dpr);
+        const w = Math.max(1, Math.round(canvas.clientWidth  * dpr));
+        const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
+        if (canvas.width !== w || canvas.height !== h) {
+            canvas.width  = w;
+            canvas.height = h;
+        }
+    }
+    update();
+    new ResizeObserver(() => { update(); onResize(); }).observe(canvas);
+}
 
-// All of pan, zoom, and rotation go through ctx so the rotation pivot is the
-// *pattern* centre (not the canvas centre): the matrix centres the pattern,
-// scales, rotates, then translates to canvas-centre + pan.
-function buildMatrix(state: PatternState): DOMMatrix {
+// Render-internal state: animation, presentation caches. No coordinate-
+// transform fields here — those live on `Viewport`. `lastStore` is the rAF
+// callback's only handle to fresh data (animation frames don't carry args).
+export interface RendererState {
+    visualRotation: number;
+    // `null` = "no render yet" → the first render snaps without animating,
+    // so a restored rotation doesn't spin in on load.
+    targetRotation: number | null;
+    rotAnim: { startTime: number; startRot: number; endRot: number } | null;
+    topIndicatorOpacity: number;
+    rafId: number | null;
+    lastFrameTime: number;
+    lastStore: Store | null;
+    // Index 1/2 refreshed from store at the top of `render`. Index 0 is the
+    // hole sentinel — render loops skip; `null` makes accidental reads fail loud.
+    colors: (string | null)[];
+    faviconCanvas: HTMLCanvasElement;
+    faviconCtx:    CanvasRenderingContext2D;
+}
+
+export function makeRendererState(): RendererState {
+    const faviconCanvas = document.createElement("canvas");
+    faviconCanvas.width  = FAVICON_SIZE;
+    faviconCanvas.height = FAVICON_SIZE;
+    return {
+        visualRotation: 0,
+        targetRotation: null,
+        rotAnim:        null,
+        topIndicatorOpacity: 0,
+        rafId:          null,
+        lastFrameTime:  0,
+        lastStore:      null,
+        colors:         [null, "#000000", "#ffffff"],
+        faviconCanvas,
+        faviconCtx:     faviconCanvas.getContext("2d")!,
+    };
+}
+
+// ── Pure math ──────────────────────────────────────────────────────────────
+export function clampZoom(z: number) {
+    return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+}
+
+// Pan/zoom/rotation all go through ctx so the rotation pivot is the *pattern*
+// centre (not canvas centre): centre the pattern, scale, rotate, translate
+// to canvas-centre + pan.
+function buildMatrix(
+    canvas: HTMLCanvasElement, view: ViewState, dpr: number, visualRotation: number,
+    pattern: PatternState,
+): DOMMatrix {
     return new DOMMatrix()
         .translate(canvas.width  / 2 + view.panX * dpr,
                    canvas.height / 2 + view.panY * dpr)
         .rotate(visualRotation)
         .scale(view.zoom * dpr)
-        .translate(-state.canvasWidth / 2, -state.canvasHeight / 2);
+        .translate(-pattern.canvasWidth / 2, -pattern.canvasHeight / 2);
 }
 
-export function screenToPattern(state: PatternState, clientX: number, clientY: number): { x: number; y: number } {
+export function screenToPattern(
+    canvas: HTMLCanvasElement, view: ViewState, dpr: number, visualRotation: number,
+    pattern: PatternState, clientX: number, clientY: number,
+): { x: number; y: number } {
     const rect = canvas.getBoundingClientRect();
     const cx = (clientX - rect.left) * dpr;
     const cy = (clientY - rect.top)  * dpr;
-    const p = buildMatrix(state).inverse().transformPoint({ x: cx, y: cy });
+    const p = buildMatrix(canvas, view, dpr, visualRotation, pattern)
+        .inverse().transformPoint({ x: cx, y: cy });
     return { x: Math.floor(p.x), y: Math.floor(p.y) };
 }
 
-export function fitToView(state: PatternState) {
+export function fitToView(
+    canvas: HTMLCanvasElement, view: ViewState, pattern: PatternState, rotationDeg: number,
+) {
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     const margin = 0.92;
-    // Account for current rotation: a rotated W×H rectangle has an axis-aligned
-    // bounding box of size (W·|cos θ| + H·|sin θ|, W·|sin θ| + H·|cos θ|).
-    const rad = view.rotation * Math.PI / 180;
+    // Rotated W×H rectangle's axis-aligned bounding box:
+    // (W·|cos θ| + H·|sin θ|, W·|sin θ| + H·|cos θ|).
+    const rad = rotationDeg * Math.PI / 180;
     const c = Math.abs(Math.cos(rad));
     const s = Math.abs(Math.sin(rad));
-    const W = state.canvasWidth, H = state.canvasHeight;
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
     const aabbW = W * c + H * s;
     const aabbH = W * s + H * c;
     view.zoom = clampZoom(margin * Math.min(rect.width / aabbW, rect.height / aabbH));
@@ -113,86 +148,58 @@ export function fitToView(state: PatternState) {
     view.panY = 0;
 }
 
-// ── Rotation animation ───────────────────────────────────────────────────────
-// Both visualRotation and topIndicatorOpacity are driven by a single rAF loop.
-// rotation: eases from current visualRotation to view.rotation over 250 ms.
-// indicator opacity: eases toward 1 while a rotation is active, toward 0 when
-// idle, at a constant 1/0.18 units per second (≈180 ms full fade).
+// ── Animation ──────────────────────────────────────────────────────────────
+function syncRotation(
+    rs: RendererState, targetDeg: number, vp: Viewport, ctx: CanvasRenderingContext2D,
+) {
+    if (rs.targetRotation === null) {
+        rs.visualRotation = targetDeg;
+        rs.targetRotation = targetDeg;
+        return;
+    }
+    if (rs.targetRotation === targetDeg) return;
+    rs.rotAnim = { startTime: performance.now(), startRot: rs.visualRotation, endRot: targetDeg };
+    rs.targetRotation = targetDeg;
+    startRaf(rs, vp, ctx);
+}
 
-let rotAnim: { startTime: number; startRot: number; endRot: number } | null = null;
-let topIndicatorOpacity = 0;
-let rafId: number | null = null;
-let lastFrameTime = 0;
+function startRaf(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D) {
+    if (rs.rafId !== null) return;
+    rs.lastFrameTime = performance.now();
+    rs.rafId = requestAnimationFrame(now => frame(rs, vp, ctx, now));
+}
 
-const ROT_DURATION = 250;
-const FADE_RATE    = 1 / 0.18; // per second
-
-function frame(now: number) {
+function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, now: number) {
     let active = false;
-
-    if (rotAnim) {
-        const t = Math.min(1, (now - rotAnim.startTime) / ROT_DURATION);
+    if (rs.rotAnim) {
+        const t = Math.min(1, (now - rs.rotAnim.startTime) / ROT_DURATION);
         const eased = 1 - Math.pow(1 - t, 3);
-        visualRotation = rotAnim.startRot + (rotAnim.endRot - rotAnim.startRot) * eased;
+        rs.visualRotation = rs.rotAnim.startRot + (rs.rotAnim.endRot - rs.rotAnim.startRot) * eased;
         if (t < 1) active = true;
-        else { visualRotation = rotAnim.endRot; rotAnim = null; }
+        else { rs.visualRotation = rs.rotAnim.endRot; rs.rotAnim = null; }
     }
 
-    const targetOpacity = rotAnim ? 1 : 0;
-    const dtSec = Math.min(0.05, (now - lastFrameTime) / 1000);
-    if (topIndicatorOpacity !== targetOpacity) {
+    const targetOpacity = rs.rotAnim ? 1 : 0;
+    const dtSec = Math.min(0.05, (now - rs.lastFrameTime) / 1000);
+    if (rs.topIndicatorOpacity !== targetOpacity) {
         const step = FADE_RATE * dtSec;
-        topIndicatorOpacity = topIndicatorOpacity < targetOpacity
-            ? Math.min(targetOpacity, topIndicatorOpacity + step)
-            : Math.max(targetOpacity, topIndicatorOpacity - step);
-        if (topIndicatorOpacity !== targetOpacity) active = true;
+        rs.topIndicatorOpacity = rs.topIndicatorOpacity < targetOpacity
+            ? Math.min(targetOpacity, rs.topIndicatorOpacity + step)
+            : Math.max(targetOpacity, rs.topIndicatorOpacity - step);
+        if (rs.topIndicatorOpacity !== targetOpacity) active = true;
     }
 
-    rerender();
-    lastFrameTime = now;
-
-    rafId = active ? requestAnimationFrame(frame) : null;
+    if (rs.lastStore) rerender(vp, ctx, rs, rs.lastStore);
+    rs.lastFrameTime = now;
+    rs.rafId = active ? requestAnimationFrame(now2 => frame(rs, vp, ctx, now2)) : null;
 }
 
-function startRaf() {
-    if (rafId !== null) return;
-    lastFrameTime = performance.now();
-    rafId = requestAnimationFrame(frame);
-}
-
-export function applyRotation() {
-    rotAnim = {
-        startTime: performance.now(),
-        startRot:  visualRotation,
-        endRot:    view.rotation,
-    };
-    startRaf();
-}
-
-export function setRotationImmediate(deg: number) {
-    if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
-    rotAnim = null;
-    view.rotation = deg;
-    visualRotation = deg;
-    topIndicatorOpacity = 0;
-    rerender();
-}
-
-export function render(state: PatternState, pixels: Uint8Array, plan: Int16Array) {
-    lastState = state; lastPixels = pixels; lastPlan = plan;
-    updateFavicon(state, pixels);
-    rerender();
-}
-
-// ── Favicon ───────────────────────────────────────────────────────────────────
-const FAVICON_SIZE = 32;
-const faviconCanvas = document.createElement("canvas");
-faviconCanvas.width  = FAVICON_SIZE;
-faviconCanvas.height = FAVICON_SIZE;
-const faviconCtx = faviconCanvas.getContext("2d")!;
-
-function updateFavicon(state: PatternState, pixels: Uint8Array) {
-    const { canvasWidth: W, canvasHeight: H } = state;
+// ── Favicon ────────────────────────────────────────────────────────────────
+function updateFavicon(
+    faviconCanvas: HTMLCanvasElement, faviconCtx: CanvasRenderingContext2D,
+    colors: (string | null)[], pattern: PatternState, pixels: Uint8Array,
+) {
+    const { canvasWidth: W, canvasHeight: H } = pattern;
     const scale = Math.min(FAVICON_SIZE / W, FAVICON_SIZE / H);
     const px    = Math.max(1, Math.floor(scale));
     const offX  = Math.floor((FAVICON_SIZE - W * scale) / 2);
@@ -203,7 +210,7 @@ function updateFavicon(state: PatternState, pixels: Uint8Array) {
         for (let x = 0; x < W; x++) {
             const p = pixels[y * W + x];
             if (p === 0) continue;
-            faviconCtx.fillStyle = COLORS[p] ?? "#333";
+            faviconCtx.fillStyle = colors[p] ?? "#333";
             faviconCtx.fillRect(offX + Math.floor(x * scale), offY + Math.floor(y * scale), px, px);
         }
     }
@@ -212,16 +219,27 @@ function updateFavicon(state: PatternState, pixels: Uint8Array) {
     if (link) link.href = faviconCanvas.toDataURL("image/png");
 }
 
-function rerender() {
-    if (!lastState || !lastPixels || !lastPlan) return;
-    const state = lastState, pixels = lastPixels, plan = lastPlan;
-    const { canvasWidth: W, canvasHeight: H } = state;
+// ── Top-level entry ────────────────────────────────────────────────────────
+export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
+    rs.lastStore  = store;
+    rs.colors[1]  = store.state.colorA;
+    rs.colors[2]  = store.state.colorB;
+    syncRotation(rs, store.state.rotation, vp, ctx);
+    updateFavicon(rs.faviconCanvas, rs.faviconCtx, rs.colors, store.state.pattern, store.state.pixels);
+    rerender(vp, ctx, rs, store);
+}
+
+function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
+    const { pattern, pixels, symmetry, hlOpacity, labelsVisible } = store.state;
+    const plan = store.plan;
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    const { canvas, view, dpr } = vp;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#161618";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    const m = buildMatrix(state);
+    const m = buildMatrix(canvas, view, dpr, rs.visualRotation, pattern);
     ctx.setTransform(m);
     ctx.imageSmoothingEnabled = false;
 
@@ -230,12 +248,12 @@ function rerender() {
         for (let x = 0; x < W; x++) {
             const p = pixels[row + x];
             if (p === 0) continue;
-            ctx.fillStyle = COLORS[p] ?? "#333";
+            ctx.fillStyle = rs.colors[p] ?? "#333";
             ctx.fillRect(x, y, 1, 1);
         }
     }
 
-    // Grid: 1 device pixel regardless of zoom
+    // Grid: 1 device pixel regardless of zoom.
     const px = 1 / (view.zoom * dpr);
     ctx.lineWidth = px;
     ctx.strokeStyle = "rgba(128, 128, 128, 0.18)";
@@ -244,52 +262,48 @@ function rerender() {
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderHighlightSymbols(state, pixels, plan);
-
-    renderSymmetryGuides(state);
+    renderHighlightSymbols(ctx, view, dpr, rs.colors, pattern, pixels, plan, m, hlOpacity / 100);
+    renderSymmetryGuides(ctx, view, dpr, pattern, symmetry);
     if (labelsVisible) {
-        if (state.mode === "row") renderRowLabels(state);
-        else                       renderRoundLabels(state, pixels);
+        if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
+        else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
-    if (topIndicatorOpacity > 0.001) renderTopIndicator(state);
+    if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
 }
 
-// ✕ for VALID overlay — drawn in pattern coords (rotates with canvas; the
-//   shape is symmetric enough that this doesn't matter). Stroke colour is the
-//   *opposite* cell colour (A on B-cells, B on A-cells), so the glyph is
-//   visible against either palette and literally shows the colour that would
-//   land there if the overlay were applied.
-//
-// ! for INVALID — drawn in *screen* coords (always points down regardless of
-//   canvas rotation; like axis labels). Stroke + dot in the opposite cell
-//   colour, same colour as ✕ would use.
-//
-// Round-mode corners produce two plan records sharing the same wrong cell
-// with perpendicular directions; each is drawn independently so they may
-// differ in colour between the two sides.
-function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, plan: Int16Array) {
-    const W = state.canvasWidth, H = state.canvasHeight;
-    const A = COLORS[1] ?? "#000";
-    const B = COLORS[2] ?? "#fff";
+// ── Drawing helpers ────────────────────────────────────────────────────────
+// ✕ for VALID overlay — pattern coords (rotates with canvas; ✕ is rotation-
+//   symmetric enough that this doesn't matter). Stroke is the *opposite* cell
+//   colour so the glyph is visible against either palette.
+// ! for INVALID — screen coords (always points down regardless of canvas
+//   rotation; like axis labels). Same opposite-colour rule.
+// Round corners produce two plan records sharing the wrong cell with
+// perpendicular directions; each draws independently so they can differ in
+// colour between the two sides.
+function renderHighlightSymbols(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number, colors: (string | null)[],
+    pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
+    m: DOMMatrix, opacity: number,
+) {
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
+    const A = colors[1] ?? "#000";
+    const B = colors[2] ?? "#fff";
 
     // Glyph colour is the opposite of the *outward* cell's colour where the
-    // glyph actually lands — not the wrong cell's. Otherwise, painting the
-    // outward cell turns the glyph the same colour as its background and it
-    // vanishes. For out-of-canvas outward (gutter), fall back to the wrong
-    // cell's own pixel value.
+    // glyph actually lands. For gutter (out-of-canvas) outward cells, fall
+    // back to the wrong cell's own pixel value.
     function outwardPixel(ox: number, oy: number, wx: number, wy: number): number {
         if (ox >= 0 && ox < W && oy >= 0 && oy < H) return pixels[oy * W + ox];
         return pixels[wy * W + wx];
     }
     const groups: { display: 1 | 2; glyph: string }[] = [
-        { display: 1, glyph: B },   // outward is A → glyph B
-        { display: 2, glyph: A },   // outward is B → glyph A
+        { display: 1, glyph: B },
+        { display: 2, glyph: A },
     ];
 
     ctx.save();
-    ctx.globalAlpha = highlightOpacity;
+    ctx.globalAlpha = opacity;
 
-    // ── ✕ overlays — pattern coords, drawn at the outward cell ──────────
     ctx.lineCap  = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.16;
@@ -308,8 +322,6 @@ function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, plan: I
         ctx.stroke();
     }
 
-    // ── ! invalid — screen coords, drawn at the outward cell ────────────
-    const m = buildMatrix(state);
     const cellPx  = view.zoom * dpr;
     const stemTop = cellPx * 0.28;
     const stemBot = cellPx * 0.08;
@@ -350,20 +362,16 @@ function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, plan: I
         ctx.fill();
     }
     ctx.restore();
-
     ctx.restore();
 }
 
-// Labels are positioned in pattern coords (so they pan/zoom/rotate with the
-// pattern) but drawn in screen coords (so the glyphs themselves stay upright
-// regardless of canvas rotation).
-const LABEL_FONT = `ui-monospace, "SF Mono", Menlo, monospace`;
-
 // Row labels in the left gutter — row 1 at the bottom (mosaic convention).
-function renderRowLabels(state: RowState) {
+function renderRowLabels(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: RowState, m: DOMMatrix,
+) {
     const cell = view.zoom * dpr;
-    const { canvasHeight: H } = state;
-    const m = buildMatrix(state);
+    const { canvasHeight: H } = pattern;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.font = `${cell * 0.5}px ${LABEL_FONT}`;
@@ -377,14 +385,16 @@ function renderRowLabels(state: RowState) {
     ctx.restore();
 }
 
-// Round labels — innermost ring numbered 1 (mosaic convention). Placement:
+// Round labels — innermost ring numbered 1. Placement:
 //   • full     — inside the top-left corner cell of each ring: ring r at (r, r).
 //   • half/qtr — above the canvas in the top gutter, centred on column r.
-function renderRoundLabels(state: RoundState, pixels: Uint8Array) {
+function renderRoundLabels(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: RoundState, pixels: Uint8Array, m: DOMMatrix,
+) {
     const cell = view.zoom * dpr;
-    const { canvasWidth: W, canvasHeight: H, rounds, offsetY } = state;
+    const { canvasWidth: W, canvasHeight: H, rounds, offsetY } = pattern;
     const isFull = offsetY === 0;
-    const m = buildMatrix(state);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.font = `${cell * (isFull ? 0.55 : 0.5)}px ${LABEL_FONT}`;
@@ -398,18 +408,18 @@ function renderRoundLabels(state: RoundState, pixels: Uint8Array) {
     } else {
         ctx.fillStyle = "rgba(210, 210, 220, 0.75)";
     }
-    for (let r = 0; r < rounds; r++) {
+    for (let i = 0; i < rounds; i++) {
         let cx: number, cy: number;
         if (isFull) {
-            const px = r, py = r;
+            const px = i, py = i;
             if (px >= W || py >= H) continue;
             if (pixels[py * W + px] === 0) continue;
             cx = px + 0.5; cy = py + 0.5;
         } else {
-            if (r >= W) continue;
-            cx = r + 0.5; cy = -0.3;
+            if (i >= W) continue;
+            cx = i + 0.5; cy = -0.3;
         }
-        const label = String(rounds - r);
+        const label = String(rounds - i);
         const p = m.transformPoint({ x: cx, y: cy });
         if (isFull) ctx.strokeText(label, p.x, p.y);
         ctx.fillText(label, p.x, p.y);
@@ -417,16 +427,18 @@ function renderRoundLabels(state: RoundState, pixels: Uint8Array) {
     ctx.restore();
 }
 
-function renderTopIndicator(state: PatternState) {
-    const cx = state.canvasWidth / 2;
+function renderTopIndicator(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: PatternState, opacity: number,
+) {
+    const cx = pattern.canvasWidth / 2;
     const tipY  = -0.4;
     const baseY = -1.6;
     const half  = 0.7;
-    const a     = topIndicatorOpacity;
 
     ctx.save();
-    ctx.fillStyle   = `rgba(214, 83, 163, ${(0.92 * a).toFixed(3)})`;
-    ctx.strokeStyle = `rgba(0, 0, 0, ${(0.55 * a).toFixed(3)})`;
+    ctx.fillStyle   = `rgba(214, 83, 163, ${(0.92 * opacity).toFixed(3)})`;
+    ctx.strokeStyle = `rgba(0, 0, 0, ${(0.55 * opacity).toFixed(3)})`;
     ctx.lineWidth   = 1.2 / (view.zoom * dpr);
     ctx.lineJoin    = "round";
     ctx.beginPath();
@@ -439,18 +451,21 @@ function renderTopIndicator(state: PatternState) {
     ctx.restore();
 }
 
-function renderSymmetryGuides(state: PatternState) {
-    if (directlyActive.size === 0) return;
-    const { canvasWidth: W, canvasHeight: H } = state;
-    const closure = computeClosure(directlyActive, diagonalsAvailable(W, H));
+function renderSymmetryGuides(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: PatternState, active: Set<SymKey>,
+) {
+    if (active.size === 0) return;
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    const closure = computeClosure(active, diagonalsAvailable(W, H));
     if (closure.size === 0) return;
 
     const cx = W / 2, cy = H / 2;
-    const overhang = 1;                       // pattern pixels each axis pokes past the pattern
-    const ovhDiag  = overhang / Math.SQRT2;   // along-line equivalent for the diagonals
-    const lw = 1.6 / (view.zoom * dpr);
-    const dash = 8 / (view.zoom * dpr);
-    const dashGap = dash * 0.55;
+    const overhang = 1;                       // pattern px past each side
+    const ovhDiag  = overhang / Math.SQRT2;   // along-line equivalent for diagonals
+    const lw       = 1.6 / (view.zoom * dpr);
+    const dash     = 8   / (view.zoom * dpr);
+    const dashGap  = dash * 0.55;
 
     const draw = (x1: number, y1: number, x2: number, y2: number, direct: boolean) => {
         ctx.strokeStyle = direct ? "rgba(255, 80, 180, 0.85)" : "rgba(255, 80, 180, 0.35)";
@@ -459,7 +474,7 @@ function renderSymmetryGuides(state: PatternState) {
         ctx.lineTo(x2, y2);
         ctx.stroke();
     };
-    const d = (k: SymKey) => directlyActive.has(k);
+    const d = (k: SymKey) => active.has(k);
 
     ctx.save();
     ctx.lineWidth = lw;
@@ -478,9 +493,9 @@ function renderSymmetryGuides(state: PatternState) {
              yMax + off + ovhDiag, yMax + ovhDiag, d("D1"));
     }
     if (closure.has("D2")) {
-        // D2 axis. In pixel-index coords it's `x + y = (W+H−2)/2`; we draw in
-        // render coords (each pixel spans [n, n+1]) where both x and y shift by
-        // +0.5, so the axis equation becomes x + y = (W+H)/2.
+        // D2 axis. In pixel-index coords it's x + y = (W+H−2)/2; in render
+        // coords (each pixel spans [n, n+1], both x and y shift by +0.5)
+        // it becomes x + y = (W+H)/2.
         const sum  = (W + H) / 2;
         const yMin = Math.max(0, sum - W);
         const yMax = Math.min(H, sum);
@@ -498,10 +513,11 @@ function renderSymmetryGuides(state: PatternState) {
     ctx.restore();
 }
 
+// ── Status bar ─────────────────────────────────────────────────────────────
 export function updateStatus(plan: Int16Array | null, x: number | null, y: number | null) {
     if (!plan) return;
-    // Corners emit two records sharing the same wrong cell — counted once each
-    // since each is a distinct visible glyph.
+    // Corners emit two records sharing the same wrong cell — counted once
+    // each since each is a distinct visible glyph.
     let valid = 0, invalid = 0;
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] === PlanType.Valid) valid++;
