@@ -40,8 +40,9 @@ export interface UICallbacks {
     onColorChange:     () => void;
     onColorCommit:     () => void;
     onSym:             (k: SymKey) => void;
-    onHighlightChange: () => void;
-    onLabelsVisibleChange: () => void;
+    onHighlightChange:        () => void;
+    onInvalidIntensityChange: () => void;
+    onLabelsVisibleChange:    () => void;
     onLockInvalidChange: () => void;
     onUndo:            () => void;
     onRedo:            () => void;
@@ -152,7 +153,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
         positionPopover(hlPopover, el("btn-hl-toggle"), "right");
         hlPopover.showPopover();
     });
-    el<HTMLInputElement>("hl-opacity")  .addEventListener("input",  cb.onHighlightChange);
+    el<HTMLInputElement>("hl-opacity")        .addEventListener("input",  cb.onHighlightChange);
+    el<HTMLInputElement>("invalid-intensity") .addEventListener("input",  cb.onInvalidIntensityChange);
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
 

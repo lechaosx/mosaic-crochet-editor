@@ -21,7 +21,8 @@ export interface SessionState {
     activeTool:    Tool;
     primaryColor:  1 | 2;
     symmetry:      Set<SymKey>;          // directly active axes
-    hlOpacity:     number;               // 0..100, matches the input range
+    hlOpacity:        number;            // 0..100, matches the input range
+    invalidIntensity: number;            // 0..100, drives ! marker saturation
     labelsVisible: boolean;
     lockInvalid:   boolean;
     rotation:      number;               // degrees (target — render.ts animates the visual)
