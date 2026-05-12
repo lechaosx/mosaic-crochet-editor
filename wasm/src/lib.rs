@@ -202,6 +202,87 @@ pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y:
 }
 
 #[wasm_bindgen]
+pub fn lock_invalid_row(before: &[u8], after: &[u8], width: i32, height: i32) -> Vec<u8> {
+    tools::lock_invalid_row(before, after, width, height)
+}
+
+#[wasm_bindgen]
+pub fn lock_invalid_round(
+    before: &[u8], after: &[u8],
+    canvas_width: i32, canvas_height: i32,
+    virtual_width: i32, virtual_height: i32,
+    offset_x: i32, offset_y: i32, rounds: i32,
+) -> Vec<u8> {
+    tools::lock_invalid_round(
+        before, after, canvas_width, canvas_height,
+        virtual_width, virtual_height, offset_x, offset_y, rounds,
+    )
+}
+
+#[wasm_bindgen]
+pub fn paint_natural_row(
+    pixels: &[u8], width: i32, height: i32,
+    x: i32, y: i32, symmetry_mask: u8, invert: bool,
+) -> Vec<u8> {
+    tools::paint_natural_row(pixels, width, height, x, y, symmetry_mask, invert)
+}
+
+#[wasm_bindgen]
+pub fn paint_natural_round(
+    pixels: &[u8],
+    canvas_width: i32, canvas_height: i32,
+    virtual_width: i32, virtual_height: i32,
+    offset_x: i32, offset_y: i32, rounds: i32,
+    x: i32, y: i32, symmetry_mask: u8, invert: bool,
+) -> Vec<u8> {
+    tools::paint_natural_round(
+        pixels, canvas_width, canvas_height,
+        virtual_width, virtual_height, offset_x, offset_y, rounds,
+        x, y, symmetry_mask, invert,
+    )
+}
+
+#[wasm_bindgen]
+pub fn paint_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u8> {
+    tools::paint_overlay_row(pixels, width, height, x, y, symmetry_mask)
+}
+
+#[wasm_bindgen]
+pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u8> {
+    tools::clear_overlay_row(pixels, width, height, x, y, symmetry_mask)
+}
+
+#[wasm_bindgen]
+pub fn paint_overlay_round(
+    pixels: &[u8],
+    canvas_width: i32, canvas_height: i32,
+    virtual_width: i32, virtual_height: i32,
+    offset_x: i32, offset_y: i32, rounds: i32,
+    x: i32, y: i32, symmetry_mask: u8,
+) -> Vec<u8> {
+    tools::paint_overlay_round(
+        pixels, canvas_width, canvas_height,
+        virtual_width, virtual_height, offset_x, offset_y, rounds,
+        x, y, symmetry_mask,
+    )
+}
+
+#[wasm_bindgen]
+pub fn clear_overlay_round(
+    pixels: &[u8],
+    canvas_width: i32, canvas_height: i32,
+    virtual_width: i32, virtual_height: i32,
+    offset_x: i32, offset_y: i32, rounds: i32,
+    x: i32, y: i32, symmetry_mask: u8,
+) -> Vec<u8> {
+    tools::clear_overlay_round(
+        pixels, canvas_width, canvas_height,
+        virtual_width, virtual_height, offset_x, offset_y, rounds,
+        x, y, symmetry_mask,
+    )
+}
+
+#[wasm_bindgen]
 pub fn symmetric_orbit_indices(canvas_width: i32, canvas_height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u32> {
     tools::symmetric_orbit(x, y, canvas_width, canvas_height, symmetry_mask)
         .into_iter()

@@ -38,8 +38,8 @@ Pure logic, no WASM deps, testable with `cargo test`. Each source file's `//!` d
 - `walk.rs` — row/round walk generators (gen blocks, 5-segment round structure).
 - `pattern.rs` — DP-based stitch-sequence compression (LCE table, period-first + branch-and-bound splits).
 - `export.rs` — 4-stage per-line export (virtual→physical, window, classify, group-by-parent).
-- `tools.rs` — symmetric paint / fill / eraser, plus the orbit walker.
-- `common.rs` — highlight computation, colour utilities.
+- `tools.rs` — symmetric paint / fill / eraser / overlay / lock-invalid, plus the orbit walker. Each tool is a self-contained function that takes pixels in, returns new pixels out.
+- `common.rs` — geometry primitives (`min_dist_axes`, `step_toward_center`, `inward_cell_*`, `outward_cells_*`, `is_always_invalid_*`), highlight computation, render-plan emission, colour utilities.
 
 — **your decision** (typed end-to-end, line-at-a-time streaming, no strings in the export pipeline). **Claude's choice** (LCE table, orbit-based tools, row-eraser fix that uses each orbit cell's own y).
 
@@ -118,7 +118,8 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - Diagonal symmetries: integer arithmetic for `f(f(p)) = p`. — **Claude's choice**
 
 ### TS / Rust boundary
-- "No duplicated functionality" — geometry (`is_always_invalid_*`, `outward_cells_*`, `inward_cell_*`) lives once, in Rust core. TS holds plain data (pixels, render plan) and rendering concerns (canvas, glyph styling). — **your decision**
+- "No duplicated functionality between Rust and TS." Geometry, tool logic, and natural-colour rules all live exactly once, in Rust core. TS owns DOM, canvas drawing, stroke state (`invertVisited`), and presentation choices (glyph shape, colour, opacity). — **your decision**
+- Each tool is a self-contained Rust function: `paint_pixel`, `flood_fill`, `paint_natural_*(invert: bool)`, `paint_overlay_*` / `clear_overlay_*` (split where the gutter handling makes the two semantic actions structurally different), `lock_invalid_*`. TS calls the right one based on click type — UI concepts like "right-click" never leak into Rust signatures; parameters describe the action's output. — **your decision**
 - Highlight render plan: Rust emits a flat `Int16Array` with stride-4 records `[type, dir, wrong_x, wrong_y]` once per paint stroke. TS renderer iterates the plan and picks glyph / colour / opacity from presentation rules — those can change without touching Rust. Per-cell highlight `Uint8Array` lives only inside Rust (used by the export pipeline). — **joint**
 - Plan enum values: `PlanType` / `PlanDir` are `#[wasm_bindgen]` enums in `wasm/src/lib.rs` (autogenerates TS bindings). Core uses matching `u8` constants for the Vec<i16> writes; a compile-time `const _` assert verifies the discriminants stay in lockstep. — **joint**
 

@@ -4,6 +4,9 @@ import {
     initialize_row_pattern,
     initialize_round_pattern,
 } from "@mosaic/wasm";
+/* isAlwaysInvalid / naturalPatternFor / outwardCells / inwardCell all moved
+ * to Rust core — see `core/src/common.rs` and `core/src/tools.rs`. TS only
+ * keeps the orchestration of WASM calls and the state holders below. */
 import { PatternState } from "./types";
 import { readClampedInt, radioValue } from "./dom";
 
@@ -128,34 +131,6 @@ function overlayPreserved(
     }
 }
 
-
-// A cell is *always* invalid if there's no way for it to host a valid overlay
-// — it has nowhere outward for the X to land. Mirrors the Rust highlight rules:
-//   • row mode — top row only (y == 0). The bottom row (foundation) has no
-//     inner row to clash with, so any colour there is a *valid* overlay onto
-//     the row above.
-//   • round mode — outermost ring (rfe == 0) or any diagonal pixel (dx == dy).
-// Hole positions don't count.
-export function isAlwaysInvalid(s: PatternState, x: number, y: number): boolean {
-    if (s.mode === "row") return y === 0;
-    const vx = x + s.offsetX, vy = y + s.offsetY;
-    const dx = Math.min(vx, s.virtualWidth  - 1 - vx);
-    const dy = Math.min(vy, s.virtualHeight - 1 - vy);
-    const rfe = Math.min(dx, dy);
-    if (rfe >= s.rounds) return false;
-    return rfe === 0 || dx === dy;
-}
-
-// The "should-be" colour for each cell — same array `initialize_*_pattern`
-// would return. Used by the Lock-invalid post-filter to know what's "correct".
-export function naturalPatternFor(s: PatternState): Uint8Array {
-    return s.mode === "row"
-        ? initialize_row_pattern(s.canvasWidth, s.canvasHeight)
-        : initialize_round_pattern(
-              s.canvasWidth, s.canvasHeight, s.virtualWidth, s.virtualHeight,
-              s.offsetX, s.offsetY, s.rounds,
-          );
-}
 
 export function recomputeHighlights() {
     if (!state || !pixels) return;
