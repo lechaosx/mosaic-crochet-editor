@@ -82,7 +82,11 @@ Two swatches: primary (left) and secondary (right). Click to select; double-clic
 
 ### Highlights
 
-The **⊙** button opens a popover with the highlight opacity slider (defaults to 100%), a labels toggle, and a **Lock invalid** toggle that prevents accidental writes to always-invalid cells (top row, outermost ring, round-mode diagonals).
+The **⚙** button on the right of the toolbar opens a Settings popover:
+
+- **Highlight opacity** — fades the ✕ / ! glyphs; 0 hides them entirely. Defaults to 100%.
+- **Show numbers** — row numbers in the left gutter, round numbers above (half/quarter) or in the corner cells (full).
+- **Lock cells with no valid overlay** — blocks paint on cells where an overlay stitch can't physically fit (top row in row mode; outermost ring and diagonal corners in round mode). Fixing an already-wrong cell still works.
 
 ### Zoom, pan, rotation
 

@@ -20,9 +20,9 @@
         <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
       </div>
       <div class="tb-group g-hlrot">
-        <button class="btn btn--icon" id="btn-hl-toggle" popovertarget="hl-popover" title="Highlight settings" aria-label="Highlight settings" aria-haspopup="dialog">⊙</button>
         <button class="btn btn--icon" id="rotate-ccw" title="Rotate counter-clockwise (Shift+R)" aria-label="Rotate counter-clockwise">↺</button>
         <button class="btn btn--icon" id="rotate-cw"  title="Rotate clockwise (R)"               aria-label="Rotate clockwise">↻</button>
+        <button class="btn btn--icon" id="btn-hl-toggle" popovertarget="hl-popover" title="Settings" aria-label="Settings" aria-haspopup="dialog">⚙</button>
       </div>
     </div>
 
@@ -59,19 +59,19 @@
     <div id="status" class="status"></div>
   </main>
 
-  <!-- ── Highlight settings popover ────────────────────────────────── -->
+  <!-- ── Settings popover ─────────────────────────────────────────────── -->
   <div id="hl-popover" popover>
-    <div class="popover-row">
-      <span class="popover-label">Opacity</span>
+    <div class="popover-row" title="Fades the ✕ overlay marks and ! invalid marks. 0 hides them entirely.">
+      <span class="popover-label">Highlight opacity</span>
       <input type="range" id="hl-opacity" value="100" min="0" max="100" aria-label="Highlight opacity">
     </div>
-    <label class="toggle popover-row">
-      <span class="popover-label">Labels</span>
+    <label class="toggle popover-row" title="Row numbers in the left gutter, round numbers above (half/quarter) or in the corner cells (full).">
+      <span class="popover-label">Show numbers</span>
       <input type="checkbox" id="labels-on" checked>
       <span class="toggle-track"></span>
     </label>
-    <label class="toggle popover-row" title="Block painting wrong colour on always-invalid cells (outermost row/ring, round corners). Fixing an already-wrong cell still works.">
-      <span class="popover-label">Lock invalid</span>
+    <label class="toggle popover-row" title="Block paint on cells that can never host a valid overlay (top row in row mode; outermost ring and diagonal corners in round mode). Fixing an already-wrong cell still works.">
+      <span class="popover-label">Lock cells with no valid overlay</span>
       <input type="checkbox" id="lock-invalid">
       <span class="toggle-track"></span>
     </label>
