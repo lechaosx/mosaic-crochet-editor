@@ -302,6 +302,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 #new-pattern-widget,
 #edit-pattern-widget { min-width: 16rem; }
 
+#hl-popover { min-width: 18rem; }
+
 .popover-footer {
   display: flex;
   gap: var(--space-2);

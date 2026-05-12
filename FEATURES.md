@@ -37,7 +37,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Round-mode corners (diagonal cells) show **two** ! markers — one on each perpendicular outward side — because the corner has no single outward axis. — **your decision**
 - Foundation row (bottom) is overlay-able: there's no inner row to clash with, so any colour there is a valid overlay onto the row above. — **your decision**
 - Glyphs are drawn in the *other* pixel colour (✕/! on an A-cell uses colour B, and vice versa) — visible against any A/B palette, and the ✕ literally shows the colour that would land there if you overlaid. — **your decision**
-- Only the opacity is user-configurable (in the popover behind the **⊙** button), defaults to 100%; the colours and the symbols themselves are fixed. — **your decision**
+- Only the opacity is user-configurable (in the Settings popover behind the **⚙** button at the right of the toolbar), defaults to 100%; the colours and the symbols themselves are fixed. — **your decision**
 - **Lock invalid** toggle (off by default): silently reverts any paint/fill/invert write to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when the cell was already correctly coloured. Fixing an already-wrong cell still works. — **your decision**
 
 ## Labels
@@ -46,7 +46,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Round labels: innermost ring numbered 1, outermost = R. — **your decision**
 - Round placement: full mode → top-left corner cell of each ring; half/quarter → above the canvas, centred on column r. — **your decision**
 - Glyphs stay upright regardless of canvas rotation; positions follow the pattern's pan/zoom/rotation. — **your decision**
-- Toggleable via a switch in the highlight popover. — **your decision**
+- Toggleable via a switch in the Settings popover. — **your decision**
 
 ## View
 
