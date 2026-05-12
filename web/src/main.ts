@@ -210,12 +210,13 @@ function onEditChange() {
     // pattern back instead of permanently losing trimmed cells.
     const head: Restored | null = historyPeek();
     const { pattern, pixels } = applyEditSettings(head ?? undefined);
+    // Fit BEFORE commit so the render inside commit uses the new viewport.
+    fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
     store.commit(s => {
         s.pattern  = pattern;
         s.pixels   = pixels;
         s.symmetry = pruneUnavailableDiagonals(s.symmetry, pattern.canvasWidth, pattern.canvasHeight);
     });
-    fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
     refreshSymmetryUi();
 }
 // Light-dismiss commits the live-previewed state to history. Undo (Ctrl+Z) is
@@ -227,6 +228,11 @@ function onEditClose() {
 
 /* ── Undo / redo ─────────────────────────────────────────────────────────── */
 function applyRestored(r: Restored) {
+    // Refit only when canvas dims changed — paint-stroke undos preserve the
+    // user's manual zoom; dim-changing undos (Edit popover) snap to fit.
+    const dimsChanged = r.pattern.canvasWidth  !== store.state.pattern.canvasWidth
+                     || r.pattern.canvasHeight !== store.state.pattern.canvasHeight;
+    if (dimsChanged) fitToView(viewport.canvas, viewport.view, r.pattern, store.state.rotation);
     store.replace(
         { ...store.state, pattern: r.pattern, pixels: r.pixels, colorA: r.colorA, colorB: r.colorB },
         { persist: true },
@@ -235,7 +241,6 @@ function applyRestored(r: Restored) {
     (document.getElementById("color-b") as HTMLInputElement).value = r.colorB;
     ui.setColors(r.colorA, r.colorB);
     ui.syncEditInputs(r.pattern);
-    fitToView(viewport.canvas, viewport.view, r.pattern, store.state.rotation);
     refreshSymmetryUi();
 }
 function undo() { const r = historyUndo(); if (r) applyRestored(r); }
@@ -245,6 +250,9 @@ function redo() { const r = historyRedo(); if (r) applyRestored(r); }
 async function onSave() { await saveToFile(store.state); }
 async function onLoad() {
     const loaded = await loadFromFile(); if (!loaded) return;
+    // Fit BEFORE replace so the render inside replace uses the new viewport.
+    // `fitToView` also resets panX/Y to 0, so no separate reset needed.
+    fitToView(viewport.canvas, viewport.view, loaded.pattern, store.state.rotation);
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
           colorA: loaded.colorA, colorB: loaded.colorB },
@@ -254,8 +262,6 @@ async function onLoad() {
     (document.getElementById("color-b") as HTMLInputElement).value = loaded.colorB;
     ui.setColors(loaded.colorA, loaded.colorB);
     ui.syncEditInputs(loaded.pattern);
-    fitToView(viewport.canvas, viewport.view, loaded.pattern, store.state.rotation);
-    viewport.view.panX = 0; viewport.view.panY = 0;
     refreshSymmetryUi();
 }
 
@@ -410,8 +416,8 @@ if (saved) {
     render(viewport, ctx, rs, store);
 } else {
     const { pattern, pixels } = applyEditSettings();
-    store.commit(s => { s.pattern = pattern; s.pixels = pixels; });
     fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
+    store.commit(s => { s.pattern = pattern; s.pixels = pixels; });
     refreshSymmetryUi();
     historyReset(store.state);
     ui.setHistory(canUndo(), canRedo());
