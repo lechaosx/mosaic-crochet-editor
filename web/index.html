@@ -61,29 +61,12 @@
   <!-- ── Highlight settings popover ────────────────────────────────── -->
   <div id="hl-popover" popover>
     <div class="popover-row">
-      <span class="popover-label">Overlay</span>
-      <div id="swatch-hl-overlay" class="swatch swatch--small" tabindex="0" role="button" aria-label="Overlay colour">
-        <input type="color" id="hl-overlay-color" value="#0000ff" tabindex="-1">
-      </div>
-    </div>
-    <div class="popover-row">
-      <span class="popover-label">Invalid</span>
-      <div id="swatch-hl-invalid" class="swatch swatch--small" tabindex="0" role="button" aria-label="Invalid colour">
-        <input type="color" id="hl-invalid-color" value="#ff0000" tabindex="-1">
-      </div>
-    </div>
-    <div class="popover-row">
       <span class="popover-label">Opacity</span>
-      <input type="range" id="hl-opacity" value="50" min="0" max="100" aria-label="Highlight opacity">
+      <input type="range" id="hl-opacity" value="80" min="0" max="100" aria-label="Highlight opacity">
     </div>
     <label class="toggle popover-row">
       <span class="popover-label">Labels</span>
       <input type="checkbox" id="labels-on" checked>
-      <span class="toggle-track"></span>
-    </label>
-    <label class="toggle popover-row">
-      <span class="popover-label">Symbols</span>
-      <input type="checkbox" id="hl-symbols" checked>
       <span class="toggle-track"></span>
     </label>
     <label class="toggle popover-row" title="Block painting wrong colour on always-invalid cells (outermost row/ring, round corners). Fixing an already-wrong cell still works.">

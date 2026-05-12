@@ -42,7 +42,6 @@ export interface UICallbacks {
     onSym:             (k: SymKey) => void;
     onHighlightChange: () => void;
     onLabelsVisibleChange: () => void;
-    onHlSymbolsChange: () => void;
     onLockInvalidChange: () => void;
     onUndo:            () => void;
     onRedo:            () => void;
@@ -59,7 +58,6 @@ export interface UIHandle {
     setTool:            (t: Tool) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
-    setHighlights:      (overlay: string, invalid: string, opacity: number) => void;
     setSymmetry:        (direct: Set<SymKey>, closure: Set<SymKey>) => void;
     setDiagonalEnabled: (enabled: boolean) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
@@ -144,12 +142,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     /* ── Highlight popover ────────────────────────────────────────────── */
-    const hlPopover     = el("hl-popover");
-    const hlOverlayCol  = el<HTMLInputElement>("hl-overlay-color");
-    const hlInvalidCol  = el<HTMLInputElement>("hl-invalid-color");
-    const hlOpacity     = el<HTMLInputElement>("hl-opacity");
-    const swatchHlOver  = el("swatch-hl-overlay");
-    const swatchHlInv   = el("swatch-hl-invalid");
+    const hlPopover = el("hl-popover");
 
     el("btn-hl-toggle").addEventListener("click", e => {
         // Intercept the popovertarget toggle so we can position before showing.
@@ -158,22 +151,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         positionPopover(hlPopover, el("btn-hl-toggle"), "right");
         hlPopover.showPopover();
     });
-    swatchHlOver.addEventListener("click", () => hlOverlayCol.click());
-    swatchHlInv .addEventListener("click", () => hlInvalidCol.click());
-    hlOverlayCol.addEventListener("input", cb.onHighlightChange);
-    hlInvalidCol.addEventListener("input", cb.onHighlightChange);
-    hlOpacity   .addEventListener("input", cb.onHighlightChange);
+    el<HTMLInputElement>("hl-opacity")  .addEventListener("input",  cb.onHighlightChange);
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
-    el<HTMLInputElement>("hl-symbols")  .addEventListener("change", cb.onHlSymbolsChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
-
-    function setHighlights(overlay: string, invalid: string, opacity: number) {
-        hlOverlayCol.value = overlay;
-        hlInvalidCol.value = invalid;
-        hlOpacity.value    = String(opacity);
-        swatchHlOver.style.background = overlay;
-        swatchHlInv .style.background = invalid;
-    }
 
     /* ── Undo / redo / rotate ────────────────────────────────────────── */
     el("btn-undo")  .addEventListener("click", cb.onUndo);
@@ -348,7 +328,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setPrimary, setColors, setHighlights, setSymmetry, setDiagonalEnabled,
+        setTool, setPrimary, setColors, setSymmetry, setDiagonalEnabled,
         setHistory,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,

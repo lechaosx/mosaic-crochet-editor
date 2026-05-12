@@ -30,9 +30,9 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Highlights
 
-- Live overlay during drawing — blue for valid overlay positions, red for invalid placements. — **your decision**
-- Overlay/invalid colour and opacity are user-configurable, in a popover behind the **⊙** button. — **your decision** (configurability); **Claude's choice** (popover placement)
-- Rendered as ✕ symbols in the highlight colour by default; a toggle in the popover switches to a solid colour fill. — **your decision**
+- Live overlay during drawing: **✕** marks valid overlay positions, **!** marks invalid placements. — **your decision**
+- Glyphs are drawn in the *other* pixel colour (✕/! on an A-cell uses colour B, and vice versa) — visible against any A/B palette, and the ✕ literally shows the colour that would land there if you overlaid. — **your decision**
+- Only the opacity is user-configurable (in the popover behind the **⊙** button); the colours and the symbols themselves are fixed. — **your decision**
 - **Lock invalid** toggle (off by default): silently reverts any paint/fill/invert write to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when the cell was already correctly coloured. Fixing an already-wrong cell still works. — **your decision**
 
 ## Labels
