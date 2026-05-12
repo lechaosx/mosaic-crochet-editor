@@ -43,7 +43,7 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 ### Patterns
 
-Click **New** to create a fresh pattern. Two modes:
+Click **Pattern** to open the dimensions popover. Two modes:
 
 - **Row** — a rectangular grid worked row by row. Set width and height.
 - **Round** — concentric rounds worked from the outside in. Set inner width / height / rounds, plus a sub-mode:
@@ -51,23 +51,24 @@ Click **New** to create a fresh pattern. Two modes:
   - **Half** — bottom half only; the pattern folds at the inner-hole boundary.
   - **Quarter** — bottom-left quarter; folds at both inner-hole boundaries.
 
-Settings update the canvas live. Closing the popover keeps your changes. If you have unsaved work, you'll be asked to discard or cancel first.
+Settings update the canvas live and the **Wipe** toggle controls whether existing pixels are preserved across the change. Light-dismissing the popover commits your changes; **Ctrl+Z** reverts.
 
 ### Drawing
 
-Four tools, in the toolbar's tools group:
+Five tools, in the toolbar's tools group:
 
 - **Pencil** — paint the active colour.
 - **Fill** — flood-fill a connected region.
-- **Eraser** — restore pixels to the underlying alternating colour.
+- **Eraser** — left click restores pixels to the underlying alternating colour; right click paints the *opposite* (the exact inverse).
+- **Overlay** — click where you want a ✕; the inward neighbour is painted so the highlight pass draws a ✕ at the clicked cell. Right-click clears it. No-op on round-mode corners (no overlay stitch fits there).
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
 
-All four respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
+All five respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
 
 **Mouse:** left click paints with the primary colour, right click paints with the secondary.
 **Touch / pen:** single-finger drag paints with the primary colour. Selecting the secondary swatch (tap it, or press **2**) paints with the secondary instead.
 
-A blue overlay marks valid overlay-stitch positions; red marks invalid placements. Both update as you draw.
+A ✕ marks valid overlay-stitch positions; a ! marks invalid placements. Both are drawn in the *opposite* pixel colour so they stay visible against either palette, and they update as you draw.
 
 ### Symmetry
 
@@ -81,7 +82,7 @@ Two swatches: primary (left) and secondary (right). Click to select; double-clic
 
 ### Highlights
 
-The **⊙** button opens a popover where you can change the overlay colour, the invalid-placement colour, and the highlight opacity.
+The **⊙** button opens a popover with the highlight opacity slider (defaults to 100%), a labels toggle, and a **Lock invalid** toggle that prevents accidental writes to always-invalid cells (top row, outermost ring, round-mode diagonals).
 
 ### Zoom, pan, rotation
 
@@ -101,7 +102,7 @@ Tool, colour, symmetry, rotation, and pixel state auto-save to `localStorage` an
 
 | Action | Key |
 |---|---|
-| Pencil / Fill / Eraser / Invert | **P** / **F** / **E** / **I** |
+| Pencil / Fill / Eraser / Overlay / Invert | **P** / **F** / **E** / **O** / **I** |
 | Vertical / Horizontal / Central symmetry | **V** / **H** / **C** |
 | Diagonal ╲ / Anti-diagonal ╱ | **D** / **A** |
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |

@@ -126,20 +126,39 @@ function overlayPreserved(
 }
 
 
-// A cell is *always* invalid if there's no way for it to be correctly placed —
-// it has nowhere to overlay against. The same conditions the Rust highlight
-// computation marks as INVALID regardless of pixel value:
-//   • row mode — outermost rows (y == 0 or y == H-1)
-//   • round mode — outermost ring (rfe == 0) or any diagonal pixel (dx == dy)
-// Hole positions don't count (mask irrelevant inside the hole).
+// A cell is *always* invalid if there's no way for it to host a valid overlay
+// — it has nowhere outward for the X to land. Mirrors the Rust highlight rules:
+//   • row mode — top row only (y == 0). The bottom row (foundation) has no
+//     inner row to clash with, so any colour there is a *valid* overlay onto
+//     the row above.
+//   • round mode — outermost ring (rfe == 0) or any diagonal pixel (dx == dy).
+// Hole positions don't count.
 export function isAlwaysInvalid(s: PatternState, x: number, y: number): boolean {
-    if (s.mode === "row") return y === 0 || y === s.canvasHeight - 1;
+    if (s.mode === "row") return y === 0;
     const vx = x + s.offsetX, vy = y + s.offsetY;
     const dx = Math.min(vx, s.virtualWidth  - 1 - vx);
     const dy = Math.min(vy, s.virtualHeight - 1 - vy);
     const rfe = Math.min(dx, dy);
     if (rfe >= s.rounds) return false;
     return rfe === 0 || dx === dy;
+}
+
+// The cells one step *outward* from (x, y) — i.e. where the highlight marker
+// for a wrong cell at (x, y) gets drawn. Returns 1 outward for non-corner
+// cells; for round-mode corners (dx == dy) it returns 2 — one along each
+// perpendicular axis — because a corner's overlay attaches to two adjacent
+// outer cells. For boundary cells the returned coords land outside the
+// canvas; the render's matrix transform places the glyph in the gutter.
+export function outwardCells(s: PatternState, x: number, y: number): { x: number; y: number }[] {
+    if (s.mode === "row") return [{ x, y: y - 1 }];
+    const vx = x + s.offsetX, vy = y + s.offsetY;
+    const dx = Math.min(vx, s.virtualWidth  - 1 - vx);
+    const dy = Math.min(vy, s.virtualHeight - 1 - vy);
+    const sx = vx * 2 >= s.virtualWidth  ? -1 : 1;
+    const sy = vy * 2 >= s.virtualHeight ? -1 : 1;
+    if (dx === dy) return [{ x: x - sx, y }, { x, y: y - sy }];
+    if (dx < dy)   return [{ x: x - sx, y }];
+    return [{ x, y: y - sy }];
 }
 
 // The "should-be" colour for each cell — same array `initialize_*_pattern`

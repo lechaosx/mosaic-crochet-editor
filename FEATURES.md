@@ -13,7 +13,9 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Drawing
 
-- Tools: Pencil, Fill, Eraser, Invert. — **your decision**
+- Tools: Pencil, Fill, Eraser, Overlay, Invert. — **your decision**
+- **Eraser** (left = restore natural; right = paint *opposite* of natural, the exact inverse). — **your decision**
+- **Overlay** tool: click *where you want a ✕*; the inward neighbour is painted with the overlay colour so the highlight pass renders a ✕ at the clicked cell. Right-click clears the ✕ by restoring that neighbour's natural colour. Symmetry mirrors the ✕ position (each orbit cell of the click gets its own ✕ with the correct per-cell colour). No-op on round-mode corners (no overlay stitch geometry exists there). — **your decision**
 - Painting is blocked on inner-hole (transparent) pixels. — **Claude's choice**
 - Strokes that change nothing leave no history entry and don't dirty the pattern. — **Claude's choice**
 - Eraser restores each pixel to its own natural alternating colour, not the click point's. Works under symmetry. — **your decision** (behaviour); **Claude's choice** (per-orbit-cell fix)
@@ -30,9 +32,12 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Highlights
 
-- Live overlay during drawing: **✕** marks valid overlay positions, **!** marks invalid placements. — **your decision**
+- Live overlay during drawing: **✕** marks valid overlay positions, **!** marks invalid placements. Both render on the overlay layer (one cell outward from the wrong pixel) — so the wrong cell stays visually clean and the marker explains "what's wrong about the overlay above." — **your decision**
+- ! markers for boundary cells (top row / outermost ring) render *outside* the canvas in the gutter, visually consistent with the rest. Right-clicking the gutter ! with the Overlay tool clears it. — **your decision**
+- Round-mode corners (diagonal cells) show **two** ! markers — one on each perpendicular outward side — because the corner has no single outward axis. — **your decision**
+- Foundation row (bottom) is overlay-able: there's no inner row to clash with, so any colour there is a valid overlay onto the row above. — **your decision**
 - Glyphs are drawn in the *other* pixel colour (✕/! on an A-cell uses colour B, and vice versa) — visible against any A/B palette, and the ✕ literally shows the colour that would land there if you overlaid. — **your decision**
-- Only the opacity is user-configurable (in the popover behind the **⊙** button); the colours and the symbols themselves are fixed. — **your decision**
+- Only the opacity is user-configurable (in the popover behind the **⊙** button), defaults to 100%; the colours and the symbols themselves are fixed. — **your decision**
 - **Lock invalid** toggle (off by default): silently reverts any paint/fill/invert write to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when the cell was already correctly coloured. Fixing an already-wrong cell still works. — **your decision**
 
 ## Labels

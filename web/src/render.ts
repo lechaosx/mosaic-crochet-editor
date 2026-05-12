@@ -1,4 +1,5 @@
 import { PatternState, RowState, RoundState, SymKey } from "./types";
+import { outwardCells } from "./pattern";
 import { computeClosure, diagonalsAvailable, directlyActive } from "./symmetry";
 
 export const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -18,7 +19,7 @@ export const COLORS: (string | null)[] = [
 // cells, white on dark — so they're visible against any colour pair the user
 // picks, without needing dedicated highlight colour pickers. `opacity` is the
 // only user-tunable.
-let highlightOpacity = 0.8;
+let highlightOpacity = 1.0;
 
 export const view = {
     panX: 0,        // CSS-px offset of pattern centre from canvas centre
@@ -233,7 +234,7 @@ function rerender() {
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderHighlightSymbols(W, H, pixels, highlights);
+    renderHighlightSymbols(state, pixels, highlights);
 
     renderSymmetryGuides(state);
     if (labelsVisible) {
@@ -243,64 +244,109 @@ function rerender() {
     if (topIndicatorOpacity > 0.001) renderTopIndicator(state);
 }
 
-// Highlight glyphs use the *opposite* pixel colour (A on B-cells, B on
-// A-cells) — guaranteed visible against either palette choice and visually
-// meaningful for overlays (the ✕ literally shows the colour that would land
-// there if you overlaid). ✕ = overlay (state 3), ! = invalid (state 4).
-// Grouped by (cell colour → glyph colour) so we batch one path per group.
-function renderHighlightSymbols(W: number, H: number, pixels: Uint8Array, highlights: Uint8Array) {
-    const groups: { color: string; pixVal: number }[] = [
-        { color: COLORS[2] ?? "#fff", pixVal: 1 },   // A-cell → draw with B
-        { color: COLORS[1] ?? "#000", pixVal: 2 },   // B-cell → draw with A
+// ✕ for overlay (state 3) — drawn in pattern coords (rotates with canvas; the
+//   shape is symmetric enough that this doesn't matter). Stroke colour is the
+//   *opposite* cell colour (A on B-cells, B on A-cells), so the glyph is
+//   visible against either palette and literally shows the colour that would
+//   land there if the overlay were applied.
+//
+// ! for invalid (state 4) — drawn in *screen* coords (always points down
+//   regardless of canvas rotation; like axis labels). Stroke + dot in the
+//   opposite cell colour, same colour as ✕ would use.
+//
+// Round-mode corners have *two* outward cells (one along each perpendicular
+// axis); the glyph is drawn on both. Each outward gets its own contrast
+// colour from its own pixel, so corner glyphs may differ in colour between
+// the two sides.
+function renderHighlightSymbols(state: PatternState, pixels: Uint8Array, highlights: Uint8Array) {
+    const W = state.canvasWidth, H = state.canvasHeight;
+    const A = COLORS[1] ?? "#000";
+    const B = COLORS[2] ?? "#fff";
+
+    // Glyph colour is the opposite of the *outward* cell's colour where the
+    // glyph actually lands — not the wrong cell's. Otherwise, painting the
+    // outward cell turns the glyph the same colour as its background and it
+    // vanishes. For out-of-canvas outward (gutter), fall back to the wrong
+    // cell's own pixel value.
+    function outwardPixel(ox: number, oy: number, wx: number, wy: number): number {
+        if (ox >= 0 && ox < W && oy >= 0 && oy < H) return pixels[oy * W + ox];
+        return pixels[wy * W + wx];
+    }
+    const groups: { display: 1 | 2; glyph: string }[] = [
+        { display: 1, glyph: B },   // outward is A → glyph B
+        { display: 2, glyph: A },   // outward is B → glyph A
     ];
 
     ctx.save();
     ctx.globalAlpha = highlightOpacity;
+
+    // ── ✕ overlays (state 3) — pattern coords, drawn at outward ──────────
     ctx.lineCap  = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.16;
-
-    // ✕ — overlay (highlight state 3)
-    for (const { color, pixVal } of groups) {
-        ctx.strokeStyle = color;
+    for (const { display, glyph } of groups) {
+        ctx.strokeStyle = glyph;
         ctx.beginPath();
         for (let y = 0; y < H; y++) {
             const row = y * W;
             for (let x = 0; x < W; x++) {
-                if (pixels[row + x] !== pixVal || highlights[row + x] !== 3) continue;
-                ctx.moveTo(x + 0.24, y + 0.24); ctx.lineTo(x + 0.76, y + 0.76);
-                ctx.moveTo(x + 0.76, y + 0.24); ctx.lineTo(x + 0.24, y + 0.76);
+                if (highlights[row + x] !== 3) continue;
+                for (const o of outwardCells(state, x, y)) {
+                    if (outwardPixel(o.x, o.y, x, y) !== display) continue;
+                    ctx.moveTo(o.x + 0.24, o.y + 0.24); ctx.lineTo(o.x + 0.76, o.y + 0.76);
+                    ctx.moveTo(o.x + 0.76, o.y + 0.24); ctx.lineTo(o.x + 0.24, o.y + 0.76);
+                }
             }
         }
         ctx.stroke();
     }
 
-    // ! — invalid (highlight state 4). Vertical stroke + filled dot.
-    for (const { color, pixVal } of groups) {
-        ctx.strokeStyle = color;
+    // ── ! invalid (state 4) — screen coords, drawn at outward ────────────
+    const m = buildMatrix(state);
+    const cellPx  = view.zoom * dpr;
+    const stemTop = cellPx * 0.28;
+    const stemBot = cellPx * 0.08;
+    const dotR    = cellPx * 0.09;
+    const dotY    = cellPx * 0.28;
+
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.lineWidth = cellPx * 0.16;
+    for (const { display, glyph } of groups) {
+        ctx.strokeStyle = glyph;
         ctx.beginPath();
         for (let y = 0; y < H; y++) {
             const row = y * W;
             for (let x = 0; x < W; x++) {
-                if (pixels[row + x] !== pixVal || highlights[row + x] !== 4) continue;
-                ctx.moveTo(x + 0.5, y + 0.22); ctx.lineTo(x + 0.5, y + 0.58);
+                if (highlights[row + x] !== 4) continue;
+                for (const o of outwardCells(state, x, y)) {
+                    if (outwardPixel(o.x, o.y, x, y) !== display) continue;
+                    const p = m.transformPoint({ x: o.x + 0.5, y: o.y + 0.5 });
+                    ctx.moveTo(p.x, p.y - stemTop);
+                    ctx.lineTo(p.x, p.y + stemBot);
+                }
             }
         }
         ctx.stroke();
     }
-    for (const { color, pixVal } of groups) {
-        ctx.fillStyle = color;
+    for (const { display, glyph } of groups) {
+        ctx.fillStyle = glyph;
         ctx.beginPath();
         for (let y = 0; y < H; y++) {
             const row = y * W;
             for (let x = 0; x < W; x++) {
-                if (pixels[row + x] !== pixVal || highlights[row + x] !== 4) continue;
-                ctx.moveTo(x + 0.5 + 0.09, y + 0.78);
-                ctx.arc(x + 0.5, y + 0.78, 0.09, 0, Math.PI * 2);
+                if (highlights[row + x] !== 4) continue;
+                for (const o of outwardCells(state, x, y)) {
+                    if (outwardPixel(o.x, o.y, x, y) !== display) continue;
+                    const p = m.transformPoint({ x: o.x + 0.5, y: o.y + 0.5 });
+                    ctx.moveTo(p.x + dotR, p.y + dotY);
+                    ctx.arc(p.x, p.y + dotY, dotR, 0, Math.PI * 2);
+                }
             }
         }
         ctx.fill();
     }
+    ctx.restore();
 
     ctx.restore();
 }

@@ -1,4 +1,4 @@
-import { paint_pixel, flood_fill, erase_pixel_row, erase_pixel_round,
+import { paint_pixel, flood_fill,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool, PatternState } from "./types";
 import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightOpacity } from "./render";
@@ -59,8 +59,13 @@ function paintAt(clientX: number, clientY: number) {
     if (!state || !pixels) return;
     const { x, y } = screenToPattern(state, clientX, clientY);
     const { canvasWidth: W, canvasHeight: H } = state;
-    if (x < 0 || x >= W || y < 0 || y >= H) return;
-    if (pixels[y * W + x] === 0) return;
+    const inCanvas = x >= 0 && x < W && y >= 0 && y < H;
+
+    // The overlay tool is the only one that handles clicks in the gutter (just
+    // outside the canvas, where boundary ! markers render). Everything else
+    // wants an in-canvas, non-hole pixel.
+    if (!inCanvas && activeTool !== "overlay") return;
+    if (inCanvas && pixels[y * W + x] === 0) return;
 
     const mask = getSymmetryMask(W, H);
     const before = pixels;
@@ -68,11 +73,51 @@ function paintAt(clientX: number, clientY: number) {
     if (activeTool === "fill") {
         next = flood_fill(pixels, W, H, x, y, strokeColor, mask);
     } else if (activeTool === "eraser") {
-        if (state.mode === "row") {
-            next = erase_pixel_row(pixels, W, H, x, y, mask);
+        // In-place: left click → paint natural (erase to baseline);
+        //           right click → paint *opposite* of natural (exact opposite of erase).
+        const natural = naturalPatternFor(state);
+        const rightClick = strokeColor !== primaryColor;
+        next = pixels.slice();
+        for (const idx of symmetric_orbit_indices(W, H, x, y, mask)) {
+            if (next[idx] === 0) continue;
+            const nat = natural[idx];
+            next[idx] = rightClick ? (nat === 1 ? 2 : 1) : nat;
+        }
+    } else if (activeTool === "overlay") {
+        // Shifts inward — paint the inner neighbour so the ✕ rendered by the
+        // highlight pass lands on the *clicked* cell. Right click paints
+        // natural there instead, erasing the X.
+        //
+        // Out-of-canvas (gutter) clicks are handled too, but only for
+        // right-click (clear): the inward neighbour of a gutter cell is the
+        // boundary cell whose ! is rendered there, so this is how you remove
+        // a ! you can see hovering outside the pattern.
+        const natural = naturalPatternFor(state);
+        const rightClick = strokeColor !== primaryColor;
+        next = pixels.slice();
+
+        if (inCanvas) {
+            for (const idx of symmetric_orbit_indices(W, H, x, y, mask)) {
+                const oy = Math.floor(idx / W), ox = idx % W;
+                const inner = inwardCell(state, ox, oy);
+                if (!inner) continue;
+                const ti = inner.y * W + inner.x;
+                if (next[ti] === 0) continue;
+                const nat = natural[ti];
+                next[ti] = rightClick ? nat : (nat === 1 ? 2 : 1);
+            }
+        } else if (rightClick) {
+            const inner = inwardCell(state, x, y);
+            if (!inner) return;
+            // Mirror via the boundary cell itself — its orbit covers all the
+            // symmetric boundary cells (whose !s sit symmetrically in the gutter).
+            for (const idx of symmetric_orbit_indices(W, H, inner.x, inner.y, mask)) {
+                const oy = Math.floor(idx / W), ox = idx % W;
+                if (next[oy * W + ox] === 0) continue;
+                next[oy * W + ox] = natural[oy * W + ox];
+            }
         } else {
-            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
-            next = erase_pixel_round(pixels, W, H, x, y, vw, vh, ox, oy, rounds, mask);
+            return;
         }
     } else if (activeTool === "invert") {
         next = pixels.slice();
@@ -92,6 +137,33 @@ function paintAt(clientX: number, clientY: number) {
     recomputeHighlights();
     updateStatus(highlights, x, y);
     reRender();
+}
+
+// For the overlay tool: from cell (x, y), pick the *inward* neighbour — the
+// cell that, when painted with the wrong colour, makes the highlight pass
+// render a ✕ at (x, y). For row mode that's just (x, y+1). For round mode it
+// mirrors compute_round_highlights's `step`: which side of the ring (x, y)
+// sits on decides the direction toward the centre. Returns null when no valid
+// inward cell exists (innermost ring, or out of bounds), or when (x, y) is a
+// round-mode corner (distX == distY) — corners can't host an overlay stitch,
+// so the tool is a no-op there. Gutter cells outside the canvas where distX
+// or distY is negative are still resolved (used for clearing gutter-rendered
+// ! markers).
+function inwardCell(s: PatternState, x: number, y: number): { x: number; y: number } | null {
+    if (s.mode === "row") {
+        return y + 1 < s.canvasHeight ? { x, y: y + 1 } : null;
+    }
+    const vx = x + s.offsetX, vy = y + s.offsetY;
+    const distX = Math.min(vx, s.virtualWidth  - 1 - vx);
+    const distY = Math.min(vy, s.virtualHeight - 1 - vy);
+    const inCanvas = x >= 0 && x < s.canvasWidth && y >= 0 && y < s.canvasHeight;
+    if (inCanvas && distX === distY) return null;
+    let sx = 0, sy = 0;
+    if (distX < distY) sx = vx * 2 >= s.virtualWidth  ? -1 : 1;
+    else               sy = vy * 2 >= s.virtualHeight ? -1 : 1;
+    const nx = x + sx, ny = y + sy;
+    if (nx < 0 || nx >= s.canvasWidth || ny < 0 || ny >= s.canvasHeight) return null;
+    return { x: nx, y: ny };
 }
 
 // Revert any always-invalid cell that the tool would have moved away from its
@@ -276,6 +348,7 @@ document.addEventListener("keydown", e => {
     if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
     else if (k === "e") setTool("eraser");
+    else if (k === "o") setTool("overlay");
     else if (k === "i") setTool("invert");
     // symmetry axes
     else if (k === "v") toggleSym("V");

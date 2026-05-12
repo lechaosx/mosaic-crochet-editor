@@ -83,10 +83,11 @@ export interface ExportDialog {
 export function mountUI(cb: UICallbacks): UIHandle {
     /* ── Tool buttons ─────────────────────────────────────────────────── */
     const toolButtons: Record<Tool, HTMLButtonElement> = {
-        pencil: el("tool-pencil"),
-        fill:   el("tool-fill"),
-        eraser: el("tool-eraser"),
-        invert: el("tool-invert"),
+        pencil:  el("tool-pencil"),
+        fill:    el("tool-fill"),
+        eraser:  el("tool-eraser"),
+        overlay: el("tool-overlay"),
+        invert:  el("tool-invert"),
     };
     (Object.keys(toolButtons) as Tool[]).forEach(t =>
         toolButtons[t].addEventListener("click", () => cb.onTool(t))
