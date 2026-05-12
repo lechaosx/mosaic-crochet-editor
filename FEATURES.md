@@ -36,8 +36,11 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - ! markers for boundary cells (top row / outermost ring) render *outside* the canvas in the gutter, visually consistent with the rest. Right-clicking the gutter ! with the Overlay tool clears it. — **your decision**
 - Round-mode corners (diagonal cells) show **two** ! markers — one on each perpendicular outward side — because the corner has no single outward axis. — **your decision**
 - Foundation row (bottom) is overlay-able: there's no inner row to clash with, so any colour there is a valid overlay onto the row above. — **your decision**
-- Glyphs are drawn in the *other* pixel colour (✕/! on an A-cell uses colour B, and vice versa) — visible against any A/B palette, and the ✕ literally shows the colour that would land there if you overlaid. — **your decision**
-- Only the opacity is user-configurable (in the Settings popover behind the **⚙** button at the right of the toolbar), defaults to 100%; the colours and the symbols themselves are fixed. — **your decision**
+- **✕** is drawn in the *other* pixel colour (auto-contrast — on an A-cell it uses colour B, and vice versa). The ✕ literally shows the colour that would land there if you overlaid. — **your decision**
+- **!** is drawn in a *third palette colour* computed at render time: the hue around the colour wheel that maximises the minimum hue-distance to both user colours, at moderate saturation/lightness (HSL 65% / 50%). The marker pops against any palette without ever blending in (auto-contrast can collide with high-saturation pixel colours; a third colour can't). — **your decision**
+- Two sliders in the Settings popover (behind the **⚙** button):
+  - **Highlight opacity** (default 100%) — dims both ✕ and !.
+  - **Invalid marker intensity** (default 65%) — adjusts only the ! marker's HSL saturation, full range 0–100%. Hue and lightness stay algorithmic; the user can tune the "vibe" without bypassing the palette-aware hue choice. — **your decision**
 - **Lock invalid** toggle (off by default): silently reverts any paint/fill/invert write to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when the cell was already correctly coloured. Fixing an already-wrong cell still works. — **your decision**
 
 ## Labels

@@ -75,6 +75,9 @@ export interface RendererState {
     // Index 1/2 refreshed from store at the top of `render`. Index 0 is the
     // hole sentinel — render loops skip; `null` makes accidental reads fail loud.
     colors: (string | null)[];
+    // Third palette colour for the ! invalid marker, chosen at render time
+    // to contrast nicely with both user colours. See `chooseInvalidColor`.
+    invalidColor: string;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
 }
@@ -92,9 +95,60 @@ export function makeRendererState(): RendererState {
         lastFrameTime:  0,
         lastStore:      null,
         colors:         [null, "#000000", "#ffffff"],
+        invalidColor:   "hsl(0, 70%, 50%)",
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
     };
+}
+
+// ── Third-colour picker for ! marker ───────────────────────────────────────
+// Walk the hue wheel; pick the hue whose minimum hue-distance to both user
+// colours is maximised. Hue is fully algorithmic — never directly user-
+// configurable, so changing palette colours auto-updates the marker.
+// `intensity` (0..100) is the user's "vibe" knob: it drives HSL saturation
+// directly (0% → grey, 100% → max). Default 65 is sensible for most palettes.
+// Grayscale inputs have no meaningful hue, so they contribute nothing to the
+// constraint — their `Infinity` is filtered by `Math.min`. If both inputs
+// are grayscale, every hue is equally good; we default to red (conventional
+// warning colour).
+function chooseInvalidColor(a: string, b: string, intensity: number): string {
+    const sat = Math.max(0, Math.min(100, intensity));
+    const { h: ha, s: sa } = hexToHsl(a);
+    const { h: hb, s: sb } = hexToHsl(b);
+    const aIsGray = sa < 0.1;
+    const bIsGray = sb < 0.1;
+    if (aIsGray && bIsGray) return `hsl(0, ${sat}%, 50%)`;
+    let bestH = 0, bestDist = -1;
+    for (let h = 0; h < 360; h += 3) {
+        const da = aIsGray ? Infinity : hueDist(h, ha);
+        const db = bIsGray ? Infinity : hueDist(h, hb);
+        const d = Math.min(da, db);
+        if (d > bestDist) { bestDist = d; bestH = h; }
+    }
+    return `hsl(${bestH}, ${sat}%, 50%)`;
+}
+
+function hueDist(h1: number, h2: number): number {
+    const d = Math.abs(h1 - h2);
+    return Math.min(d, 360 - d);
+}
+
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
+    const r = parseInt(hex.slice(1, 3), 16) / 255;
+    const g = parseInt(hex.slice(3, 5), 16) / 255;
+    const b = parseInt(hex.slice(5, 7), 16) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    let h = 0, s = 0;
+    if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if      (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+        else if (max === g) h = ((b - r) / d + 2) * 60;
+        else                h = ((r - g) / d + 4) * 60;
+    }
+    return { h, s, l };
 }
 
 // ── Pure math ──────────────────────────────────────────────────────────────
@@ -221,9 +275,10 @@ function updateFavicon(
 
 // ── Top-level entry ────────────────────────────────────────────────────────
 export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
-    rs.lastStore  = store;
-    rs.colors[1]  = store.state.colorA;
-    rs.colors[2]  = store.state.colorB;
+    rs.lastStore    = store;
+    rs.colors[1]    = store.state.colorA;
+    rs.colors[2]    = store.state.colorB;
+    rs.invalidColor = chooseInvalidColor(store.state.colorA, store.state.colorB, store.state.invalidIntensity);
     syncRotation(rs, store.state.rotation, vp, ctx);
     updateFavicon(rs.faviconCanvas, rs.faviconCtx, rs.colors, store.state.pattern, store.state.pixels);
     rerender(vp, ctx, rs, store);
@@ -262,7 +317,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderHighlightSymbols(ctx, view, dpr, rs.colors, pattern, pixels, plan, m, hlOpacity / 100);
+    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.invalidColor, pattern, pixels, plan, m, hlOpacity / 100);
     renderSymmetryGuides(ctx, view, dpr, pattern, symmetry);
     if (labelsVisible) {
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
@@ -272,16 +327,19 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 }
 
 // ── Drawing helpers ────────────────────────────────────────────────────────
-// ✕ for VALID overlay — pattern coords (rotates with canvas; ✕ is rotation-
-//   symmetric enough that this doesn't matter). Stroke is the *opposite* cell
-//   colour so the glyph is visible against either palette.
+// ✕ for VALID overlay — pattern coords, auto-contrast (opposite of the cell
+//   colour the glyph lands on, so the glyph is readable against either
+//   palette).
 // ! for INVALID — screen coords (always points down regardless of canvas
-//   rotation; like axis labels). Same opposite-colour rule.
-// Round corners produce two plan records sharing the wrong cell with
-// perpendicular directions; each draws independently so they can differ in
-// colour between the two sides.
+//   rotation, like axis labels). Drawn in `invalidColor` — a third palette
+//   colour chosen at render time to contrast with both user colours so the
+//   marker reads against any cell underneath.
+// Both ✕ and ! are dimmable via the user's opacity slider. Round-mode corners
+// produce two plan records sharing the wrong cell with perpendicular
+// directions; each draws independently.
 function renderHighlightSymbols(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number, colors: (string | null)[],
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    colors: (string | null)[], invalidColor: string,
     pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
     m: DOMMatrix, opacity: number,
 ) {
@@ -289,8 +347,8 @@ function renderHighlightSymbols(
     const A = colors[1] ?? "#000";
     const B = colors[2] ?? "#fff";
 
-    // Glyph colour is the opposite of the *outward* cell's colour where the
-    // glyph actually lands. For gutter (out-of-canvas) outward cells, fall
+    // Glyph colour for ✕ is the opposite of the *outward* cell's colour where
+    // the glyph actually lands. For gutter (out-of-canvas) outward cells, fall
     // back to the wrong cell's own pixel value.
     function outwardPixel(ox: number, oy: number, wx: number, wy: number): number {
         if (ox >= 0 && ox < W && oy >= 0 && oy < H) return pixels[oy * W + ox];
@@ -304,6 +362,7 @@ function renderHighlightSymbols(
     ctx.save();
     ctx.globalAlpha = opacity;
 
+    // ── ✕ overlays — pattern coords ─────────────────────────────────────────
     ctx.lineCap  = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.16;
@@ -322,6 +381,7 @@ function renderHighlightSymbols(
         ctx.stroke();
     }
 
+    // ── ! invalid — screen coords ───────────────────────────────────────────
     const cellPx  = view.zoom * dpr;
     const stemTop = cellPx * 0.28;
     const stemBot = cellPx * 0.08;
@@ -330,38 +390,35 @@ function renderHighlightSymbols(
 
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.lineWidth = cellPx * 0.16;
-    for (const { display, glyph } of groups) {
-        ctx.strokeStyle = glyph;
-        ctx.beginPath();
-        for (let i = 0; i < plan.length; i += 4) {
-            if (plan[i] !== PlanType.Invalid) continue;
-            const wx = plan[i+2], wy = plan[i+3];
-            const [dx, dy] = DIR_VECTORS[plan[i+1]];
-            const ox = wx + dx, oy = wy + dy;
-            if (outwardPixel(ox, oy, wx, wy) !== display) continue;
-            const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
-            ctx.moveTo(p.x, p.y - stemTop);
-            ctx.lineTo(p.x, p.y + stemBot);
-        }
-        ctx.stroke();
+
+    ctx.strokeStyle = invalidColor;
+    ctx.lineWidth   = cellPx * 0.16;
+    ctx.beginPath();
+    for (let i = 0; i < plan.length; i += 4) {
+        if (plan[i] !== PlanType.Invalid) continue;
+        const wx = plan[i+2], wy = plan[i+3];
+        const [dx, dy] = DIR_VECTORS[plan[i+1]];
+        const ox = wx + dx, oy = wy + dy;
+        const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
+        ctx.moveTo(p.x, p.y - stemTop);
+        ctx.lineTo(p.x, p.y + stemBot);
     }
-    for (const { display, glyph } of groups) {
-        ctx.fillStyle = glyph;
-        ctx.beginPath();
-        for (let i = 0; i < plan.length; i += 4) {
-            if (plan[i] !== PlanType.Invalid) continue;
-            const wx = plan[i+2], wy = plan[i+3];
-            const [dx, dy] = DIR_VECTORS[plan[i+1]];
-            const ox = wx + dx, oy = wy + dy;
-            if (outwardPixel(ox, oy, wx, wy) !== display) continue;
-            const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
-            ctx.moveTo(p.x + dotR, p.y + dotY);
-            ctx.arc(p.x, p.y + dotY, dotR, 0, Math.PI * 2);
-        }
-        ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = invalidColor;
+    ctx.beginPath();
+    for (let i = 0; i < plan.length; i += 4) {
+        if (plan[i] !== PlanType.Invalid) continue;
+        const wx = plan[i+2], wy = plan[i+3];
+        const [dx, dy] = DIR_VECTORS[plan[i+1]];
+        const ox = wx + dx, oy = wy + dy;
+        const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
+        ctx.moveTo(p.x + dotR, p.y + dotY);
+        ctx.arc(p.x, p.y + dotY, dotR, 0, Math.PI * 2);
     }
+    ctx.fill();
     ctx.restore();
+
     ctx.restore();
 }
 

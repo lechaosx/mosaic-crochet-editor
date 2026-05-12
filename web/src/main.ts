@@ -33,11 +33,12 @@ function defaultSession(): SessionState {
         colorB:        "#ffffff",
         activeTool:    "pencil",
         primaryColor:  1,
-        symmetry:      new Set<SymKey>(),
-        hlOpacity:     100,
-        labelsVisible: true,
-        lockInvalid:   false,
-        rotation:      0,
+        symmetry:        new Set<SymKey>(),
+        hlOpacity:        100,
+        invalidIntensity: 65,
+        labelsVisible:   true,
+        lockInvalid:     false,
+        rotation:        0,
     };
 }
 
@@ -180,6 +181,10 @@ function onHlOpacityInput() {
     const v = parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
     store.commit(s => { s.hlOpacity = v; }, { recompute: false });
 }
+function onInvalidIntensityInput() {
+    const v = parseInt((document.getElementById("invalid-intensity") as HTMLInputElement).value);
+    store.commit(s => { s.invalidIntensity = v; }, { recompute: false });
+}
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
     store.commit(s => { s.labelsVisible = v; }, { recompute: false });
@@ -306,8 +311,9 @@ const ui: UIHandle = mountUI({
     onColorChange:  onColorInput,
     onColorCommit,
     onSym: toggleSym,
-    onHighlightChange:     onHlOpacityInput,
-    onLabelsVisibleChange: onLabelsToggle,
+    onHighlightChange:         onHlOpacityInput,
+    onInvalidIntensityChange:  onInvalidIntensityInput,
+    onLabelsVisibleChange:     onLabelsToggle,
     onLockInvalidChange:   onLockInvalidToggle,
     onUndo: undo,
     onRedo: redo,
@@ -384,8 +390,9 @@ document.addEventListener("keydown", e => {
 function syncDomInputs(s: Readonly<SessionState>) {
     (document.getElementById("color-a") as HTMLInputElement).value = s.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = s.colorB;
-    (document.getElementById("hl-opacity")   as HTMLInputElement).value   = String(s.hlOpacity);
-    (document.getElementById("labels-on")    as HTMLInputElement).checked = s.labelsVisible;
+    (document.getElementById("hl-opacity")         as HTMLInputElement).value   = String(s.hlOpacity);
+    (document.getElementById("invalid-intensity")  as HTMLInputElement).value   = String(s.invalidIntensity);
+    (document.getElementById("labels-on")          as HTMLInputElement).checked = s.labelsVisible;
     (document.getElementById("lock-invalid") as HTMLInputElement).checked = s.lockInvalid;
 }
 

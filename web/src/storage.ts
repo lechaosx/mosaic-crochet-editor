@@ -63,18 +63,19 @@ function unpackPixelsV1(old: number[]): Uint8Array {
 // ── localStorage (session persistence) ───────────────────────────────────────
 
 interface LocalSaveV2 {
-    version:        2;
-    state:          PatternState;
-    pixels:         string;   // packed
-    colorA:         string;
-    colorB:         string;
-    activeTool:     string;
-    primaryColor:   number;
-    symmetry:       string[];
-    hlOpacity:      number;
-    labelsVisible:  boolean;
-    lockInvalid:    boolean;
-    canvasRotation: number;
+    version:         2;
+    state:           PatternState;
+    pixels:          string;   // packed
+    colorA:          string;
+    colorB:          string;
+    activeTool:      string;
+    primaryColor:    number;
+    symmetry:        string[];
+    hlOpacity:       number;
+    invalidIntensity?: number;  // added after v2 shipped; missing → default 65
+    labelsVisible:   boolean;
+    lockInvalid:     boolean;
+    canvasRotation:  number;
 }
 
 // BC: v1 LocalSave (no `version` field, pixels as number[])
@@ -104,10 +105,11 @@ export function saveToLocalStorage(s: Readonly<SessionState>) {
         activeTool:     s.activeTool,
         primaryColor:   s.primaryColor,
         symmetry:       [...s.symmetry],
-        hlOpacity:      s.hlOpacity,
-        labelsVisible:  s.labelsVisible,
-        lockInvalid:    s.lockInvalid,
-        canvasRotation: s.rotation,
+        hlOpacity:        s.hlOpacity,
+        invalidIntensity: s.invalidIntensity,
+        labelsVisible:   s.labelsVisible,
+        lockInvalid:     s.lockInvalid,
+        canvasRotation:  s.rotation,
     };
     localStorage.setItem(LS_KEY, JSON.stringify(data));
 }
@@ -133,8 +135,9 @@ export function loadFromLocalStorage(): SessionState | null {
             activeTool:    (data.activeTool    ?? "pencil") as Tool,
             primaryColor:  (data.primaryColor  ?? 1) as 1 | 2,
             symmetry:      new Set((data.symmetry ?? []) as SymKey[]),
-            hlOpacity:     data.hlOpacity      ?? 100,
-            labelsVisible: data.labelsVisible  ?? true,
+            hlOpacity:        data.hlOpacity      ?? 100,
+            invalidIntensity: ("invalidIntensity" in data && data.invalidIntensity !== undefined) ? data.invalidIntensity : 65,
+            labelsVisible:    data.labelsVisible  ?? true,
             lockInvalid:   ("lockInvalid" in data ? data.lockInvalid : false) ?? false,
             rotation:      data.canvasRotation ?? 0,
         };
