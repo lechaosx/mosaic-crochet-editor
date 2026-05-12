@@ -1,8 +1,12 @@
 import { paint_pixel, flood_fill, PlanType,
+         paint_natural_row, paint_natural_round,
+         paint_overlay_row, paint_overlay_round,
+         clear_overlay_row, clear_overlay_round,
+         lock_invalid_row, lock_invalid_round,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool, PatternState } from "./types";
 import { view, render, fitToView, screenToPattern, updateStatus, COLORS, applyRotation, setRotationImmediate, setLabelsVisible, setHighlightOpacity } from "./render";
-import { state, pixels, highlightPlan, setPixels, setState, applyEditSettings, isAlwaysInvalid, naturalPatternFor, recomputeHighlights } from "./pattern";
+import { state, pixels, highlightPlan, setPixels, setState, applyEditSettings, recomputeHighlights } from "./pattern";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek, historyUndo, historyRedo, canUndo, canRedo } from "./history";
 import { SymKey } from "./types";
 import { directlyActive, setDirectlyActive, computeClosure, diagonalsAvailable, getSymmetryMask, ensureDiagonalsValid } from "./symmetry";
@@ -73,51 +77,28 @@ function paintAt(clientX: number, clientY: number) {
     if (activeTool === "fill") {
         next = flood_fill(pixels, W, H, x, y, strokeColor, mask);
     } else if (activeTool === "eraser") {
-        // In-place: left click → paint natural (erase to baseline);
-        //           right click → paint *opposite* of natural (exact opposite of erase).
-        const natural = naturalPatternFor(state);
-        const rightClick = strokeColor !== primaryColor;
-        next = pixels.slice();
-        for (const idx of symmetric_orbit_indices(W, H, x, y, mask)) {
-            if (next[idx] === 0) continue;
-            const nat = natural[idx];
-            next[idx] = rightClick ? (nat === 1 ? 2 : 1) : nat;
+        // Left-click restores the natural alternating baseline; right-click
+        // paints the opposite (deliberately wrong placements).
+        const invert = strokeColor !== primaryColor;
+        if (state.mode === "row") {
+            next = paint_natural_row(pixels, W, H, x, y, mask, invert);
+        } else {
+            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
+            next = paint_natural_round(pixels, W, H, vw, vh, ox, oy, rounds, x, y, mask, invert);
         }
     } else if (activeTool === "overlay") {
-        // Shifts inward — paint the inner neighbour so the ✕ rendered by the
-        // highlight pass lands on the *clicked* cell. Right click paints
-        // natural there instead, erasing the X.
-        //
-        // Out-of-canvas (gutter) clicks are handled too, but only for
-        // right-click (clear): the inward neighbour of a gutter cell is the
-        // boundary cell whose ! is rendered there, so this is how you remove
-        // a ! you can see hovering outside the pattern.
-        const natural = naturalPatternFor(state);
-        const rightClick = strokeColor !== primaryColor;
-        next = pixels.slice();
-
-        if (inCanvas) {
-            for (const idx of symmetric_orbit_indices(W, H, x, y, mask)) {
-                const oy = Math.floor(idx / W), ox = idx % W;
-                const inner = inwardCell(state, ox, oy);
-                if (!inner) continue;
-                const ti = inner.y * W + inner.x;
-                if (next[ti] === 0) continue;
-                const nat = natural[ti];
-                next[ti] = rightClick ? nat : (nat === 1 ? 2 : 1);
-            }
-        } else if (rightClick) {
-            const inner = inwardCell(state, x, y);
-            if (!inner) return;
-            // Mirror via the boundary cell itself — its orbit covers all the
-            // symmetric boundary cells (whose !s sit symmetrically in the gutter).
-            for (const idx of symmetric_orbit_indices(W, H, inner.x, inner.y, mask)) {
-                const oy = Math.floor(idx / W), ox = idx % W;
-                if (next[oy * W + ox] === 0) continue;
-                next[oy * W + ox] = natural[oy * W + ox];
-            }
+        // Right-click clears existing overlays / boundary ! markers; left-click
+        // paints new ✕ overlays at the clicked cell.
+        const clear = strokeColor !== primaryColor;
+        if (state.mode === "row") {
+            next = clear
+                ? clear_overlay_row(pixels, W, H, x, y, mask)
+                : paint_overlay_row(pixels, W, H, x, y, mask);
         } else {
-            return;
+            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = state;
+            next = clear
+                ? clear_overlay_round(pixels, W, H, vw, vh, ox, oy, rounds, x, y, mask)
+                : paint_overlay_round(pixels, W, H, vw, vh, ox, oy, rounds, x, y, mask);
         }
     } else if (activeTool === "invert") {
         next = pixels.slice();
@@ -132,55 +113,22 @@ function paintAt(clientX: number, clientY: number) {
     } else {
         next = paint_pixel(pixels, W, H, x, y, strokeColor, mask);
     }
-    if (getLockInvalid()) lockAlwaysInvalid(state, before, next);
+    if (getLockInvalid()) next = lockAlwaysInvalid(state, before, next);
     setPixels(next);
     recomputeHighlights();
     updateStatus(highlightPlan, x, y);
     reRender();
 }
 
-// For the overlay tool: from cell (x, y), pick the *inward* neighbour — the
-// cell that, when painted with the wrong colour, makes the highlight pass
-// render a ✕ at (x, y). For row mode that's just (x, y+1). For round mode it
-// mirrors compute_round_highlights's `step`: which side of the ring (x, y)
-// sits on decides the direction toward the centre. Returns null when no valid
-// inward cell exists (innermost ring, or out of bounds), or when (x, y) is a
-// round-mode corner (distX == distY) — corners can't host an overlay stitch,
-// so the tool is a no-op there. Gutter cells outside the canvas where distX
-// or distY is negative are still resolved (used for clearing gutter-rendered
-// ! markers).
-function inwardCell(s: PatternState, x: number, y: number): { x: number; y: number } | null {
-    if (s.mode === "row") {
-        return y + 1 < s.canvasHeight ? { x, y: y + 1 } : null;
-    }
-    const vx = x + s.offsetX, vy = y + s.offsetY;
-    const distX = Math.min(vx, s.virtualWidth  - 1 - vx);
-    const distY = Math.min(vy, s.virtualHeight - 1 - vy);
-    const inCanvas = x >= 0 && x < s.canvasWidth && y >= 0 && y < s.canvasHeight;
-    if (inCanvas && distX === distY) return null;
-    let sx = 0, sy = 0;
-    if (distX < distY) sx = vx * 2 >= s.virtualWidth  ? -1 : 1;
-    else               sy = vy * 2 >= s.virtualHeight ? -1 : 1;
-    const nx = x + sx, ny = y + sy;
-    if (nx < 0 || nx >= s.canvasWidth || ny < 0 || ny >= s.canvasHeight) return null;
-    return { x: nx, y: ny };
-}
-
-// Revert any always-invalid cell that the tool would have moved away from its
-// natural colour — but only if it was already correct. Wrong-coloured cells
-// can still be repainted (so the user can fix them).
-function lockAlwaysInvalid(s: PatternState, before: Uint8Array, after: Uint8Array) {
-    const natural = naturalPatternFor(s);
-    const W = s.canvasWidth, H = s.canvasHeight;
-    for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-            const i = y * W + x;
-            if (!isAlwaysInvalid(s, x, y)) continue;
-            if (before[i] === natural[i] && after[i] !== natural[i]) {
-                after[i] = before[i];
-            }
-        }
-    }
+function lockAlwaysInvalid(s: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
+    return s.mode === "row"
+        ? lock_invalid_row(before, after, s.canvasWidth, s.canvasHeight)
+        : lock_invalid_round(
+            before, after,
+            s.canvasWidth, s.canvasHeight,
+            s.virtualWidth, s.virtualHeight,
+            s.offsetX, s.offsetY, s.rounds,
+          );
 }
 
 /* ─── UI callbacks → state mutations ──────────────────────────────────────── */

@@ -44,6 +44,26 @@ pub fn get_color_index(index: i32) -> u8 {
     if index % 2 == 0 { COLOR_A } else { COLOR_B }
 }
 
+// The "should-be" colour for a cell. `*_row` is just the alternating row
+// pattern; `*_round` returns COLOR_TRANSPARENT for cells inside the inner
+// hole (rfe ≥ rounds). Used by `initialize_*_pattern`, the overlay/eraser
+// tools, and the Lock-invalid post-filter.
+pub fn natural_color_row(height: i32, y: i32) -> u8 {
+    get_color_index(height - 1 - y)
+}
+
+pub fn natural_color_round(
+    virtual_size: IVec2, offset: IVec2, rounds: i32, coord: IVec2,
+) -> u8 {
+    let rfe = get_round_from_edge(virtual_size, coord + offset);
+    if rfe >= rounds { COLOR_TRANSPARENT } else { get_color_index(rounds - 1 - rfe) }
+}
+
+// Flip COLOR_A ↔ COLOR_B; passes the hole sentinel through unchanged.
+pub fn opposite_color(c: u8) -> u8 {
+    match c { COLOR_A => COLOR_B, COLOR_B => COLOR_A, _ => c }
+}
+
 // Per-axis distance from `virtual_coord` to the closer of its two virtual
 // edges. `min_dist.x` = closer-edge distance along x; `min_dist.y` similar.
 // Round-from-edge (the scalar) is just `min(min_dist.x, min_dist.y)`.
@@ -742,5 +762,127 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0], (PLAN_TYPE_INVALID, PLAN_DIR_UP,   1, 1));
         assert_eq!(entries[1], (PLAN_TYPE_INVALID, PLAN_DIR_LEFT, 1, 1));
+    }
+
+    // ── colour helpers ───────────────────────────────────────────────────────
+
+    #[test]
+    fn opposite_color_swaps_a_and_b() {
+        assert_eq!(opposite_color(COLOR_A), COLOR_B);
+        assert_eq!(opposite_color(COLOR_B), COLOR_A);
+    }
+
+    #[test]
+    fn opposite_color_passes_through_transparent() {
+        assert_eq!(opposite_color(COLOR_TRANSPARENT), COLOR_TRANSPARENT);
+    }
+
+    #[test]
+    fn natural_color_row_alternates_top_to_bottom() {
+        // height=4: y=0 is COLOR_B (3 odd), y=1 is COLOR_A (2 even),
+        // y=2 is COLOR_B (1 odd), y=3 is COLOR_A (0 even).
+        assert_eq!(natural_color_row(4, 0), COLOR_B);
+        assert_eq!(natural_color_row(4, 1), COLOR_A);
+        assert_eq!(natural_color_row(4, 2), COLOR_B);
+        assert_eq!(natural_color_row(4, 3), COLOR_A);
+    }
+
+    #[test]
+    fn natural_color_round_transparent_in_hole() {
+        // 9×9 r=3: centre (4, 4) has rfe=4 ≥ rounds=3 → transparent.
+        assert_eq!(natural_color_round(v(9, 9), v(0, 0), 3, v(4, 4)), COLOR_TRANSPARENT);
+    }
+
+    #[test]
+    fn natural_color_round_active_ring_uses_rfe() {
+        // 9×9 r=3: (1, 4) has rfe=1, so colour = get_color_index(3-1-1) = B.
+        // (0, 4) has rfe=0 → get_color_index(2) = A.
+        assert_eq!(natural_color_round(v(9, 9), v(0, 0), 3, v(1, 4)), COLOR_B);
+        assert_eq!(natural_color_round(v(9, 9), v(0, 0), 3, v(0, 4)), COLOR_A);
+    }
+
+    // ── is_always_invalid_* ──────────────────────────────────────────────────
+
+    #[test]
+    fn is_always_invalid_row_only_top_row() {
+        for y in 0..5 {
+            assert_eq!(is_always_invalid_row(v(0, y)), y == 0, "y={y}");
+        }
+    }
+
+    #[test]
+    fn is_always_invalid_round_flags_outermost_corners_and_diagonals() {
+        // 9×9 r=3. Outermost ring (rfe=0): always invalid.
+        assert!(is_always_invalid_round(v(9, 9), v(0, 0), 3, v(0, 4))); // edge
+        assert!(is_always_invalid_round(v(9, 9), v(0, 0), 3, v(0, 0))); // corner outermost
+        // Inner-ring diagonal (rfe>0, dx==dy): always invalid.
+        assert!(is_always_invalid_round(v(9, 9), v(0, 0), 3, v(1, 1))); // r=1 corner
+        assert!(is_always_invalid_round(v(9, 9), v(0, 0), 3, v(2, 2))); // r=2 corner (innermost)
+        // Inner non-corner: NOT always invalid.
+        assert!(!is_always_invalid_round(v(9, 9), v(0, 0), 3, v(1, 4)));
+        assert!(!is_always_invalid_round(v(9, 9), v(0, 0), 3, v(2, 4)));
+        // Inner hole (rfe ≥ rounds): NOT always invalid (no overlay semantics).
+        assert!(!is_always_invalid_round(v(9, 9), v(0, 0), 3, v(4, 4)));
+    }
+
+    // ── outward_cells_* ──────────────────────────────────────────────────────
+
+    #[test]
+    fn outward_cells_row_is_just_above() {
+        assert_eq!(outward_cells_row(v(2, 3)), vec![v(2, 2)]);
+        // y=0 → off-canvas (-1) is intentional: renderer draws in the gutter.
+        assert_eq!(outward_cells_row(v(2, 0)), vec![v(2, -1)]);
+    }
+
+    #[test]
+    fn outward_cells_round_non_corner_returns_one() {
+        // (1, 4) in 9×9: closer-to-x edge → outward LEFT.
+        assert_eq!(outward_cells_round(v(9, 9), v(0, 0), v(1, 4)), vec![v(0, 4)]);
+        // (4, 1): closer-to-y edge (top) → outward UP.
+        assert_eq!(outward_cells_round(v(9, 9), v(0, 0), v(4, 1)), vec![v(4, 0)]);
+    }
+
+    #[test]
+    fn outward_cells_round_corner_returns_two_perpendicular() {
+        // (1, 1) is a diagonal corner → two outwards: LEFT (0, 1) and UP (1, 0).
+        let cells = outward_cells_round(v(9, 9), v(0, 0), v(1, 1));
+        assert_eq!(cells.len(), 2);
+        assert!(cells.contains(&v(0, 1)));
+        assert!(cells.contains(&v(1, 0)));
+    }
+
+    // ── inward_cell_* ────────────────────────────────────────────────────────
+
+    #[test]
+    fn inward_cell_row_returns_below_in_bounds() {
+        assert_eq!(inward_cell_row(v(4, 4), v(2, 1)), Some(v(2, 2)));
+        // y=H-1 → no row below → None.
+        assert_eq!(inward_cell_row(v(4, 4), v(2, 3)), None);
+    }
+
+    #[test]
+    fn inward_cell_round_corner_is_none() {
+        // (1, 1) is a corner → no single inward direction.
+        assert_eq!(inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(1, 1)), None);
+    }
+
+    #[test]
+    fn inward_cell_round_non_corner_steps_toward_centre() {
+        // (1, 4) → step +x (centre right of vx=1, vW=9) → inner is (2, 4).
+        assert_eq!(inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(1, 4)), Some(v(2, 4)));
+    }
+
+    #[test]
+    fn inward_cell_round_gutter_resolves_to_boundary() {
+        // Gutter cell (-1, 4): the ! marker drawn there belongs to boundary
+        // cell (0, 4). inward_cell_round returns (0, 4).
+        assert_eq!(inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(-1, 4)), Some(v(0, 4)));
+    }
+
+    #[test]
+    fn inward_cell_round_off_canvas_inner_is_none() {
+        // For a hypothetical click far outside (e.g., (-5, 4)), the inner
+        // step lands at (-4, 4), still out of canvas → None.
+        assert_eq!(inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(-5, 4)), None);
     }
 }
