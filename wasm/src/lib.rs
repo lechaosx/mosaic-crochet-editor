@@ -72,10 +72,6 @@ fn to_array2(flat: &[u8], width: i32, height: i32) -> Array2<u8> {
     ).expect("pixel buffer size mismatch")
 }
 
-fn from_array2(grid: Array2<u8>) -> Vec<u8> {
-    grid.into_raw_vec_and_offset().0
-}
-
 // Compute highlights once from pixels (used by both render-plan and export
 // paths — they each need it but TS never sees the raw per-cell array).
 fn highlights_row(pixels: &[u8], width: i32, height: i32) -> Array2<u8> {
@@ -151,14 +147,14 @@ pub fn export_start_round(
 
 #[wasm_bindgen]
 pub fn initialize_row_pattern(width: i32, height: i32) -> Vec<u8> {
-    let mut grid = Array2::zeros((height as usize, width as usize));
+    let mut grid = vec![0u8; (width * height) as usize];
     for y in 0..height {
-        let color = common::get_color_index(height - 1 - y);
+        let color = common::natural_color_row(height, y);
         for x in 0..width {
-            grid[[y as usize, x as usize]] = color;
+            grid[(y * width + x) as usize] = color;
         }
     }
-    from_array2(grid)
+    grid
 }
 
 #[wasm_bindgen]
@@ -171,24 +167,16 @@ pub fn initialize_round_pattern(
     offset_y:       i32,
     rounds:         i32,
 ) -> Vec<u8> {
-    let canvas_size  = IVec2::new(canvas_width,  canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset       = IVec2::new(offset_x,      offset_y);
-    let mut grid     = Array2::zeros((canvas_height as usize, canvas_width as usize));
-
-    for y in 0..canvas_size.y {
-        for x in 0..canvas_size.x {
-            let virtual_coord     = IVec2::new(x, y) + offset;
-            let round_from_edge   = common::get_round_from_edge(virtual_size, virtual_coord);
-            let color = if round_from_edge >= rounds {
-                common::COLOR_TRANSPARENT
-            } else {
-                common::get_color_index(rounds - 1 - round_from_edge)
-            };
-            grid[[y as usize, x as usize]] = color;
+    let mut grid     = vec![0u8; (canvas_width * canvas_height) as usize];
+    for y in 0..canvas_height {
+        for x in 0..canvas_width {
+            grid[(y * canvas_width + x) as usize] =
+                common::natural_color_round(virtual_size, offset, rounds, IVec2::new(x, y));
         }
     }
-    from_array2(grid)
+    grid
 }
 
 #[wasm_bindgen]
