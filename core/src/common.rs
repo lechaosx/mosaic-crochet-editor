@@ -23,6 +23,12 @@ pub fn get_round_from_edge(virtual_size: IVec2, virtual_coord: IVec2) -> i32 {
     dist.x.min(dist.y)
 }
 
+// Highlight is stored at the *wrong cell* itself; the renderer is responsible
+// for drawing it one step outward (= the overlay layer). Storing at the wrong
+// cell unifies the logic: there's no special case for top row vs middle vs
+// foundation — every wrong cell asks the same question ("is the overlay this
+// would create structurally valid?") and writes V/I at its own position. The
+// renderer's `outwardCell` does the visual displacement.
 pub fn compute_row_highlights(
     size:       IVec2,
     pixels:     &Array2<u8>,
@@ -32,19 +38,20 @@ pub fn compute_row_highlights(
         let color_index = get_color_index(size.y - 1 - y);
         for x in 0..size.x {
             let [xi, yi] = [x as usize, y as usize];
-            if color_index != pixels[[yi, xi]] {
-                if y <= 0 || y >= size.y - 1 {
-                    highlights[[yi, xi]] = HIGHLIGHT_INVALID;
-                } else {
-                    let inner_pixel    = pixels[[y as usize + 1, xi]];
-                    let overlay_target = y as usize - 1;
-                    if color_index == inner_pixel {
-                        highlights[[yi, xi]] = HIGHLIGHT_INVALID;
-                    } else if highlights[[overlay_target, xi]] != HIGHLIGHT_INVALID {
-                        highlights[[overlay_target, xi]] = HIGHLIGHT_VALID_OVERLAY;
-                    }
-                }
-            }
+            if color_index == pixels[[yi, xi]] { continue; }
+
+            let result = if y == 0 {
+                // Top row: no row above to anchor an overlay against.
+                HIGHLIGHT_INVALID
+            } else if y >= size.y - 1 {
+                // Foundation: no inner row to clash with → valid overlay.
+                HIGHLIGHT_VALID_OVERLAY
+            } else {
+                let inner_pixel = pixels[[y as usize + 1, xi]];
+                if color_index == inner_pixel { HIGHLIGHT_INVALID }
+                else                          { HIGHLIGHT_VALID_OVERLAY }
+            };
+            highlights[[yi, xi]] = result;
         }
     }
 }
@@ -74,35 +81,35 @@ pub fn compute_round_highlights(
                 continue;
             }
 
-            if min_dist.x == min_dist.y || round_from_edge == 0 {
-                highlights[[yi, xi]] = HIGHLIGHT_INVALID;
-                continue;
-            }
-
-            let step = if min_dist.x < min_dist.y {
-                IVec2::new(if virtual_coord.x * 2 >= virtual_size.x { -1 } else { 1 }, 0)
+            // Outermost ring or any diagonal corner: no well-defined outward
+            // target. Force INVALID at the wrong cell — renderer handles the
+            // visual position (gutter for outermost, the cell itself for
+            // interior corners via the y-fallback in `outwardCell`).
+            let result = if min_dist.x == min_dist.y || round_from_edge == 0 {
+                HIGHLIGHT_INVALID
             } else {
-                IVec2::new(0, if virtual_coord.y * 2 >= virtual_size.y { -1 } else { 1 })
-            };
+                let step = if min_dist.x < min_dist.y {
+                    IVec2::new(if virtual_coord.x * 2 >= virtual_size.x { -1 } else { 1 }, 0)
+                } else {
+                    IVec2::new(0, if virtual_coord.y * 2 >= virtual_size.y { -1 } else { 1 })
+                };
 
-            let neighbor           = physical_coord + step;
-            let neighbor_in_bounds = neighbor.x >= 0 && neighbor.x < canvas_size.x
-                                  && neighbor.y >= 0 && neighbor.y < canvas_size.y;
+                let neighbor           = physical_coord + step;
+                let neighbor_in_bounds = neighbor.x >= 0 && neighbor.x < canvas_size.x
+                                      && neighbor.y >= 0 && neighbor.y < canvas_size.y;
 
-            let is_seam = !neighbor_in_bounds || {
-                let neighbor_rfe = get_round_from_edge(virtual_size, neighbor + offset);
-                neighbor_rfe <= round_from_edge
-            };
+                let is_seam = !neighbor_in_bounds || {
+                    let neighbor_rfe = get_round_from_edge(virtual_size, neighbor + offset);
+                    neighbor_rfe <= round_from_edge
+                };
 
-            let overlay_target  = physical_coord - step;
-            let [otx, oty]      = [overlay_target.x as usize, overlay_target.y as usize];
-            if is_seam || color_index != pixels[[neighbor.y as usize, neighbor.x as usize]] {
-                if highlights[[oty, otx]] != HIGHLIGHT_INVALID {
-                    highlights[[oty, otx]] = HIGHLIGHT_VALID_OVERLAY;
+                if is_seam || color_index != pixels[[neighbor.y as usize, neighbor.x as usize]] {
+                    HIGHLIGHT_VALID_OVERLAY
+                } else {
+                    HIGHLIGHT_INVALID
                 }
-            } else {
-                highlights[[yi, xi]] = HIGHLIGHT_INVALID;
-            }
+            };
+            highlights[[yi, xi]] = result;
         }
     }
 }
@@ -298,24 +305,28 @@ mod tests {
     }
 
     #[test]
-    fn row_hl_bottom_edge_overlay_is_invalid() {
+    fn row_hl_foundation_overlay_is_valid() {
+        // y=H-1 (foundation) wrong → no inner row to clash with → VALID overlay
+        // stored at the wrong cell (renderer draws it one row up).
         let hl = run_row_hl(4, 4, &[(2, 3, COLOR_B)]);
-        assert_eq!(hl[[3, 2]], I);
+        assert_eq!(hl[[3, 2]], V);
     }
 
     #[test]
     fn row_hl_valid_overlay_highlights_row_above() {
-        // y=1: rowIndex=2 (even) → COLOR_A; flip to COLOR_B; inner y=2 → COLOR_B ≠ COLOR_A → VALID at y=0
+        // y=1 wrong; inner y=2 differs → VALID at the wrong cell.
         let hl = run_row_hl(4, 4, &[(2, 1, COLOR_B)]);
-        assert_eq!(hl[[0, 2]], V);
-        assert_eq!(hl[[1, 2]], 0);
+        assert_eq!(hl[[1, 2]], V);
     }
 
     #[test]
     fn row_hl_invalid_when_inner_pixel_matches_expected() {
-        // H=3, y=1: colorIndex=COLOR_B; inner y=2 forced to COLOR_B → INVALID at (2,1)
+        // H=3. y=1 wrong (A instead of B); inner y=2 forced to B (matches
+        // color_index) → INVALID at the wrong cell y=1. y=2 (foundation)
+        // also wrong → VALID at its own cell.
         let hl = run_row_hl(4, 3, &[(2, 1, COLOR_A), (2, 2, COLOR_B)]);
         assert_eq!(hl[[1, 2]], I);
+        assert_eq!(hl[[2, 2]], V);
     }
 
     #[test]
@@ -323,16 +334,20 @@ mod tests {
         let overrides: Vec<(usize, usize, u8)> = (0..6).map(|x| (x, 1, COLOR_B)).collect();
         let hl = run_row_hl(6, 4, &overrides);
         for x in 0..6usize {
-            assert_eq!(hl[[0, x]], V, "col {x}: expected VALID at y=0");
+            assert_eq!(hl[[1, x]], V, "col {x}: expected VALID at the wrong cell y=1");
         }
     }
 
     #[test]
     fn row_hl_adjacent_wrong_pixels_regression() {
-        // y=1 → INVALID; y=2 must NOT be INVALID (old outer-pixel guard bug)
+        // H=5. y=1 wrong (inner y=2 matches color_index) → INVALID at its own
+        // cell. y=2 wrong (inner y=3 differs) → VALID at its own cell. Each
+        // wrong cell holds exactly one marker; the renderer draws them on the
+        // overlay layer above.
         let hl = run_row_hl(4, 5, &[(2, 1, COLOR_A), (2, 2, COLOR_B)]);
-        assert_eq!(hl[[1, 2]], I, "y=1 must be INVALID");
-        assert_ne!(hl[[2, 2]], I, "y=2 must not be INVALID (regression)");
+        assert_eq!(hl[[1, 2]], I, "INVALID at y=1 (inner matches color_index)");
+        assert_eq!(hl[[2, 2]], V, "VALID at y=2 (inner differs)");
+        assert_eq!(hl[[0, 2]], 0, "no marker at y=0");
     }
 
     // ── compute_round_highlights — full 9×9, r=3 ─────────────────────────────
@@ -351,9 +366,10 @@ mod tests {
 
     #[test]
     fn round_hl_full_second_ring_overlay_valid() {
-        // (1,4): RFE=1 → COLOR_B; flip to COLOR_A; stepX=+1 → (2,4) RFE=2 → COLOR_A ≠ COLOR_B → VALID at (0,4)
+        // (1,4) rfe=1 wrong; inner (2,4) rfe=2 differs → VALID stored at the
+        // wrong cell.
         let (hl, _) = run_round_hl(9, 9, 9, 9, 0, 0, 3, &[(1, 4, COLOR_A)]);
-        assert_eq!(hl[[4, 0]], V);
+        assert_eq!(hl[[4, 1]], V);
     }
 
     #[test]
@@ -409,9 +425,10 @@ mod tests {
 
     #[test]
     fn round_hl_half_virtual_seam_overlay_valid() {
-        // 9×3, vW=9 vH=6 offY=3; y=0 vy=3 minDistY=2, x=4 minDistX=4→stepY; vy*2≥vH→stepY=-1→OOB→seam→VALID at (4,1)
+        // 9×3 half mode (vH=6, offY=3): wrong cell (4, 0) sits on the virtual
+        // seam; step points OOB → is_seam → VALID stored at the wrong cell.
         let (hl, _) = run_round_hl(9, 3, 9, 6, 0, 3, 3, &[(4, 0, COLOR_B)]);
-        assert_eq!(hl[[1, 4]], V);
+        assert_eq!(hl[[0, 4]], V);
     }
 
     #[test]
@@ -432,9 +449,10 @@ mod tests {
 
     #[test]
     fn round_hl_quarter_bottom_seam_valid() {
-        // x=2, y=4 (one ring from bottom seam): seam detected → VALID at (2,5)
+        // Quarter mode (offY=6), wrong (2, 4) rfe=1; inner differs → VALID
+        // stored at the wrong cell.
         let (hl, _) = run_round_hl(6, 6, 12, 12, 0, 6, 3, &[(2, 4, COLOR_A)]);
-        assert_eq!(hl[[5, 2]], V);
+        assert_eq!(hl[[4, 2]], V);
     }
 
     #[test]
@@ -470,9 +488,10 @@ mod tests {
 
     #[test]
     fn round_hl_rect_zero_dim_seam_valid() {
-        // y=2, x=8: RFE=2, minDistY=2, stepY=+1→y=3 RFE=2≤2→seam→VALID at (8,1)
+        // Rectangular 16×6, wrong (8, 2) rfe=2; neighbor (8, 3) has rfe=2 →
+        // zero-dim seam → VALID stored at the wrong cell.
         let (hl, _) = run_round_hl(16, 6, 16, 6, 0, 0, 3, &[(8, 2, COLOR_B)]);
-        assert_eq!(hl[[1, 8]], V);
+        assert_eq!(hl[[2, 8]], V);
     }
 
     #[test]

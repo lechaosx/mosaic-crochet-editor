@@ -145,7 +145,7 @@ export function loadFromLocalStorage(): LocalState | null {
             activeTool:     data.activeTool     ?? "pencil",
             primaryColor:   data.primaryColor   ?? 1,
             symmetry:       data.symmetry       ?? [],
-            hlOpacity:      data.hlOpacity      ?? 80,
+            hlOpacity:      data.hlOpacity      ?? 100,
             labelsVisible:  data.labelsVisible  ?? true,
             lockInvalid:    ("lockInvalid" in data ? data.lockInvalid : false) ?? false,
             canvasRotation: data.canvasRotation ?? 0,

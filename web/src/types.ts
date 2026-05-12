@@ -1,4 +1,4 @@
-export type Tool   = "pencil" | "fill" | "eraser" | "invert";
+export type Tool   = "pencil" | "fill" | "eraser" | "invert" | "overlay";
 export type SymKey = "V" | "H" | "C" | "D1" | "D2";
 export type Point  = [number, number];
 
