@@ -1,5 +1,6 @@
 import { initialize_row_pattern, initialize_round_pattern } from "@mosaic/wasm";
-import { PatternState } from "./types";
+import { PatternState, Tool, SymKey } from "./types";
+import { SessionState } from "./store";
 
 const LS_KEY       = "mosaic-pattern-v2";
 const FILE_VERSION = 2;
@@ -93,38 +94,25 @@ interface LocalSaveV1 {
     canvasRotation: number;
 }
 
-export interface LocalState {
-    state:          PatternState;
-    pixels:         Uint8Array;
-    colorA:         string;
-    colorB:         string;
-    activeTool:     string;
-    primaryColor:   number;
-    symmetry:       string[];
-    hlOpacity:      number;
-    labelsVisible:  boolean;
-    lockInvalid:    boolean;
-    canvasRotation: number;
-}
-
-export function saveToLocalStorage(
-    state: PatternState, pixels: Uint8Array,
-    colorA: string, colorB: string,
-    activeTool: string, primaryColor: number, symmetry: string[],
-    hlOpacity: number,
-    labelsVisible: boolean, lockInvalid: boolean,
-    canvasRotation: number,
-) {
+export function saveToLocalStorage(s: Readonly<SessionState>) {
     const data: LocalSaveV2 = {
         version: LS_VERSION,
-        state, pixels: packPixels(pixels), colorA, colorB,
-        activeTool, primaryColor, symmetry,
-        hlOpacity, labelsVisible, lockInvalid, canvasRotation,
+        state:          s.pattern,
+        pixels:         packPixels(s.pixels),
+        colorA:         s.colorA,
+        colorB:         s.colorB,
+        activeTool:     s.activeTool,
+        primaryColor:   s.primaryColor,
+        symmetry:       [...s.symmetry],
+        hlOpacity:      s.hlOpacity,
+        labelsVisible:  s.labelsVisible,
+        lockInvalid:    s.lockInvalid,
+        canvasRotation: s.rotation,
     };
     localStorage.setItem(LS_KEY, JSON.stringify(data));
 }
 
-export function loadFromLocalStorage(): LocalState | null {
+export function loadFromLocalStorage(): SessionState | null {
     const saved = localStorage.getItem(LS_KEY);
     if (!saved) return null;
     try {
@@ -138,17 +126,17 @@ export function loadFromLocalStorage(): LocalState | null {
             : unpackPixels((data as LocalSaveV2).pixels, data.state);
 
         return {
-            state:          data.state,
+            pattern:       data.state,
             pixels,
-            colorA:         data.colorA         ?? "#000000",
-            colorB:         data.colorB         ?? "#ffffff",
-            activeTool:     data.activeTool     ?? "pencil",
-            primaryColor:   data.primaryColor   ?? 1,
-            symmetry:       data.symmetry       ?? [],
-            hlOpacity:      data.hlOpacity      ?? 100,
-            labelsVisible:  data.labelsVisible  ?? true,
-            lockInvalid:    ("lockInvalid" in data ? data.lockInvalid : false) ?? false,
-            canvasRotation: data.canvasRotation ?? 0,
+            colorA:        data.colorA         ?? "#000000",
+            colorB:        data.colorB         ?? "#ffffff",
+            activeTool:    (data.activeTool    ?? "pencil") as Tool,
+            primaryColor:  (data.primaryColor  ?? 1) as 1 | 2,
+            symmetry:      new Set((data.symmetry ?? []) as SymKey[]),
+            hlOpacity:     data.hlOpacity      ?? 100,
+            labelsVisible: data.labelsVisible  ?? true,
+            lockInvalid:   ("lockInvalid" in data ? data.lockInvalid : false) ?? false,
+            rotation:      data.canvasRotation ?? 0,
         };
     } catch { localStorage.removeItem(LS_KEY); return null; }
 }
@@ -172,8 +160,11 @@ interface SaveFileV1 {
     colorB:  string;
 }
 
-export async function saveToFile(state: PatternState, pixels: Uint8Array, colorA: string, colorB: string): Promise<boolean> {
-    const file: SaveFileV2 = { version: FILE_VERSION, state, pixels: packPixels(pixels), colorA, colorB };
+export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
+    const file: SaveFileV2 = {
+        version: FILE_VERSION, state: s.pattern, pixels: packPixels(s.pixels),
+        colorA: s.colorA, colorB: s.colorB,
+    };
     const json = JSON.stringify(file);
 
     if ("showSaveFilePicker" in window) {
@@ -200,7 +191,14 @@ export async function saveToFile(state: PatternState, pixels: Uint8Array, colorA
     }
 }
 
-export function loadFromFile(): Promise<{ state: PatternState; pixels: Uint8Array; colorA: string; colorB: string } | null> {
+export interface LoadedFile {
+    pattern: PatternState;
+    pixels:  Uint8Array;
+    colorA:  string;
+    colorB:  string;
+}
+
+export function loadFromFile(): Promise<LoadedFile | null> {
     return new Promise(resolve => {
         const input = Object.assign(document.createElement("input"), { type: "file", accept: ".mcw,application/json" });
         input.addEventListener("change", () => {
@@ -210,13 +208,10 @@ export function loadFromFile(): Promise<{ state: PatternState; pixels: Uint8Arra
             reader.onload = () => {
                 try {
                     const data = JSON.parse(reader.result as string) as SaveFileV2 | SaveFileV1;
-                    // Backward-compatibility: v1 stored pixels as number[] using the
-                    // same 0/1/2 in-memory encoding — no transform needed beyond
-                    // wrapping as Uint8Array.
                     const pixels = data.version === 2
                         ? unpackPixels(data.pixels, data.state)
                         : unpackPixelsV1(data.pixels);
-                    resolve({ state: data.state, pixels, colorA: data.colorA, colorB: data.colorB });
+                    resolve({ pattern: data.state, pixels, colorA: data.colorA, colorB: data.colorB });
                 } catch { resolve(null); }
             };
             reader.readAsText(file);

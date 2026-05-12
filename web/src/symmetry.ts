@@ -1,7 +1,6 @@
-import { SymKey } from "./types";
+// Pure symmetry helpers. Caller owns the directly-active set and passes it in.
 
-export let directlyActive = new Set<SymKey>();
-export function setDirectlyActive(keys: SymKey[]) { directlyActive = new Set(keys); }
+import { SymKey } from "./types";
 
 export function computeClosure(active: Set<SymKey>, diagonals: boolean): Set<SymKey> {
     let V = active.has("V"), H = active.has("H"), C = active.has("C"),
@@ -33,7 +32,7 @@ export function diagonalsAvailable(canvasWidth: number, canvasHeight: number): b
     return (canvasWidth - canvasHeight) % 2 === 0;
 }
 
-export function closureToMask(closure: Set<SymKey>): number {
+function closureToMask(closure: Set<SymKey>): number {
     let mask = 0;
     if (closure.has("V"))  mask |= 1;
     if (closure.has("H"))  mask |= 2;
@@ -43,14 +42,18 @@ export function closureToMask(closure: Set<SymKey>): number {
     return mask;
 }
 
-export function getSymmetryMask(canvasWidth: number, canvasHeight: number): number {
-    return closureToMask(computeClosure(directlyActive, diagonalsAvailable(canvasWidth, canvasHeight)));
+export function getSymmetryMask(active: Set<SymKey>, canvasWidth: number, canvasHeight: number): number {
+    return closureToMask(computeClosure(active, diagonalsAvailable(canvasWidth, canvasHeight)));
 }
 
-// When the canvas dimensions change, drop diagonals if no longer available.
-export function ensureDiagonalsValid(canvasWidth: number, canvasHeight: number) {
-    if (!diagonalsAvailable(canvasWidth, canvasHeight)) {
-        directlyActive.delete("D1");
-        directlyActive.delete("D2");
-    }
+// Drop diagonals if no longer available for the new canvas size. Returns a
+// new set (caller decides whether to swap it in).
+export function pruneUnavailableDiagonals(
+    active: Set<SymKey>, canvasWidth: number, canvasHeight: number,
+): Set<SymKey> {
+    if (diagonalsAvailable(canvasWidth, canvasHeight)) return active;
+    const next = new Set(active);
+    next.delete("D1");
+    next.delete("D2");
+    return next;
 }

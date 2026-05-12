@@ -1,23 +1,28 @@
-import { canvas, view, screenToPattern, clampZoom } from "./render";
-import { PatternState } from "./types";
+import { ViewState, clampZoom } from "./render";
 
 interface Pointer { x: number; y: number; button: number; type: string; }
 
 type Mode = "idle" | "paint" | "gesture" | "gesture-end" | "middle-pan";
 
 export interface GestureCallbacks {
-    getState:      () => PatternState | null;
     primaryColor:  () => 1 | 2;
     onPaintStart:  (color: 1 | 2) => void;
     onPaintAt:     (clientX: number, clientY: number) => void;
     onPaintEnd:    () => void;     // commit stroke (record history if changed)
     onPaintCancel: () => void;     // discard stroke (revert to pre-stroke pixels)
     onHover:       (x: number | null, y: number | null) => void;
-    onView:        () => void;     // re-render after view change
-    onViewSettle:  () => void;     // persist view (after wheel/middle-pan/rotate)
+    onView:        () => void;     // re-render after view change (pan/zoom)
 }
 
-function zoomAt(clientX: number, clientY: number, factor: number) {
+// `clientToPattern` is supplied by the caller: it takes raw client coords and
+// returns the pattern-space position (and whether that position is inside
+// the canvas). Returns null when there's no pattern yet. The caller closes
+// over whatever state is needed (current pattern, dpr, visualRotation, etc.)
+// — gesture has no business knowing.
+export type ClientToPattern = (clientX: number, clientY: number)
+    => { x: number; y: number; inside: boolean } | null;
+
+function zoomAt(canvas: HTMLCanvasElement, view: ViewState, clientX: number, clientY: number, factor: number) {
     const rect = canvas.getBoundingClientRect();
     const dx = clientX - (rect.left + rect.width  / 2);
     const dy = clientY - (rect.top  + rect.height / 2);
@@ -28,7 +33,10 @@ function zoomAt(clientX: number, clientY: number, factor: number) {
     view.zoom = newZoom;
 }
 
-export function mountGestures(cb: GestureCallbacks) {
+export function mountGestures(
+    canvas: HTMLCanvasElement, view: ViewState,
+    clientToPattern: ClientToPattern, cb: GestureCallbacks,
+) {
     const pointers = new Map<number, Pointer>();
     let mode: Mode = "idle";
 
@@ -84,11 +92,9 @@ export function mountGestures(cb: GestureCallbacks) {
         }
         const p = pointers.get(e.pointerId);
         if (!p) {
-            const state = cb.getState();
-            if (!state) { cb.onHover(null, null); return; }
-            const { x, y } = screenToPattern(state, e.clientX, e.clientY);
-            const inside = x >= 0 && y >= 0 && x < state.canvasWidth && y < state.canvasHeight;
-            cb.onHover(inside ? x : null, inside ? y : null);
+            const cp = clientToPattern(e.clientX, e.clientY);
+            if (!cp) { cb.onHover(null, null); return; }
+            cb.onHover(cp.inside ? cp.x : null, cp.inside ? cp.y : null);
             return;
         }
         p.x = e.clientX;
@@ -100,7 +106,7 @@ export function mountGestures(cb: GestureCallbacks) {
             const m = midpoint();
             const d = distance();
             if (gestDist > 0) {
-                zoomAt(m.x, m.y, d / gestDist);
+                zoomAt(canvas, view, m.x, m.y, d / gestDist);
                 view.panX += m.x - gestMid.x;
                 view.panY += m.y - gestMid.y;
             }
@@ -114,7 +120,6 @@ export function mountGestures(cb: GestureCallbacks) {
         if (mode === "middle-pan" && e.pointerType === "mouse" && e.button === 1) {
             mode = "idle";
             canvas.releasePointerCapture(e.pointerId);
-            cb.onViewSettle();
             return;
         }
         if (!pointers.has(e.pointerId)) return;
@@ -127,7 +132,6 @@ export function mountGestures(cb: GestureCallbacks) {
         } else if (mode === "gesture" || mode === "gesture-end") {
             if (pointers.size === 0) {
                 mode = "idle";
-                cb.onViewSettle();
             } else {
                 mode = "gesture-end";
             }
@@ -143,8 +147,7 @@ export function mountGestures(cb: GestureCallbacks) {
 
     canvas.addEventListener("wheel", e => {
         e.preventDefault();
-        zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+        zoomAt(canvas, view, e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
         cb.onView();
-        cb.onViewSettle();
     }, { passive: false });
 }
