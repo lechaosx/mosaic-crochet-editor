@@ -1,5 +1,5 @@
 import { Tool, SymKey, PatternState } from "./types";
-import { el, setRadio, clampInputDisplay, radioValue, readClampedInt } from "./dom";
+import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 
 // ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
@@ -188,23 +188,30 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     let editOpenState: PatternState | null = null;
 
-    // "Keep painted" is forced off (and disabled) for changes that don't
-    // meaningfully preserve content — mode switch, inner-dim change. The user
-    // still gets a checkbox state they can re-enable by undoing the input.
+    // "Wipe" is forced ON (visibly checked, disabled) only for mode switches —
+    // row ↔ round can't preserve content. Inner-dim and rounds changes within
+    // the same mode are handled by the round-mode corner/strip transfer (see
+    // `preserveRound` in pattern.ts) and need no force.
+    //
+    // When force kicks in we stash the user's actual preference on the
+    // element's dataset and tick the checkbox so the disabled state
+    // communicates *which way* it's forced. When force lifts, restore the
+    // stashed preference. The user's choice is never lost, just suppressed.
     function refreshWipeAvailability() {
         if (!editOpenState) return;
         const newMode = radioValue("edit-mode");
-        let force = newMode !== editOpenState.mode;
-        if (!force && newMode === "round" && editOpenState.mode === "round") {
-            const oldInnerW = editOpenState.virtualWidth  - editOpenState.rounds * 2;
-            const oldInnerH = editOpenState.virtualHeight - editOpenState.rounds * 2;
-            const newInnerW = readClampedInt("edit-inner-width",  0);
-            const newInnerH = readClampedInt("edit-inner-height", 0);
-            force = newInnerW !== oldInnerW || newInnerH !== oldInnerH;
+        const force = newMode !== editOpenState.mode;
+        const wipeEl = el<HTMLInputElement>("edit-wipe");
+        if (force) {
+            if (wipeEl.dataset.userPref === undefined) {
+                wipeEl.dataset.userPref = wipeEl.checked ? "1" : "0";
+            }
+            wipeEl.checked = true;
+        } else if (wipeEl.dataset.userPref !== undefined) {
+            wipeEl.checked = wipeEl.dataset.userPref === "1";
+            delete wipeEl.dataset.userPref;
         }
-        // Disable only — never overwrite the user's preference. The actual
-        // preserve behaviour is `checked && !disabled` (computed downstream).
-        el<HTMLInputElement>("edit-wipe").disabled = force;
+        wipeEl.disabled = force;
     }
 
     document.querySelectorAll<HTMLInputElement>('[name="edit-mode"]').forEach(radio => {
@@ -269,8 +276,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
             el<HTMLInputElement>("edit-rounds")      .value = String(s.rounds);
         }
         // Each fresh popover open resets the user preference to "preserve"
-        // (i.e. Wipe unchecked).
-        el<HTMLInputElement>("edit-wipe").checked = false;
+        // (i.e. Wipe unchecked) and drops any stashed force-state from the
+        // previous open.
+        const wipeEl = el<HTMLInputElement>("edit-wipe");
+        delete wipeEl.dataset.userPref;
+        wipeEl.checked = false;
         refreshWipeAvailability();
     }
 

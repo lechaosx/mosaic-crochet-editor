@@ -101,12 +101,16 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Pattern popover
 
 - Single **Pattern** toolbar button — handles both "create from scratch" and "edit in place" via the same popover (no separate New button). Mode toggle (row/round), dimensions, submode all editable; light-dismiss on outside click and Esc. — **your decision**
-- Live preview as inputs change. Painted cells are preserved across resizing / submode toggles where they map (row: bottom-anchored vertically, centre-anchored horizontally; round: centre-anchored in virtual space). Mode switch (row↔round) is inherently a wipe. — **your decision**
+- Live preview as inputs change. Painted cells are preserved across resizing / submode toggles where they map:
+  - **Row mode** — bottom-left anchored: row 1 (foundation) stays put vertically; column 0 stays put horizontally. Adding rows grows upward, adding columns grows to the right; shrinking truncates from the same far edges. — **your decision**
+  - **Round mode** — bottom-left anchored, partitioned into 4 corner blocks (`rounds × rounds` each, one per canvas corner) and 4 straight strips between them. Each region transfers independently: corner blocks anchor to their canvas corner; horizontal strips (top/bottom) anchor to top/bottom vertically and are left-anchored within the strip; vertical strips (left/right) anchor to left/right horizontally and are bottom-anchored within the strip (so detail near the foundation stays put when inner height changes). No collisions; shrinking inner dims drops cells from the side opposite the strip's anchor. — **your decision**
+  - **Rounds count change** — composes with the inner-dim rule above by giving every cell an inward shift of Δrounds (so old ring 1 stays ring 1; the new outermost ring wraps around with natural colour). — **your decision**
+  - **Mode switch** (row↔round) is inherently a wipe. — **your decision**
 - Live preview always derives from the pre-edit snapshot, so destructive scrubbing is reversible without committing: reduce rounds to 1 and back to 20 brings the original pattern back. — **your decision**
-- **Keep painted** toggle: on by default, the user can flip it off to force a wipe even when preservation is possible. Disabled automatically for inherently-destructive changes (mode switch, inner-W/H change). — **your decision**
+- **Keep painted** toggle: on by default, the user can flip it off to force a wipe even when preservation is possible. Disabled automatically only for mode switches (row ↔ round, which can't preserve content). Inner-W/H and rounds changes preserve painted pixels via the per-mode anchoring rules above. — **your decision**
 - Closing the popover (Esc, click outside, or clicking the canvas) commits the current preview to history. Undo (Ctrl+Z) is the universal revert — no Cancel/Apply buttons, no lossy confirmation modal. — **your decision**
 - Live preview always re-derives from the head, so destructive scrubbing (rounds 20 → 1 → 20, full → quarter → full) brings the original pattern back without losing data, even while the popover is open. — **your decision**
-- **Wipe** toggle: user preference (default off = preserve painted). Disabled with a visibly greyed appearance for inherently destructive changes (mode switch, inner-W/H change); the disabled state forces wipe but doesn't alter the checked value, so when the user backs out of the destructive change their preference takes over again and the preview restores to painted unless they explicitly checked Wipe. — **your decision**
+- **Wipe** toggle: user preference (default off = preserve painted). Disabled with a visibly greyed appearance only for mode switches (row ↔ round); the disabled state forces wipe but doesn't alter the checked value, so when the user backs out their preference takes over again. — **your decision**
 - Numeric inputs typed below the field's minimum are normalised on blur. — **your decision**
 
 ## Load
