@@ -190,6 +190,37 @@ pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y:
 }
 
 #[wasm_bindgen]
+pub fn transfer_preserved_row(
+    old_pixels: &[u8], old_width: i32, old_height: i32,
+    new_pixels: &[u8], new_width: i32, new_height: i32,
+) -> Vec<u8> {
+    tools::transfer_preserved_row(old_pixels, old_width, old_height, new_pixels, new_width, new_height)
+}
+
+#[wasm_bindgen]
+pub fn transfer_preserved_round(
+    old_pixels: &[u8],
+    old_canvas_width: i32, old_canvas_height: i32,
+    old_virtual_width: i32, old_virtual_height: i32,
+    old_offset_x: i32, old_offset_y: i32, old_rounds: i32,
+    new_pixels: &[u8],
+    new_canvas_width: i32, new_canvas_height: i32,
+    new_virtual_width: i32, new_virtual_height: i32,
+    new_offset_x: i32, new_offset_y: i32, new_rounds: i32,
+) -> Vec<u8> {
+    tools::transfer_preserved_round(
+        old_pixels,
+        old_canvas_width, old_canvas_height,
+        old_virtual_width, old_virtual_height,
+        old_offset_x, old_offset_y, old_rounds,
+        new_pixels,
+        new_canvas_width, new_canvas_height,
+        new_virtual_width, new_virtual_height,
+        new_offset_x, new_offset_y, new_rounds,
+    )
+}
+
+#[wasm_bindgen]
 pub fn lock_invalid_row(before: &[u8], after: &[u8], width: i32, height: i32) -> Vec<u8> {
     tools::lock_invalid_row(before, after, width, height)
 }

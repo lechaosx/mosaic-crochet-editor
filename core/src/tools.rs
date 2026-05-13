@@ -239,6 +239,103 @@ pub fn lock_invalid_round(
     result
 }
 
+// Bottom-left anchored pixel preservation across a row-mode resize. Reads
+// `old_pixels` (the previous canvas) and the freshly-natural `new_pixels`
+// (the new canvas at its natural colours), blits painted cells from old onto
+// new where they map. Row 1 (foundation) stays put vertically; column 0
+// stays put horizontally. Adding rows grows upward, columns grow to the
+// right; shrinking truncates from the same far edges. Holes are skipped on
+// both sides — `new_pixels` already encodes its hole layout.
+pub fn transfer_preserved_row(
+    old_pixels: &[u8], old_width: i32, old_height: i32,
+    new_pixels: &[u8], new_width: i32, new_height: i32,
+) -> Vec<u8> {
+    let mut result = new_pixels.to_vec();
+    let dy = old_height - new_height;
+    for new_py in 0..new_height {
+        let old_py = new_py + dy;
+        if old_py < 0 || old_py >= old_height { continue; }
+        for new_px in 0..new_width {
+            if new_px >= old_width { continue; }
+            let v = old_pixels[(old_py * old_width + new_px) as usize];
+            if v == COLOR_TRANSPARENT { continue; }
+            let new_idx = (new_py * new_width + new_px) as usize;
+            if result[new_idx] == COLOR_TRANSPARENT { continue; }
+            result[new_idx] = v;
+        }
+    }
+    result
+}
+
+// Bottom-left anchored pixel preservation across a round-mode resize. The
+// pattern is partitioned in virtual coords into 4 corner blocks (each
+// `rounds × rounds`, one per canvas corner) and 4 straight strips between
+// them. Each region transfers independently:
+//   • TL / TR / BL / BR corner blocks anchor to their own canvas corner.
+//   • TOP / BOTTOM strips: vertically anchor to top/bottom respectively;
+//     horizontally left-anchored within the strip.
+//   • LEFT / RIGHT strips: horizontally anchor to left/right respectively;
+//     vertically bottom-anchored within the strip (so detail near the
+//     foundation stays put when inner height changes).
+// When `rounds` also changes by Δr, every cell gets an additional inward
+// shift of Δr (old ring N stays ring N, new outermost ring is freshly
+// natural). The two shifts compose. Inner-hole cells are skipped. Strip
+// cells whose middle-axis lands outside the new strip range (which would
+// collide with the adjacent corner block) are dropped — that's where
+// shrinking takes its losses, always from the side opposite the anchor.
+pub fn transfer_preserved_round(
+    old_pixels: &[u8],
+    old_canvas_width: i32, old_canvas_height: i32,
+    old_virtual_width: i32, old_virtual_height: i32,
+    old_offset_x: i32, old_offset_y: i32, old_rounds: i32,
+    new_pixels: &[u8],
+    new_canvas_width: i32, new_canvas_height: i32,
+    new_virtual_width: i32, new_virtual_height: i32,
+    new_offset_x: i32, new_offset_y: i32, new_rounds: i32,
+) -> Vec<u8> {
+    let mut result = new_pixels.to_vec();
+    let d_vw = new_virtual_width  - old_virtual_width;
+    let d_vh = new_virtual_height - old_virtual_height;
+    let d_r  = new_rounds          - old_rounds;
+
+    for old_py in 0..old_canvas_height {
+        let old_vy = old_py + old_offset_y;
+        let on_top = old_vy < old_rounds;
+        let on_bot = old_vy >= old_virtual_height - old_rounds;
+        for old_px in 0..old_canvas_width {
+            let old_vx  = old_px + old_offset_x;
+            let on_left  = old_vx < old_rounds;
+            let on_right = old_vx >= old_virtual_width - old_rounds;
+
+            // Inner-hole cells (not in any corner or strip): skipped.
+            if !on_top && !on_bot && !on_left && !on_right { continue; }
+
+            // x: left-anchored. y: TOP-corner cells stay near the top (+Δr),
+            // everything else (BOTTOM-corner OR LEFT/RIGHT strip) anchors to
+            // the bottom (+ΔVH − Δr).
+            let new_vx = if on_right { old_vx + d_vw - d_r } else { old_vx + d_r };
+            let new_vy = if on_top   { old_vy + d_r       } else { old_vy + d_vh - d_r };
+
+            let is_h_strip = (on_top  || on_bot)   && !on_left && !on_right;
+            if is_h_strip && (new_vx < new_rounds || new_vx > new_virtual_width  - 1 - new_rounds) { continue; }
+            let is_v_strip = (on_left || on_right) && !on_top  && !on_bot;
+            if is_v_strip && (new_vy < new_rounds || new_vy > new_virtual_height - 1 - new_rounds) { continue; }
+
+            let new_px = new_vx - new_offset_x;
+            let new_py = new_vy - new_offset_y;
+            if new_px < 0 || new_px >= new_canvas_width  { continue; }
+            if new_py < 0 || new_py >= new_canvas_height { continue; }
+
+            let v = old_pixels[(old_py * old_canvas_width + old_px) as usize];
+            if v == COLOR_TRANSPARENT { continue; }
+            let new_idx = (new_py * new_canvas_width + new_px) as usize;
+            if result[new_idx] == COLOR_TRANSPARENT { continue; }
+            result[new_idx] = v;
+        }
+    }
+    result
+}
+
 pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y: i32, fill_color: u8, mask: u8) -> Vec<u8> {
     let mut result      = pixels.to_vec();
     let     target_color = result[(start_y * width + start_x) as usize];
@@ -510,4 +607,238 @@ mod tests {
         assert_eq!(out[1 * 9 + 1], after[1 * 9 + 1]);
     }
 
+    // ── transfer_preserved_row (BL-anchored) ─────────────────────────────────
+
+    /// Mark cell `(x, y)` in a row grid with `marker` (used for tests; pick
+    /// markers distinct from `COLOR_A`/`COLOR_B` so the assertion is loud
+    /// even if the test reads from the wrong index).
+    fn put(grid: &mut [u8], w: i32, x: i32, y: i32, marker: u8) {
+        grid[(y * w + x) as usize] = marker;
+    }
+    fn get(grid: &[u8], w: i32, x: i32, y: i32) -> u8 {
+        grid[(y * w + x) as usize]
+    }
+
+    #[test]
+    fn transfer_row_widening_preserves_left_columns_at_same_x() {
+        // Old 4×4, new 6×4 (widen). Mark old (0, 3) = foundation-left and
+        // old (3, 0) = top-right. After widening, foundation-left stays at
+        // new (0, 3); old top-right (vx=3 at old top) stays at new (3, 0).
+        // The new right columns (vx=4, 5) and top row added cells appear
+        // freshly natural.
+        let mut old_g = row_grid(4, 4);
+        put(&mut old_g, 4, 0, 3, COLOR_A);  // foundation-left (vx=0 row 3 → already A, just mark explicitly)
+        put(&mut old_g, 4, 3, 0, COLOR_A);  // top-right cell
+        let new_g = row_grid(6, 4);
+        let out = transfer_preserved_row(&old_g, 4, 4, &new_g, 6, 4);
+        assert_eq!(get(&out, 6, 0, 3), COLOR_A);
+        assert_eq!(get(&out, 6, 3, 0), COLOR_A);
+        // New right cells should still hold their natural value.
+        assert_eq!(get(&out, 6, 5, 0), natural_color_row(4, 0));
+    }
+
+    #[test]
+    fn transfer_row_heightening_grows_upward() {
+        // Old 4×4, new 4×6 (heighten by 2). Foundation row (old vy=3) stays
+        // at new vy=5. Old top row (vy=0) moves to new vy=2 (rows added at
+        // the TOP).
+        let mut old_g = row_grid(4, 4);
+        put(&mut old_g, 4, 2, 0, COLOR_A);  // old top
+        put(&mut old_g, 4, 1, 3, COLOR_B);  // old foundation
+        let new_g = row_grid(4, 6);
+        let out = transfer_preserved_row(&old_g, 4, 4, &new_g, 4, 6);
+        assert_eq!(get(&out, 4, 2, 2), COLOR_A);  // old top → new vy=2
+        assert_eq!(get(&out, 4, 1, 5), COLOR_B);  // old foundation → new vy=5
+    }
+
+    #[test]
+    fn transfer_row_shrinking_truncates_top_and_right() {
+        // Old 6×6, new 4×4 (shrink). Foundation-left stays. Cells at the
+        // right side or top of old that fall outside new are lost.
+        let mut old_g = row_grid(6, 6);
+        put(&mut old_g, 6, 0, 5, COLOR_A);  // foundation-left → keeps
+        put(&mut old_g, 6, 5, 5, COLOR_A);  // foundation-far-right → truncated (vx=5 >= new W=4)
+        put(&mut old_g, 6, 0, 0, COLOR_A);  // top-left → truncated (vy=0 → new vy=-2)
+        let new_g = row_grid(4, 4);
+        let out = transfer_preserved_row(&old_g, 6, 6, &new_g, 4, 4);
+        assert_eq!(get(&out, 4, 0, 3), COLOR_A);                    // foundation-left preserved
+        // Right cell at vx=5 is outside the new canvas; new (3, 3) holds natural.
+        assert_eq!(get(&out, 4, 3, 3), natural_color_row(4, 3));
+    }
+
+    // ── transfer_preserved_round (BL-anchored, corner/strip partition) ──────
+
+    /// Round-grid with paint markers at specified virtual coords. Returns
+    /// `(canvas grid, virtual_size, offset, rounds)` for assertions.
+    fn round_grid_marked(
+        cw: i32, ch: i32, vw: i32, vh: i32, ox: i32, oy: i32, rounds: i32,
+        marks: &[(i32, i32, u8)],  // (vx, vy, marker)
+    ) -> Vec<u8> {
+        let mut g = round_grid(cw, ch, vw, vh, ox, oy, rounds);
+        for &(vx, vy, marker) in marks {
+            let px = vx - ox; let py = vy - oy;
+            if px >= 0 && px < cw && py >= 0 && py < ch {
+                g[(py * cw + px) as usize] = marker;
+            }
+        }
+        g
+    }
+
+    #[test]
+    fn transfer_round_inner_widen_corners_anchor_to_canvas_corners() {
+        // 8×8 (inner 4, r=2) → 10×8 (inner 6, r=2). Mark all four canvas
+        // corners; after the transfer they should sit at the new canvas
+        // corners. Specifically the BL corner stays at canvas BL.
+        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2,
+            &[(0, 0, COLOR_A), (7, 0, COLOR_A), (0, 7, COLOR_A), (7, 7, COLOR_A)]);
+        let new_init = round_grid(10, 8, 10, 8, 0, 0, 2);
+        let out = transfer_preserved_round(
+            &old, 8, 8, 8, 8, 0, 0, 2,
+            &new_init, 10, 8, 10, 8, 0, 0, 2,
+        );
+        assert_eq!(get(&out, 10, 0, 0), COLOR_A);  // TL canvas corner
+        assert_eq!(get(&out, 10, 9, 0), COLOR_A);  // TR canvas corner
+        assert_eq!(get(&out, 10, 0, 7), COLOR_A);  // BL canvas corner
+        assert_eq!(get(&out, 10, 9, 7), COLOR_A);  // BR canvas corner
+    }
+
+    #[test]
+    fn transfer_round_top_strip_is_left_anchored() {
+        // Inner-width widen 4→6 (8×8 → 10×8). Mark old TOP-strip cell at
+        // vx=2 (leftmost strip cell, just past TL corner). After widening,
+        // it should stay at vx=2 (left-anchored). The new strip cells at
+        // vx=6, 7 (between old strip end and new TR corner) should be
+        // freshly natural.
+        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2, &[(2, 0, COLOR_A)]);
+        let new_init = round_grid(10, 8, 10, 8, 0, 0, 2);
+        let out = transfer_preserved_round(
+            &old, 8, 8, 8, 8, 0, 0, 2,
+            &new_init, 10, 8, 10, 8, 0, 0, 2,
+        );
+        assert_eq!(get(&out, 10, 2, 0), COLOR_A);
+        // New TOP strip cells in the middle should hold natural colour.
+        assert_eq!(get(&out, 10, 6, 0), natural_color_round(v(10, 8), v(0, 0), 2, v(6, 0)));
+    }
+
+    #[test]
+    fn transfer_round_left_strip_is_bottom_anchored() {
+        // Inner-height heighten 4→6 (8×8 → 8×10). Mark old LEFT-strip cell
+        // at vy=5 (bottommost strip cell, just above BL corner). After
+        // heightening, it should be bottom-anchored: it moves to new vy=7
+        // (preserving distance to BL = 2). The top of the new LEFT strip
+        // (vy=2, 3) gets freshly natural cells.
+        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2, &[(0, 5, COLOR_A)]);
+        let new_init = round_grid(8, 10, 8, 10, 0, 0, 2);
+        let out = transfer_preserved_round(
+            &old, 8, 8, 8, 8, 0, 0, 2,
+            &new_init, 8, 10, 8, 10, 0, 0, 2,
+        );
+        assert_eq!(get(&out, 8, 0, 7), COLOR_A);  // moved down by ΔVH=2
+        // New cell at top of LEFT strip should still be natural.
+        assert_eq!(get(&out, 8, 0, 2), natural_color_round(v(8, 10), v(0, 0), 2, v(0, 2)));
+    }
+
+    #[test]
+    fn transfer_round_shrink_horizontal_strip_drops_right_end() {
+        // Inner-width shrink 6→4 (10×8 → 8×8). Mark old TOP-strip cells:
+        // - vx=2 (left end) — preserved.
+        // - vx=7 (right end) — would map to new vx=7, but new TOP strip
+        //   only spans [2, 5]; cell is dropped to avoid colliding with new
+        //   TR corner.
+        let old = round_grid_marked(10, 8, 10, 8, 0, 0, 2, &[(2, 0, COLOR_A), (7, 0, COLOR_A)]);
+        let new_init = round_grid(8, 8, 8, 8, 0, 0, 2);
+        let out = transfer_preserved_round(
+            &old, 10, 8, 10, 8, 0, 0, 2,
+            &new_init, 8, 8, 8, 8, 0, 0, 2,
+        );
+        assert_eq!(get(&out, 8, 2, 0), COLOR_A);  // left end preserved
+        // Right end was dropped; new (5, 0) is filled by old TR corner cell,
+        // which we didn't mark — should be natural.
+        let nat_50 = natural_color_round(v(8, 8), v(0, 0), 2, v(5, 0));
+        assert_eq!(get(&out, 8, 5, 0), nat_50);
+    }
+
+    #[test]
+    fn transfer_round_rounds_increase_shifts_existing_rings_inward() {
+        // rounds 2→3, inner unchanged. Old outermost-TL corner (0, 0) was
+        // ring 2 in old; it should stay ring 2 (= rfe=1) in new at TL,
+        // i.e. new (1, 1). The new outermost ring (rfe=0) cells around the
+        // edge get freshly natural.
+        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2, &[(0, 0, COLOR_A)]);
+        let new_init = round_grid(10, 10, 10, 10, 0, 0, 3);
+        let out = transfer_preserved_round(
+            &old, 8, 8, 8, 8, 0, 0, 2,
+            &new_init, 10, 10, 10, 10, 0, 0, 3,
+        );
+        assert_eq!(get(&out, 10, 1, 1), COLOR_A);
+        // New outermost-TL cell (0, 0) should be natural.
+        assert_eq!(get(&out, 10, 0, 0), natural_color_round(v(10, 10), v(0, 0), 3, v(0, 0)));
+    }
+
+    #[test]
+    fn transfer_round_rounds_decrease_drops_outermost_ring() {
+        // rounds 3→2, inner unchanged (10×10 → 8×8). Old outermost (0, 0)
+        // ring 3 should be dropped (new pattern has no ring 3). Old ring 2
+        // (e.g. old (1, 1)) should become new ring 2 = new outermost at TL,
+        // i.e. new (0, 0).
+        let old = round_grid_marked(10, 10, 10, 10, 0, 0, 3,
+            &[(0, 0, COLOR_A), (1, 1, COLOR_B)]);
+        let new_init = round_grid(8, 8, 8, 8, 0, 0, 2);
+        let out = transfer_preserved_round(
+            &old, 10, 10, 10, 10, 0, 0, 3,
+            &new_init, 8, 8, 8, 8, 0, 0, 2,
+        );
+        // Old ring 2 corner → new outermost-TL.
+        assert_eq!(get(&out, 8, 0, 0), COLOR_B);
+    }
+
+    #[test]
+    fn transfer_round_half_submode_preserves_pixels() {
+        // Half-mode: offsetY = rounds. Inner-width widen 4→6.
+        // Old: canvas 8×6, virtual 8×8, offset (0, 2), rounds 2.
+        // New: canvas 10×6, virtual 10×8, offset (0, 2), rounds 2.
+        // Mark old TL canvas corner (canvas (0, 0) = virtual (0, 2)).
+        // After widening, it should remain at new (0, 0).
+        let old = round_grid_marked(8, 6, 8, 8, 0, 2, 2, &[(0, 2, COLOR_A)]);
+        let new_init = round_grid(10, 6, 10, 8, 0, 2, 2);
+        let out = transfer_preserved_round(
+            &old, 8, 6, 8, 8, 0, 2, 2,
+            &new_init, 10, 6, 10, 8, 0, 2, 2,
+        );
+        assert_eq!(get(&out, 10, 0, 0), COLOR_A);
+    }
+
+    #[test]
+    fn transfer_round_combined_inner_and_rounds_change() {
+        // Both inner and rounds change: rounds 2→3, inner 4→6.
+        // 8×8 → 12×12. Old TL corner cell (0, 0) was ring 2; in new it
+        // should be ring 2 = rfe=1 at TL → new (1, 1). Old TR canvas corner
+        // (7, 0) was ring 2; in new it should be ring 2 at TR → rfe=1, i.e.
+        // new (newVW-2, 1) = (10, 1).
+        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2,
+            &[(0, 0, COLOR_A), (7, 0, COLOR_B)]);
+        let new_init = round_grid(12, 12, 12, 12, 0, 0, 3);
+        let out = transfer_preserved_round(
+            &old, 8, 8, 8, 8, 0, 0, 2,
+            &new_init, 12, 12, 12, 12, 0, 0, 3,
+        );
+        assert_eq!(get(&out, 12, 1, 1), COLOR_A);
+        assert_eq!(get(&out, 12, 10, 1), COLOR_B);
+    }
+
+    #[test]
+    fn transfer_round_skips_old_hole_cells() {
+        // The old hole region (inner) is transparent. Even if we passed in
+        // a buffer where those cells were COLOR_A (impossible in practice
+        // but tests the guard), transfer should NOT overwrite the new hole
+        // with that "value" — both sides skip transparent cells.
+        let old = round_grid(9, 9, 9, 9, 0, 0, 3);
+        let new_init = round_grid(9, 9, 9, 9, 0, 0, 3);
+        let out = transfer_preserved_round(
+            &old, 9, 9, 9, 9, 0, 0, 3,
+            &new_init, 9, 9, 9, 9, 0, 0, 3,
+        );
+        // Inner-hole cell stays transparent.
+        assert_eq!(get(&out, 9, 4, 4), COLOR_TRANSPARENT);
+    }
 }
