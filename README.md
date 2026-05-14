@@ -55,15 +55,18 @@ Settings update the canvas live and the **Wipe** toggle controls whether existin
 
 ### Drawing
 
-Five tools, in the toolbar's tools group:
+Six tools, in the toolbar's tools group:
 
 - **Pencil** — paint the active colour.
-- **Fill** — flood-fill a connected region.
+- **Fill** — flood-fill a connected region (stops at the selection boundary when a selection is active).
 - **Eraser** — left click restores pixels to the underlying alternating colour; right click paints the *opposite* (the exact inverse).
 - **Overlay** — click where you want a ✕; the inward neighbour is painted so the highlight pass draws a ✕ at the clicked cell. Right-click clears it. No-op on round-mode corners (no overlay stitch fits there).
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
+- **Select** — drag a rectangle to mark cells. **Shift+drag** adds to the selection; **Ctrl+drag** removes; no-modifier replaces. A single click selects one cell; clicking off-canvas with no modifier deselects.
 
-All five respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
+All five drawing tools respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
+
+When a selection is active, painting tools are clipped to it: clicks outside the selection do nothing. The boundary appears as marching ants in a palette-aware accent colour. Holes (transparent cells) behave as outside the selection — never added by drag, never affected by paint.
 
 **Mouse:** left click paints with the primary colour, right click paints with the secondary.
 **Touch / pen:** single-finger drag paints with the primary colour. Selecting the secondary swatch (tap it, or press **2**) paints with the secondary instead.
@@ -100,17 +103,18 @@ The **⚙** button on the right of the toolbar opens a Settings popover:
 - **Load** opens a file picker and restores the entire pattern, including colours and symmetry.
 - **Export** opens a modal where the pattern is converted to text line-by-line. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
-Tool, colour, symmetry, rotation, and pixel state auto-save to `localStorage` and restore on refresh.
+Tool, colour, symmetry, rotation, selection, and pixel state auto-save to `localStorage` and restore on refresh. The selection isn't saved into `.mcw` files (it's transient editing state, not pattern data).
 
 ### Keyboard shortcuts
 
 | Action | Key |
 |---|---|
-| Pencil / Fill / Eraser / Overlay / Invert | **P** / **F** / **E** / **O** / **I** |
+| Pencil / Fill / Eraser / Overlay / Invert / Select | **P** / **F** / **E** / **O** / **I** / **S** |
 | Vertical / Horizontal / Central symmetry | **V** / **H** / **C** |
 | Diagonal ╲ / Anti-diagonal ╱ | **D** / **A** |
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
 | Select primary / secondary swatch | **1** / **2** |
+| Select all paintable cells / Deselect | **Ctrl+A** / **Ctrl+Shift+A** |
 | Undo / Redo | **Ctrl+Z** / **Ctrl+Y** (or **Ctrl+Shift+Z**) |
 
 Every button has a hover label that shows the same info.

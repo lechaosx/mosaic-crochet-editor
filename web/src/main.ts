@@ -36,10 +36,65 @@ function defaultSession(): SessionState {
         symmetry:        new Set<SymKey>(),
         hlOpacity:        100,
         invalidIntensity: 65,
+        selection:       null,
         labelsVisible:   true,
         lockInvalid:     false,
         rotation:        0,
     };
+}
+
+// Clip a freshly-painted pixel buffer to the active selection: any cell that
+// changed but isn't inside the selection is reverted to its pre-paint value.
+// Returns `after` unmodified when there's no active selection.
+function clipToSelection(before: Uint8Array, after: Uint8Array, selection: Uint8Array | null): Uint8Array {
+    if (!selection) return after;
+    const out = after.slice();
+    for (let i = 0; i < out.length; i++) {
+        if (selection[i] === 0) out[i] = before[i];
+    }
+    return out;
+}
+
+// Build a selection mask from a drag rectangle (pattern coords, inclusive),
+// combined with an existing selection per the mode:
+//   replace → use just the rect; null if rect doesn't overlap the canvas.
+//   add     → union of existing and the (clipped) rect.
+//   remove  → existing minus the (clipped) rect; null if result is empty.
+// A rect entirely outside the canvas contributes no cells. Inner-hole cells
+// (where pixels[idx] === 0) are treated the same as outside-canvas — never
+// added to a selection, even if the rect covers them.
+function commitSelectRect(
+    existing: Uint8Array | null,
+    pixels: Uint8Array,
+    W: number, H: number,
+    startX: number, startY: number, endX: number, endY: number,
+    mode: SelectMode,
+): Uint8Array | null {
+    // Does the unclamped rect overlap the canvas at all?
+    const ux1 = Math.min(startX, endX), uy1 = Math.min(startY, endY);
+    const ux2 = Math.max(startX, endX), uy2 = Math.max(startY, endY);
+    const overlaps = ux2 >= 0 && ux1 <= W - 1 && uy2 >= 0 && uy1 <= H - 1;
+
+    let next: Uint8Array;
+    if (mode === "replace") {
+        next = new Uint8Array(W * H);
+    } else {
+        next = existing ? existing.slice() : new Uint8Array(W * H);
+    }
+    if (overlaps) {
+        const x1 = Math.max(0, ux1), y1 = Math.max(0, uy1);
+        const x2 = Math.min(W - 1, ux2), y2 = Math.min(H - 1, uy2);
+        for (let y = y1; y <= y2; y++) {
+            for (let x = x1; x <= x2; x++) {
+                const i = y * W + x;
+                if (pixels[i] === 0) continue;   // hole cells: same as outside
+                next[i] = mode === "remove" ? 0 : 1;
+            }
+        }
+    }
+    // null when empty so downstream "no selection" code paths kick in.
+    for (let i = 0; i < next.length; i++) if (next[i] !== 0) return next;
+    return null;
 }
 
 const viewport = makeViewport(document.getElementById("canvas") as HTMLCanvasElement);
@@ -54,6 +109,30 @@ const store    = new Store(saved ?? defaultSession());
 let preStroke:     Uint8Array | null = null;
 let invertVisited: Set<number>| null = null;
 let strokeColor:   1 | 2              = 1;
+
+type SelectMode = "replace" | "add" | "remove";
+// Active rectangle-drag for the select tool. Mode is captured at pointerdown
+// (before we know the cursor's pattern coord); start/end are set on the
+// first `onPaintAt` and updated each subsequent move. Cleared on
+// pointerup/cancel after commit. Coords stay null until the first move.
+let selectDrag: { startX: number | null; startY: number | null; endX: number; endY: number; mode: SelectMode } | null = null;
+
+// Sync the renderer's drag state. During replace-mode drag we hide the
+// committed selection (the drag is about to replace it). The drag rect is
+// shown as its own marching-ants outline at the full sweep extent. The
+// actual committed selection only updates on pointerup.
+function syncPreview() {
+    if (!selectDrag || selectDrag.startX === null) {
+        rs.hideCommittedSelection = false;
+        rs.dragRect               = null;
+        return;
+    }
+    rs.hideCommittedSelection = selectDrag.mode === "replace";
+    rs.dragRect = {
+        x1: selectDrag.startX, y1: selectDrag.startY!,
+        x2: selectDrag.endX,   y2: selectDrag.endY,
+    };
+}
 
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, () => render(viewport, ctx, rs, store));
 
@@ -75,19 +154,34 @@ function paintAt(clientX: number, clientY: number) {
     );
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const inCanvas = x >= 0 && x < W && y >= 0 && y < H;
+    const tool = store.state.activeTool;
+
+    // Select tool: extend the in-progress drag rect; re-render to preview.
+    // Commit happens in `onPaintEnd`.
+    if (tool === "select") {
+        if (!selectDrag) return;
+        selectDrag.endX = x;
+        selectDrag.endY = y;
+        render(viewport, ctx, rs, store);
+        return;
+    }
 
     // The overlay tool is the only one that handles clicks in the gutter
     // (just outside the canvas, where boundary ! markers render).
     // Everything else wants an in-canvas, non-hole pixel.
-    if (!inCanvas && store.state.activeTool !== "overlay") return;
+    if (!inCanvas && tool !== "overlay") return;
     if (inCanvas && pixels[y * W + x] === 0) return;
+    // When a selection is active, the click cell itself must be in it.
+    // Necessary because some tools (notably overlay) paint a *different*
+    // cell from the click cell, so clip-after alone would let a click
+    // outside the selection still produce a visible mark inside it.
+    if (inCanvas && store.state.selection && store.state.selection[y * W + x] === 0) return;
 
     const mask   = getSymmetryMask(store.state.symmetry, W, H);
     const before = pixels;
     let next: Uint8Array;
-    const tool = store.state.activeTool;
     if (tool === "fill") {
-        next = flood_fill(pixels, W, H, x, y, strokeColor, mask);
+        next = flood_fill(pixels, W, H, x, y, strokeColor, mask, store.state.selection ?? new Uint8Array(0));
     } else if (tool === "eraser") {
         // Left-click restores the natural alternating baseline; right-click
         // paints the opposite (deliberately wrong placements).
@@ -125,6 +219,13 @@ function paintAt(clientX: number, clientY: number) {
     } else {
         next = paint_pixel(pixels, W, H, x, y, strokeColor, mask);
     }
+    // Clip to selection: revert any cells that changed but aren't in the
+    // selection. Skipped for the overlay tool — its painted cell is the
+    // *inward neighbour* of the click cell (the implementation detail that
+    // makes the ✕ render at the click position), not the click cell itself,
+    // so clip-after would block the user's intended placement near the
+    // selection border. The click-cell gate above is the user-intent check.
+    if (tool !== "overlay") next = clipToSelection(before, next, store.state.selection);
     if (store.state.lockInvalid) next = lockAlwaysInvalid(pattern, before, next);
     store.commit(s => { s.pixels = next; });
     updateStatus(store.plan, x, y);
@@ -197,6 +298,18 @@ function rotate(delta: number) {
     store.commit(s => { s.rotation += delta; }, { recompute: false });
 }
 
+function selectAll() {
+    // Hole cells behave as outside the canvas — exclude them from select-all.
+    const { pixels } = store.state;
+    const all = new Uint8Array(pixels.length);
+    for (let i = 0; i < pixels.length; i++) if (pixels[i] !== 0) all[i] = 1;
+    store.commit(s => { s.selection = all; }, { recompute: false, history: true });
+}
+function deselect() {
+    if (!store.state.selection) return;
+    store.commit(s => { s.selection = null; }, { recompute: false, history: true });
+}
+
 /* ── Pattern (Edit) popover ─────────────────────────────────────────────── */
 // No separate snapshot — the history head is already the pre-edit state.
 // Live preview mutates `state` / `pixels` in memory without touching history;
@@ -216,6 +329,9 @@ function onEditChange() {
         s.pattern  = pattern;
         s.pixels   = pixels;
         s.symmetry = pruneUnavailableDiagonals(s.symmetry, pattern.canvasWidth, pattern.canvasHeight);
+        // Selection coords no longer make sense after a resize — clearer to
+        // drop than try to remap (and trivially undoable via the same edit).
+        s.selection = null;
     });
     refreshSymmetryUi();
 }
@@ -234,7 +350,8 @@ function applyRestored(r: Restored) {
                      || r.pattern.canvasHeight !== store.state.pattern.canvasHeight;
     if (dimsChanged) fitToView(viewport.canvas, viewport.view, r.pattern, store.state.rotation);
     store.replace(
-        { ...store.state, pattern: r.pattern, pixels: r.pixels, colorA: r.colorA, colorB: r.colorB },
+        { ...store.state, pattern: r.pattern, pixels: r.pixels, selection: r.selection,
+          colorA: r.colorA, colorB: r.colorB },
         { persist: true },
     );
     (document.getElementById("color-a") as HTMLInputElement).value = r.colorA;
@@ -255,7 +372,8 @@ async function onLoad() {
     fitToView(viewport.canvas, viewport.view, loaded.pattern, store.state.rotation);
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
-          colorA: loaded.colorA, colorB: loaded.colorB },
+          colorA: loaded.colorA, colorB: loaded.colorB,
+          selection: null /* loaded pattern's cells don't match prior selection's coords */ },
         { history: true, persist: true },
     );
     (document.getElementById("color-a") as HTMLInputElement).value = loaded.colorA;
@@ -341,13 +459,56 @@ const clientToPattern = (cx: number, cy: number) => {
 
 mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
-    onPaintStart: (color) => {
+    onPaintStart: (color, mods) => {
+        if (store.state.activeTool === "select") {
+            // Mode captured here; start/end filled in on the first onPaintAt
+            // (gesture fires onPaintAt immediately after onPaintStart, so the
+            // null window is one synchronous step).
+            selectDrag = {
+                startX: null, startY: null, endX: 0, endY: 0,
+                mode: mods.shift ? "add" : (mods.ctrl ? "remove" : "replace"),
+            };
+            return;
+        }
         strokeColor   = color;
         preStroke     = store.state.pixels.slice();
         invertVisited = store.state.activeTool === "invert" ? new Set<number>() : null;
     },
-    onPaintAt:    paintAt,
+    onPaintAt:    (cx, cy) => {
+        if (store.state.activeTool === "select" && selectDrag) {
+            const p = screenToPattern(
+                viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+                store.state.pattern, cx, cy,
+            );
+            if (selectDrag.startX === null) {
+                selectDrag.startX = p.x;
+                selectDrag.startY = p.y;
+            }
+            selectDrag.endX = p.x;
+            selectDrag.endY = p.y;
+            syncPreview();
+            render(viewport, ctx, rs, store);
+            return;
+        }
+        paintAt(cx, cy);
+    },
     onPaintEnd:   () => {
+        if (store.state.activeTool === "select" && selectDrag) {
+            const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+            const next = selectDrag.startX === null
+                ? store.state.selection   // never moved → no change
+                : commitSelectRect(
+                    store.state.selection, store.state.pixels, W, H,
+                    selectDrag.startX, selectDrag.startY!,
+                    selectDrag.endX,   selectDrag.endY,
+                    selectDrag.mode,
+                );
+            selectDrag = null;
+            syncPreview();
+            store.commit(s => { s.selection = next; },
+                { recompute: false, history: true });
+            return;
+        }
         if (preStroke && !arraysEqual(preStroke, store.state.pixels)) {
             store.commit(() => {}, { recompute: false, render: false, history: true });
         }
@@ -355,6 +516,12 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         invertVisited = null;
     },
     onPaintCancel: () => {
+        if (store.state.activeTool === "select") {
+            selectDrag = null;
+            syncPreview();
+            render(viewport, ctx, rs, store);
+            return;
+        }
         // Two-finger gesture started — revert the partial stroke.
         if (preStroke) {
             const snap = preStroke;
@@ -374,6 +541,8 @@ document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
         else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
+        else if (e.key === "a" && !e.shiftKey) { e.preventDefault(); selectAll(); }
+        else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); deselect(); }
         return;
     }
     const k = e.key.toLowerCase();
@@ -382,6 +551,7 @@ document.addEventListener("keydown", e => {
     else if (k === "e") setTool("eraser");
     else if (k === "o") setTool("overlay");
     else if (k === "i") setTool("invert");
+    else if (k === "s") setTool("select");
     else if (k === "v") toggleSym("V");
     else if (k === "h") toggleSym("H");
     else if (k === "c") toggleSym("C");

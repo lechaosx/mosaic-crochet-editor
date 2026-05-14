@@ -9,6 +9,15 @@ const ROT_DURATION = 250;
 const FADE_RATE    = 1 / 0.18;   // per second
 const FAVICON_SIZE = 32;
 const LABEL_FONT   = `ui-monospace, "SF Mono", Menlo, monospace`;
+// Marching-ants scroll speed in **screen pixels** per second. Converted to
+// pattern units per frame using current zoom/dpr so the perceived speed is
+// constant regardless of zoom level.
+const ANTS_SCREEN_PX_PER_SEC = 24;
+// Discrete dash-offset step in **screen pixels**. The continuous offset
+// (advanced per frame) is snapped to multiples of this step before being
+// applied, so dashes jump rather than glide — the classic marching-ants
+// look. With 24 px/s + 3 px/step the visual ticks ~8 times per second.
+const ANTS_STEP_PX = 3;
 
 // `PlanDir` → outward offset in pattern coords. Single source of truth for
 // the direction enum decoding; the actual direction *selection* per cell
@@ -78,6 +87,19 @@ export interface RendererState {
     // Third palette colour for the ! invalid marker, chosen at render time
     // to contrast nicely with both user colours. See `chooseInvalidColor`.
     invalidColor: string;
+    // During a replace-mode select drag, the committed selection is hidden
+    // (the drag is about to drop it). For add/remove modes the committed
+    // selection stays visible so the user can see what they're modifying.
+    hideCommittedSelection: boolean;
+    // Full unclamped drag rectangle (pattern coords, inclusive). Rendered as
+    // a marching-ants outline during a select drag — same style as the
+    // selection itself. Shows the user the full sweep even when it crosses
+    // the canvas border. The actual committed selection (clipped to canvas,
+    // holes excluded) only appears after release.
+    dragRect: { x1: number; y1: number; x2: number; y2: number } | null;
+    // Marching-ants phase. Animated in `frame` while any selection (preview
+    // or committed) is on-screen; used as `lineDashOffset` for the outline.
+    selectionDashOffset: number;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
 }
@@ -95,7 +117,10 @@ export function makeRendererState(): RendererState {
         lastFrameTime:  0,
         lastStore:      null,
         colors:         [null, "#000000", "#ffffff"],
-        invalidColor:   "hsl(0, 70%, 50%)",
+        invalidColor:     "hsl(0, 70%, 50%)",
+        hideCommittedSelection: false,
+        dragRect:               null,
+        selectionDashOffset:    0,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
     };
@@ -243,6 +268,18 @@ function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, n
         if (rs.topIndicatorOpacity !== targetOpacity) active = true;
     }
 
+    // Marching ants: animate the dash offset while any ants outline is
+    // visible. Convert screen-px/sec to pattern-units/sec so the visible
+    // speed is constant across zoom levels. The modulo keeps the offset
+    // bounded so floating-point precision holds over long sessions.
+    const antsVisible = rs.dragRect !== null
+        || (rs.lastStore && !rs.hideCommittedSelection && rs.lastStore.state.selection !== null);
+    if (antsVisible) {
+        const advance = (ANTS_SCREEN_PX_PER_SEC * dtSec) / (vp.view.zoom * vp.dpr);
+        rs.selectionDashOffset = (rs.selectionDashOffset + advance) % 1000;
+        active = true;
+    }
+
     if (rs.lastStore) rerender(vp, ctx, rs, rs.lastStore);
     rs.lastFrameTime = now;
     rs.rafId = active ? requestAnimationFrame(now2 => frame(rs, vp, ctx, now2)) : null;
@@ -280,6 +317,12 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
     rs.colors[2]    = store.state.colorB;
     rs.invalidColor = chooseInvalidColor(store.state.colorA, store.state.colorB, store.state.invalidIntensity);
     syncRotation(rs, store.state.rotation, vp, ctx);
+    // Kick off the rAF loop whenever any marching-ants outline is on-screen
+    // (committed selection that isn't hidden, or an in-flight drag rect).
+    // `frame()` advances the dash offset each tick and stops on its own.
+    const antsVisible = rs.dragRect !== null
+        || (!rs.hideCommittedSelection && store.state.selection !== null);
+    if (antsVisible) startRaf(rs, vp, ctx);
     updateFavicon(rs.faviconCanvas, rs.faviconCtx, rs.colors, store.state.pattern, store.state.pixels);
     rerender(vp, ctx, rs, store);
 }
@@ -319,11 +362,117 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 
     renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.invalidColor, pattern, pixels, plan, m, hlOpacity / 100);
     renderSymmetryGuides(ctx, view, dpr, pattern, symmetry);
+    // During a drag, the preview wins even when empty (drag started outside
+    // canvas in replace mode → old selection visually disappears immediately).
+    // Snap the dash offset to discrete screen-pixel steps so dashes visibly
+    // tick rather than glide.
+    const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
+    const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
+    if (!rs.hideCommittedSelection) {
+        renderSelection(ctx, view, dpr, pattern, store.state.selection, rs.invalidColor, dashOffsetSnapped);
+    }
+    if (rs.dragRect) renderDragRect(ctx, view, dpr, rs.dragRect, rs.invalidColor, dashOffsetSnapped);
     if (labelsVisible) {
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
     if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
+}
+
+// Outline of a selection: walk all selected cells, emit a line segment for
+// each side that borders an unselected cell (or canvas edge). Drawn in the
+// existing `invalidColor` — already a palette-distinct contrast pick — so
+// it's visible against either palette. Static dashes; animating the offset
+// in the rAF loop is a Phase 1 follow-up.
+// Trace the selection's boundary as one or more closed polylines (one per
+// connected component, plus one per hole). Each loop is CCW around the
+// selected region — top edge goes right, right edge goes down, bottom edge
+// goes left, left edge goes up. Holes naturally end up CW. Returned as flat
+// number arrays [x0, y0, x1, y1, …]; first and last point coincide.
+// Renderer walks each loop as a single continuous subpath, so the marching-
+// ants dash offset flows around the perimeter (rather than restarting per
+// cell-edge, which would look like flickering noise instead of motion).
+function tracedBoundary(selection: Uint8Array, W: number, H: number): number[][] {
+    const cornerKey = (x: number, y: number) => y * (W + 1) + x;
+    const edgeFrom = new Map<number, [number, number, number, number]>();
+    const sel = (x: number, y: number) =>
+        x >= 0 && x < W && y >= 0 && y < H && selection[y * W + x] === 1;
+
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            if (!sel(x, y)) continue;
+            if (!sel(x,     y - 1)) edgeFrom.set(cornerKey(x,     y),     [x,     y,     x + 1, y    ]); // top    →
+            if (!sel(x + 1, y))     edgeFrom.set(cornerKey(x + 1, y),     [x + 1, y,     x + 1, y + 1]); // right  ↓
+            if (!sel(x,     y + 1)) edgeFrom.set(cornerKey(x + 1, y + 1), [x + 1, y + 1, x,     y + 1]); // bottom ←
+            if (!sel(x - 1, y))     edgeFrom.set(cornerKey(x,     y + 1), [x,     y + 1, x,     y    ]); // left   ↑
+        }
+    }
+
+    const paths: number[][] = [];
+    while (edgeFrom.size > 0) {
+        const startKey: number = edgeFrom.keys().next().value!;
+        const path: number[] = [];
+        let key = startKey;
+        while (edgeFrom.has(key)) {
+            const e = edgeFrom.get(key)!;
+            edgeFrom.delete(key);
+            if (path.length === 0) path.push(e[0], e[1]);
+            path.push(e[2], e[3]);
+            key = cornerKey(e[2], e[3]);
+            if (key === startKey) break;
+        }
+        if (path.length >= 4) paths.push(path);
+    }
+    return paths;
+}
+
+function renderSelection(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: PatternState, selection: Uint8Array | null,
+    color: string, dashOffset: number,
+) {
+    if (!selection) return;
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
+    const lw   = 3.0 / (view.zoom * dpr);
+    const dash = 6   / (view.zoom * dpr);
+
+    ctx.save();
+    ctx.lineWidth      = lw;
+    ctx.setLineDash([dash, dash]);
+    ctx.lineDashOffset = dashOffset;
+    ctx.strokeStyle    = color;
+    ctx.beginPath();
+    for (const path of tracedBoundary(selection, W, H)) {
+        ctx.moveTo(path[0], path[1]);
+        for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
+    }
+    ctx.stroke();
+    ctx.restore();
+}
+
+// Marching-ants outline of the in-flight drag rect — same style as the
+// selection outline so the visual reads consistently. Shows the full sweep
+// even when the rect crosses the canvas border. The actually-committed
+// selection (clipped to canvas, holes excluded) only appears after release.
+function renderDragRect(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    r: { x1: number; y1: number; x2: number; y2: number },
+    color: string, dashOffset: number,
+) {
+    const lw   = 3.0 / (view.zoom * dpr);
+    const dash = 6   / (view.zoom * dpr);
+    const x1 = Math.min(r.x1, r.x2), y1 = Math.min(r.y1, r.y2);
+    const x2 = Math.max(r.x1, r.x2) + 1, y2 = Math.max(r.y1, r.y2) + 1;
+    ctx.save();
+    ctx.lineWidth      = lw;
+    ctx.setLineDash([dash, dash]);
+    ctx.lineDashOffset = dashOffset;
+    ctx.strokeStyle    = color;
+    // One closed subpath so the dash offset flows around the rectangle.
+    ctx.beginPath();
+    ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.restore();
 }
 
 // ── Drawing helpers ────────────────────────────────────────────────────────

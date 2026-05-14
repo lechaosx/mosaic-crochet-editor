@@ -336,10 +336,22 @@ pub fn transfer_preserved_round(
     result
 }
 
-pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y: i32, fill_color: u8, mask: u8) -> Vec<u8> {
-    let mut result      = pixels.to_vec();
+// `selection` is a per-cell bitmask (1 = in selection, 0 = not). Empty slice
+// = no selection — walker runs across the whole connected region. When
+// non-empty the walker treats unselected cells as boundaries: BFS never
+// crosses out of the selection, so a same-colour path running through
+// unselected cells doesn't leak the fill into another selection island.
+// The symmetric-orbit fill at the end is unaffected; TS-side clip-after
+// handles mirror cells that land outside the selection.
+pub fn flood_fill(
+    pixels: &[u8], width: i32, height: i32,
+    start_x: i32, start_y: i32, fill_color: u8, mask: u8,
+    selection: &[u8],
+) -> Vec<u8> {
+    let mut result       = pixels.to_vec();
     let     target_color = result[(start_y * width + start_x) as usize];
     if target_color == fill_color || target_color == 0 { return result; }
+    let use_sel = !selection.is_empty();
 
     let mut visited: HashSet<i32>          = HashSet::new();
     let mut queue:   VecDeque<(i32, i32)>  = VecDeque::new();
@@ -351,6 +363,7 @@ pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y:
         if x < 0 || x >= width || y < 0 || y >= height { continue; }
         let idx = y * width + x;
         if visited.contains(&idx) || result[idx as usize] != target_color { continue; }
+        if use_sel && selection[idx as usize] == 0 { continue; }
         visited.insert(idx);
         filled.push((x, y));
         queue.push_back((x + 1, y));
@@ -840,5 +853,40 @@ mod tests {
         );
         // Inner-hole cell stays transparent.
         assert_eq!(get(&out, 9, 4, 4), COLOR_TRANSPARENT);
+    }
+
+    // ── flood_fill selection awareness ───────────────────────────────────────
+
+    #[test]
+    fn flood_fill_no_selection_fills_whole_connected_region() {
+        // Empty selection slice = no selection clipping; behavior unchanged
+        // from before the selection-aware refactor.
+        let pixels = vec![COLOR_A; 5];
+        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, 0, &[]);
+        assert_eq!(&out[..], &[COLOR_B, COLOR_B, COLOR_B, COLOR_B, COLOR_B]);
+    }
+
+    #[test]
+    fn flood_fill_stops_at_unselected_cells() {
+        // 5×1 grid all A. Selection covers cells 0–2; cells 3–4 unselected.
+        // Fill from (0, 0) with B: walker should stop at the selection
+        // boundary, leaving cells 3–4 at A.
+        let pixels = vec![COLOR_A; 5];
+        let selection: Vec<u8> = vec![1, 1, 1, 0, 0];
+        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, 0, &selection);
+        assert_eq!(&out[..], &[COLOR_B, COLOR_B, COLOR_B, COLOR_A, COLOR_A]);
+    }
+
+    #[test]
+    fn flood_fill_disconnected_selection_islands_isolated() {
+        // 5×1 grid all A. Selection has two disconnected islands (cell 0 and
+        // cell 4); cells 1–3 are unselected but match the target colour. A
+        // naïve walker would cross through 1–3 and fill cell 4 too; the
+        // selection-aware walker fills only the connected component
+        // containing the click.
+        let pixels = vec![COLOR_A; 5];
+        let selection: Vec<u8> = vec![1, 0, 0, 0, 1];
+        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, 0, &selection);
+        assert_eq!(&out[..], &[COLOR_B, COLOR_A, COLOR_A, COLOR_A, COLOR_A]);
     }
 }

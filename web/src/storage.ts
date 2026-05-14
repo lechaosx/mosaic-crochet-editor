@@ -32,6 +32,23 @@ export function packPixels(pixels: Uint8Array): string {
     }
     return u8ToB64(out);
 }
+
+// 1 bit per cell — selection is a pure boolean mask, no hole sentinel.
+export function packSelection(sel: Uint8Array): string {
+    const out = new Uint8Array(Math.ceil(sel.length / 8));
+    for (let i = 0; i < sel.length; i++) {
+        if (sel[i]) out[i >> 3] |= 1 << (i & 7);
+    }
+    return u8ToB64(out);
+}
+export function unpackSelection(s: string, length: number): Uint8Array {
+    const packed = b64ToU8(s);
+    const out = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        out[i] = (packed[i >> 3] >> (i & 7)) & 1;
+    }
+    return out;
+}
 // Start from a fresh natural-colour pattern (which already encodes hole
 // positions as 0) and overwrite non-hole cells with the saved A/B bit. This
 // keeps the hole geometry as a single Rust-side source of truth — no TS-side
@@ -73,6 +90,7 @@ interface LocalSaveV2 {
     symmetry:        string[];
     hlOpacity:       number;
     invalidIntensity?: number;  // added after v2 shipped; missing → default 65
+    selection?:      string | null;  // added after v2 shipped; packed bitset, or null
     labelsVisible:   boolean;
     lockInvalid:     boolean;
     canvasRotation:  number;
@@ -107,6 +125,7 @@ export function saveToLocalStorage(s: Readonly<SessionState>) {
         symmetry:       [...s.symmetry],
         hlOpacity:        s.hlOpacity,
         invalidIntensity: s.invalidIntensity,
+        selection:        s.selection ? packSelection(s.selection) : null,
         labelsVisible:   s.labelsVisible,
         lockInvalid:     s.lockInvalid,
         canvasRotation:  s.rotation,
@@ -137,6 +156,9 @@ export function loadFromLocalStorage(): SessionState | null {
             symmetry:      new Set((data.symmetry ?? []) as SymKey[]),
             hlOpacity:        data.hlOpacity      ?? 100,
             invalidIntensity: ("invalidIntensity" in data && data.invalidIntensity !== undefined) ? data.invalidIntensity : 65,
+            selection:        (("selection" in data && data.selection)
+                                ? unpackSelection(data.selection, data.state.canvasWidth * data.state.canvasHeight)
+                                : null),
             labelsVisible:    data.labelsVisible  ?? true,
             lockInvalid:   ("lockInvalid" in data ? data.lockInvalid : false) ?? false,
             rotation:      data.canvasRotation ?? 0,

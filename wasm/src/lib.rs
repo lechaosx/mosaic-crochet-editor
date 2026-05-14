@@ -185,8 +185,12 @@ pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color
 }
 
 #[wasm_bindgen]
-pub fn flood_fill(pixels: &[u8], width: i32, height: i32, start_x: i32, start_y: i32, fill_color: u8, symmetry_mask: u8) -> Vec<u8> {
-    tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, symmetry_mask)
+pub fn flood_fill(
+    pixels: &[u8], width: i32, height: i32,
+    start_x: i32, start_y: i32, fill_color: u8, symmetry_mask: u8,
+    selection: &[u8],
+) -> Vec<u8> {
+    tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, symmetry_mask, selection)
 }
 
 #[wasm_bindgen]
