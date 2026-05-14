@@ -4,9 +4,15 @@ interface Pointer { x: number; y: number; button: number; type: string; }
 
 type Mode = "idle" | "paint" | "gesture" | "gesture-end" | "middle-pan";
 
+export interface PointerModifiers {
+    shift: boolean;
+    ctrl:  boolean;
+    alt:   boolean;
+}
+
 export interface GestureCallbacks {
     primaryColor:  () => 1 | 2;
-    onPaintStart:  (color: 1 | 2) => void;
+    onPaintStart:  (color: 1 | 2, modifiers: PointerModifiers) => void;
     onPaintAt:     (clientX: number, clientY: number) => void;
     onPaintEnd:    () => void;     // commit stroke (record history if changed)
     onPaintCancel: () => void;     // discard stroke (revert to pre-stroke pixels)
@@ -78,7 +84,7 @@ export function mountGestures(
         } else if (mode === "idle") {
             const color: 1 | 2 = e.button === 2 ? (cb.primaryColor() === 1 ? 2 : 1) : cb.primaryColor();
             mode = "paint";
-            cb.onPaintStart(color);
+            cb.onPaintStart(color, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey });
             cb.onPaintAt(e.clientX, e.clientY);
         }
     });

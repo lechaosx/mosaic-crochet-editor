@@ -13,7 +13,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Drawing
 
-- Tools: Pencil, Fill, Eraser, Overlay, Invert. — **your decision**
+- Tools: Pencil, Fill, Eraser, Overlay, Invert, Select. — **your decision**
 - **Eraser** (left = restore natural; right = paint *opposite* of natural, the exact inverse). — **your decision**
 - **Overlay** tool: click *where you want a ✕*; the inward neighbour is painted with the overlay colour so the highlight pass renders a ✕ at the clicked cell. Right-click clears the ✕ by restoring that neighbour's natural colour. Symmetry mirrors the ✕ position (each orbit cell of the click gets its own ✕ with the correct per-cell colour). No-op on round-mode corners (no overlay stitch geometry exists there). — **your decision**
 - Painting is blocked on inner-hole (transparent) pixels. — **Claude's choice**
@@ -21,6 +21,25 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Eraser restores each pixel to its own natural alternating colour, not the click point's. Works under symmetry. — **your decision** (behaviour); **Claude's choice** (per-orbit-cell fix)
 - Invert toggles 1 ↔ 2 with symmetry; within one stroke an orbit cell can't be inverted twice. — **your decision**
 - Left click paints primary, right click paints secondary on desktop. — **Claude's choice**
+
+## Selection
+
+- **Select** tool (`S`): drag a rectangle to mark cells. **Shift+drag** adds; **Ctrl+drag** removes; no-modifier replaces (GIMP semantics). Single click = 1×1 rect. — **your decision**
+- Click outside the canvas with no modifier deselects. With modifiers, no-op. — **your decision**
+- Click inside an in-canvas, non-hole cell that's not in the selection: paint tools no-op. The click cell itself must be in the selection. — **your decision**
+- Inner-hole cells behave as outside-the-canvas for all selection purposes (never added by rect or magic-wand, never affected by paint, never outlined). — **your decision**
+- Painting tools (pencil, fill, eraser, invert) are clipped to the selection. Cells outside don't change. — **your decision**
+  - `fill` walks the connected same-colour region but stops at unselected cells (Rust-side `flood_fill` walker — fixes the "fills across selection boundary via same-colour path through unselected cells" leak). — **your decision**
+- The **Overlay tool** is exempt from selection clipping for its painted *inward-neighbour* cell — the click cell (where the ✕ visually lands) is in the selection (gate-checked), so the implementation-detail neighbour writes happen regardless. — **your decision**
+- Drawing the marquee:
+  - Marching-ants outline along the selection boundary; one continuous closed loop per connected component (so dashes flow *around* the perimeter rather than restarting per cell-edge). — **your decision**
+  - Drawn in the `invalidColor` (the palette-aware third colour) so it stays visible against any palette. — **your decision**
+  - Animated as discrete jumps (~8 ticks/sec, dash-offset snapped to 3-screen-px steps) for a stepped "marching" feel rather than continuous glide. — **your decision**
+  - Speed is zoom-independent (configured in screen pixels per second, converted to pattern units per frame). — **your decision**
+- During a drag, a static unclamped rectangle outline (same style, full sweep including off-canvas) shows what's about to commit. In replace mode the existing selection is hidden during drag; in add/remove mode it stays visible. — **your decision**
+- Keyboard: `Ctrl+A` selects all (paintable cells; holes excluded); `Ctrl+Shift+A` deselects. — **your decision**
+- Selection is part of undo/redo: changing the selection pushes a snapshot. — **your decision**
+- Selection is *session* state, not pattern data: persisted in localStorage (survives refresh) but NOT in `.mcw` (shareable pattern files don't carry transient editing state). Cleared on canvas resize or file load (its coords no longer make sense). — **your decision**
 
 ## Symmetry
 

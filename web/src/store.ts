@@ -23,6 +23,10 @@ export interface SessionState {
     symmetry:      Set<SymKey>;          // directly active axes
     hlOpacity:        number;            // 0..100, matches the input range
     invalidIntensity: number;            // 0..100, drives ! marker saturation
+    // 1 byte per canvas cell; 1 = in selection, 0 = not. `null` = no selection.
+    // Persisted in localStorage (1-bit packed) but NOT in .mcw — transient
+    // editing state, not pattern data.
+    selection:     Uint8Array | null;
     labelsVisible: boolean;
     lockInvalid:   boolean;
     rotation:      number;               // degrees (target — render.ts animates the visual)
