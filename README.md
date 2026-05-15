@@ -62,13 +62,15 @@ Eight tools, in the toolbar's tools group:
 - **Eraser** — left click restores pixels to the underlying alternating colour; right click paints the *opposite* (the exact inverse).
 - **Overlay** — click where you want a ✕; the inward neighbour is painted so the highlight pass draws a ✕ at the clicked cell. Right-click clears it. No-op on round-mode corners (no overlay stitch fits there).
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
-- **Select** — drag a rectangle to mark cells. **Shift+drag** adds to the selection; **Ctrl+drag** removes; no-modifier replaces. A single click selects one cell; clicking off-canvas with no modifier deselects.
-- **Magic wand** — click a cell to select its connected same-colour region. Same Shift / Ctrl / no-modifier semantics as the rect tool.
-- **Move** — drag inside the current selection to shift its pixels. Source cells reset to the natural alternating colour; release stamps the float at the new position. Pieces dragged off-canvas or onto hole cells are dropped on release. **Ctrl+drag** copies (leaves the source intact); **Shift+drag** moves the selection outline only (no pixels move). **Hold Alt** with any tool to temporarily swap into Move; releasing Alt restores the previous tool.
+- **Select** — drag a rectangle to **lift** those cells into a floating selection: their values move into the float, the canvas below them resets to the natural alternating colour. **Shift+drag** adds to the selection; **Ctrl+drag** removes (re-anchors the rest); no-modifier replaces. A single click lifts one cell.
+- **Magic wand** — click a cell to lift its connected same-colour region as a float. Same Shift / Ctrl / no-modifier semantics as the rect tool.
+- **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive until you deselect (`Ctrl+Shift+A`), switch out via the Edit popover, save, or do something else that anchors it. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Shift+drag** moves the marquee only — the float's pixels are cleared at the start, the drag carries an empty selection, and on release the canvas content at the new position is re-lifted as the new float. **Hold Alt** with any tool to temporarily swap into Move; releasing Alt restores the previous tool.
 
 All five drawing tools respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
 
-When a selection is active, painting tools are clipped to it: clicks outside the selection do nothing. The boundary appears as marching ants in a palette-aware accent colour. Holes (transparent cells) behave as outside the selection — never added by drag, never affected by paint.
+When a selection is active, painting tools clip to its visible marquee: changes inside the float go to the float's pixels; clicks outside the marquee do nothing. The boundary appears as marching ants in a palette-aware accent colour. Holes (transparent cells) behave as outside the selection — never lifted, never affected by paint through the float.
+
+`Ctrl+C` copies the float to the clipboard *and* stamps it into the canvas at its current position (the marquee stays alive). `Ctrl+X` cuts: clipboard gets the content, canvas under the float clears to baseline, and the selection drops. `Ctrl+V` pastes from the clipboard back at the original copy location as a non-destructive float — moving it leaves the canvas underneath alone, so paste-then-move is duplicate by default.
 
 **Mouse:** left click paints with the primary colour, right click paints with the secondary.
 **Touch / pen:** single-finger drag paints with the primary colour. Selecting the secondary swatch (tap it, or press **2**) paints with the secondary instead.
@@ -105,7 +107,7 @@ The **⚙** button on the right of the toolbar opens a Settings popover:
 - **Load** opens a file picker and restores the entire pattern, including colours and symmetry.
 - **Export** opens a modal where the pattern is converted to text line-by-line. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
-Tool, colour, symmetry, rotation, selection, and pixel state auto-save to `localStorage` and restore on refresh. The selection isn't saved into `.mcw` files (it's transient editing state, not pattern data).
+Tool, colour, symmetry, rotation, the active float (selection + lifted pixels), and the committed canvas auto-save to `localStorage` and restore on refresh. The float isn't written to `.mcw` files (it's transient editing state, not pattern data) — Save and Export bake the float into the file/export and leave the live selection alone.
 
 ### Keyboard shortcuts
 
@@ -118,6 +120,7 @@ Tool, colour, symmetry, rotation, selection, and pixel state auto-save to `local
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
 | Select primary / secondary swatch | **1** / **2** |
 | Select all paintable cells / Deselect | **Ctrl+A** / **Ctrl+Shift+A** |
+| Copy selection / Cut to clipboard / Paste as a free float | **Ctrl+C** / **Ctrl+X** / **Ctrl+V** |
 | Undo / Redo | **Ctrl+Z** / **Ctrl+Y** (or **Ctrl+Shift+Z**) |
 
 Every button has a hover label that shows the same info.

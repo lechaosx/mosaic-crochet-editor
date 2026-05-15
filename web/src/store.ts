@@ -11,7 +11,7 @@ import {
     build_highlight_plan_row,
     build_highlight_plan_round,
 } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey } from "./types";
+import { Tool, PatternState, SymKey, Float } from "./types";
 
 export interface SessionState {
     pattern:       PatternState;
@@ -23,10 +23,12 @@ export interface SessionState {
     symmetry:      Set<SymKey>;          // directly active axes
     hlOpacity:        number;            // 0..100, matches the input range
     invalidIntensity: number;            // 0..100, drives ! marker saturation
-    // 1 byte per canvas cell; 1 = in selection, 0 = not. `null` = no selection.
-    // Persisted in localStorage (1-bit packed) but NOT in .mcw — transient
-    // editing state, not pattern data.
-    selection:     Uint8Array | null;
+    // The lifted-selection layer. When present, `pixels` carries the canvas
+    // with the float's mask cells reset to natural baseline (cut on lift);
+    // `float.pixels` carries the lifted values, stamped at offset `(dx, dy)`
+    // on render. Commit (deselect / tool switch / etc.) writes the lifted
+    // pixels into `pixels` at the offset position and clears the float.
+    float:         Float | null;
     labelsVisible: boolean;
     lockInvalid:   boolean;
     rotation:      number;               // degrees (target — render.ts animates the visual)
@@ -44,12 +46,38 @@ export type ObserverFn = (store: Store) => void;
 export type HistoryFn  = (s: Readonly<SessionState>) => void;
 export type PersistFn  = (s: Readonly<SessionState>) => void;
 
+// The visible canvas: `pixels` with `float` stamped at its current offset.
+// Off-canvas and over-hole destinations drop. A mask cell whose lifted
+// value is 0 means "selected, no content" (e.g., after cut) — those skip
+// stamping so the float doesn't punch holes into the canvas.
+export function visiblePixels(s: Readonly<SessionState>): Uint8Array {
+    if (!s.float) return s.pixels;
+    const { canvasWidth: W, canvasHeight: H } = s.pattern;
+    const { mask, pixels: lifted, dx: fdx, dy: fdy } = s.float;
+    const out = s.pixels.slice();
+    for (let sy = 0; sy < H; sy++) {
+        const srow = sy * W;
+        for (let sx = 0; sx < W; sx++) {
+            if (mask[srow + sx] === 0) continue;
+            const v = lifted[srow + sx];
+            if (v === 0) continue;   // empty mask cell (cut content)
+            const tx = sx + fdx, ty = sy + fdy;
+            if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
+            const ti = ty * W + tx;
+            if (out[ti] === 0) continue;   // skip holes
+            out[ti] = v;
+        }
+    }
+    return out;
+}
+
 function computePlan(s: SessionState): Int16Array {
-    const p = s.pattern;
+    const p   = s.pattern;
+    const vis = visiblePixels(s);
     return p.mode === "row"
-        ? build_highlight_plan_row(s.pixels, p.canvasWidth, p.canvasHeight).slice()
+        ? build_highlight_plan_row(vis, p.canvasWidth, p.canvasHeight).slice()
         : build_highlight_plan_round(
-            s.pixels, p.canvasWidth, p.canvasHeight,
+            vis, p.canvasWidth, p.canvasHeight,
             p.virtualWidth, p.virtualHeight,
             p.offsetX, p.offsetY, p.rounds,
         ).slice();
