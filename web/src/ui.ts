@@ -90,6 +90,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         overlay: el("tool-overlay"),
         invert:  el("tool-invert"),
         select:  el("tool-select"),
+        wand:    el("tool-wand"),
     };
     (Object.keys(toolButtons) as Tool[]).forEach(t =>
         toolButtons[t].addEventListener("click", () => cb.onTool(t))

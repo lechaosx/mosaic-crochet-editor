@@ -194,6 +194,15 @@ pub fn flood_fill(
 }
 
 #[wasm_bindgen]
+pub fn wand_select(
+    pixels: &[u8], width: i32, height: i32,
+    start_x: i32, start_y: i32,
+    mode: u8, existing: &[u8],
+) -> Vec<u8> {
+    tools::wand_select(pixels, width, height, start_x, start_y, mode, existing)
+}
+
+#[wasm_bindgen]
 pub fn transfer_preserved_row(
     old_pixels: &[u8], old_width: i32, old_height: i32,
     new_pixels: &[u8], new_width: i32, new_height: i32,

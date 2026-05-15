@@ -384,6 +384,53 @@ pub fn flood_fill(
     result
 }
 
+// Magic-wand selection: flood-fill the connected same-colour region starting
+// at (start_x, start_y), combined with an existing selection per `mode`.
+//   mode 0 = replace  — new selection is just the wand region.
+//   mode 1 = add      — existing ∪ wand region.
+//   mode 2 = remove   — existing ∖ wand region.
+// Hole click is a no-op (returns existing or empty for replace). The walker
+// uses 4-neighbour connectivity and stops at colour boundaries (no
+// tolerance — pixel values are discrete A / B / hole). Returns the new
+// selection bitset (1 byte per cell, 1 = selected).
+pub fn wand_select(
+    pixels: &[u8], width: i32, height: i32,
+    start_x: i32, start_y: i32,
+    mode: u8, existing: &[u8],
+) -> Vec<u8> {
+    let n = (width * height) as usize;
+    let mut result: Vec<u8> = if mode == 0 {
+        vec![0u8; n]                     // replace: start empty
+    } else if existing.is_empty() {
+        vec![0u8; n]                     // add / remove with no existing → empty start
+    } else {
+        existing.to_vec()                // add / remove: copy existing
+    };
+
+    // Hole or out-of-bounds click: nothing to flood — return the start state.
+    if start_x < 0 || start_x >= width || start_y < 0 || start_y >= height { return result; }
+    let start_idx = (start_y * width + start_x) as usize;
+    let target_color = pixels[start_idx];
+    if target_color == COLOR_TRANSPARENT { return result; }
+
+    let mut visited: HashSet<i32>         = HashSet::new();
+    let mut queue:   VecDeque<(i32, i32)> = VecDeque::new();
+    queue.push_back((start_x, start_y));
+
+    while let Some((x, y)) = queue.pop_front() {
+        if x < 0 || x >= width || y < 0 || y >= height { continue; }
+        let idx = y * width + x;
+        if visited.contains(&idx) || pixels[idx as usize] != target_color { continue; }
+        visited.insert(idx);
+        result[idx as usize] = if mode == 2 { 0 } else { 1 };
+        queue.push_back((x + 1, y));
+        queue.push_back((x - 1, y));
+        queue.push_back((x,     y + 1));
+        queue.push_back((x,     y - 1));
+    }
+    result
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {
@@ -888,5 +935,55 @@ mod tests {
         let selection: Vec<u8> = vec![1, 0, 0, 0, 1];
         let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, 0, &selection);
         assert_eq!(&out[..], &[COLOR_B, COLOR_A, COLOR_A, COLOR_A, COLOR_A]);
+    }
+
+    // ── wand_select ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn wand_replace_selects_connected_same_colour_region() {
+        // 5×1 grid: A A B A A. Click at 0 → wand should select cells 0,1
+        // (connected A region); cells 3,4 are A but disconnected from start.
+        let pixels = vec![COLOR_A, COLOR_A, COLOR_B, COLOR_A, COLOR_A];
+        let out = wand_select(&pixels, 5, 1, 0, 0, /*replace*/ 0, &[]);
+        assert_eq!(&out[..], &[1, 1, 0, 0, 0]);
+    }
+
+    #[test]
+    fn wand_replace_drops_existing_selection() {
+        let pixels = vec![COLOR_A, COLOR_A, COLOR_B, COLOR_A, COLOR_A];
+        let existing: Vec<u8> = vec![0, 0, 0, 1, 1];   // cells 3,4 selected
+        let out = wand_select(&pixels, 5, 1, 0, 0, /*replace*/ 0, &existing);
+        // Replace mode: existing 3,4 dropped, only the wand region remains.
+        assert_eq!(&out[..], &[1, 1, 0, 0, 0]);
+    }
+
+    #[test]
+    fn wand_add_unions_with_existing() {
+        let pixels = vec![COLOR_A, COLOR_A, COLOR_B, COLOR_A, COLOR_A];
+        let existing: Vec<u8> = vec![0, 0, 0, 1, 1];
+        let out = wand_select(&pixels, 5, 1, 0, 0, /*add*/ 1, &existing);
+        assert_eq!(&out[..], &[1, 1, 0, 1, 1]);
+    }
+
+    #[test]
+    fn wand_remove_subtracts_region_from_existing() {
+        let pixels = vec![COLOR_A, COLOR_A, COLOR_B, COLOR_A, COLOR_A];
+        // Existing covers cells 0,1,3,4 (everything but the B). Click at 0
+        // with remove mode: wand region {0,1} subtracted, leaves {3,4}.
+        let existing: Vec<u8> = vec![1, 1, 0, 1, 1];
+        let out = wand_select(&pixels, 5, 1, 0, 0, /*remove*/ 2, &existing);
+        assert_eq!(&out[..], &[0, 0, 0, 1, 1]);
+    }
+
+    #[test]
+    fn wand_hole_click_is_noop() {
+        // 3×1 grid: A HOLE A. Click on the hole → no change, existing
+        // selection returned untouched (for add / remove) or empty (replace).
+        let pixels = vec![COLOR_A, COLOR_TRANSPARENT, COLOR_A];
+        let existing: Vec<u8> = vec![1, 0, 1];
+        let out_add     = wand_select(&pixels, 3, 1, 1, 0, /*add*/ 1, &existing);
+        let out_replace = wand_select(&pixels, 3, 1, 1, 0, /*replace*/ 0, &existing);
+        assert_eq!(&out_add[..],     &[1, 0, 1]);
+        assert_eq!(&out_replace[..], &[0, 0, 0]);
     }
 }
