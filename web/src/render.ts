@@ -1,5 +1,5 @@
 import { PatternState, RowState, RoundState, SymKey } from "./types";
-import { PlanType, PlanDir } from "@mosaic/wasm";
+import { PlanType, PlanDir, build_highlight_plan_row, build_highlight_plan_round } from "@mosaic/wasm";
 import { computeClosure, diagonalsAvailable } from "./symmetry";
 import { Store } from "./store";
 
@@ -97,6 +97,19 @@ export interface RendererState {
     // the canvas border. The actual committed selection (clipped to canvas,
     // holes excluded) only appears after release.
     dragRect: { x1: number; y1: number; x2: number; y2: number } | null;
+    // Transient floating layer for move/copy gestures. While set, the
+    // renderer paints `base` as the pixel grid (source-cut canvas), then
+    // stamps `lifted` cells at offset (dx, dy), and traces the shifted
+    // `mask` as the selection outline instead of the committed selection.
+    // Committed at gesture-end by `main.ts`; the store stays untouched
+    // mid-drag so undo / cancel restore cleanly.
+    float: {
+        base:   Uint8Array;
+        lifted: Uint8Array;
+        mask:   Uint8Array;
+        dx:     number;
+        dy:     number;
+    } | null;
     // Marching-ants phase. Animated in `frame` while any selection (preview
     // or committed) is on-screen; used as `lineDashOffset` for the outline.
     selectionDashOffset: number;
@@ -120,6 +133,7 @@ export function makeRendererState(): RendererState {
         invalidColor:     "hsl(0, 70%, 50%)",
         hideCommittedSelection: false,
         dragRect:               null,
+        float:                  null,
         selectionDashOffset:    0,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
@@ -273,6 +287,7 @@ function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, n
     // speed is constant across zoom levels. The modulo keeps the offset
     // bounded so floating-point precision holds over long sessions.
     const antsVisible = rs.dragRect !== null
+        || rs.float !== null
         || (rs.lastStore && !rs.hideCommittedSelection && rs.lastStore.state.selection !== null);
     if (antsVisible) {
         const advance = (ANTS_SCREEN_PX_PER_SEC * dtSec) / (vp.view.zoom * vp.dpr);
@@ -310,6 +325,39 @@ function updateFavicon(
     if (link) link.href = faviconCanvas.toDataURL("image/png");
 }
 
+// Stamped canvas for the current float position. `base` already has the
+// source cells reset to natural; lifted cells are written at `(dx, dy)` if
+// they land on a non-hole canvas cell (off-canvas and hole destinations
+// drop — matches `finishMove`'s commit logic).
+function buildFloatPreview(
+    float: NonNullable<RendererState["float"]>, pixels: Uint8Array, W: number, H: number,
+): Uint8Array {
+    const { base, lifted, mask, dx: fdx, dy: fdy } = float;
+    const out = base.slice();
+    for (let sy = 0; sy < H; sy++) {
+        const srow = sy * W;
+        for (let sx = 0; sx < W; sx++) {
+            if (mask[srow + sx] === 0) continue;
+            const dx = sx + fdx, dy = sy + fdy;
+            if (dx < 0 || dx >= W || dy < 0 || dy >= H) continue;
+            const di = dy * W + dx;
+            if (pixels[di] === 0) continue;   // destination is a hole — drop
+            out[di] = lifted[srow + sx];
+        }
+    }
+    return out;
+}
+
+function computeHighlightPlan(p: PatternState, pixels: Uint8Array): Int16Array {
+    return (p.mode === "row"
+        ? build_highlight_plan_row(pixels, p.canvasWidth, p.canvasHeight)
+        : build_highlight_plan_round(
+            pixels, p.canvasWidth, p.canvasHeight,
+            p.virtualWidth, p.virtualHeight,
+            p.offsetX, p.offsetY, p.rounds,
+          )).slice();
+}
+
 // ── Top-level entry ────────────────────────────────────────────────────────
 export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
     rs.lastStore    = store;
@@ -321,6 +369,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
     // (committed selection that isn't hidden, or an in-flight drag rect).
     // `frame()` advances the dash offset each tick and stops on its own.
     const antsVisible = rs.dragRect !== null
+        || rs.float !== null
         || (!rs.hideCommittedSelection && store.state.selection !== null);
     if (antsVisible) startRaf(rs, vp, ctx);
     updateFavicon(rs.faviconCanvas, rs.faviconCtx, rs.colors, store.state.pattern, store.state.pixels);
@@ -329,9 +378,18 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
 
 function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
     const { pattern, pixels, symmetry, hlOpacity, labelsVisible } = store.state;
-    const plan = store.plan;
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { canvas, view, dpr } = vp;
+
+    // During a move/copy drag, build a stamped preview canvas (cut + lifted
+    // at offset, with off-canvas / hole destinations dropped — same rules
+    // the commit applies). Used as the pixel source for the cell render
+    // pass AND for the highlight-plan rebuild below, so ✕ / ! markers
+    // reflect the in-flight position live.
+    const previewPixels = rs.float ? buildFloatPreview(rs.float, pixels, W, H) : pixels;
+    const plan = rs.float
+        ? computeHighlightPlan(pattern, previewPixels)
+        : store.plan;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#161618";
@@ -344,10 +402,29 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y < H; y++) {
         const row = y * W;
         for (let x = 0; x < W; x++) {
-            const p = pixels[row + x];
+            const p = previewPixels[row + x];
             if (p === 0) continue;
             ctx.fillStyle = rs.colors[p] ?? "#333";
             ctx.fillRect(x, y, 1, 1);
+        }
+    }
+    // Off-canvas lifted ghosts: drawn separately because they're outside
+    // the preview-pixels grid and the commit would drop them. Useful as a
+    // visual cue for "this piece is about to fall off"; the marquee
+    // outline below excludes them (matches the commit behaviour).
+    if (rs.float) {
+        const { lifted, mask, dx: fdx, dy: fdy } = rs.float;
+        for (let sy = 0; sy < H; sy++) {
+            const srow = sy * W;
+            for (let sx = 0; sx < W; sx++) {
+                if (mask[srow + sx] === 0) continue;
+                const p = lifted[srow + sx];
+                if (p === 0) continue;
+                const dx = sx + fdx, dy = sy + fdy;
+                if (dx >= 0 && dx < W && dy >= 0 && dy < H) continue;   // already drawn via preview
+                ctx.fillStyle = rs.colors[p] ?? "#333";
+                ctx.fillRect(dx, dy, 1, 1);
+            }
         }
     }
 
@@ -360,7 +437,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.invalidColor, pattern, pixels, plan, m, hlOpacity / 100);
+    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.invalidColor, pattern, previewPixels, plan, m, hlOpacity / 100);
     renderSymmetryGuides(ctx, view, dpr, pattern, symmetry);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old selection visually disappears immediately).
@@ -368,7 +445,24 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     // tick rather than glide.
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
     const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
-    if (!rs.hideCommittedSelection) {
+    if (rs.float) {
+        // Outline the shifted mask, clipped to canvas — matches what the
+        // commit will actually keep (parts that fell off-canvas or onto
+        // holes are dropped on release).
+        const shifted = new Uint8Array(W * H);
+        const { mask, dx: fdx, dy: fdy } = rs.float;
+        for (let sy = 0; sy < H; sy++) {
+            const srow = sy * W;
+            for (let sx = 0; sx < W; sx++) {
+                if (mask[srow + sx] === 0) continue;
+                const dx = sx + fdx, dy = sy + fdy;
+                if (dx < 0 || dx >= W || dy < 0 || dy >= H) continue;
+                if (pixels[dy * W + dx] === 0) continue;   // holes drop
+                shifted[dy * W + dx] = 1;
+            }
+        }
+        renderSelection(ctx, view, dpr, pattern, shifted, rs.invalidColor, dashOffsetSnapped);
+    } else if (!rs.hideCommittedSelection) {
         renderSelection(ctx, view, dpr, pattern, store.state.selection, rs.invalidColor, dashOffsetSnapped);
     }
     if (rs.dragRect) renderDragRect(ctx, view, dpr, rs.dragRect, rs.invalidColor, dashOffsetSnapped);

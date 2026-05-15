@@ -42,6 +42,9 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Keyboard: `Ctrl+A` selects all (paintable cells; holes excluded); `Ctrl+Shift+A` deselects. — **your decision**
 - Selection is part of undo/redo: changing the selection pushes a snapshot. — **your decision**
 - Selection is *session* state, not pattern data: persisted in localStorage (survives refresh) but NOT in `.mcw` (shareable pattern files don't carry transient editing state). Cleared on canvas resize or file load (its coords no longer make sense). — **your decision**
+- **Move tool** (`M`): drag inside the current selection to shift its pixels. Lift → drag → release stamps the float at the new position and shifts the selection mask to match (one history snapshot). Source cells reset to natural baseline (same as an eraser pass). Off-canvas and over-hole destinations drop on release (both pixel value and selection bit). Pointer-cancel reverts cleanly — the store is never mutated mid-drag. Click outside the selection (or with no selection) is a no-op. — **your decision**
+- **Alt as a momentary Move-tool swap**: holding **Alt** with any tool swaps the active tool to Move (toolbar reflects it); releasing Alt restores the previous tool. Window blur also restores (Alt-Tab safety). Clicking a different tool button *while Alt is held* doesn't switch the visible tool — it queues that tool as the return target, so the user can line up "what I'll be on after I let go of Alt" without leaving Move mode. Keyboard shortcuts are ignored while Alt is held (browser-level Alt+key bindings would conflict anyway). — **your decision**
+- **Live highlights during move**: while the float is in-flight, the ✕ / ! markers are recomputed from the stamped preview canvas every render frame (Rust `build_highlight_plan_*`), so the user sees overlay validity update as they drag rather than only at commit. — **your decision**
 
 ## Symmetry
 

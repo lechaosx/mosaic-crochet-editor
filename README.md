@@ -55,7 +55,7 @@ Settings update the canvas live and the **Wipe** toggle controls whether existin
 
 ### Drawing
 
-Seven tools, in the toolbar's tools group:
+Eight tools, in the toolbar's tools group:
 
 - **Pencil** — paint the active colour.
 - **Fill** — flood-fill a connected region (stops at the selection boundary when a selection is active).
@@ -64,6 +64,7 @@ Seven tools, in the toolbar's tools group:
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
 - **Select** — drag a rectangle to mark cells. **Shift+drag** adds to the selection; **Ctrl+drag** removes; no-modifier replaces. A single click selects one cell; clicking off-canvas with no modifier deselects.
 - **Magic wand** — click a cell to select its connected same-colour region. Same Shift / Ctrl / no-modifier semantics as the rect tool.
+- **Move** — drag inside the current selection to shift its pixels. Source cells reset to the natural alternating colour; release stamps the float at the new position. Pieces dragged off-canvas or onto hole cells are dropped on release. **Hold Alt** with any tool to temporarily swap into Move; releasing Alt restores the previous tool.
 
 All five drawing tools respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
 
@@ -110,7 +111,8 @@ Tool, colour, symmetry, rotation, selection, and pixel state auto-save to `local
 
 | Action | Key |
 |---|---|
-| Pencil / Fill / Eraser / Overlay / Invert / Select / Wand | **P** / **F** / **E** / **O** / **I** / **S** / **W** |
+| Pencil / Fill / Eraser / Overlay / Invert / Select / Wand / Move | **P** / **F** / **E** / **O** / **I** / **S** / **W** / **M** |
+| Hold Alt — temporary Move tool (any active tool) | **Alt** |
 | Vertical / Horizontal / Central symmetry | **V** / **H** / **C** |
 | Diagonal ╲ / Anti-diagonal ╱ | **D** / **A** |
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
