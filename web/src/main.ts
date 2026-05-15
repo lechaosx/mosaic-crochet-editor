@@ -140,6 +140,12 @@ let floatDrag: { startCellX: number; startCellY: number } | null = null;
 // user picks a different tool from the bar / shortcut while Alt is held,
 // we drop this so the manual pick wins on release.
 let altPrevTool: Tool | null = null;
+// Whether the Move-tool drag will wipe (cut) the source on commit.
+// Default true = the regular move flow; Ctrl held at paintdown flips it
+// to false = copy (source left intact). Captured here because the
+// gesture API only carries modifiers on the down event — the first
+// paintAt consumes this and resets it.
+let pendingFloatWipe = true;
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -162,13 +168,13 @@ function syncPreview() {
     };
 }
 
-// Lift the current selection into a transient float, source cells reset to
-// natural baseline. Called from the first paintAt of a no-modifier select
-// drag whose click landed inside the existing selection. The store is NOT
-// mutated — `rs.float.base` carries the cut canvas for rendering, and the
-// commit happens in `finishMove`. `clickX` / `clickY` anchor the drag so
-// later moves compute an offset relative to the original click cell.
-function startMove(clickX: number, clickY: number) {
+// Lift the current selection into a transient float. `wipe = true` (the
+// move case) resets the source cells to natural baseline; `wipe = false`
+// leaves them intact, so the float is a duplicate (copy). The store is
+// NOT mutated either way — `rs.float.base` carries the visible canvas,
+// and the commit happens in `finishMove`. `clickX` / `clickY` anchor the
+// drag so later moves compute an offset relative to the original click cell.
+function startMove(clickX: number, clickY: number, wipe: boolean) {
     const { pattern, pixels, selection } = store.state;
     if (!selection) return;
     const { canvasWidth: W, canvasHeight: H } = pattern;
@@ -178,14 +184,16 @@ function startMove(clickX: number, clickY: number) {
         if (selection[i]) lifted[i] = pixels[i];
     }
 
-    const base = pattern.mode === "row"
-        ? cut_to_natural_row(pixels, W, H, selection)
-        : cut_to_natural_round(
-            pixels, W, H,
-            pattern.virtualWidth, pattern.virtualHeight,
-            pattern.offsetX, pattern.offsetY, pattern.rounds,
-            selection,
-        );
+    const base = wipe
+        ? (pattern.mode === "row"
+            ? cut_to_natural_row(pixels, W, H, selection)
+            : cut_to_natural_round(
+                pixels, W, H,
+                pattern.virtualWidth, pattern.virtualHeight,
+                pattern.offsetX, pattern.offsetY, pattern.rounds,
+                selection,
+            ))
+        : pixels.slice();
 
     rs.float  = { base, lifted, mask: selection.slice(), dx: 0, dy: 0 };
     floatDrag = { startCellX: clickX, startCellY: clickY };
@@ -590,9 +598,11 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
         if (store.state.activeTool === "move") {
-            // Move tool: first paintAt decides lift vs. no-op. Nothing to
-            // initialise here. (Alt-held is the same code path because Alt
-            // swaps the active tool to Move at the keyboard layer.)
+            // Move tool: first paintAt decides lift vs. no-op. Capture Ctrl
+            // now since the gesture API only delivers modifiers on the down
+            // event; the first paintAt consumes it. Ctrl held → don't wipe
+            // (copy); otherwise the default move flow wipes the source.
+            pendingFloatWipe = !mods.ctrl;
             return;
         }
         if (store.state.activeTool === "select") {
@@ -632,8 +642,10 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 const insideSel = sel !== null
                     && p.x >= 0 && p.x < W && p.y >= 0 && p.y < H
                     && sel[p.y * W + p.x] === 1;
+                const wipe = pendingFloatWipe;
+                pendingFloatWipe = true;
                 if (!insideSel) return;
-                startMove(p.x, p.y);
+                startMove(p.x, p.y, wipe);
                 return;
             }
             if (rs.float) {
