@@ -182,25 +182,22 @@ function paintAt(clientX: number, clientY: number) {
     }
 
     // Magic wand: drag-able. Each new cell the cursor enters runs a wand
-    // select against the current selection; the drag sweeps and accumulates
-    // (or peels off, for ctrl). History snapshot happens on pointerup.
+    // select against the current selection using the captured mode verbatim.
+    //   replace → each step replaces with the current cell's region (drag
+    //             previews what would commit on release; overshoot is
+    //             corrected by dragging back).
+    //   add     → each step adds the current region to the selection
+    //             (drag sweeps and accumulates).
+    //   remove  → each step removes the current region (drag peels off).
+    // History snapshot happens on pointerup; pointer-cancel reverts.
     if (tool === "wand") {
         if (!wandDrag) return;
         if (!inCanvas || pixels[y * W + x] === 0) return;
         if (wandDrag.lastCell && wandDrag.lastCell.x === x && wandDrag.lastCell.y === y) return;
-        const isFirst = wandDrag.lastCell === null;
         wandDrag.lastCell = { x, y };
 
-        // First cell uses the captured mode. After that, replace flips to
-        // add so the drag accumulates rather than resetting to each new
-        // region; remove stays remove (drag peels off regions).
-        const useMode: SelectMode =
-            isFirst ? wandDrag.mode
-            : wandDrag.mode === "remove" ? "remove"
-            : "add";
-
         const existing = store.state.selection ?? new Uint8Array(0);
-        const next = wand_select(pixels, W, H, x, y, modeToCode(useMode), existing);
+        const next = wand_select(pixels, W, H, x, y, modeToCode(wandDrag.mode), existing);
         let any = false;
         for (let i = 0; i < next.length; i++) if (next[i]) { any = true; break; }
         store.commit(s => { s.selection = any ? next : null; }, { recompute: false });
