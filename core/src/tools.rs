@@ -431,6 +431,49 @@ pub fn wand_select(
     result
 }
 
+// Cut a selection to natural baseline. Used at the start of a move/copy
+// drag to produce the "source removed" preview canvas: every selected
+// non-hole cell is replaced with its own natural alternating value, same
+// as if the eraser ran across the region with no symmetry. Cells outside
+// the selection (or where `selection[i] == 0`) pass through unchanged.
+// Hole cells are skipped both ways — they stay transparent regardless of
+// selection.
+pub fn cut_to_natural_row(
+    pixels: &[u8], width: i32, height: i32, selection: &[u8],
+) -> Vec<u8> {
+    let mut result = pixels.to_vec();
+    for y in 0..height {
+        for x in 0..width {
+            let i = (y * width + x) as usize;
+            if i >= selection.len() || selection[i] == 0 { continue; }
+            if result[i] == COLOR_TRANSPARENT { continue; }
+            result[i] = natural_color_row(height, y);
+        }
+    }
+    result
+}
+
+pub fn cut_to_natural_round(
+    pixels: &[u8],
+    canvas_width: i32, canvas_height: i32,
+    virtual_width: i32, virtual_height: i32,
+    offset_x: i32, offset_y: i32, rounds: i32,
+    selection: &[u8],
+) -> Vec<u8> {
+    let virtual_size = IVec2::new(virtual_width, virtual_height);
+    let offset       = IVec2::new(offset_x,      offset_y);
+    let mut result   = pixels.to_vec();
+    for y in 0..canvas_height {
+        for x in 0..canvas_width {
+            let i = (y * canvas_width + x) as usize;
+            if i >= selection.len() || selection[i] == 0 { continue; }
+            if result[i] == COLOR_TRANSPARENT { continue; }
+            result[i] = natural_color_round(virtual_size, offset, rounds, IVec2::new(x, y));
+        }
+    }
+    result
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {
@@ -985,5 +1028,47 @@ mod tests {
         let out_replace = wand_select(&pixels, 3, 1, 1, 0, /*replace*/ 0, &existing);
         assert_eq!(&out_add[..],     &[1, 0, 1]);
         assert_eq!(&out_replace[..], &[0, 0, 0]);
+    }
+
+    // ── cut_to_natural ───────────────────────────────────────────────────────
+
+    #[test]
+    fn cut_row_resets_selected_to_natural() {
+        // 4×4 row grid, wrong out two cells, select them, cut → both restored
+        // to per-row natural. Unselected wrong cell stays wrong.
+        let mut pixels = row_grid(4, 4);
+        pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1));
+        pixels[2 * 4 + 1] = opposite_color(natural_color_row(4, 2));
+        pixels[3 * 4 + 0] = opposite_color(natural_color_row(4, 3)); // not in selection
+        let mut sel = vec![0u8; 16];
+        sel[1 * 4 + 2] = 1;
+        sel[2 * 4 + 1] = 1;
+        let out = cut_to_natural_row(&pixels, 4, 4, &sel);
+        assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1));
+        assert_eq!(out[2 * 4 + 1], natural_color_row(4, 2));
+        assert_eq!(out[3 * 4 + 0], opposite_color(natural_color_row(4, 3)));
+    }
+
+    #[test]
+    fn cut_row_empty_selection_is_passthrough() {
+        let pixels = row_grid(4, 4);
+        let sel = vec![0u8; 16];
+        let out = cut_to_natural_row(&pixels, 4, 4, &sel);
+        assert_eq!(out, pixels);
+    }
+
+    #[test]
+    fn cut_round_skips_hole_cells() {
+        // 9×9 r=3 full. Hole at (4, 4). Even if it's somehow flagged in the
+        // selection (shouldn't be, but defence in depth), the cut must leave
+        // it transparent — holes are pattern shape, not paint state.
+        let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
+        let mut sel = vec![0u8; 81];
+        sel[4 * 9 + 4] = 1;   // hole cell
+        sel[4 * 9 + 1] = 1;   // non-hole cell
+        let out = cut_to_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, &sel);
+        assert_eq!(out[4 * 9 + 4], COLOR_TRANSPARENT);
+        // (1, 4) was already natural, stays natural.
+        assert_eq!(out[4 * 9 + 1], pixels[4 * 9 + 1]);
     }
 }

@@ -315,6 +315,28 @@ pub fn clear_overlay_round(
 }
 
 #[wasm_bindgen]
+pub fn cut_to_natural_row(
+    pixels: &[u8], width: i32, height: i32, selection: &[u8],
+) -> Vec<u8> {
+    tools::cut_to_natural_row(pixels, width, height, selection)
+}
+
+#[wasm_bindgen]
+pub fn cut_to_natural_round(
+    pixels: &[u8],
+    canvas_width: i32, canvas_height: i32,
+    virtual_width: i32, virtual_height: i32,
+    offset_x: i32, offset_y: i32, rounds: i32,
+    selection: &[u8],
+) -> Vec<u8> {
+    tools::cut_to_natural_round(
+        pixels, canvas_width, canvas_height,
+        virtual_width, virtual_height, offset_x, offset_y, rounds,
+        selection,
+    )
+}
+
+#[wasm_bindgen]
 pub fn symmetric_orbit_indices(canvas_width: i32, canvas_height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u32> {
     tools::symmetric_orbit(x, y, canvas_width, canvas_height, symmetry_mask)
         .into_iter()

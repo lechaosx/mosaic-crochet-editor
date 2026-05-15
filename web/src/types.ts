@@ -1,4 +1,4 @@
-export type Tool   = "pencil" | "fill" | "eraser" | "invert" | "overlay" | "select" | "wand";
+export type Tool   = "pencil" | "fill" | "eraser" | "invert" | "overlay" | "select" | "wand" | "move";
 export type SymKey = "V" | "H" | "C" | "D1" | "D2";
 
 export interface RowState {

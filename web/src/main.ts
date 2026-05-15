@@ -3,6 +3,7 @@ import { paint_pixel, flood_fill, wand_select, PlanType,
          paint_overlay_row, paint_overlay_round,
          clear_overlay_row, clear_overlay_round,
          lock_invalid_row, lock_invalid_round,
+         cut_to_natural_row, cut_to_natural_round,
          export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey } from "./types";
 import { makeViewport, makeRendererState, observeCanvasResize,
@@ -127,6 +128,18 @@ let wandDrag: {
     startSelection: Uint8Array | null;
     lastCell: { x: number; y: number } | null;
 } | null = null;
+// Active move-pixels drag. Set when the first paintAt of a Move-tool drag
+// (or an Alt-modifier drag from any tool, see `altMovePending`) lands
+// inside the existing selection — the float is lifted into `rs.float` and
+// this records the click cell so subsequent moves compute the offset.
+// The store stays untouched until release; pointer-cancel just clears the
+// float and this state.
+let floatDrag: { startCellX: number; startCellY: number } | null = null;
+// Holding Alt temporarily switches the active tool to Move (the toolbar
+// highlights it too). Releasing Alt restores the previous tool. If the
+// user picks a different tool from the bar / shortcut while Alt is held,
+// we drop this so the manual pick wins on release.
+let altPrevTool: Tool | null = null;
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -147,6 +160,72 @@ function syncPreview() {
         x1: selectDrag.startX, y1: selectDrag.startY!,
         x2: selectDrag.endX,   y2: selectDrag.endY,
     };
+}
+
+// Lift the current selection into a transient float, source cells reset to
+// natural baseline. Called from the first paintAt of a no-modifier select
+// drag whose click landed inside the existing selection. The store is NOT
+// mutated — `rs.float.base` carries the cut canvas for rendering, and the
+// commit happens in `finishMove`. `clickX` / `clickY` anchor the drag so
+// later moves compute an offset relative to the original click cell.
+function startMove(clickX: number, clickY: number) {
+    const { pattern, pixels, selection } = store.state;
+    if (!selection) return;
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+
+    const lifted = new Uint8Array(W * H);
+    for (let i = 0; i < selection.length; i++) {
+        if (selection[i]) lifted[i] = pixels[i];
+    }
+
+    const base = pattern.mode === "row"
+        ? cut_to_natural_row(pixels, W, H, selection)
+        : cut_to_natural_round(
+            pixels, W, H,
+            pattern.virtualWidth, pattern.virtualHeight,
+            pattern.offsetX, pattern.offsetY, pattern.rounds,
+            selection,
+        );
+
+    rs.float  = { base, lifted, mask: selection.slice(), dx: 0, dy: 0 };
+    floatDrag = { startCellX: clickX, startCellY: clickY };
+    render(viewport, ctx, rs, store);
+}
+
+// Stamp the lifted float into a fresh pixels buffer at its current offset,
+// shift the selection mask to match, and commit both as one snapshot. Off-
+// canvas destinations and destinations over hole cells are dropped — both
+// the pixel value and the selection bit. After commit `rs.float` is cleared
+// so the next render reads from the store.
+function finishMove() {
+    if (!floatDrag || !rs.float) return;
+    const { base, lifted, mask, dx: fdx, dy: fdy } = rs.float;
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+
+    const newPixels = base.slice();
+    const newMask   = new Uint8Array(W * H);
+    let anySelected = false;
+    for (let sy = 0; sy < H; sy++) {
+        const srow = sy * W;
+        for (let sx = 0; sx < W; sx++) {
+            if (mask[srow + sx] === 0) continue;
+            const dx = sx + fdx, dy = sy + fdy;
+            if (dx < 0 || dx >= W || dy < 0 || dy >= H) continue;
+            const di = dy * W + dx;
+            if (newPixels[di] === 0) continue;   // hole destinations drop
+            newPixels[di] = lifted[srow + sx];
+            newMask[di]   = 1;
+            anySelected   = true;
+        }
+    }
+
+    rs.float  = null;
+    floatDrag = null;
+    const finalSelection = anySelected ? newMask : null;
+    store.commit(s => {
+        s.pixels    = newPixels;
+        s.selection = finalSelection;
+    }, { history: true });
 }
 
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, () => render(viewport, ctx, rs, store));
@@ -298,6 +377,18 @@ function toggleSym(k: SymKey) {
 
 /* ── Tool / colour / settings handlers ─────────────────────────────────── */
 function setTool(t: Tool) {
+    if (altPrevTool !== null) {
+        // Alt is held — the visible tool is Move and clicking another tool
+        // button just *queues* it as the return tool, applied when the user
+        // releases Alt. (Picking Move queues Move; restore is a no-op.)
+        altPrevTool = t;
+        return;
+    }
+    applyTool(t);
+}
+// Lower-level set used by both `setTool` (user picks) and the Alt swap, so
+// the swap can set the tool without clobbering its own `altPrevTool`.
+function applyTool(t: Tool) {
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
 }
@@ -498,6 +589,12 @@ const clientToPattern = (cx: number, cy: number) => {
 mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
+        if (store.state.activeTool === "move") {
+            // Move tool: first paintAt decides lift vs. no-op. Nothing to
+            // initialise here. (Alt-held is the same code path because Alt
+            // swaps the active tool to Move at the keyboard layer.)
+            return;
+        }
         if (store.state.activeTool === "select") {
             // Mode captured here; start/end filled in on the first onPaintAt
             // (gesture fires onPaintAt immediately after onPaintStart, so the
@@ -521,6 +618,31 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         invertVisited = store.state.activeTool === "invert" ? new Set<number>() : null;
     },
     onPaintAt:    (cx, cy) => {
+        // Move tool: first paintAt resolves the click cell, decides lift,
+        // subsequent moves update the float offset. Click outside any
+        // selection is a no-op (the gesture is consumed; nothing paints).
+        if (store.state.activeTool === "move" || floatDrag) {
+            const p = screenToPattern(
+                viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+                store.state.pattern, cx, cy,
+            );
+            if (!floatDrag) {
+                const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+                const sel = store.state.selection;
+                const insideSel = sel !== null
+                    && p.x >= 0 && p.x < W && p.y >= 0 && p.y < H
+                    && sel[p.y * W + p.x] === 1;
+                if (!insideSel) return;
+                startMove(p.x, p.y);
+                return;
+            }
+            if (rs.float) {
+                rs.float.dx = p.x - floatDrag.startCellX;
+                rs.float.dy = p.y - floatDrag.startCellY;
+                render(viewport, ctx, rs, store);
+            }
+            return;
+        }
         if (store.state.activeTool === "select" && selectDrag) {
             const p = screenToPattern(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
@@ -539,6 +661,13 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         paintAt(cx, cy);
     },
     onPaintEnd:   () => {
+        // Float drag owns the gesture until release regardless of the tool
+        // that started it (Alt-down can swap the tool mid-air, but the
+        // gesture state machine doesn't care).
+        if (floatDrag) {
+            finishMove();
+            return;
+        }
         if (store.state.activeTool === "select" && selectDrag) {
             const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
             const next = selectDrag.startX === null
@@ -572,6 +701,12 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         invertVisited = null;
     },
     onPaintCancel: () => {
+        if (floatDrag || rs.float) {
+            floatDrag = null;
+            rs.float  = null;
+            render(viewport, ctx, rs, store);
+            return;
+        }
         if (store.state.activeTool === "select") {
             selectDrag = null;
             syncPreview();
@@ -598,9 +733,28 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
 });
 
 /* ── Keyboard shortcuts ──────────────────────────────────────────────────── */
+// Restore the pre-Alt tool. Used by Alt keyup and window blur (since blur
+// can swallow keyup if the user Alt-tabs away).
+function restoreFromAlt() {
+    if (altPrevTool === null) return;
+    const prev  = altPrevTool;
+    altPrevTool = null;
+    applyTool(prev);
+}
+
 document.addEventListener("keydown", e => {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    // Alt is a momentary swap to the Move tool. `repeat` filters key-hold
+    // re-fires; the activeTool check prevents re-saving Move-over-Move.
+    if (e.key === "Alt") {
+        if (!e.repeat && altPrevTool === null && store.state.activeTool !== "move") {
+            altPrevTool = store.state.activeTool;
+            applyTool("move");
+        }
+        e.preventDefault();   // suppress menu-bar focus on platforms that listen for bare Alt
+        return;
+    }
     if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
         else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
@@ -608,6 +762,10 @@ document.addEventListener("keydown", e => {
         else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); deselect(); }
         return;
     }
+    // Alt held: don't fire any of our shortcuts. The browser's own Alt+key
+    // bindings (Firefox menu activations, etc.) are then the user's problem
+    // to live with — they just won't use shortcuts mid-Alt-hold.
+    if (e.altKey) return;
     const k = e.key.toLowerCase();
     if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
@@ -616,6 +774,7 @@ document.addEventListener("keydown", e => {
     else if (k === "i") setTool("invert");
     else if (k === "s") setTool("select");
     else if (k === "w") setTool("wand");
+    else if (k === "m") setTool("move");
     else if (k === "v") toggleSym("V");
     else if (k === "h") toggleSym("H");
     else if (k === "c") toggleSym("C");
@@ -625,6 +784,17 @@ document.addEventListener("keydown", e => {
     else if (k === "1") setPrimary(1);
     else if (k === "2") setPrimary(2);
 });
+
+document.addEventListener("keyup", e => {
+    if (e.key === "Alt") {
+        restoreFromAlt();
+        e.preventDefault();
+    }
+});
+
+// If the user Alt-tabs away, the keyup never reaches us — restore on blur
+// so they don't come back stuck on Move.
+window.addEventListener("blur", restoreFromAlt);
 
 /* ── Initial DOM-input sync + first render ───────────────────────────────── */
 function syncDomInputs(s: Readonly<SessionState>) {
