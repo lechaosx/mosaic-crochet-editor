@@ -8,6 +8,8 @@
         wasm-pack
         bun
         cargo-watch
+        cargo-edit       # `cargo upgrade` for bumping Cargo.toml versions
+        cargo-outdated   # `cargo outdated` for spotting available upgrades
       ];
     };
   };
