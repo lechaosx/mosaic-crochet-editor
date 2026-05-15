@@ -1,10 +1,14 @@
 import { initialize_row_pattern, initialize_round_pattern } from "@mosaic/wasm";
-import { PatternState, Tool, SymKey } from "./types";
+import { PatternState, Tool, SymKey, Float } from "./types";
 import { SessionState } from "./store";
 
-const LS_KEY       = "mosaic-pattern-v2";
+const LS_KEY       = "mosaic-pattern-v3";
+// `.mcw` schema is unchanged from v2 (pattern + pixels + colours); floats
+// are never persisted to file (the user anchors them before save). The
+// localStorage version bump (v3) is only because that buffer now includes
+// the in-memory float for cross-refresh continuity.
 const FILE_VERSION = 2;
-const LS_VERSION   = 2;
+const LS_VERSION   = 3;
 
 // In-memory pixel encoding: 0 = inner hole, 1 = COLOR_A, 2 = COLOR_B.
 // On disk we pack to 1 bit per cell (A=0, B=1). Hole cells get an arbitrary
@@ -33,7 +37,8 @@ export function packPixels(pixels: Uint8Array): string {
     return u8ToB64(out);
 }
 
-// 1 bit per cell — selection is a pure boolean mask, no hole sentinel.
+// 1 bit per cell — pure boolean mask, no hole sentinel. Used for the float's
+// mask on the wire (same shape the old selection bitset had).
 export function packSelection(sel: Uint8Array): string {
     const out = new Uint8Array(Math.ceil(sel.length / 8));
     for (let i = 0; i < sel.length; i++) {
@@ -70,65 +75,65 @@ export function unpackPixels(s: string, state: PatternState): Uint8Array {
     return out;
 }
 
-// ── BC v1 → v2 ───────────────────────────────────────────────────────────────
-// v1 stored pixels as `number[]` using the same 0/1/2 in-memory encoding.
-// We only need to wrap it as a Uint8Array.
-function unpackPixelsV1(old: number[]): Uint8Array {
-    return new Uint8Array(old);
+// Float (mask + lifted pixels + offset) → serialised form. Stored alongside
+// session pixels in localStorage and inside undo snapshots. The lifted
+// pixels are 1-bit-packed using the same A=0/B=1 convention as `packPixels`,
+// but only cells where `mask` is set are meaningful on read.
+export interface PackedFloat {
+    mask:   string;
+    pixels: string;
+    dx:     number;
+    dy:     number;
+}
+export function packFloat(f: Float): PackedFloat {
+    return { mask: packSelection(f.mask), pixels: packPixels(f.pixels), dx: f.dx, dy: f.dy };
+}
+export function unpackFloat(p: PackedFloat, length: number): Float {
+    const mask   = unpackSelection(p.mask, length);
+    // Lifted pixels are A/B only — holes can't be lifted (selection skips them).
+    const packed = b64ToU8(p.pixels);
+    const pixels = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+        if (mask[i]) pixels[i] = ((packed[i >> 3] >> (i & 7)) & 1) ? 2 : 1;
+    }
+    return { mask, pixels, dx: p.dx, dy: p.dy };
 }
 
 // ── localStorage (session persistence) ───────────────────────────────────────
 
-interface LocalSaveV2 {
-    version:         2;
-    state:           PatternState;
-    pixels:          string;   // packed
-    colorA:          string;
-    colorB:          string;
-    activeTool:      string;
-    primaryColor:    number;
-    symmetry:        string[];
-    hlOpacity:       number;
-    invalidIntensity?: number;  // added after v2 shipped; missing → default 65
-    selection?:      string | null;  // added after v2 shipped; packed bitset, or null
-    labelsVisible:   boolean;
-    lockInvalid:     boolean;
-    canvasRotation:  number;
-}
-
-// BC: v1 LocalSave (no `version` field, pixels as number[])
-interface LocalSaveV1 {
-    state:          PatternState;
-    pixels:         number[];
-    colorA:         string;
-    colorB:         string;
-    activeTool:     string;
-    primaryColor:   number;
-    symmetry:       string[];
-    hlOverlayColor: string;
-    hlInvalidColor: string;
-    hlOpacity:      number;
-    labelsVisible?: boolean;
-    hlSymbols?:     boolean;
-    canvasRotation: number;
+interface LocalSaveV3 {
+    version:          3;
+    state:            PatternState;
+    pixels:           string;   // packed
+    colorA:           string;
+    colorB:           string;
+    activeTool:       string;
+    primaryColor:     number;
+    symmetry:         string[];
+    hlOpacity:        number;
+    invalidIntensity: number;
+    float:            PackedFloat | null;
+    labelsVisible:    boolean;
+    lockInvalid:      boolean;
+    canvasRotation:   number;
 }
 
 export function saveToLocalStorage(s: Readonly<SessionState>) {
-    const data: LocalSaveV2 = {
-        version: LS_VERSION,
-        state:          s.pattern,
-        pixels:         packPixels(s.pixels),
-        colorA:         s.colorA,
-        colorB:         s.colorB,
-        activeTool:     s.activeTool,
-        primaryColor:   s.primaryColor,
-        symmetry:       [...s.symmetry],
+    const data: LocalSaveV3 = {
+        version:          LS_VERSION,
+        state:            s.pattern,
+        pixels:           packPixels(s.pixels),
+        colorA:           s.colorA,
+        colorB:           s.colorB,
+        activeTool:       s.activeTool,
+        primaryColor:     s.primaryColor,
+        symmetry:         [...s.symmetry],
         hlOpacity:        s.hlOpacity,
         invalidIntensity: s.invalidIntensity,
-        selection:        s.selection ? packSelection(s.selection) : null,
-        labelsVisible:   s.labelsVisible,
-        lockInvalid:     s.lockInvalid,
-        canvasRotation:  s.rotation,
+        float:            s.float ? packFloat(s.float) : null,
+        labelsVisible:    s.labelsVisible,
+        lockInvalid:      s.lockInvalid,
+        canvasRotation:   s.rotation,
     };
     localStorage.setItem(LS_KEY, JSON.stringify(data));
 }
@@ -137,31 +142,23 @@ export function loadFromLocalStorage(): SessionState | null {
     const saved = localStorage.getItem(LS_KEY);
     if (!saved) return null;
     try {
-        const data = JSON.parse(saved) as LocalSaveV2 | LocalSaveV1;
-        if (!data.state) return null;
-
-        // Backward-compatibility: v1 had no `version` field; pixels was number[].
-        const isV1 = !("version" in data);
-        const pixels = isV1
-            ? unpackPixelsV1((data as LocalSaveV1).pixels)
-            : unpackPixels((data as LocalSaveV2).pixels, data.state);
-
+        const data = JSON.parse(saved) as LocalSaveV3;
+        if (!data || data.version !== LS_VERSION || !data.state) return null;
+        const cells = data.state.canvasWidth * data.state.canvasHeight;
         return {
-            pattern:       data.state,
-            pixels,
-            colorA:        data.colorA         ?? "#000000",
-            colorB:        data.colorB         ?? "#ffffff",
-            activeTool:    (data.activeTool    ?? "pencil") as Tool,
-            primaryColor:  (data.primaryColor  ?? 1) as 1 | 2,
-            symmetry:      new Set((data.symmetry ?? []) as SymKey[]),
-            hlOpacity:        data.hlOpacity      ?? 100,
-            invalidIntensity: ("invalidIntensity" in data && data.invalidIntensity !== undefined) ? data.invalidIntensity : 65,
-            selection:        (("selection" in data && data.selection)
-                                ? unpackSelection(data.selection, data.state.canvasWidth * data.state.canvasHeight)
-                                : null),
-            labelsVisible:    data.labelsVisible  ?? true,
-            lockInvalid:   ("lockInvalid" in data ? data.lockInvalid : false) ?? false,
-            rotation:      data.canvasRotation ?? 0,
+            pattern:          data.state,
+            pixels:           unpackPixels(data.pixels, data.state),
+            colorA:           data.colorA,
+            colorB:           data.colorB,
+            activeTool:       data.activeTool as Tool,
+            primaryColor:     data.primaryColor as 1 | 2,
+            symmetry:         new Set(data.symmetry as SymKey[]),
+            hlOpacity:        data.hlOpacity,
+            invalidIntensity: data.invalidIntensity,
+            float:            data.float ? unpackFloat(data.float, cells) : null,
+            labelsVisible:    data.labelsVisible,
+            lockInvalid:      data.lockInvalid,
+            rotation:         data.canvasRotation,
         };
     } catch { localStorage.removeItem(LS_KEY); return null; }
 }
@@ -176,13 +173,18 @@ interface SaveFileV2 {
     colorB:  string;
 }
 
-// BC: v1 .mcw files
+// ── BC v1 → v2 ───────────────────────────────────────────────────────────────
+// v1 .mcw files stored pixels as `number[]` in the in-memory 0/1/2 encoding.
+// Load-only; we always write v2.
 interface SaveFileV1 {
     version: 1;
     state:   PatternState;
     pixels:  number[];
     colorA:  string;
     colorB:  string;
+}
+function unpackPixelsV1(old: number[]): Uint8Array {
+    return new Uint8Array(old);
 }
 
 export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
@@ -233,10 +235,16 @@ export function loadFromFile(): Promise<LoadedFile | null> {
             reader.onload = () => {
                 try {
                     const data = JSON.parse(reader.result as string) as SaveFileV2 | SaveFileV1;
+                    if (!data || (data.version !== 2 && data.version !== 1)) { resolve(null); return; }
                     const pixels = data.version === 2
                         ? unpackPixels(data.pixels, data.state)
                         : unpackPixelsV1(data.pixels);
-                    resolve({ pattern: data.state, pixels, colorA: data.colorA, colorB: data.colorB });
+                    resolve({
+                        pattern: data.state,
+                        pixels,
+                        colorA:  data.colorA,
+                        colorB:  data.colorB,
+                    });
                 } catch { resolve(null); }
             };
             reader.readAsText(file);

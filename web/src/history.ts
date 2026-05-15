@@ -3,19 +3,19 @@
 // On QuotaExceededError we drop the oldest snapshot(s) and retry until the new
 // one fits — the freshly-added snapshot at the tail is always preserved.
 
-import { PatternState } from "./types";
+import { PatternState, Float } from "./types";
 import { SessionState } from "./store";
-import { packPixels, unpackPixels, packSelection, unpackSelection } from "./storage";
+import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "./storage";
 
-const LS_KEY = "mosaic-history-v2";
+const LS_KEY = "mosaic-history-v3";
 const MAX    = 64;
 
 interface Snapshot {
-    state:     PatternState;
-    pixels:    string;          // 1-bit-packed, base64
-    selection: string | null;   // 1-bit-packed bitset, or null when no selection
-    colorA:    string;
-    colorB:    string;
+    state:   PatternState;
+    pixels:  string;             // 1-bit-packed, base64
+    float:   PackedFloat | null; // serialised float (mask + lifted + offset)
+    colorA:  string;
+    colorB:  string;
 }
 interface HistoryBlob {
     snapshots: Snapshot[];
@@ -49,21 +49,22 @@ function write(h: HistoryBlob) {
 
 function snapshotFrom(s: Readonly<SessionState>): Snapshot {
     return {
-        state:     s.pattern,
-        pixels:    packPixels(s.pixels),
-        selection: s.selection ? packSelection(s.selection) : null,
-        colorA:    s.colorA,
-        colorB:    s.colorB,
+        state:  s.pattern,
+        pixels: packPixels(s.pixels),
+        float:  s.float ? packFloat(s.float) : null,
+        colorA: s.colorA,
+        colorB: s.colorB,
     };
 }
 
 export function historySave(s: Readonly<SessionState>) {
     const h    = read() ?? { snapshots: [], index: -1 };
     const snap = snapshotFrom(s);
-    // Skip redundant snapshots — same packed pixels, selection, colours, and
+    // Skip redundant snapshots — same packed pixels, float, colours, and
     // dims as the current head means nothing user-visible has changed.
     const head = h.index >= 0 ? h.snapshots[h.index] : null;
-    if (head && head.pixels === snap.pixels && head.selection === snap.selection
+    if (head && head.pixels === snap.pixels
+            && JSON.stringify(head.float) === JSON.stringify(snap.float)
             && head.colorA === snap.colorA && head.colorB === snap.colorB
             && JSON.stringify(head.state) === JSON.stringify(snap.state)) {
         return;
@@ -89,27 +90,26 @@ export function historyEnsureInitialized(s: Readonly<SessionState>) {
 export function canUndo(): boolean { const h = read(); return h !== null && h.index > 0; }
 export function canRedo(): boolean { const h = read(); return h !== null && h.index < h.snapshots.length - 1; }
 
-// Snapshots carry pattern + pixels + selection + colours — the rest of
+// Snapshots carry pattern + pixels + float + colours — the rest of
 // SessionState (tool / settings / view) is unchanged by undo/redo. Caller
 // merges these fields into the live session.
 export interface Restored {
-    pattern:   PatternState;
-    pixels:    Uint8Array;
-    selection: Uint8Array | null;
-    colorA:    string;
-    colorB:    string;
+    pattern: PatternState;
+    pixels:  Uint8Array;
+    float:   Float | null;
+    colorA:  string;
+    colorB:  string;
 }
 
 function restoredAt(h: HistoryBlob): Restored {
     const s = h.snapshots[h.index];
+    const cells = s.state.canvasWidth * s.state.canvasHeight;
     return {
-        pattern:   s.state,
-        pixels:    unpackPixels(s.pixels, s.state),
-        selection: s.selection
-                    ? unpackSelection(s.selection, s.state.canvasWidth * s.state.canvasHeight)
-                    : null,
-        colorA:    s.colorA,
-        colorB:    s.colorB,
+        pattern: s.state,
+        pixels:  unpackPixels(s.pixels, s.state),
+        float:   s.float ? unpackFloat(s.float, cells) : null,
+        colorA:  s.colorA,
+        colorB:  s.colorB,
     };
 }
 
