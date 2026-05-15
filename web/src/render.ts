@@ -97,18 +97,20 @@ export interface RendererState {
     // the canvas border. The actual committed selection (clipped to canvas,
     // holes excluded) only appears after release.
     dragRect: { x1: number; y1: number; x2: number; y2: number } | null;
-    // Transient floating layer for move/copy gestures. While set, the
-    // renderer paints `base` as the pixel grid (source-cut canvas), then
+    // Transient floating layer for move/copy/mask-only gestures. While set,
+    // the renderer paints `base` as the pixel grid, then (if `stamp`)
     // stamps `lifted` cells at offset (dx, dy), and traces the shifted
     // `mask` as the selection outline instead of the committed selection.
-    // Committed at gesture-end by `main.ts`; the store stays untouched
-    // mid-drag so undo / cancel restore cleanly.
+    // `stamp = false` is mask-only mode: the outline still moves but no
+    // pixels move with it. Committed at gesture-end by `main.ts`; the store
+    // stays untouched mid-drag so undo / cancel restore cleanly.
     float: {
         base:   Uint8Array;
         lifted: Uint8Array;
         mask:   Uint8Array;
         dx:     number;
         dy:     number;
+        stamp:  boolean;
     } | null;
     // Marching-ants phase. Animated in `frame` while any selection (preview
     // or committed) is on-screen; used as `lineDashOffset` for the outline.
@@ -332,8 +334,9 @@ function updateFavicon(
 function buildFloatPreview(
     float: NonNullable<RendererState["float"]>, pixels: Uint8Array, W: number, H: number,
 ): Uint8Array {
-    const { base, lifted, mask, dx: fdx, dy: fdy } = float;
+    const { base, lifted, mask, dx: fdx, dy: fdy, stamp } = float;
     const out = base.slice();
+    if (!stamp) return out;   // mask-only: pixels stay put
     for (let sy = 0; sy < H; sy++) {
         const srow = sy * W;
         for (let sx = 0; sx < W; sx++) {
@@ -412,7 +415,8 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     // the preview-pixels grid and the commit would drop them. Useful as a
     // visual cue for "this piece is about to fall off"; the marquee
     // outline below excludes them (matches the commit behaviour).
-    if (rs.float) {
+    // Skipped in mask-only mode — no lifted pixels are visible at all.
+    if (rs.float && rs.float.stamp) {
         const { lifted, mask, dx: fdx, dy: fdy } = rs.float;
         for (let sy = 0; sy < H; sy++) {
             const srow = sy * W;

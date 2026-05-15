@@ -64,7 +64,7 @@ Eight tools, in the toolbar's tools group:
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
 - **Select** — drag a rectangle to mark cells. **Shift+drag** adds to the selection; **Ctrl+drag** removes; no-modifier replaces. A single click selects one cell; clicking off-canvas with no modifier deselects.
 - **Magic wand** — click a cell to select its connected same-colour region. Same Shift / Ctrl / no-modifier semantics as the rect tool.
-- **Move** — drag inside the current selection to shift its pixels. Source cells reset to the natural alternating colour; release stamps the float at the new position. Pieces dragged off-canvas or onto hole cells are dropped on release. **Ctrl+drag** copies (leaves the source intact). **Hold Alt** with any tool to temporarily swap into Move; releasing Alt restores the previous tool.
+- **Move** — drag inside the current selection to shift its pixels. Source cells reset to the natural alternating colour; release stamps the float at the new position. Pieces dragged off-canvas or onto hole cells are dropped on release. **Ctrl+drag** copies (leaves the source intact); **Shift+drag** moves the selection outline only (no pixels move). **Hold Alt** with any tool to temporarily swap into Move; releasing Alt restores the previous tool.
 
 All five drawing tools respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
 

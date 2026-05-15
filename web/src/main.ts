@@ -140,12 +140,13 @@ let floatDrag: { startCellX: number; startCellY: number } | null = null;
 // user picks a different tool from the bar / shortcut while Alt is held,
 // we drop this so the manual pick wins on release.
 let altPrevTool: Tool | null = null;
-// Whether the Move-tool drag will wipe (cut) the source on commit.
-// Default true = the regular move flow; Ctrl held at paintdown flips it
-// to false = copy (source left intact). Captured here because the
-// gesture API only carries modifiers on the down event — the first
-// paintAt consumes this and resets it.
-let pendingFloatWipe = true;
+// Modifier-driven Move-tool flags captured at paintdown (the gesture API
+// only carries modifiers on the down event; the first paintAt consumes
+// these and resets them). Three combinations are surfaced via Ctrl /
+// Shift: nothing → move, Ctrl → copy (wipe off), Shift → mask only
+// (stamp off — pixels stay put, the outline moves).
+let pendingFloatWipe  = true;
+let pendingFloatStamp = true;
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -168,13 +169,18 @@ function syncPreview() {
     };
 }
 
-// Lift the current selection into a transient float. `wipe = true` (the
-// move case) resets the source cells to natural baseline; `wipe = false`
-// leaves them intact, so the float is a duplicate (copy). The store is
-// NOT mutated either way — `rs.float.base` carries the visible canvas,
-// and the commit happens in `finishMove`. `clickX` / `clickY` anchor the
-// drag so later moves compute an offset relative to the original click cell.
-function startMove(clickX: number, clickY: number, wipe: boolean) {
+// Lift the current selection into a transient float. Three combinations
+// matter:
+//   wipe=true,  stamp=true  → move (default)
+//   wipe=false, stamp=true  → copy (source intact, duplicate at offset)
+//   wipe=false, stamp=false → mask only (pixels untouched; the outline
+//                              moves so the user can reposition the marquee)
+// `wipe=true, stamp=false` (cut without restamp = delete) isn't surfaced
+// in the UI but the implementation handles it correctly. The store is NOT
+// mutated for any of these — `rs.float` carries the preview, commit
+// happens in `finishMove`. `clickX` / `clickY` anchor the drag so later
+// moves compute an offset relative to the original click cell.
+function startMove(clickX: number, clickY: number, wipe: boolean, stamp: boolean) {
     const { pattern, pixels, selection } = store.state;
     if (!selection) return;
     const { canvasWidth: W, canvasHeight: H } = pattern;
@@ -195,7 +201,7 @@ function startMove(clickX: number, clickY: number, wipe: boolean) {
             ))
         : pixels.slice();
 
-    rs.float  = { base, lifted, mask: selection.slice(), dx: 0, dy: 0 };
+    rs.float  = { base, lifted, mask: selection.slice(), dx: 0, dy: 0, stamp };
     floatDrag = { startCellX: clickX, startCellY: clickY };
     render(viewport, ctx, rs, store);
 }
@@ -207,7 +213,7 @@ function startMove(clickX: number, clickY: number, wipe: boolean) {
 // so the next render reads from the store.
 function finishMove() {
     if (!floatDrag || !rs.float) return;
-    const { base, lifted, mask, dx: fdx, dy: fdy } = rs.float;
+    const { base, lifted, mask, dx: fdx, dy: fdy, stamp } = rs.float;
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
 
     const newPixels = base.slice();
@@ -221,7 +227,7 @@ function finishMove() {
             if (dx < 0 || dx >= W || dy < 0 || dy >= H) continue;
             const di = dy * W + dx;
             if (newPixels[di] === 0) continue;   // hole destinations drop
-            newPixels[di] = lifted[srow + sx];
+            if (stamp) newPixels[di] = lifted[srow + sx];
             newMask[di]   = 1;
             anySelected   = true;
         }
@@ -598,11 +604,13 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
         if (store.state.activeTool === "move") {
-            // Move tool: first paintAt decides lift vs. no-op. Capture Ctrl
-            // now since the gesture API only delivers modifiers on the down
-            // event; the first paintAt consumes it. Ctrl held → don't wipe
-            // (copy); otherwise the default move flow wipes the source.
-            pendingFloatWipe = !mods.ctrl;
+            // Move tool: first paintAt decides lift vs. no-op. Capture
+            // modifiers now since the gesture API only delivers them on
+            // the down event. Shift dominates Ctrl: with Shift held the
+            // lift is mask-only (no wipe, no stamp); Ctrl alone makes it
+            // a copy (no wipe but still stamp); nothing → plain move.
+            pendingFloatWipe  = !mods.ctrl && !mods.shift;
+            pendingFloatStamp = !mods.shift;
             return;
         }
         if (store.state.activeTool === "select") {
@@ -642,10 +650,12 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 const insideSel = sel !== null
                     && p.x >= 0 && p.x < W && p.y >= 0 && p.y < H
                     && sel[p.y * W + p.x] === 1;
-                const wipe = pendingFloatWipe;
-                pendingFloatWipe = true;
+                const wipe  = pendingFloatWipe;
+                const stamp = pendingFloatStamp;
+                pendingFloatWipe  = true;
+                pendingFloatStamp = true;
                 if (!insideSel) return;
-                startMove(p.x, p.y, wipe);
+                startMove(p.x, p.y, wipe, stamp);
                 return;
             }
             if (rs.float) {
