@@ -1,4 +1,4 @@
-import { paint_pixel, flood_fill, PlanType,
+import { paint_pixel, flood_fill, wand_select, PlanType,
          paint_natural_row, paint_natural_round,
          paint_overlay_row, paint_overlay_round,
          clear_overlay_row, clear_overlay_round,
@@ -116,6 +116,21 @@ type SelectMode = "replace" | "add" | "remove";
 // first `onPaintAt` and updated each subsequent move. Cleared on
 // pointerup/cancel after commit. Coords stay null until the first move.
 let selectDrag: { startX: number | null; startY: number | null; endX: number; endY: number; mode: SelectMode } | null = null;
+// Active wand-tool drag. Mode is captured at pointerdown; each `onPaintAt`
+// step that enters a new cell runs `wand_select` so the drag sweeps over
+// multiple regions. After the first cell, replace mode flips to add so
+// subsequent cells accumulate rather than overwriting. `startSelection`
+// snapshots the pre-drag state so pointer-cancel can revert; `lastCell`
+// dedupes when the cursor lingers in the same cell across moves.
+let wandDrag: {
+    mode: SelectMode;
+    startSelection: Uint8Array | null;
+    lastCell: { x: number; y: number } | null;
+} | null = null;
+
+function modeToCode(m: SelectMode): number {
+    return m === "replace" ? 0 : m === "add" ? 1 : 2;
+}
 
 // Sync the renderer's drag state. During replace-mode drag we hide the
 // committed selection (the drag is about to replace it). The drag rect is
@@ -163,6 +178,32 @@ function paintAt(clientX: number, clientY: number) {
         selectDrag.endX = x;
         selectDrag.endY = y;
         render(viewport, ctx, rs, store);
+        return;
+    }
+
+    // Magic wand: drag-able. Each new cell the cursor enters runs a wand
+    // select against the current selection; the drag sweeps and accumulates
+    // (or peels off, for ctrl). History snapshot happens on pointerup.
+    if (tool === "wand") {
+        if (!wandDrag) return;
+        if (!inCanvas || pixels[y * W + x] === 0) return;
+        if (wandDrag.lastCell && wandDrag.lastCell.x === x && wandDrag.lastCell.y === y) return;
+        const isFirst = wandDrag.lastCell === null;
+        wandDrag.lastCell = { x, y };
+
+        // First cell uses the captured mode. After that, replace flips to
+        // add so the drag accumulates rather than resetting to each new
+        // region; remove stays remove (drag peels off regions).
+        const useMode: SelectMode =
+            isFirst ? wandDrag.mode
+            : wandDrag.mode === "remove" ? "remove"
+            : "add";
+
+        const existing = store.state.selection ?? new Uint8Array(0);
+        const next = wand_select(pixels, W, H, x, y, modeToCode(useMode), existing);
+        let any = false;
+        for (let i = 0; i < next.length; i++) if (next[i]) { any = true; break; }
+        store.commit(s => { s.selection = any ? next : null; }, { recompute: false });
         return;
     }
 
@@ -470,6 +511,14 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             };
             return;
         }
+        if (store.state.activeTool === "wand") {
+            wandDrag = {
+                mode: mods.shift ? "add" : (mods.ctrl ? "remove" : "replace"),
+                startSelection: store.state.selection,
+                lastCell: null,
+            };
+            return;
+        }
         strokeColor   = color;
         preStroke     = store.state.pixels.slice();
         invertVisited = store.state.activeTool === "invert" ? new Set<number>() : null;
@@ -509,6 +558,16 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 { recompute: false, history: true });
             return;
         }
+        if (store.state.activeTool === "wand" && wandDrag) {
+            // Drag steps committed without history; push one snapshot now
+            // covering the whole sweep. `historySave` dedupes against the
+            // head, so a no-op drag (no cell processed) won't push.
+            if (wandDrag.lastCell !== null) {
+                store.commit(() => {}, { recompute: false, render: false, history: true });
+            }
+            wandDrag = null;
+            return;
+        }
         if (preStroke && !arraysEqual(preStroke, store.state.pixels)) {
             store.commit(() => {}, { recompute: false, render: false, history: true });
         }
@@ -520,6 +579,13 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             selectDrag = null;
             syncPreview();
             render(viewport, ctx, rs, store);
+            return;
+        }
+        if (store.state.activeTool === "wand" && wandDrag) {
+            // Two-finger gesture started — revert to the pre-drag selection.
+            const startSel = wandDrag.startSelection;
+            wandDrag = null;
+            store.commit(s => { s.selection = startSel; }, { recompute: false });
             return;
         }
         // Two-finger gesture started — revert the partial stroke.
@@ -552,6 +618,7 @@ document.addEventListener("keydown", e => {
     else if (k === "o") setTool("overlay");
     else if (k === "i") setTool("invert");
     else if (k === "s") setTool("select");
+    else if (k === "w") setTool("wand");
     else if (k === "v") toggleSym("V");
     else if (k === "h") toggleSym("H");
     else if (k === "c") toggleSym("C");

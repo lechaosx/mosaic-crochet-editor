@@ -25,6 +25,8 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Selection
 
 - **Select** tool (`S`): drag a rectangle to mark cells. **Shift+drag** adds; **Ctrl+drag** removes; no-modifier replaces (GIMP semantics). Single click = 1×1 rect. — **your decision**
+- **Magic wand** tool (`W`): click a cell to select its connected same-colour region (4-neighbour, no tolerance — pixel values are discrete). Same Shift / Ctrl / no-modifier semantics as the rect tool. Hole click is a no-op. — **your decision**
+- **Wand drag** sweeps through multiple regions: each new cell the cursor enters runs another wand select. After the first cell, replace flips to add (the drag accumulates regions) and remove stays remove (the drag peels off regions). One history entry covers the whole drag. — **your decision**
 - Click outside the canvas with no modifier deselects. With modifiers, no-op. — **your decision**
 - Click inside an in-canvas, non-hole cell that's not in the selection: paint tools no-op. The click cell itself must be in the selection. — **your decision**
 - Inner-hole cells behave as outside-the-canvas for all selection purposes (never added by rect or magic-wand, never affected by paint, never outlined). — **your decision**
