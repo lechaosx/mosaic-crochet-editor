@@ -1,7 +1,7 @@
-import { PatternState, RowState, RoundState, SymKey } from "./types";
+import { PatternState, RowState, RoundState, SymKey } from "@mosaic/logic/types";
 import { PlanType, PlanDir } from "@mosaic/wasm";
-import { computeClosure, diagonalsAvailable } from "./symmetry";
-import { Store, visiblePixels } from "./store";
+import { computeClosure, diagonalsAvailable } from "@mosaic/logic/symmetry";
+import { Store, visiblePixels } from "@mosaic/logic/store";
 
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;

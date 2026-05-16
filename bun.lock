@@ -3,6 +3,23 @@
   "configVersion": 1,
   "workspaces": {
     "": {},
+    "logic": {
+      "name": "@mosaic/logic",
+      "version": "0.1.0",
+      "dependencies": {
+        "@mosaic/wasm": "workspace:*",
+      },
+      "devDependencies": {
+        "@stryker-mutator/core": "^9.6.1",
+        "@stryker-mutator/vitest-runner": "^9.6.1",
+        "@vitest/coverage-istanbul": "^4.1.6",
+        "fast-check": "^4.8.0",
+        "typescript": "^6.0.3",
+        "vite": "^8.0.13",
+        "vite-plugin-wasm": "^3.6.0",
+        "vitest": "^4.1.6",
+      },
+    },
     "wasm": {
       "name": "@mosaic/wasm",
       "version": "0.1.0",
@@ -10,13 +27,11 @@
     "web": {
       "name": "@mosaic/web",
       "dependencies": {
+        "@mosaic/logic": "workspace:*",
         "@mosaic/wasm": "workspace:*",
       },
       "devDependencies": {
         "@playwright/test": "1.59.1",
-        "@stryker-mutator/core": "^9.6.1",
-        "@stryker-mutator/vitest-runner": "^9.6.1",
-        "@vitest/coverage-istanbul": "^4.1.6",
         "fast-check": "^4.8.0",
         "jsdom": "^29.1.1",
         "typescript": "^6.0.3",
@@ -166,6 +181,8 @@
     "@jridgewell/sourcemap-codec": ["@jridgewell/sourcemap-codec@1.5.5", "", {}, "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og=="],
 
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
+
+    "@mosaic/logic": ["@mosaic/logic@workspace:logic"],
 
     "@mosaic/wasm": ["@mosaic/wasm@workspace:wasm"],
 

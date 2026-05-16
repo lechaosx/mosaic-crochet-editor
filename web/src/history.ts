@@ -3,9 +3,9 @@
 // On QuotaExceededError we drop the oldest snapshot(s) and retry until the new
 // one fits — the freshly-added snapshot at the tail is always preserved.
 
-import { PatternState, Float } from "./types";
-import { SessionState } from "./store";
-import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "./storage";
+import { PatternState, Float } from "@mosaic/logic/types";
+import { SessionState } from "@mosaic/logic/store";
+import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 
 const LS_KEY = "mosaic-history-v3";
 const MAX    = 64;

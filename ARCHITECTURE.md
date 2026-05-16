@@ -12,11 +12,14 @@ This file records the technical decisions behind the codebase: structure, module
 mosaic-crochet-web/
 ├── core/   pure Rust logic (walk, pattern compression, highlight, drawing tools, export)
 ├── wasm/   Rust → WASM binding layer (src/lib.rs only; pkg/ is internal output)
-├── web/    Vite + TypeScript application
+├── logic/  pure TypeScript logic (@mosaic/logic) — no DOM, lib: ["ESNext"] enforces the boundary
+├── web/    Vite + TypeScript application — I/O shell, imports @mosaic/logic and @mosaic/wasm
 └── flake.nix, Cargo.toml, package.json
 ```
 
 Workspace membership is source-driven. — **your correction**
+
+Dependency direction is enforced structurally: `logic/tsconfig.json` uses `lib: ["ESNext"]` with no DOM, so any accidental import of browser APIs causes a compile-time error. `web/` imports from `logic/`; `logic/` never imports from `web/`. — **joint**
 
 ---
 
@@ -157,15 +160,16 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 ## Build & CI
 
 - `build:wasm` (wasm-pack) → `build:web` (Vite). `dev:rust` watches via `cargo-watch`. Both write to `wasm/pkg/`. — **Claude's choice**
+- `@mosaic/logic` exports pure TypeScript (`store`, `selection`, `paint`, `pattern`, `symmetry`, `clipboard`, `storage` serialisation). `web/src/` keeps the I/O shell: `history.ts` (localStorage-backed undo), `storage-io.ts` (localStorage + file picker), DOM adapters. Stryker mutates only `logic/src/` — I/O paths are covered by E2E. — **joint**
 - `flake.nix` provides rustup, wasm-pack, bun, cargo-watch, plus `playwright-driver.browsers` and the env vars to point Playwright at the nixpkgs-built chromium-headless-shell (downloaded binaries don't link against system libs on NixOS). — **joint**
 - `rust-toolchain.toml`: nightly + `wasm32-unknown-unknown`. — **Claude's choice**
-- GitHub Actions: single `ci.yml` — `rust` and `wasm` run in parallel; `web` and `build-web` fan out from `wasm`; `e2e` runs against the `build-web` artifact; `deploy` is gated on all three test jobs and reuses the `build-web` artifact. — **Claude's choice**; no custom packaging — **your decision**
+- GitHub Actions: single `ci.yml` — `test-rust` and `build-wasm` run in parallel; `test-logic`, `test-io`, and `build-app` fan out from `build-wasm`; `test-e2e` runs against the `build-app` artifact; `deploy` is gated on all test jobs and reuses the `build-app` artifact. `test-logic` runs typecheck (`tsc -p logic/tsconfig.json`) before tests, enforcing the no-DOM boundary in CI. — **Claude's choice**; no custom packaging — **your decision**
 
 ## Testing
 
 - **Rust:** `cargo test` (156 tests). Per-tool BFS/flood/wand/cut/transfer specs live in `core/tests`; covers the geometry boundary that TS can't easily exercise.
-- **TS unit:** Vitest runs against the same `vite-plugin-wasm` config so wasm-pack's bundler-target output resolves identically to runtime. `tests/*.test.ts` cover `store`, `selection`, `paint`, `clipboard`, `symmetry`, `storage`, `history`, `pattern`, `types`. jsdom is opt-in per-file via `// @vitest-environment jsdom`. — **Claude's choice**
-- **TS properties:** `tests/properties.test.ts` uses `fast-check` to assert invariants over random inputs (pack/unpack round-trips, lift-then-anchor identity, `applySelectionMod` add idempotence, wand colour + 4-connectivity, history undo/redo balance). Each property runs 100 generated inputs per execution; counter-examples shrink to minimal failing cases. — **Claude's choice**
-- **TS mutation:** Stryker with the vitest runner (`bun run --cwd web test:mutation`) — ~1100-mutant sweep across the logic modules, ~50s. The npm script invokes `node ./node_modules/@stryker-mutator/core/bin/stryker.js` directly: Stryker's instrumenter relies on Node's CJS-default unwrap (`generate.default` on `@babel/generator`), which Bun correctly omits per the ESM spec — so the script bypasses Bun for this one command. `nodejs` is pulled in via `flake.nix` for that reason. `stryker.config.mjs` lists `@stryker-mutator/vitest-runner` explicitly because Bun's `.bun/` virtual store breaks Stryker's plugin auto-discovery. — **joint**
-- **E2E:** Playwright (pinned to 1.59.1 to match `playwright-driver`'s browsers version in current nixpkgs) drives a `vite preview` build. Tests in `e2e/*.spec.ts` cover boot, tool switching, paint pixel verification (via `getImageData`), selection / move / copy / cut / paste flows, symmetry, edit popover. `render.ts` exposes the latest canvas matrix on `window.__test_matrix__` so cell-relative clicks don't need to inspect view state. — **Claude's choice**
-- Root `test` script chains all three: `bun run test` → cargo + vitest + playwright. — **Claude's choice**
+- **Logic unit + properties:** `logic/tests/` — Vitest with `vite-plugin-wasm`, no jsdom. Covers `store`, `selection`, `paint`, `clipboard`, `symmetry`, `storage`, `pattern`, `types` + cross-feature interaction tests. `properties.test.ts` uses `fast-check` for invariants over random inputs (pack/unpack round-trips, lift-anchor identity, `applySelectionMod` add idempotence, wand BFS, history undo/redo balance). — **Claude's choice**
+- **Web IO unit:** `web/tests/` — Vitest with jsdom. Covers `history.ts` (localStorage-backed undo) and `storage-io.ts` (localStorage persistence). jsdom required for `localStorage`. — **Claude's choice**
+- **Logic mutation:** Stryker with the vitest runner (`bun run test:mutation`) — ~780-mutant sweep across `logic/src/`, ~20s, 81% score. The script invokes `node ./node_modules/@stryker-mutator/core/bin/stryker.js` directly: Stryker's instrumenter relies on Node's CJS-default unwrap which Bun correctly omits per the ESM spec. `nodejs` is pulled in via `flake.nix` for that reason. — **joint**
+- **E2E:** Playwright (pinned to 1.59.1) drives a `vite preview` build. Tests in `web/e2e/*.spec.ts` cover boot, tools, paint, selection/move/copy/cut/paste, symmetry, edit popover, persistence (localStorage round-trip, float survives reload, undo/redo stability). `render.ts` exposes the canvas matrix on `window.__test_matrix__` so cell-relative clicks don't need to inspect view state. — **Claude's choice**
+- Root `test` script chains all four: `bun run test` → cargo + logic vitest + web vitest + playwright. — **Claude's choice**
