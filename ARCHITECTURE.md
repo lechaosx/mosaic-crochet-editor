@@ -52,25 +52,34 @@ Thin binding layer — `src/lib.rs` only. — **Claude's choice**
 - **`ExportSession`** — `#[wasm_bindgen]` struct; JS owns it, calls `.next()` per line, calls `.free()`. Avoids global session state. — **your decision**
 - **`symmetric_orbit_indices`** — exposes the BFS orbit walker so the TS Invert tool can dedupe orbit cells per stroke without re-implementing the walk in JS. — **Claude's choice**
 
-### `web`
-Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. State ownership and shape:
+### `logic` (`@mosaic/logic`)
+Pure TypeScript — no DOM, `lib: ["ESNext"]` enforced. All modules are free functions; `Store` is the only class (justified by the commit-chain invariant).
 
 | Module | Owns | Shape |
 |---|---|---|
-| `store.ts` | `SessionState` (pattern, pixels, **float** layer, colours, tool, primary, symmetry, settings, rotation) + derived highlight plan + `visiblePixels(s)` helper that stamps the float onto pixels | **class** (`Store`) — `commit(mutate, opts?)` is the only path that runs the recompute → render → history → persist → observers chain; the invariant justifies the class |
-| `main.ts` | Boot + orchestration: constructs `Store` + `RendererState`, wires renderer/history/persistence/observers, mounts UI + gestures, dispatches keyboard. Owns the per-gesture `Gesture` union (paint / select / wand / move) for the duration of one pointerdown→up. | free functions |
-| `selection.ts` | Selection / float operations. Pure helpers (`liftCells`, `cutCells`, `rectMask`, `shiftedFloatMask`, `anchorIntoCanvas`) and store-mutating ops (`applySelectionMod` and the rect / wand / select-all / deselect / anchor wrappers around it). | free functions |
-| `clipboard.ts` | Module-level clipboard buffer + `copyFloat` / `cutFloat` / `pasteClipboard`. The tool-switch side effect of paste lives in `main.ts` (we don't import UI from here). | free functions |
-| `paint.ts` | `paintOps: Record<PaintTool, PaintFn>` — per-tool dispatch as a lookup table over the visible canvas + paint-context shape. Single surface area for adding/changing a tool. | free functions + data |
-| `render.ts` | `RendererState` struct (canvas, ctx, view pan/zoom, animation state, colour cache) + `render(r, store)`, `screenToPattern(r, …)`, `fitToView(r, …)`, `clampZoom`, `updateStatus` | **free functions + state struct** — no invariants, no resources to manage |
-| `gesture.ts` | pointer-event state machine. `mountGestures(r, callbacks)` takes the renderer state explicitly | free function |
-| `ui.ts` | toolbar wiring (tools, swatches, symmetry, popovers, dialogs) + `mountToolbarLayout` | free function returning a `UIHandle` |
-| `symmetry.ts` | pure helpers (`computeClosure`, `getSymmetryMask`, `pruneUnavailableDiagonals`); active-axis set is owned by `Store` | free functions |
-| `pattern.ts` | `applyEditSettings(source?)` — pure, returns a fresh `{ pattern, pixels }` for the caller to commit | free functions |
-| `history.ts` | undo/redo snapshot stack, localStorage-backed; takes/returns `SessionState` slices | free functions |
-| `storage.ts` | localStorage + file save/load serialisation; takes/returns `SessionState` | free functions |
-| `dom.ts` | small helpers | free functions |
-| `dev.ts` | `devAssert(cond, msg)` + `assertNever(x, ctx)` — dev/test-only invariant guards (gated by `import.meta.env.DEV`, dead-code-eliminated in production builds) | free functions |
+| `store.ts` | `SessionState` + derived highlight plan + `visiblePixels`, `outOfBounds`, `forEachCell` helpers | **class** (`Store`) — `commit(mutate, opts?)` is the only mutation path |
+| `selection.ts` | Float lift/cut/anchor/delete + `applySelectionMod` (rect / wand / select-all / deselect wrappers) | free functions |
+| `clipboard.ts` | In-memory clipboard + `copyFloat` / `cutFloat` / `pasteClipboard` | free functions |
+| `paint.ts` | `paintOps: Record<PaintTool, PaintFn>` — per-tool dispatch table | free functions + data |
+| `symmetry.ts` | `computeClosure`, `getSymmetryMask`, `pruneUnavailableDiagonals` | free functions |
+| `pattern.ts` | `applyEditSettings(settings: EditSettings, source?)` — pure; DOM-reading adapter lives in `web/src/pattern.ts` | free functions |
+| `storage.ts` | `packPixels` / `unpackPixels` / `packFloat` / `unpackFloat` / `packSelection` / `unpackSelection` — serialisation only | free functions |
+| `types.ts` | `PatternState`, `Float`, `Tool`, `SymKey` | types |
+| `dev.ts` | `devAssert` / `assertNever` — dead-code-eliminated in production | free functions |
+
+### `web`
+Vite + TypeScript I/O shell. Imports `@mosaic/logic` and `@mosaic/wasm`.
+
+| Module | Owns | Shape |
+|---|---|---|
+| `main.ts` | Boot + orchestration: constructs `Store` + `RendererState`, wires renderer/history/persistence/observers, mounts UI + gestures, dispatches keyboard. Owns the per-gesture `Gesture` union for the duration of one pointerdown→up. | free functions |
+| `render.ts` | `RendererState` struct (canvas, ctx, view pan/zoom, animation state, colour cache) + `render`, `screenToPattern`, `fitToView`, `clampZoom`, `updateStatus` | free functions + state struct |
+| `gesture.ts` | Pointer-event state machine. `mountGestures(r, callbacks)` takes renderer state explicitly. | free function |
+| `ui.ts` | Toolbar wiring (tools, swatches, symmetry, popovers, dialogs) + `mountToolbarLayout` | free function returning `UIHandle` |
+| `history.ts` | Undo/redo snapshot stack, localStorage-backed (`mosaic-history-v3`); takes/returns `SessionState` slices | free functions |
+| `storage-io.ts` | `saveToLocalStorage` / `loadFromLocalStorage` / `saveToFile` / `loadFromFile` — browser I/O only | free functions |
+| `pattern.ts` | DOM adapter: reads Edit popover inputs, calls `@mosaic/logic/pattern.applyEditSettings` | free function |
+| `dom.ts` | Small DOM helpers (`el`, `radioValue`, `readClampedInt`) | free functions |
 
 — **your decision** (single-owner Store + free functions everywhere else); **Claude's choice** (specific shape of `Store.commit` opts and `RendererState`).
 
@@ -120,7 +129,7 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 ### Pixel encoding
 - In memory: 3 values — 0 = inner hole (transparent sentinel), 1 = COLOR_A, 2 = COLOR_B. The sentinel doubles as the universal "skip this cell" guard (`!= 0`) across every tool. — **your decision**
 - On disk: 1 bit per cell (A=0, B=1). Save converts at the boundary; load rebuilds the 3-value array using geometry to fill the transparent sentinel. Hole bits in storage are arbitrary. — **your decision**
-- Save format `.mcw` and the `localStorage` payload are versioned. v2 = packed bits + base64. v1 (legacy `number[]` with the same 0/1/2 in-memory encoding) is still loadable; the BC path is marked in `storage.ts`. — **your decision**
+- `.mcw` file format is v2 (packed bits + base64). v1 (legacy `number[]` in-memory encoding) is still loadable; the BC path is in `storage-io.ts`. Session `localStorage` is v3 (adds float serialisation). History `localStorage` is v3. — **your decision**
 
 ### Data flow & state
 - Single mutable owner: `Store` (class, in `store.ts`) owns `SessionState`. Direct mutation of `store.state` is blocked at the type level (`Readonly<SessionState>`); all writes go through `store.commit(mutate, opts?)`. — **your decision**

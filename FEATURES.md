@@ -21,7 +21,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Drawing
 
-- Tools: Pencil, Fill, Eraser, Overlay, Invert, Select. — **your decision**
+- Tools: Pencil, Fill, Eraser, Overlay, Invert, Select, Magic Wand, Move. — **your decision**
 - **Eraser** (left = restore natural; right = paint *opposite* of natural, the exact inverse). — **your decision**
 - **Overlay** tool: click *where you want a ✕*; the inward neighbour is painted with the overlay colour so the highlight pass renders a ✕ at the clicked cell. Right-click clears the ✕ by restoring that neighbour's natural colour. Symmetry mirrors the ✕ position (each orbit cell of the click gets its own ✕ with the correct per-cell colour). No-op on round-mode corners (no overlay stitch geometry exists there). — **your decision**
 - Painting is blocked on inner-hole (transparent) pixels. — **Claude's choice**
@@ -51,7 +51,8 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
   - `Ctrl+A` — lift all paintable cells into float. `Ctrl+Shift+A` / `Esc` — anchor and clear.
   - `Delete` — cut canvas under the float's current position to natural baseline, then re-lift those cleared cells so the selection stays active. Float keeps its mask and offset; content becomes the natural baseline. No yank.
   - **Arrow** — nudge float (content + mask) ±1 cell. **Shift+Arrow** — ±5 cells.
-  - **Ctrl+Arrow** / **Alt+Arrow** — stamp float content into canvas once (first press per modifier-down), then move the empty marquee ±1 cell. **Ctrl/Alt+Shift+Arrow** — same but ±5 cells. Stamp resets when the modifier is released. Alt and Ctrl are equivalent here — both mean "mask-only".
+  - **Ctrl+Arrow** — bake the float's current position into canvas once (first press per Ctrl-down), then move the float **with its content intact** ±1 cell. **Ctrl+Shift+Arrow** — same but ±5 cells. Stamp resets when Ctrl is released.
+  - **Alt+Arrow** — mask-only: stamp content into canvas once (first press per Alt-down), zero the float's pixels, move the empty marquee ±1 cell. On Alt release the canvas at the new marquee position is re-lifted into the float. **Alt+Shift+Arrow** — same but ±5 cells.
   - Holding any arrow key produces one undo entry for the entire held sequence.
   — **your decision**
 
@@ -96,7 +97,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## History
 
 - Up to 64 history states per session. — **Claude's choice**
-- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v2`). On refresh the saved stack is restored as-is. — **your decision**
+- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v3`). On refresh the saved stack is restored as-is. — **your decision**
 - Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
 - Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
 - Redundant snapshots (same packed pixels + same state + same colours as the head) are skipped. — **Claude's choice**

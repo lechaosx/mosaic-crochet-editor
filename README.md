@@ -64,7 +64,7 @@ Eight tools, in the toolbar's tools group:
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
 - **Select** — drag a rectangle to **lift** those cells into a floating selection: their values move into the float, the canvas below them resets to the natural alternating colour. **Shift+drag** adds to the selection; **Ctrl+drag** removes (re-anchors the rest); no-modifier replaces. A single click lifts one cell.
 - **Magic wand** — click a cell to lift its connected same-colour region as a float. Same Shift / Ctrl / no-modifier semantics as the rect tool.
-- **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive until you deselect (`Ctrl+Shift+A`), switch out via the Edit popover, save, or do something else that anchors it. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Shift+drag** moves the marquee only — the float's pixels are cleared at the start, the drag carries an empty selection, and on release the canvas content at the new position is re-lifted as the new float. **Hold Alt** with any tool to temporarily swap into Move; releasing Alt restores the previous tool.
+- **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive until you deselect (`Ctrl+Shift+A`), switch out via the Edit popover, save, or do something else that anchors it. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's pixels are baked into the canvas at the start, the drag carries an empty marquee, and on release the canvas content at the new position is re-lifted as the new float. **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
 
 All five drawing tools respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
 
@@ -114,12 +114,15 @@ Tool, colour, symmetry, rotation, the active float (selection + lifted pixels), 
 | Action | Key |
 |---|---|
 | Pencil / Fill / Eraser / Overlay / Invert / Select / Wand / Move | **P** / **F** / **E** / **O** / **I** / **S** / **W** / **M** |
-| Hold Alt — temporary Move tool (any active tool) | **Alt** |
 | Vertical / Horizontal / Central symmetry | **V** / **H** / **C** |
 | Diagonal ╲ / Anti-diagonal ╱ | **D** / **A** |
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
 | Select primary / secondary swatch | **1** / **2** |
-| Select all paintable cells / Deselect | **Ctrl+A** / **Ctrl+Shift+A** |
+| Select all paintable cells / Deselect / Clear selection | **Ctrl+A** / **Ctrl+Shift+A** / **Esc** |
+| Delete selection content (keeps selection active) | **Delete** |
+| Nudge float / Nudge ×5 | **Arrow** / **Shift+Arrow** |
+| Bake position into canvas, nudge float | **Ctrl+Arrow** / **Ctrl+Shift+Arrow** |
+| Mask-only nudge (stamp + move marquee, re-lifts on release) | **Alt+Arrow** / **Alt+Shift+Arrow** |
 | Copy selection / Cut to clipboard / Paste as a free float | **Ctrl+C** / **Ctrl+X** / **Ctrl+V** |
 | Undo / Redo | **Ctrl+Z** / **Ctrl+Y** (or **Ctrl+Shift+Z**) |
 
@@ -166,16 +169,17 @@ bun run test
 Chains all three layers:
 
 - **Rust** (`cargo test`) — geometry, walk generators, pattern compression.
-- **TS unit + properties** (`bun run --cwd web test`, Vitest) — store / selection / paint / clipboard / symmetry / storage / history / pattern + `fast-check`-generated property assertions for pack/unpack round-trips, lift-anchor identity, wand BFS invariants, history undo/redo balance.
+- **TS unit + properties** (`bun run test:logic` for pure logic, `bun run test:web` for IO layer, Vitest) — store / selection / paint / clipboard / symmetry / storage / pattern + `fast-check`-generated property assertions for pack/unpack round-trips, lift-anchor identity, wand BFS invariants, history undo/redo balance; plus history and localStorage persistence.
 - **E2E** (`bun run --cwd web test:e2e`, Playwright) — full UX flows: tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry mirroring, Edit popover.
 
 Run a subset:
 
 ```sh
-bun run --cwd web test                # Vitest only
+bun run test:logic                    # Vitest — pure logic (logic/tests/)
+bun run --cwd web test                # Vitest — IO layer (web/tests/)
 bun run --cwd web test:watch          # Vitest interactive
 bun run --cwd web test:coverage       # Istanbul HTML report at web/coverage/index.html
-bun run --cwd web test:mutation       # Stryker mutation sweep (~50s; report at web/reports/mutation/mutation.html)
+bun run test:mutation                 # Stryker mutation sweep on logic (~20s; report at logic/reports/mutation/mutation.html)
 bun run --cwd web test:e2e            # Playwright only
 ```
 
