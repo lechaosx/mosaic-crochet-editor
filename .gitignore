@@ -1,5 +1,3 @@
 target/
 node_modules/
-wasm/pkg/
-wasm/pkg-debug/
-wasm/pkg-release/
+wasm/pkg*/
