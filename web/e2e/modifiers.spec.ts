@@ -87,12 +87,18 @@ test("Arrow while an input is focused does not move the float", async ({ page })
     await clickCell(page, 2, 1);
     await page.keyboard.press("s");
     await clickCell(page, 2, 1);
-    // Focus a numeric input (e.g. rotation field in toolbar)
-    const input = page.locator("input[type='number']").first();
-    await input.focus();
+    // Inject a temporary input and focus it — reliable across any toolbar state.
+    await page.evaluate(() => {
+        const inp = Object.assign(document.createElement("input"), {
+            type: "text", id: "__test_guard_input",
+        });
+        Object.assign(inp.style, { position: "fixed", top: "0", left: "0", opacity: "0" });
+        document.body.appendChild(inp);
+        inp.focus();
+    });
     await page.keyboard.press("ArrowRight");
-    await input.blur();
-    // Anchor — float should still be at source (2,1)
+    await page.evaluate(() => document.getElementById("__test_guard_input")?.remove());
+    // Anchor — float should still be at (2,1), not moved
     await page.keyboard.press("Escape");
     const c = await cellCoord(page, 2, 1);
     expect(await pixelRGB(page, c.cx, c.cy)).toEqual(A);
@@ -296,13 +302,14 @@ test("Alt+Ctrl+Select drag = remove (Alt ignored, Ctrl applies)", async ({ page 
     await dragCells(page, 0, 0, 1, 1);   // remove top-left 2×2
     await page.keyboard.up("Control");
     await page.keyboard.up("Alt");
-    // Paint primary into the float — should clip to remaining selection
+    // Right-click (secondary = B) at (0,0) — should be clipped since removed.
+    // After remove, (0,0) is stamped back to canvas as A (row-0 baseline).
+    // If clipped: stays A. If not clipped (bug): becomes B.
     await page.keyboard.press("p");
-    await clickCell(page, 0, 0);   // was removed from selection — should be clipped
+    await clickCell(page, 0, 0, { button: "right" });
     await page.keyboard.press("Escape");
-    // (0,0) paint was clipped (outside remaining selection) → stays at natural baseline
     const c = await cellCoord(page, 0, 0);
-    expect(await pixelRGB(page, c.cx, c.cy)).not.toEqual(A);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual(A);   // paint was clipped → stayed A
 });
 
 test("Alt+Shift+Select drag = add (Alt ignored, Shift applies)", async ({ page }) => {
