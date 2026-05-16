@@ -1,4 +1,4 @@
-import { Tool, SymKey, PatternState } from "./types";
+import { Tool, SymKey, PatternState } from "@mosaic/logic/types";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 
 // ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────

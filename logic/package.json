@@ -1,0 +1,35 @@
+{
+  "name": "@mosaic/logic",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./types":     "./src/types.ts",
+    "./dev":       "./src/dev.ts",
+    "./store":     "./src/store.ts",
+    "./selection": "./src/selection.ts",
+    "./paint":     "./src/paint.ts",
+    "./pattern":   "./src/pattern.ts",
+    "./symmetry":  "./src/symmetry.ts",
+    "./clipboard": "./src/clipboard.ts",
+    "./storage":   "./src/storage.ts"
+  },
+  "scripts": {
+    "typecheck":     "tsc --noEmit",
+    "test":          "vitest run",
+    "test:watch":    "vitest",
+    "test:mutation": "node ./node_modules/@stryker-mutator/core/bin/stryker.js run"
+  },
+  "dependencies": {
+    "@mosaic/wasm": "workspace:*"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core":         "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@vitest/coverage-istanbul":     "^4.1.6",
+    "fast-check":                    "^4.8.0",
+    "typescript":                    "^6.0.3",
+    "vite":                          "^8.0.13",
+    "vite-plugin-wasm":              "^3.6.0",
+    "vitest":                        "^4.1.6"
+  }
+}

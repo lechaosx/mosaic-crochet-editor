@@ -9,7 +9,6 @@ export default {
         "src/store.ts",
         "src/symmetry.ts",
         "src/storage.ts",
-        "src/history.ts",
         "src/pattern.ts",
         "src/types.ts",
     ],

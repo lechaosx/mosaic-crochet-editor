@@ -162,11 +162,9 @@ Phases 1 and 4 are independent — can be done in either order. Everything else 
 
 ### Test tightening (Stryker-driven)
 
-Mutation score after the May 2026 pass: **75.86%** overall. Modules at ≥80%: `store` (92%), `paint` (91%), `pattern` (85%), `symmetry` (85%). Remaining below target:
+Mutation score after the May 2026 pass: **81%** on `logic/src/` (target: ≥80% on every module). History and storage-io are not Stryker targets — they are I/O shells covered by E2E. Remaining below target in logic:
 
-- **`selection.ts` (73%, 66 survivors)** — coordinate arithmetic survivors in `applySelectionMod` (offset math, bounds checks). The obvious duplication was extracted (`outOfBounds`, `forEachCell`) and tested, cutting survivors from 98 → 66. Remaining are narrow boundary tests for each arithmetic expression — diminishing returns.
-- **`history.ts` (72%, 23 survivors)** — localStorage error-handling paths. Hard to unit-test cleanly; drop to E2E for the recovery flows.
-- **`storage.ts` (54%, 60 no-coverage)** — browser APIs (`showSaveFilePicker`, `FileReader`). Untestable in unit tests by design; covered by E2E.
+- **`selection.ts` (73%, 66 survivors)** — coordinate arithmetic in `applySelectionMod` (offset math, bounds checks). `outOfBounds`/`forEachCell` helpers extracted and tested (98 → 66 survivors). Remaining are narrow boundary tests — diminishing returns.
 - **`clipboard.ts` (80%, 31 survivors)** — at target; survivors are minor.
 
-Run with `bun run --cwd web test:mutation`; HTML report at `web/reports/mutation/mutation.html` shows per-line survivor breakdown.
+Run with `bun run test:mutation`; HTML report at `logic/reports/mutation/mutation.html`.

@@ -1,10 +1,6 @@
-// Shared test helpers — small `SessionState` factory + a 5×5 canvas
-// pre-filled with colour A so tests have something distinguishable from
-// natural baseline (which alternates A/B by row).
-
 import { initialize_row_pattern } from "@mosaic/wasm";
-import type { PatternState, Float } from "@mosaic/logic/types";
-import type { SessionState } from "@mosaic/logic/store";
+import type { PatternState, Float } from "../src/types";
+import type { SessionState } from "../src/store";
 
 export function rowPattern(W: number, H: number): PatternState {
     return { mode: "row", canvasWidth: W, canvasHeight: H };

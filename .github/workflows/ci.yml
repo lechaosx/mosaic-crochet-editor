@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  rust:
-    name: Rust (cargo test)
+  test-rust:
+    name: Rust tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -31,8 +31,8 @@ jobs:
           key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
       - run: cargo test
 
-  wasm:
-    name: Build WASM
+  build-wasm:
+    name: WASM build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -49,16 +49,30 @@ jobs:
           key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
       - run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - uses: oven-sh/setup-bun@v2
-      - run: bun install
       - run: bun run build:wasm
       - uses: actions/upload-artifact@v7
         with:
           name: pkg
           path: wasm/pkg/
 
-  web:
-    name: TS unit + properties (Vitest)
-    needs: wasm
+  test-logic:
+    name: Logic tests
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - uses: actions/download-artifact@v8
+        with:
+          name: pkg
+          path: wasm/pkg/
+      - run: bun run --cwd logic typecheck
+      - run: bun run --cwd logic test
+
+  test-io:
+    name: IO layer tests
+    needs: build-wasm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -70,9 +84,9 @@ jobs:
           path: wasm/pkg/
       - run: bun run --cwd web test
 
-  build-web:
-    name: Build web
-    needs: wasm
+  build-app:
+    name: App build
+    needs: build-wasm
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -88,9 +102,9 @@ jobs:
           name: web-dist
           path: web/dist/
 
-  e2e:
-    name: E2E (Playwright)
-    needs: build-web
+  test-e2e:
+    name: E2E tests
+    needs: build-app
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -106,7 +120,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    needs: [rust, web, e2e]
+    needs: [test-rust, test-logic, test-io, test-e2e]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:

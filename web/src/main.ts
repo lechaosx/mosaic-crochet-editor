@@ -1,20 +1,20 @@
 import { PlanType, lock_invalid_row, lock_invalid_round,
          export_start_row, export_start_round } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey, Float } from "./types";
+import { Tool, PatternState, SymKey, Float } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, screenToPattern, updateStatus } from "./render";
 import { applyEditSettings } from "./pattern";
-import { Store, SessionState, visiblePixels } from "./store";
+import { Store, SessionState, visiblePixels } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
-import { computeClosure, diagonalsAvailable, getSymmetryMask, pruneUnavailableDiagonals } from "./symmetry";
-import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "./storage";
+import { computeClosure, diagonalsAvailable, getSymmetryMask, pruneUnavailableDiagonals } from "@mosaic/logic/symmetry";
+import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "./storage-io";
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
-         commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat } from "./selection";
-import { copyFloat, cutFloat, pasteClipboard } from "./clipboard";
-import { PaintTool, paintOps } from "./paint";
+         commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat } from "@mosaic/logic/selection";
+import { copyFloat, cutFloat, pasteClipboard } from "@mosaic/logic/clipboard";
+import { PaintTool, paintOps } from "@mosaic/logic/paint";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
