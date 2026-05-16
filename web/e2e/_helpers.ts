@@ -37,9 +37,17 @@ export async function pixelRGB(page: Page, cx: number, cy: number): Promise<[num
     }, { cx, cy });
 }
 
-export async function clickCell(page: Page, x: number, y: number, opts: Parameters<Page["mouse"]["click"]>[2] = {}) {
+// `page.mouse.click` doesn't accept modifiers — we wrap with explicit
+// keyboard down/up so callers can simulate Shift / Ctrl / Alt chord clicks.
+export async function clickCell(
+    page: Page, x: number, y: number,
+    opts: Parameters<Page["mouse"]["click"]>[2] & { modifiers?: ("Shift" | "Control" | "Alt")[] } = {},
+) {
     const { cx, cy } = await cellCoord(page, x, y);
-    await page.mouse.click(cx, cy, opts);
+    const { modifiers = [], ...mouseOpts } = opts;
+    for (const m of modifiers) await page.keyboard.down(m);
+    await page.mouse.click(cx, cy, mouseOpts);
+    for (const m of [...modifiers].reverse()) await page.keyboard.up(m);
 }
 
 // Drag from cell (sx,sy) to (ex,ey) with interpolated steps so the gesture

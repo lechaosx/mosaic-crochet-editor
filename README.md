@@ -175,6 +175,7 @@ Run a subset:
 bun run --cwd web test                # Vitest only
 bun run --cwd web test:watch          # Vitest interactive
 bun run --cwd web test:coverage       # Istanbul HTML report at web/coverage/index.html
+bun run --cwd web test:mutation       # Stryker mutation sweep (~50s; report at web/reports/mutation/mutation.html)
 bun run --cwd web test:e2e            # Playwright only
 ```
 
