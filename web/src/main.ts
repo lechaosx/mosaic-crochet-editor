@@ -12,7 +12,8 @@ import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } fr
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
-         commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat } from "@mosaic/logic/selection";
+         commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
+         deleteFloat } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 
@@ -53,7 +54,7 @@ const store    = new Store(saved ?? defaultSession());
 //   "duplicate"  → Ctrl; pre-stamps the float into canvas at paintdown
 //                  (visible duplicate carried through the drag), release
 //                  records the moved float at the drag end.
-//   "mask-only"  → Shift (dominates Ctrl); paintdown stamps the float into
+//   "mask-only"  → Alt (dominates Ctrl); paintdown stamps the float into
 //                  canvas at its current position and zeros `float.pixels`,
 //                  drag carries the empty marquee, release lifts the
 //                  canvas content at the new mask position.
@@ -99,10 +100,7 @@ type Gesture =
         preFloat: Float | null;
       };
 let gesture: Gesture | null = null;
-// Holding Alt temporarily switches the active tool to Move (the toolbar
-// reflects it). Releasing Alt restores the previous tool. Picking a
-// different tool while Alt is held queues that tool as the return target.
-let altPrevTool: Tool | null = null;
+let maskArrowStamped = false;   // stamp happens once per modifier-press (Ctrl or Alt + Arrow)
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -235,18 +233,9 @@ function toggleSym(k: SymKey) {
 }
 
 // ── Tool / colour / settings handlers ────────────────────────────────────────
-function setTool(t: Tool) {
-    if (altPrevTool !== null) {
-        // Alt is held — queue the pick as the return tool; don't actually switch.
-        altPrevTool = t;
-        return;
-    }
-    applyTool(t);
-}
 // Switching tools keeps any active float alive — paint tools clip to its
-// shifted mask, so the selection survives across tool changes (matching
-// the user mental model of "selection persists until I deselect").
-function applyTool(t: Tool) {
+// shifted mask, so the selection survives across tool changes.
+function setTool(t: Tool) {
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
 }
@@ -287,12 +276,8 @@ function rotate(delta: number) {
 // `pasteClipboard` itself only touches state; the tool switch is a UI side
 // effect that lives here in the orchestrator.
 function onPaste() {
-    if (store.state.activeTool !== "move") applyTool("move");
-    if (!pasteClipboard(store)) {
-        // Couldn't paste (no clipboard, or all cells dropped). The
-        // `applyTool` above still ran; that's fine — switching to Move
-        // with no float is harmless.
-    }
+    if (store.state.activeTool !== "move") setTool("move");
+    pasteClipboard(store);
 }
 
 // ── Pattern (Edit) popover ──────────────────────────────────────────────────
@@ -454,7 +439,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     onPaintStart: (color, mods) => {
         const tool = store.state.activeTool;
         if (tool === "move") {
-            const mode: MoveMode = mods.shift ? "mask-only" : mods.ctrl ? "duplicate" : "move";
+            const mode: MoveMode = mods.alt ? "mask-only" : mods.ctrl ? "duplicate" : "move";
             let prePixels: Uint8Array | null = null;
             const preFloat = store.state.float;
             if (mode === "mask-only" && preFloat) {
@@ -646,24 +631,9 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
 });
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────
-function restoreFromAlt() {
-    if (altPrevTool === null) return;
-    const prev  = altPrevTool;
-    altPrevTool = null;
-    applyTool(prev);
-}
-
 document.addEventListener("keydown", e => {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
-    if (e.key === "Alt") {
-        if (!e.repeat && altPrevTool === null && store.state.activeTool !== "move") {
-            altPrevTool = store.state.activeTool;
-            applyTool("move");
-        }
-        e.preventDefault();
-        return;
-    }
     if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
         else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
@@ -672,9 +642,60 @@ document.addEventListener("keydown", e => {
         else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); copyFloat(store); }
         else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); cutFloat(store); }
         else if (e.key === "v" && !e.shiftKey) { e.preventDefault(); onPaste(); }
+        else if (e.key.startsWith("Arrow") && store.state.float) {
+            e.preventDefault();
+            const step = e.shiftKey ? 5 : 1;
+            const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+            const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
+            store.commit(state => {
+                if (!maskArrowStamped && state.float) {
+                    // Bake current position into canvas (duplicate), keep float pixels intact.
+                    state.pixels     = visiblePixels(state);
+                    maskArrowStamped = true;
+                }
+                if (state.float)
+                    state.float = { ...state.float, dx: state.float.dx + ddx, dy: state.float.dy + ddy };
+            }, { history: !e.repeat });
+        }
         return;
     }
-    if (e.altKey) return;
+    if (e.altKey) {
+        if (e.key.startsWith("Arrow") && store.state.float) {
+            e.preventDefault();
+            const step = e.shiftKey ? 5 : 1;
+            const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+            const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
+            store.commit(state => {
+                if (!maskArrowStamped && state.float) {
+                    state.pixels = visiblePixels(state);
+                    state.float  = { ...state.float, pixels: new Uint8Array(state.float.pixels.length) };
+                    maskArrowStamped = true;
+                }
+                if (state.float)
+                    state.float = { ...state.float, dx: state.float.dx + ddx, dy: state.float.dy + ddy };
+            }, { history: !e.repeat });
+        }
+        return;
+    }
+    if (e.key === "Escape") {
+        if (store.state.float) { e.preventDefault(); anchorFloat(store); }
+        return;
+    }
+    if (e.key === "Delete") {
+        if (store.state.float) { e.preventDefault(); deleteFloat(store); }
+        return;
+    }
+    if (e.key.startsWith("Arrow")) {
+        if (!store.state.float) return;
+        e.preventDefault();
+        const step = e.shiftKey ? 5 : 1;
+        const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+        const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
+        store.commit(state => {
+            state.float = { ...state.float!, dx: state.float!.dx + ddx, dy: state.float!.dy + ddy };
+        }, { history: !e.repeat });
+        return;
+    }
     const k = e.key.toLowerCase();
     if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
@@ -695,13 +716,24 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
-    if (e.key === "Alt") {
-        restoreFromAlt();
-        e.preventDefault();
+    if (e.key === "Control" || e.key === "Meta" || e.key === "Alt") {
+        if (e.key === "Alt" && maskArrowStamped && store.state.float) {
+            // Float pixels were zeroed by Alt+Arrow mask-only ops — re-lift canvas
+            // at the marquee's current display position, same as Alt+drag release.
+            if (!store.state.float.pixels.some(v => v !== 0)) {
+                const shifted = shiftedFloatMask(store.state);
+                const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
+                store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
+            }
+        }
+        maskArrowStamped = false;
     }
 });
 
-window.addEventListener("blur", restoreFromAlt);
+window.addEventListener("blur", () => {
+    // On blur we can't distinguish which modifier was held, so just clear state.
+    maskArrowStamped = false;
+});
 
 // Force the Edit popover to commit its live preview (via its `toggle`
 // → `onEditClose` chain) before any *outside* user input runs. The popover

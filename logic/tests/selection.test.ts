@@ -7,6 +7,7 @@ import { describe, test, expect } from "vitest";
 import {
     liftCells, cutCells, rectMask, shiftedFloatMask, anchorIntoCanvas,
     applySelectionMod, commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
+    deleteFloat,
 } from "../src/selection";
 import { Store, visiblePixels } from "../src/store";
 import { initialize_row_pattern, initialize_round_pattern } from "@mosaic/wasm";
@@ -573,6 +574,47 @@ describe("deselect / anchorFloat", () => {
         // restore the lifted source (lift cut it, but our test float was
         // never actually "lifted" from this canvas; we constructed it).
         expect(s.state.pixels[1 * 3 + 1]).toBe(2);   // stamped at (1,1)
+        expect(s.state.float).toBeNull();
+    });
+});
+
+describe("deleteFloat", () => {
+    test("clears canvas at destination and keeps selection active with baseline content", () => {
+        const s = storeOf(3, 3, {
+            pixels: filledPixels(3, 3, 1),
+            float: makeFloat(3, 3, [{ x: 0, y: 0, v: 2 }]),
+        });
+        deleteFloat(s);
+        // Float still exists (selection kept active)
+        expect(s.state.float).not.toBeNull();
+        // Canvas at (0,0) cut to natural baseline (row 0 = A = 1)
+        expect(s.state.pixels[0]).toBe(1);
+        // Float pixels updated to the cleared baseline value (row 0, col 0 = A = 1)
+        expect(s.state.float!.pixels[0]).toBe(1);
+        // Mask and offset preserved
+        expect(s.state.float!.mask[0]).toBe(1);
+        expect(s.state.float!.dx).toBe(0);
+    });
+
+    test("with offset: destination cut to baseline, float re-loaded with baseline", () => {
+        const s = storeOf(3, 3, {
+            pixels: filledPixels(3, 3, 1),
+            float: makeFloat(3, 3, [{ x: 0, y: 0, v: 2 }], 1, 1),
+        });
+        deleteFloat(s);
+        expect(s.state.float).not.toBeNull();
+        // Destination (1,1) cut to row-1 natural baseline = B = 2
+        expect(s.state.pixels[1 * 3 + 1]).toBe(2);
+        // Float pixels at source (0,0) = baseline value at destination (1,1) = 2
+        expect(s.state.float!.pixels[0]).toBe(2);
+        // Offset preserved
+        expect(s.state.float!.dx).toBe(1);
+        expect(s.state.float!.dy).toBe(1);
+    });
+
+    test("no-op when no float", () => {
+        const s = storeOf(3, 3);
+        deleteFloat(s);
         expect(s.state.float).toBeNull();
     });
 });

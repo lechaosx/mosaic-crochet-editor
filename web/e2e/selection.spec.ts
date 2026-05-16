@@ -57,3 +57,219 @@ test("Ctrl+Shift+A deselects", async ({ page }) => {
     // No DOM hook to assert directly; this is a smoke test that the
     // shortcut path doesn't throw.
 });
+
+test("Esc stamps float content into canvas and clears selection", async ({ page }) => {
+    await bootApp(page);
+    // Paint a cell, lift it with select-all, verify float exists via paint-clip,
+    // then Esc to anchor.
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);   // row 1 baseline = B; paint A at (0,1)
+    await page.keyboard.press("Control+a");
+    // Move the float one cell right.
+    await page.keyboard.press("m");
+    const src = await cellCoord(page, 0, 1);
+    const dst = await cellCoord(page, 1, 1);
+    await page.mouse.move(src.cx, src.cy);
+    await page.mouse.down();
+    await page.mouse.move(dst.cx, dst.cy, { steps: 5 });
+    await page.mouse.up();
+    // Esc: should stamp at current offset (1,1) and clear selection.
+    await page.keyboard.press("Escape");
+    // After anchor, paint A at (1,1) would overwrite; verify it has the stamped colour.
+    const c = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // A = black
+});
+
+test("Delete clears content and keeps selection active with baseline content", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);   // paint A at (0,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);   // select that cell
+    await page.keyboard.press("Delete");
+    // Canvas at (0,1) cleared to baseline (row 1 = B = not black)
+    const c = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).not.toEqual([0, 0, 0]);
+    // Selection still active — move it to verify the float exists
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Escape");
+    // After anchoring the moved baseline-content float, (1,1) should have baseline (B)
+    const dst = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, dst.cx, dst.cy)).not.toEqual([0, 0, 0]);
+});
+
+test("Arrow keys nudge float by 1 cell per press", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);   // paint A at (0,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);   // select
+    // Nudge right once, then anchor with Esc.
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Escape");
+    // Content should now be at (1,1).
+    const c = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);
+});
+
+test("Shift+Arrow nudges float by 5 cells", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);   // paint A at (0,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);   // select
+    // Shift+ArrowRight = 5 cells.
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.keyboard.press("Escape");
+    const c = await cellCoord(page, 5, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);
+});
+
+test("Ctrl+Arrow bakes current position into canvas and moves float with content", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 2, 1);   // paint A at (2,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 1);   // select it
+    await page.keyboard.down("Control");
+    await page.keyboard.press("ArrowRight");   // bake at (2,1), move float to (3,1)
+    await page.keyboard.up("Control");
+    // Source (2,1) baked — has A in canvas
+    const src = await cellCoord(page, 2, 1);
+    expect(await pixelRGB(page, src.cx, src.cy)).toEqual([0, 0, 0]);
+    // Float still has content and is now at (3,1) — anchor stamps it there too
+    await page.keyboard.press("Escape");
+    const dst = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, dst.cx, dst.cy)).toEqual([0, 0, 0]);   // float anchored with content
+});
+
+test("Ctrl+Arrow bakes only on the first Arrow while Ctrl is held", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 2, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 1);
+    await page.keyboard.down("Control");
+    await page.keyboard.press("ArrowRight");   // bakes at (2,1), moves to (3,1)
+    await page.keyboard.press("ArrowRight");   // no new bake, moves to (4,1)
+    await page.keyboard.up("Control");
+    // (2,1) was baked on first press
+    const c2 = await cellCoord(page, 2, 1);
+    expect(await pixelRGB(page, c2.cx, c2.cy)).toEqual([0, 0, 0]);
+    // Float anchors at (4,1) with content
+    await page.keyboard.press("Escape");
+    const c4 = await cellCoord(page, 4, 1);
+    expect(await pixelRGB(page, c4.cx, c4.cy)).toEqual([0, 0, 0]);
+    // (3,1) was NOT baked on the second press
+    const c3 = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, c3.cx, c3.cy)).not.toEqual([0, 0, 0]);
+});
+
+test("Ctrl+Shift+Arrow bakes once then moves float 5 cells", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);
+    await page.keyboard.down("Control");
+    await page.keyboard.down("Shift");
+    await page.keyboard.press("ArrowRight");   // bake at (0,1), move float 5 cells to (5,1)
+    await page.keyboard.up("Shift");
+    await page.keyboard.up("Control");
+    const src = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, src.cx, src.cy)).toEqual([0, 0, 0]);   // baked
+    await page.keyboard.press("Escape");
+    const dst = await cellCoord(page, 5, 1);
+    expect(await pixelRGB(page, dst.cx, dst.cy)).toEqual([0, 0, 0]);   // float anchored with content
+});
+
+test("Alt+Arrow stamps content, moves marquee, then re-lifts on Alt release", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 2, 1);   // paint A at (2,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 1);   // select
+    // Hold Alt and press Arrow — stamps at (2,1), moves marquee to (3,1)
+    await page.keyboard.down("Alt");
+    await page.keyboard.press("ArrowRight");
+    // Content stamped at source while Alt is still held
+    const src = await cellCoord(page, 2, 1);
+    expect(await pixelRGB(page, src.cx, src.cy)).toEqual([0, 0, 0]);
+    // Release Alt — should re-lift canvas at (3,1) into the float
+    await page.keyboard.up("Alt");
+    // Float is now re-lifted at (3,1). Move it further to verify content exists.
+    await page.keyboard.press("ArrowRight");   // regular move to (4,1)
+    await page.keyboard.press("Escape");       // anchor
+    // (3,1) was re-lifted then moved out — canvas at (3,1) = baseline (not A)
+    const mid = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, mid.cx, mid.cy)).not.toEqual([0, 0, 0]);
+    // (4,1) has the re-lifted + anchored content
+    const dst = await cellCoord(page, 4, 1);
+    expect(await pixelRGB(page, dst.cx, dst.cy)).not.toEqual([0, 0, 0]);   // re-lifted = baseline B, not A
+});
+
+test("Ctrl+drag duplicates float content at current position", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 1, 1);   // paint A at (1,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);   // select it
+    await page.keyboard.press("m");
+    // Ctrl+drag from (1,1) to (3,1): pre-stamps at (1,1), drags to (3,1)
+    const src = await cellCoord(page, 1, 1);
+    const dst = await cellCoord(page, 3, 1);
+    await page.keyboard.down("Control");
+    await page.mouse.move(src.cx, src.cy);
+    await page.mouse.down();
+    await page.mouse.move(dst.cx, dst.cy, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up("Control");
+    await page.keyboard.press("Escape");
+    // Both source and destination should have the painted colour
+    expect(await pixelRGB(page, src.cx, src.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, dst.cx, dst.cy)).toEqual([0, 0, 0]);
+});
+
+test("Alt+drag moves the marquee without the float content (mask-only)", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 1, 1);   // paint A at (1,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);   // select
+    await page.keyboard.press("m");
+    // Alt+drag from (1,1) to (3,1): stamps content at (1,1), drags empty marquee
+    const src = await cellCoord(page, 1, 1);
+    const dst = await cellCoord(page, 3, 1);
+    await page.keyboard.down("Alt");
+    await page.mouse.move(src.cx, src.cy);
+    await page.mouse.down();
+    await page.mouse.move(dst.cx, dst.cy, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    // Content stamped at source — source keeps the painted colour
+    expect(await pixelRGB(page, src.cx, src.cy)).toEqual([0, 0, 0]);
+    // Marquee re-lifts at (3,1) and anchors to baseline (not a duplicate)
+    await page.keyboard.press("Escape");
+    expect(await pixelRGB(page, dst.cx, dst.cy)).not.toEqual([0, 0, 0]);
+});
+
+test("Shift+drag on Move is regular move (Shift has no special Move meaning)", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 1, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);
+    await page.keyboard.press("m");
+    const src = await cellCoord(page, 1, 1);
+    const dst = await cellCoord(page, 3, 1);
+    await page.keyboard.down("Shift");
+    await page.mouse.move(src.cx, src.cy);
+    await page.mouse.down();
+    await page.mouse.move(dst.cx, dst.cy, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up("Shift");
+    await page.keyboard.press("Escape");
+    // Regular move: content at destination, source at baseline
+    expect(await pixelRGB(page, dst.cx, dst.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, src.cx, src.cy)).not.toEqual([0, 0, 0]);
+});

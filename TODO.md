@@ -17,14 +17,14 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 - **Hole cells behave as outside the canvas** for selection. They are never added to a selection (rect-select skips them; select-all skips them). Magic wand (Phase 2) and move/copy (Phase 2) must follow the same rule.
 - Modifier semantics depend on cursor position relative to selection:
   - Click **outside** current selection → selection-editing modifiers: pure replaces, Shift adds, Ctrl removes (GIMP convention).
-  - Click **inside** current selection → operate-on-contents modifiers: pure moves pixels, Ctrl copies, Alt moves selection mask only.
+  - Click **inside** current selection → operate-on-contents modifiers: pure moves pixels, Ctrl copies.
 - "Floating layer" is the underlying mechanic, with two lifecycles sharing the same `{ pixels, mask, x, y, name?, id }` struct:
   - **Transient** float: lives for one drag (lift → move → commit on release).
   - **Persistent** float: stored in `SessionState.floats`, lives until deleted. Library items.
 
 ## Open decisions (resolve when you reach the relevant phase)
 
-- [ ] **Esc on transient float**: cancel (Photoshop) or commit (GIMP)? Suggested: cancel — safer, still undoable.
+- [x] **Esc on transient float**: commit/anchor (GIMP). — **your decision**
 - [ ] **Selection serialisation**: 1 bit / cell (matches existing pixel packing) or 1 byte / cell (simpler)? Suggested: 1 bit, reuse the existing packPixels machinery.
 - [ ] **Library panel position**: sidebar, floating modal, or another popover? Affects toolbar layout.
 - [ ] **Mirror axis position**: snap to cell grid or pixel-precise? Suggested: snap to grid — half-integer placements (between cells) are useful (even mirrors), integer are useful (odd mirrors with a cell on the axis), but no in-between.
@@ -52,7 +52,7 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 
 **Phase 2 follow-ups (queue with Phase 2 ops):**
 - [ ] Move per-tool clipping into Rust: `paint_pixel`, `paint_natural_*` take a `selection: &[u8]` param (empty = no clip) and skip writes at the source rather than via TS clip-after. Overlay variants stay parameterless (click-gate covers them). Drops the TS `clipToSelection` helper.
-- [ ] **Touch-friendly mask-only move.** Currently the only way to move the selection outline without moving its pixels is Shift+drag on the Move tool — keyboard-only, and Shift+Alt collides with the OS keyboard-layout switcher. Pick one of: (a) dragging the marquee outline on the Select tool moves the mask, (b) arrow-key nudge moves the selection alone (Shift+arrow = pixels+selection), (c) a dedicated "Move Selection" tool, (d) a Move-tool mode toggle stored in `SessionState` and exposed in the toolbar. Whichever path: it must work on touch with no modifier keys.
+- [ ] **Touch-friendly mask-only move.** Keyboard: Ctrl+Arrow stamps content and moves the empty marquee (shipped). Touch/drag: no modifier-free drag path yet. Pick one of: (a) dragging the marquee outline on the Select tool moves the mask, (c) a dedicated "Move Selection" tool, (d) a Move-tool mode toggle in the toolbar.
 
 **Risk noted:** Marching-ants edge computation. Done — single `beginPath()` per render call batches all edges.
 
@@ -63,9 +63,9 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 > The status-note at the top reflects the post-Phase-2 refactor: `SessionState.float` *is* the selection. The bullets below describe the final shipped behaviour, not the iteration path — see `FEATURES.md` / `ARCHITECTURE.md` for full per-decision rationale.
 
 - [x] **Magic wand tool** (`W` shortcut). `wand_select` in Rust (BFS, same shape as `flood_fill`); the TS `applySelectionMod` applies replace / add / remove locally so each mode keeps the float's existing lift state intact. Hole click is a no-op. Drag-sweep through multiple regions; one history snapshot per drag. Rust tests for the BFS itself; Vitest tests for the wrapper; property tests verify the BFS colour + 4-connectivity invariants.
-- [x] **Move tool (`M`)** + Alt-temporary-Move swap. Drag inside the float updates `float.dx/dy`; release records the new offset. Click outside the float is a no-op. Hold Alt with any tool to temporarily swap to Move (toolbar reflects it); release / window blur restores the previous tool. Click-outside-popover capture-phase listener ensures the Edit popover commits before any outside button / shortcut handler runs.
+- [x] **Move tool (`M`)**. Drag inside the float updates `float.dx/dy`; release records the new offset. Click outside the float is a no-op. Click-outside-popover capture-phase listener ensures the Edit popover commits before any outside button / shortcut handler runs.
 - [x] **Ctrl+drag = duplicate.** At paintdown the float is pre-stamped into the canvas at its current position (visible duplicate carried through the drag), then the drag proceeds as a regular move. Single history snapshot at release.
-- [x] **Shift+drag = mask only.** At paintdown the float's pixels are zeroed and the canvas absorbs the previous content; the empty marquee drags around; release re-lifts the canvas content at the new mask position.
+- [x] **Alt+drag = mask only** (changed from Shift+drag — Alt now consistently means "alternate/mask operation"). At paintdown the float's pixels are zeroed and the canvas absorbs the previous content; the empty marquee drags around; release re-lifts the canvas content at the new mask position. Alt dominates Ctrl.
 - [x] **`Ctrl+C` (copy).** Yanks the float (bbox-bounded clipboard) AND stamps it into the base canvas at its current position. The float stays alive.
 - [x] **`Ctrl+X` (cut).** Yanks to clipboard AND clears the base canvas under the float to natural baseline. Drops the float entirely (Photoshop-style: destructive op deselects).
 - [x] **`Ctrl+V` (paste).** Anchors any prior float, then creates a *non-destructive uncut* float at the clipboard's original canvas coordinates. Canvas underneath is untouched, so a follow-up Move-drag of the paste-float gives duplicate semantics for free. Auto-switches to the Move tool.
@@ -74,7 +74,10 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 - [x] **Float survives across save / export / tool switch.** `onSave` / `onExport` bake the float into a throwaway snapshot for the file/export and leave the live float intact. Switching tools doesn't anchor — paint tools clip to the float's shifted mask and write back into `float.pixels`.
 - [x] **Off-canvas float cells stay in the mask during drag** (rendered as a gap, not pruned) so dragging back restores them; commit / save / export drops them via the existing pixels-skip rules.
 - [x] **Tests:** Rust unit tests for `wand_select` / `cut_to_natural_*` / `paint_natural_*`. Vitest unit tests for `selection.ts`, `clipboard.ts`, `paint.ts`, `store.ts`, `history.ts`, `storage.ts`, `pattern.ts`, `types.ts` (97 cases). Vitest property tests for pack/unpack round-trips, lift-anchor identity, add-idempotence, wand BFS invariants, history undo/redo balance (9 properties, ~900 generated inputs). Playwright E2E for tool switching, paint pixel verification, selection / move / cut / copy / paste flows (31 specs).
-- [ ] **Arrow keys nudge the float by 1 cell; Shift+arrow by 5.** Quality-of-life, keyboard-only; not implemented.
+- [x] **Arrow keys nudge the float by 1 cell; Shift+Arrow by 5; Ctrl+Arrow stamps content once (per Ctrl press) then moves the empty marquee; Ctrl+Shift+Arrow stamps once then moves 5 cells.** Holding counts as one undo step. Alt+Arrow is a no-op. — **your decision**
+- [x] **Esc clears selection** (stamps float + drops, identical to `Ctrl+Shift+A`). — **your decision**
+- [x] **Delete clears selection content and keeps selection active** — cuts canvas at the float's current display position to natural baseline, re-lifts those cleared cells so the float stays alive with baseline content. No yank. Ctrl+X still drops the float. — **your decision**
+- [x] **Alt+move removed** — Alt temporary Move-tool swap dropped; `M` key is the explicit path. — **your decision**
 - [x] **Two-consecutive-moves cumulative test.** Atomic-history-snapshot move flow gives this naturally; covered in `tests/selection.test.ts` ("cumulative move").
 
 **Decided not to ship:**

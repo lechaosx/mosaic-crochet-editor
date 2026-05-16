@@ -225,3 +225,29 @@ export function deselect(store: Store): void {
     if (!store.state.float) return;
     anchorFloat(store);
 }
+
+// Delete the float's content: cut the canvas at the float's current display
+// position to natural baseline, then re-lift those cleared cells so the
+// selection stays active. Float keeps its mask and offset; pixels update
+// to the natural baseline values.
+export function deleteFloat(store: Store): void {
+    if (!store.state.float) return;
+    const s  = store.state;
+    const f  = s.float!;
+    const W  = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
+    const shifted = shiftedFloatMask(s);
+    const cleared = cutCells(s.pixels, s.pattern, shifted);
+    // Re-read the cleared (baseline) values back into float-space pixels.
+    const newPixels = new Uint8Array(f.pixels.length);
+    forEachCell(W, H, (sx, sy) => {
+        if (f.mask[sy * W + sx] === 0) return;
+        const tx = sx + f.dx, ty = sy + f.dy;
+        if (outOfBounds(tx, ty, W, H)) return;
+        if (cleared[ty * W + tx] === 0) return;   // hole
+        newPixels[sy * W + sx] = cleared[ty * W + tx];
+    });
+    store.commit(state => {
+        state.pixels = cleared;
+        state.float  = { ...f, pixels: newPixels };
+    }, { history: true });
+}

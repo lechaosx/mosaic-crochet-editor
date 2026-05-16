@@ -6,7 +6,7 @@
 
 import { Float } from "./types";
 import { Store, visiblePixels } from "./store";
-import { cutCells, shiftedFloatMask, anchorFloat } from "./selection";
+import { cutCells, shiftedFloatMask, anchorFloat, deleteFloat } from "./selection";
 
 interface ClipboardData {
     pixels:  Uint8Array;
@@ -60,10 +60,8 @@ export function copyFloat(store: Store): void {
     store.commit(s => { s.pixels = newPixels; }, { history: true });
 }
 
-// Cut: yank to clipboard AND clear the base canvas under the float
-// (delete-key semantics). Drops the float — the destructive op closes
-// the selection. A follow-up `paste` brings the content back at the cut
-// location.
+// Cut: yank to clipboard, clear canvas under float to baseline, drop float.
+// A follow-up `paste` brings the content back at the cut location.
 export function cutFloat(store: Store): void {
     if (!yankFloat(store)) return;
     const shifted = shiftedFloatMask(store.state);
