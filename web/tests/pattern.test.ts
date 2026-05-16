@@ -115,6 +115,34 @@ describe("applyEditSettings (round mode)", () => {
     });
 });
 
+describe("applyEditSettings (dev asserts)", () => {
+    test("unknown subMode throws (dev assert)", () => {
+        // Kills `devAssert(subMode === "quarter", ...)` mutations: with
+        // `devAssert(true, ...)` or an empty message, this test would
+        // either not throw or throw with the wrong message.
+        (document.querySelector('[name="edit-mode"][value="row"]') as HTMLInputElement).checked = false;
+        (document.querySelector('[name="edit-mode"][value="round"]') as HTMLInputElement).checked = true;
+        // Inject an unknown subMode value.
+        document.body.insertAdjacentHTML("beforeend",
+            `<input type="radio" name="edit-submode" value="weird" checked>`);
+        // Make sure the existing ones are unchecked.
+        for (const v of ["full", "half", "quarter"]) {
+            (document.querySelector(`[name="edit-submode"][value="${v}"]`) as HTMLInputElement).checked = false;
+        }
+        expect(() => applyEditSettings()).toThrow(/unknown subMode/);
+    });
+
+    test("unknown edit-mode throws (dev assert)", () => {
+        // Kills `devAssert(mode === "round", ...)` mutations.
+        for (const v of ["row", "round"]) {
+            (document.querySelector(`[name="edit-mode"][value="${v}"]`) as HTMLInputElement).checked = false;
+        }
+        document.body.insertAdjacentHTML("beforeend",
+            `<input type="radio" name="edit-mode" value="weird" checked>`);
+        expect(() => applyEditSettings()).toThrow(/unknown edit-mode/);
+    });
+});
+
 describe("applyEditSettings (mode preservation)", () => {
     test("row→round mode switch: doesn't run transfer_preserved_row (which would corrupt round indices)", () => {
         // Kills mutations on `if (old.mode === "row" && newPattern.mode === "row")`:

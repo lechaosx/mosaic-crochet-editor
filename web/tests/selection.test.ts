@@ -501,21 +501,13 @@ describe("commitWandAt", () => {
         expect(count).toBe(9);
     });
 
-    test("click out of canvas is a no-op", () => {
-        const s = storeOf(3, 3);
-        commitWandAt(s, -1, 0, "replace");
-        expect(s.state.float).toBeNull();
-    });
-
-    test("each canvas edge fully gates the wand click (no aliasing into the row above/below)", () => {
-        // Kills the individual terms of `if (x < 0 || x >= W || y < 0 ||
-        // y >= H) return;`. With any term dropped, a click at e.g. x=W,
-        // y=0 would read visible[W] (which is the (0,1) cell) and wand-
-        // select that neighbour by accident.
+    test("out-of-bounds click throws in dev (callers must validate first)", () => {
+        // The wand bounds check is an invariant: gesture.ts (main.ts:556)
+        // already filters OOB before calling. The inner check is a dev
+        // assert that surfaces caller bugs rather than silently no-oping.
         for (const [x, y] of [[-1, 0], [3, 0], [0, -1], [0, 3]] as const) {
             const s = storeOf(3, 3, { pixels: filledPixels(3, 3, 1) });
-            commitWandAt(s, x, y, "replace");
-            expect(s.state.float).toBeNull();
+            expect(() => commitWandAt(s, x, y, "replace")).toThrow(/out of bounds/);
         }
     });
 });
