@@ -5,7 +5,8 @@
 import { defineConfig } from "vitest/config";
 import wasm from "vite-plugin-wasm";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+    resolve: command !== "build" ? { conditions: ["debug"] } : {},
     plugins: [wasm()],
     base: "./",
     build: { target: "esnext" },
@@ -29,4 +30,4 @@ export default defineConfig({
             reporter: ["text", "html"],
         },
     },
-});
+}));
