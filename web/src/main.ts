@@ -62,34 +62,26 @@ function cutCells(pixels: Uint8Array, pattern: PatternState, mask: Uint8Array): 
         );
 }
 
-// Lift the cells indicated by `liftMask` from `pixels` into a new (or
-// extended) float. The float is created at dx=dy=0; if `into` is supplied,
-// its mask is merged with `liftMask` (only the *new* cells get cut). The
-// caller is responsible for ensuring `into.dx == 0 && into.dy == 0` —
-// extending a displaced float would put new cells at the wrong source
-// positions. `liftMask` should already exclude holes.
+// Lift the cells indicated by `liftMask` from `pixels` into a fresh float
+// at dx=dy=0. Canvas at lifted cells is cut to natural baseline. `liftMask`
+// should already exclude holes; returns `float: null` if no cells qualify.
 function liftCells(
-    pixels: Uint8Array, pattern: PatternState, liftMask: Uint8Array, into: Float | null,
+    pixels: Uint8Array, pattern: PatternState, liftMask: Uint8Array,
 ): { pixels: Uint8Array; float: Float | null } {
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
     const n = W * H;
-    const newMask   = into ? into.mask.slice()   : new Uint8Array(n);
-    const newLifted = into ? into.pixels.slice() : new Uint8Array(n);
-    const cutMask   = new Uint8Array(n);
+    const mask   = new Uint8Array(n);
+    const lifted = new Uint8Array(n);
+    let any = false;
     for (let i = 0; i < n; i++) {
         if (!liftMask[i]) continue;
-        if (newMask[i])    continue;   // already in the float
-        newMask[i]   = 1;
-        newLifted[i] = pixels[i];
-        cutMask[i]   = 1;
+        mask[i]   = 1;
+        lifted[i] = pixels[i];
+        any = true;
     }
-    let anyCells = false;
-    for (let i = 0; i < n; i++) if (newMask[i]) { anyCells = true; break; }
-    if (!anyCells) return { pixels, float: null };
-    let anyCut = false;
-    for (let i = 0; i < n; i++) if (cutMask[i]) { anyCut = true; break; }
-    const newPixels = anyCut ? cutCells(pixels, pattern, cutMask) : pixels;
-    return { pixels: newPixels, float: { mask: newMask, pixels: newLifted, dx: 0, dy: 0 } };
+    if (!any) return { pixels, float: null };
+    const newPixels = cutCells(pixels, pattern, mask);
+    return { pixels: newPixels, float: { mask, pixels: lifted, dx: 0, dy: 0 } };
 }
 
 // Build a mask covering `(x1,y1)..(x2,y2)` (inclusive, canvas-clipped),
@@ -137,40 +129,62 @@ const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
 
-// Stroke-scoped — captured at pointerdown, cleared at pointerup.
-let preStroke:     Uint8Array | null = null;
-let preFloat:      Float | null      = null;
-let invertVisited: Set<number>| null = null;
-let strokeColor:   1 | 2              = 1;
-
 type SelectMode = "replace" | "add" | "remove";
-// In-flight rectangle drag for the select tool. The lift happens on
-// pointerup (drag preview is a marching-ants rect overlay).
-let selectDrag: { startX: number | null; startY: number | null; endX: number; endY: number; mode: SelectMode } | null = null;
-// In-flight magic-wand drag. Mode captured at paintdown; each cell entered
-// runs `wand_select` and folds the result into the float. `preFloat` /
-// `prePixels` snapshot pre-drag state so pointer-cancel can revert.
-let wandDrag: { mode: SelectMode; lastCell: { x: number; y: number } | null } | null = null;
-// Move-tool drag anchor: the click cell in **canvas coords**. During drag,
-// the float's offset becomes `(cursor - anchor)`. `startDx/Dy` captures the
-// float's pre-drag offset so the cursor's click cell stays under the
-// finger as the float moves.
-let moveDrag: {
-    anchorX: number; anchorY: number;
-    startDx: number; startDy: number;
-} | null = null;
+// Move-tool drag mode, captured at paintdown from the modifiers:
+//   "move"       → no modifier; drag updates `float.dx/dy`, release records.
+//   "duplicate"  → Ctrl; pre-stamps the float into canvas at paintdown
+//                  (visible duplicate carried through the drag), release
+//                  records the moved float at the drag end.
+//   "mask-only"  → Shift (dominates Ctrl); paintdown stamps the float into
+//                  canvas at its current position and zeros `float.pixels`,
+//                  drag carries the empty marquee, release lifts the
+//                  canvas content at the new mask position.
+type MoveMode = "move" | "duplicate" | "mask-only";
+
+// One discriminated-union active per gesture, set at `onPaintStart`,
+// updated on `onPaintAt`, consumed (committed or reverted) on
+// `onPaintEnd` / `onPaintCancel`, then cleared. Replaces the half-dozen
+// `selectDrag` / `wandDrag` / `moveDrag` / `preStroke` / `preFloat` /
+// `pendingMoveMode` module vars — one variable, one cleared state.
+//   paint  — pencil / fill / eraser / overlay / invert. `prePixels` /
+//            `preFloat` snapshot pre-stroke state for cancel revert and
+//            history dedupe; `invertVisited` only non-null for invert.
+//   select — rect drag. `rect` stays null until the first paintAt so
+//            single-click vs drag is detected consistently.
+//   wand   — wand drag. `lastCell` dedupes when the cursor lingers in
+//            one cell across moves.
+//   move   — Move-tool drag. `drag` is null until the first paintAt
+//            resolves the click cell. `prePixels` is only set when
+//            paintdown mutated `s.pixels` (duplicate's pre-stamp,
+//            mask-only's stamp) so cancel can revert.
+type Gesture =
+    | { kind: "paint";
+        color: 1 | 2;
+        prePixels: Uint8Array;
+        preFloat: Float | null;
+        invertVisited: Set<number> | null;
+      }
+    | { kind: "select";
+        mode: SelectMode;
+        rect: { startX: number; startY: number; endX: number; endY: number } | null;
+      }
+    | { kind: "wand";
+        mode: SelectMode;
+        lastCell: { x: number; y: number } | null;
+        prePixels: Uint8Array;
+        preFloat: Float | null;
+      }
+    | { kind: "move";
+        mode: MoveMode;
+        drag: { anchorX: number; anchorY: number; startDx: number; startDy: number } | null;
+        prePixels: Uint8Array | null;
+        preFloat: Float | null;
+      };
+let gesture: Gesture | null = null;
 // Holding Alt temporarily switches the active tool to Move (the toolbar
 // reflects it). Releasing Alt restores the previous tool. Picking a
 // different tool while Alt is held queues that tool as the return target.
 let altPrevTool: Tool | null = null;
-// Ctrl held at Move-tool paintdown means "duplicate on release": stamp the
-// float at its destination, then reset its offset to 0 so the source
-// stays selected. Captured at pointerdown.
-let pendingMoveDuplicate = false;
-// Shift held at Move-tool paintdown means "mask only": at release, anchor
-// the float at its source position (canvas content restored) and create a
-// fresh uncut selection at the drag-end position (canvas there stays put).
-let pendingMaskOnly = false;
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -180,15 +194,16 @@ function modeToCode(m: SelectMode): number {
 // drag the existing float outline is hidden; for add/remove modes it
 // stays visible.
 function syncSelectPreview() {
-    if (!selectDrag || selectDrag.startX === null) {
+    const g = gesture?.kind === "select" ? gesture : null;
+    if (!g || !g.rect) {
         rs.hideCommittedSelection = false;
         rs.dragRect               = null;
         return;
     }
-    rs.hideCommittedSelection = selectDrag.mode === "replace";
+    rs.hideCommittedSelection = g.mode === "replace";
     rs.dragRect = {
-        x1: selectDrag.startX, y1: selectDrag.startY!,
-        x2: selectDrag.endX,   y2: selectDrag.endY,
+        x1: g.rect.startX, y1: g.rect.startY,
+        x2: g.rect.endX,   y2: g.rect.endY,
     };
 }
 
@@ -204,11 +219,6 @@ store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => updateStatus(s.plan, null, null));
 
 // ── Selection / lift operations ──────────────────────────────────────────────
-// Commit any active float by stamping it into the canvas. If the float
-// hasn't moved (dx=dy=0) this is a no-op — visiblePixels == pixels.
-function ensureFloatCommitted(s: SessionState): { pixels: Uint8Array; float: null } {
-    return { pixels: commitFloatToPixels(s), float: null };
-}
 
 // Unified selection-modify dispatched by both rect-select and wand. Three
 // paths, each chosen to keep the float's existing lift state intact:
@@ -229,7 +239,7 @@ function applySelectionMod(region: Uint8Array, mode: SelectMode) {
         const anchored = s.float ? visiblePixels(s) : s.pixels;
         const clean = region.slice();
         for (let i = 0; i < n; i++) if (anchored[i] === 0) clean[i] = 0;
-        const lifted = liftCells(anchored, s.pattern, clean, null);
+        const lifted = liftCells(anchored, s.pattern, clean);
         store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
         return;
     }
@@ -239,7 +249,7 @@ function applySelectionMod(region: Uint8Array, mode: SelectMode) {
         if (mode === "add") {
             const clean = region.slice();
             for (let i = 0; i < n; i++) if (s.pixels[i] === 0) clean[i] = 0;
-            const lifted = liftCells(s.pixels, s.pattern, clean, null);
+            const lifted = liftCells(s.pixels, s.pattern, clean);
             store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
         }
         return;
@@ -329,9 +339,9 @@ function commitWandAt(x: number, y: number, mode: SelectMode) {
 // Paint operates on the *visible* canvas (pixels + float stamped). When a
 // float is active, paint changes are clipped to its shifted mask and
 // written back to `float.pixels`. When no float, paint writes to canvas.
-// The pre-stroke snapshot is taken on pointerdown so pointer-cancel can
-// revert; `arraysEqual` against post-stroke state drives history dedupe.
-function paintAt(clientX: number, clientY: number) {
+// `g.prePixels` / `g.preFloat` (captured at paintdown) drive cancel revert
+// and the change-detection that decides whether release pushes a snapshot.
+function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "paint" }>) {
     const s = store.state;
     const { pattern } = s;
     const { x, y } = screenToPattern(
@@ -358,9 +368,9 @@ function paintAt(clientX: number, clientY: number) {
     const before  = visible;
     let next: Uint8Array;
     if (tool === "fill") {
-        next = flood_fill(visible, W, H, x, y, strokeColor, symMask, shifted ?? new Uint8Array(0));
+        next = flood_fill(visible, W, H, x, y, g.color, symMask, shifted ?? new Uint8Array(0));
     } else if (tool === "eraser") {
-        const invert = strokeColor !== s.primaryColor;
+        const invert = g.color !== s.primaryColor;
         if (pattern.mode === "row") {
             next = paint_natural_row(visible, W, H, x, y, symMask, invert);
         } else {
@@ -368,7 +378,7 @@ function paintAt(clientX: number, clientY: number) {
             next = paint_natural_round(visible, W, H, vw, vh, ox, oy, rounds, x, y, symMask, invert);
         }
     } else if (tool === "overlay") {
-        const clear = strokeColor !== s.primaryColor;
+        const clear = g.color !== s.primaryColor;
         if (pattern.mode === "row") {
             next = clear
                 ? clear_overlay_row(visible, W, H, x, y, symMask)
@@ -383,14 +393,14 @@ function paintAt(clientX: number, clientY: number) {
         next = visible.slice();
         const indices = symmetric_orbit_indices(W, H, x, y, symMask);
         for (const idx of indices) {
-            if (invertVisited!.has(idx)) continue;
-            invertVisited!.add(idx);
+            if (g.invertVisited!.has(idx)) continue;
+            g.invertVisited!.add(idx);
             const cur = next[idx];
             if      (cur === 1) next[idx] = 2;
             else if (cur === 2) next[idx] = 1;
         }
     } else {
-        next = paint_pixel(visible, W, H, x, y, strokeColor, symMask);
+        next = paint_pixel(visible, W, H, x, y, g.color, symMask);
     }
 
     // Clip cells outside the float mask back to `before`. Skipped for
@@ -502,19 +512,13 @@ function rotate(delta: number) {
     store.commit(s => { s.rotation += delta; }, { recompute: false });
 }
 
-// Lift every non-hole, non-already-lifted cell into the float.
+// Lift every non-hole cell into a fresh float (anchoring any existing one).
 function selectAll() {
     const s = store.state;
-    const { canvasWidth: W, canvasHeight: H } = s.pattern;
-    let pixels = s.pixels;
-    let float = s.float;
-    if (float && (float.dx !== 0 || float.dy !== 0)) {
-        ({ pixels, float } = ensureFloatCommitted(s));
-    }
-    const mask = new Uint8Array(W * H);
-    for (let i = 0; i < pixels.length; i++) if (pixels[i] !== 0) mask[i] = 1;
-    ({ pixels, float } = liftCells(pixels, s.pattern, mask, float));
-    store.commit(state => { state.pixels = pixels; state.float = float; }, { history: true });
+    const visible = visiblePixels(s);
+    const mask = new Uint8Array(visible.length);
+    for (let i = 0; i < visible.length; i++) if (visible[i] !== 0) mask[i] = 1;
+    applySelectionMod(mask, "replace");
 }
 // Anchor the float at its current position and clear it.
 function anchorFloat() {
@@ -775,79 +779,82 @@ const clientToPattern = (cx: number, cy: number) => {
 mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
-        if (store.state.activeTool === "move") {
-            // Shift dominates Ctrl. Shift = mask-only (committed at release);
-            // Ctrl alone = duplicate (pre-stamp at paintdown so the
-            // duplicate is visible throughout the drag); nothing = plain
-            // move (just dx/dy updates). preStroke / preFloat let
-            // pointer-cancel revert the Ctrl pre-stamp.
-            pendingMaskOnly      = mods.shift;
-            pendingMoveDuplicate = mods.ctrl && !mods.shift;
-            // Remember the pre-drag float so pointer-cancel can revert.
-            if (store.state.float) preFloat = store.state.float;
-            if (pendingMaskOnly && store.state.float) {
-                // Mask-only: stamp the float into the canvas at its current
-                // position FIRST so the lifted content isn't lost when we
-                // clear the float's pixels. Then empty the float — during
-                // the drag the marquee moves but content is invisible
-                // (zero pixels skip stamping in `visiblePixels`). At
-                // release the empty mask is filled by lifting cells from
-                // the canvas at the new position.
+        const tool = store.state.activeTool;
+        if (tool === "move") {
+            const mode: MoveMode = mods.shift ? "mask-only" : mods.ctrl ? "duplicate" : "move";
+            let prePixels: Uint8Array | null = null;
+            const preFloat = store.state.float;
+            if (mode === "mask-only" && preFloat) {
+                // Stamp the float into the canvas at its current position
+                // FIRST so the lifted content isn't lost when we clear the
+                // float's pixels. Then empty the float — during the drag
+                // the marquee moves but content is invisible (zero pixels
+                // skip stamping in `visiblePixels`). Release lifts cells
+                // from the canvas at the new position.
+                prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
-                const f = store.state.float;
-                const emptied: Float = { mask: f.mask, pixels: new Uint8Array(f.pixels.length), dx: f.dx, dy: f.dy };
+                const emptied: Float = { mask: preFloat.mask, pixels: new Uint8Array(preFloat.pixels.length), dx: preFloat.dx, dy: preFloat.dy };
                 store.commit(s => { s.pixels = stamped; s.float = emptied; }, { persist: false });
-            } else if (pendingMoveDuplicate && store.state.float) {
-                preStroke = store.state.pixels.slice();
+            } else if (mode === "duplicate" && preFloat) {
+                // Pre-stamp the float into canvas so the duplicate is
+                // visible throughout the drag.
+                prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; }, { persist: false });
             }
+            gesture = { kind: "move", mode, drag: null, prePixels, preFloat };
             return;
         }
-        if (store.state.activeTool === "select") {
-            selectDrag = {
-                startX: null, startY: null, endX: 0, endY: 0,
-                mode: mods.shift ? "add" : (mods.ctrl ? "remove" : "replace"),
+        if (tool === "select") {
+            gesture = {
+                kind: "select",
+                mode: mods.shift ? "add" : mods.ctrl ? "remove" : "replace",
+                rect: null,
             };
             return;
         }
-        if (store.state.activeTool === "wand") {
-            wandDrag = {
-                mode: mods.shift ? "add" : (mods.ctrl ? "remove" : "replace"),
+        if (tool === "wand") {
+            gesture = {
+                kind: "wand",
+                mode: mods.shift ? "add" : mods.ctrl ? "remove" : "replace",
                 lastCell: null,
+                prePixels: store.state.pixels.slice(),
+                preFloat:  store.state.float,
             };
-            preFloat  = store.state.float;
-            preStroke = store.state.pixels.slice();
             return;
         }
-        strokeColor   = color;
-        preStroke     = store.state.pixels.slice();
-        preFloat      = store.state.float;
-        invertVisited = store.state.activeTool === "invert" ? new Set<number>() : null;
+        gesture = {
+            kind: "paint",
+            color,
+            prePixels: store.state.pixels.slice(),
+            preFloat:  store.state.float,
+            invertVisited: tool === "invert" ? new Set<number>() : null,
+        };
     },
     onPaintAt:    (cx, cy) => {
-        if (store.state.activeTool === "move" || moveDrag) {
+        if (!gesture) return;
+        if (gesture.kind === "move") {
             const p = screenToPattern(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
                 store.state.pattern, cx, cy,
             );
             const f = store.state.float;
-            if (!moveDrag) {
+            if (!gesture.drag) {
+                // First paintAt: try to start a drag. Click must land inside
+                // the float's shifted mask. Clicks outside are a no-op — the
+                // float lives until explicit deselect / Ctrl+A / modify-select
+                // / etc., so a stray click can't accidentally anchor it.
                 if (!f) return;
-                // Click must land inside the float's visible (shifted) mask
-                // to start a drag. Clicks outside are a no-op — the float
-                // lives until explicit deselect / Ctrl+A / modify-select etc.,
-                // so a stray click can't accidentally anchor it.
                 const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
                 const sx = p.x - f.dx, sy = p.y - f.dy;
                 const insideFloat = sx >= 0 && sx < W && sy >= 0 && sy < H && f.mask[sy * W + sx] === 1;
                 if (!insideFloat) return;
-                moveDrag = { anchorX: p.x, anchorY: p.y, startDx: f.dx, startDy: f.dy };
+                gesture.drag = { anchorX: p.x, anchorY: p.y, startDx: f.dx, startDy: f.dy };
                 return;
             }
-            if (!f) { moveDrag = null; return; }
-            const newDx = moveDrag.startDx + (p.x - moveDrag.anchorX);
-            const newDy = moveDrag.startDy + (p.y - moveDrag.anchorY);
+            if (!f) { gesture.drag = null; return; }
+            const newDx = gesture.drag.startDx + (p.x - gesture.drag.anchorX);
+            const newDy = gesture.drag.startDy + (p.y - gesture.drag.anchorY);
             if (newDx !== f.dx || newDy !== f.dy) {
                 store.commit(s => {
                     s.float = { mask: f.mask, pixels: f.pixels, dx: newDx, dy: newDy };
@@ -855,131 +862,112 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             }
             return;
         }
-        if (store.state.activeTool === "select" && selectDrag) {
+        if (gesture.kind === "select") {
             const p = screenToPattern(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
                 store.state.pattern, cx, cy,
             );
-            if (selectDrag.startX === null) {
-                selectDrag.startX = p.x;
-                selectDrag.startY = p.y;
+            if (!gesture.rect) {
+                gesture.rect = { startX: p.x, startY: p.y, endX: p.x, endY: p.y };
+            } else {
+                gesture.rect.endX = p.x;
+                gesture.rect.endY = p.y;
             }
-            selectDrag.endX = p.x;
-            selectDrag.endY = p.y;
             syncSelectPreview();
             render(viewport, ctx, rs, store);
             return;
         }
-        if (store.state.activeTool === "wand" && wandDrag) {
+        if (gesture.kind === "wand") {
             const p = screenToPattern(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
                 store.state.pattern, cx, cy,
             );
             if (p.x < 0 || p.x >= store.state.pattern.canvasWidth) return;
             if (p.y < 0 || p.y >= store.state.pattern.canvasHeight) return;
-            if (wandDrag.lastCell && wandDrag.lastCell.x === p.x && wandDrag.lastCell.y === p.y) return;
-            wandDrag.lastCell = { x: p.x, y: p.y };
-            commitWandAt(p.x, p.y, wandDrag.mode);
+            if (gesture.lastCell && gesture.lastCell.x === p.x && gesture.lastCell.y === p.y) return;
+            gesture.lastCell = { x: p.x, y: p.y };
+            commitWandAt(p.x, p.y, gesture.mode);
             return;
         }
-        paintAt(cx, cy);
+        // gesture.kind === "paint"
+        paintAt(cx, cy, gesture);
     },
     onPaintEnd:   () => {
-        if (moveDrag) {
-            if (pendingMaskOnly && store.state.float) {
-                // Mask-only release: the float has been moving with empty
-                // pixels. Now lift the canvas content at the float's
-                // current shifted position into the float — same shape as
-                // a fresh rect-select at the marquee's end position.
+        if (!gesture) return;
+        if (gesture.kind === "move") {
+            if (!gesture.drag) { gesture = null; return; }
+            if (gesture.mode === "mask-only" && store.state.float) {
+                // The float has been moving with empty pixels. Now lift the
+                // canvas content at the float's current shifted position —
+                // same shape as a fresh rect-select at the marquee's end.
                 const shifted = shiftedFloatMask(store.state);
-                const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted, null);
+                const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
                 store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
             } else {
-                // Regular and Ctrl-drag converge here: the duplicate's
-                // pre-stamp already happened at paintdown, so the release
-                // just records the final dx/dy.
+                // Move and duplicate converge here: the duplicate's pre-stamp
+                // already happened at paintdown, so release just records the
+                // final dx/dy.
                 store.commit(() => {}, { recompute: false, render: false, history: true });
             }
-            moveDrag = null;
-            pendingMoveDuplicate = false;
-            pendingMaskOnly      = false;
-            preStroke = null;
-            preFloat  = null;
+            gesture = null;
             return;
         }
-        if (store.state.activeTool === "select" && selectDrag) {
-            if (selectDrag.startX !== null) {
+        if (gesture.kind === "select") {
+            if (gesture.rect) {
                 commitSelectRect(
-                    selectDrag.startX, selectDrag.startY!,
-                    selectDrag.endX,   selectDrag.endY,
-                    selectDrag.mode,
+                    gesture.rect.startX, gesture.rect.startY,
+                    gesture.rect.endX,   gesture.rect.endY,
+                    gesture.mode,
                 );
             }
-            selectDrag = null;
+            gesture = null;
             syncSelectPreview();
             render(viewport, ctx, rs, store);
             return;
         }
-        if (store.state.activeTool === "wand" && wandDrag) {
-            if (wandDrag.lastCell !== null) {
+        if (gesture.kind === "wand") {
+            if (gesture.lastCell !== null) {
                 store.commit(() => {}, { recompute: false, render: false, history: true });
             }
-            wandDrag = null;
-            preFloat = null;
-            preStroke = null;
+            gesture = null;
             return;
         }
-        // Other tools: dedupe-push a snapshot if state actually changed.
-        const changed = (preStroke && !arraysEqual(preStroke, store.state.pixels))
-                     || preFloat !== store.state.float;
+        // gesture.kind === "paint" — dedupe-push if state actually changed.
+        const changed = !arraysEqual(gesture.prePixels, store.state.pixels)
+                     || gesture.preFloat !== store.state.float;
         if (changed) store.commit(() => {}, { recompute: false, render: false, history: true });
-        preStroke = null;
-        preFloat  = null;
-        invertVisited = null;
+        gesture = null;
     },
     onPaintCancel: () => {
-        if (moveDrag) {
-            moveDrag = null;
-            pendingMoveDuplicate = false;
-            pendingMaskOnly      = false;
-            const beforePixels = preStroke;
-            const beforeFloat  = preFloat;
-            preStroke = null;
-            preFloat  = null;
-            // Fully restore pre-drag state: pixels (in case of Ctrl pre-stamp)
-            // and the entire float (offset, content, mask).
+        if (!gesture) return;
+        if (gesture.kind === "move") {
+            const { prePixels, preFloat } = gesture;
+            gesture = null;
+            // Restore pre-drag state: pixels (if paintdown pre-stamped) and
+            // the entire float (offset, content, mask).
             store.commit(s => {
-                if (beforePixels)  s.pixels = beforePixels;
-                if (beforeFloat)   s.float  = beforeFloat;
+                if (prePixels) s.pixels = prePixels;
+                s.float = preFloat;
             });
             return;
         }
-        if (store.state.activeTool === "select") {
-            selectDrag = null;
+        if (gesture.kind === "select") {
+            gesture = null;
             syncSelectPreview();
             render(viewport, ctx, rs, store);
             return;
         }
-        if (store.state.activeTool === "wand" && wandDrag) {
+        if (gesture.kind === "wand") {
             // Revert to pre-drag state — partial wand sweep is lost.
-            const beforePixels = preStroke;
-            const beforeFloat  = preFloat;
-            wandDrag = null;
-            preFloat = null;
-            preStroke = null;
-            if (beforePixels && beforeFloat !== undefined) {
-                store.commit(s => { s.pixels = beforePixels; s.float = beforeFloat; }, { recompute: true });
-            }
+            const { prePixels, preFloat } = gesture;
+            gesture = null;
+            store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
             return;
         }
-        if (preStroke) {
-            const snap = preStroke;
-            const snapFloat = preFloat;
-            store.commit(s => { s.pixels = snap; s.float = snapFloat; });
-        }
-        preStroke = null;
-        preFloat  = null;
-        invertVisited = null;
+        // gesture.kind === "paint"
+        const { prePixels, preFloat } = gesture;
+        gesture = null;
+        store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
     },
     onHover:      (x, y) => updateStatus(store.plan, x, y),
     onView:       () => render(viewport, ctx, rs, store),
