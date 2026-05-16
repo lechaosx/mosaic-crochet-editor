@@ -1,10 +1,5 @@
-import { paint_pixel, flood_fill, wand_select, PlanType,
-         paint_natural_row, paint_natural_round,
-         paint_overlay_row, paint_overlay_round,
-         clear_overlay_row, clear_overlay_round,
-         lock_invalid_row, lock_invalid_round,
-         cut_to_natural_row, cut_to_natural_round,
-         export_start_row, export_start_round, symmetric_orbit_indices } from "@mosaic/wasm";
+import { PlanType, lock_invalid_row, lock_invalid_round,
+         export_start_row, export_start_round } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float } from "./types";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, screenToPattern, updateStatus } from "./render";
@@ -16,6 +11,10 @@ import { computeClosure, diagonalsAvailable, getSymmetryMask, pruneUnavailableDi
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "./storage";
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
+import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
+         commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat } from "./selection";
+import { copyFloat, cutFloat, pasteClipboard } from "./clipboard";
+import { PaintTool, paintOps } from "./paint";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -42,86 +41,6 @@ function defaultSession(): SessionState {
     };
 }
 
-// ── Float helpers ────────────────────────────────────────────────────────────
-// Commit the float into the canvas: stamp `float.pixels` at offset, clear
-// `float`. Returns the new pixels buffer; caller passes back into the store.
-function commitFloatToPixels(s: SessionState): Uint8Array {
-    return visiblePixels(s);
-}
-
-// Cut cells from `pixels` to natural baseline, returning the new buffer.
-function cutCells(pixels: Uint8Array, pattern: PatternState, mask: Uint8Array): Uint8Array {
-    const { canvasWidth: W, canvasHeight: H } = pattern;
-    return pattern.mode === "row"
-        ? cut_to_natural_row(pixels, W, H, mask)
-        : cut_to_natural_round(
-            pixels, W, H,
-            pattern.virtualWidth, pattern.virtualHeight,
-            pattern.offsetX, pattern.offsetY, pattern.rounds,
-            mask,
-        );
-}
-
-// Lift the cells indicated by `liftMask` from `pixels` into a fresh float
-// at dx=dy=0. Canvas at lifted cells is cut to natural baseline. `liftMask`
-// should already exclude holes; returns `float: null` if no cells qualify.
-function liftCells(
-    pixels: Uint8Array, pattern: PatternState, liftMask: Uint8Array,
-): { pixels: Uint8Array; float: Float | null } {
-    const W = pattern.canvasWidth, H = pattern.canvasHeight;
-    const n = W * H;
-    const mask   = new Uint8Array(n);
-    const lifted = new Uint8Array(n);
-    let any = false;
-    for (let i = 0; i < n; i++) {
-        if (!liftMask[i]) continue;
-        mask[i]   = 1;
-        lifted[i] = pixels[i];
-        any = true;
-    }
-    if (!any) return { pixels, float: null };
-    const newPixels = cutCells(pixels, pattern, mask);
-    return { pixels: newPixels, float: { mask, pixels: lifted, dx: 0, dy: 0 } };
-}
-
-// Build a mask covering `(x1,y1)..(x2,y2)` (inclusive, canvas-clipped),
-// skipping hole cells.
-function rectMask(pixels: Uint8Array, W: number, H: number,
-                  x1: number, y1: number, x2: number, y2: number): Uint8Array {
-    const m = new Uint8Array(W * H);
-    const ux1 = Math.min(x1, x2), uy1 = Math.min(y1, y2);
-    const ux2 = Math.max(x1, x2), uy2 = Math.max(y1, y2);
-    if (ux2 < 0 || ux1 >= W || uy2 < 0 || uy1 >= H) return m;
-    const cx1 = Math.max(0, ux1), cy1 = Math.max(0, uy1);
-    const cx2 = Math.min(W - 1, ux2), cy2 = Math.min(H - 1, uy2);
-    for (let y = cy1; y <= cy2; y++) {
-        for (let x = cx1; x <= cx2; x++) {
-            if (pixels[y * W + x] === 0) continue;
-            m[y * W + x] = 1;
-        }
-    }
-    return m;
-}
-
-// The float's shifted mask in canvas coordinates — used as a "selection
-// mask" for paint clipping and hit-testing.
-function shiftedFloatMask(s: SessionState): Uint8Array {
-    const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
-    const out = new Uint8Array(W * H);
-    if (!s.float) return out;
-    const { mask, dx: fdx, dy: fdy } = s.float;
-    for (let sy = 0; sy < H; sy++) {
-        const srow = sy * W;
-        for (let sx = 0; sx < W; sx++) {
-            if (mask[srow + sx] === 0) continue;
-            const dx = sx + fdx, dy = sy + fdy;
-            if (dx < 0 || dx >= W || dy < 0 || dy >= H) continue;
-            out[dy * W + dx] = 1;
-        }
-    }
-    return out;
-}
-
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const viewport = makeViewport(document.getElementById("canvas") as HTMLCanvasElement);
 const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
@@ -129,7 +48,6 @@ const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
 
-type SelectMode = "replace" | "add" | "remove";
 // Move-tool drag mode, captured at paintdown from the modifiers:
 //   "move"       → no modifier; drag updates `float.dx/dy`, release records.
 //   "duplicate"  → Ctrl; pre-stamps the float into canvas at paintdown
@@ -218,123 +136,6 @@ store.setPersistFn(s => saveToLocalStorage(s));
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => updateStatus(s.plan, null, null));
 
-// ── Selection / lift operations ──────────────────────────────────────────────
-
-// Unified selection-modify dispatched by both rect-select and wand. Three
-// paths, each chosen to keep the float's existing lift state intact:
-//   replace → anchor any active float, lift the region fresh
-//   add     → lift just the new region cells into the float at
-//             (canvas − offset) source positions; the existing float is
-//             untouched (no stamp-and-relift). Cells whose source position
-//             would fall off the W×H mask grid are skipped — those are
-//             rare in practice and not worth a re-anchor.
-//   remove  → stamp each region cell that's currently in the float back
-//             onto the canvas at its visible position; mask shrinks.
-function applySelectionMod(region: Uint8Array, mode: SelectMode) {
-    const s = store.state;
-    const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
-    const n = W * H;
-
-    if (mode === "replace") {
-        const anchored = s.float ? visiblePixels(s) : s.pixels;
-        const clean = region.slice();
-        for (let i = 0; i < n; i++) if (anchored[i] === 0) clean[i] = 0;
-        const lifted = liftCells(anchored, s.pattern, clean);
-        store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
-        return;
-    }
-
-    if (!s.float) {
-        // No existing float: `add` lifts the region; `remove` is a no-op.
-        if (mode === "add") {
-            const clean = region.slice();
-            for (let i = 0; i < n; i++) if (s.pixels[i] === 0) clean[i] = 0;
-            const lifted = liftCells(s.pixels, s.pattern, clean);
-            store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
-        }
-        return;
-    }
-
-    const f = s.float;
-    if (mode === "add") {
-        const newMask   = f.mask.slice();
-        const newLifted = f.pixels.slice();
-        const cutMask   = new Uint8Array(n);
-        let any = false;
-        for (let cy = 0; cy < H; cy++) {
-            for (let cx = 0; cx < W; cx++) {
-                if (region[cy * W + cx] === 0) continue;
-                if (s.pixels[cy * W + cx] === 0) continue;   // hole
-                const sx = cx - f.dx, sy = cy - f.dy;
-                if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
-                if (newMask[sy * W + sx] === 1) continue;    // already in float
-                newMask[sy * W + sx]   = 1;
-                newLifted[sy * W + sx] = s.pixels[cy * W + cx];
-                cutMask[cy * W + cx]   = 1;
-                any = true;
-            }
-        }
-        if (!any) return;
-        const cutPixels = cutCells(s.pixels, s.pattern, cutMask);
-        store.commit(state => {
-            state.pixels = cutPixels;
-            state.float  = { mask: newMask, pixels: newLifted, dx: f.dx, dy: f.dy };
-        }, { history: true });
-        return;
-    }
-
-    // mode === "remove"
-    const newPixels = s.pixels.slice();
-    const newMask   = f.mask.slice();
-    const newLifted = f.pixels.slice();
-    let removed = false;
-    for (let cy = 0; cy < H; cy++) {
-        for (let cx = 0; cx < W; cx++) {
-            if (region[cy * W + cx] === 0) continue;
-            const sx = cx - f.dx, sy = cy - f.dy;
-            if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
-            if (newMask[sy * W + sx] === 0) continue;
-            if (newPixels[cy * W + cx] === 0) continue;     // hole — leave alone
-            newPixels[cy * W + cx] = newLifted[sy * W + sx];
-            newMask[sy * W + sx]   = 0;
-            newLifted[sy * W + sx] = 0;
-            removed = true;
-        }
-    }
-    if (!removed) return;
-    let any = false;
-    for (let i = 0; i < n; i++) if (newMask[i]) { any = true; break; }
-    store.commit(state => {
-        state.pixels = newPixels;
-        state.float  = any ? { mask: newMask, pixels: newLifted, dx: f.dx, dy: f.dy } : null;
-    }, { history: true });
-}
-
-// Apply a select-tool rect drag with the given mode.
-function commitSelectRect(x1: number, y1: number, x2: number, y2: number, mode: SelectMode) {
-    const s = store.state;
-    const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
-    // Rect is gated against the visible canvas so hole-exclusion follows
-    // the user's view (the float counts as in-canvas content).
-    const visible = visiblePixels(s);
-    const region  = rectMask(visible, W, H, x1, y1, x2, y2);
-    applySelectionMod(region, mode);
-}
-
-// Apply a wand-tool action at (x, y) with the given mode.
-function commitWandAt(x: number, y: number, mode: SelectMode) {
-    const s = store.state;
-    const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
-    if (x < 0 || x >= W || y < 0 || y >= H) return;
-    const visible = visiblePixels(s);
-    if (visible[y * W + x] === 0) return;   // hole click — no-op
-    // Always pick the region with replace mode and apply the modifier
-    // locally — the Rust `wand_select`'s "remove" mode wants an existing
-    // mask to subtract from, which doesn't fit our float-based model.
-    const region = wand_select(visible, W, H, x, y, 0, new Uint8Array(0));
-    applySelectionMod(region, mode);
-}
-
 // ── Paint ────────────────────────────────────────────────────────────────────
 // Paint operates on the *visible* canvas (pixels + float stamped). When a
 // float is active, paint changes are clipped to its shifted mask and
@@ -366,42 +167,12 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
 
     const symMask = getSymmetryMask(s.symmetry, W, H);
     const before  = visible;
-    let next: Uint8Array;
-    if (tool === "fill") {
-        next = flood_fill(visible, W, H, x, y, g.color, symMask, shifted ?? new Uint8Array(0));
-    } else if (tool === "eraser") {
-        const invert = g.color !== s.primaryColor;
-        if (pattern.mode === "row") {
-            next = paint_natural_row(visible, W, H, x, y, symMask, invert);
-        } else {
-            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
-            next = paint_natural_round(visible, W, H, vw, vh, ox, oy, rounds, x, y, symMask, invert);
-        }
-    } else if (tool === "overlay") {
-        const clear = g.color !== s.primaryColor;
-        if (pattern.mode === "row") {
-            next = clear
-                ? clear_overlay_row(visible, W, H, x, y, symMask)
-                : paint_overlay_row(visible, W, H, x, y, symMask);
-        } else {
-            const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
-            next = clear
-                ? clear_overlay_round(visible, W, H, vw, vh, ox, oy, rounds, x, y, symMask)
-                : paint_overlay_round(visible, W, H, vw, vh, ox, oy, rounds, x, y, symMask);
-        }
-    } else if (tool === "invert") {
-        next = visible.slice();
-        const indices = symmetric_orbit_indices(W, H, x, y, symMask);
-        for (const idx of indices) {
-            if (g.invertVisited!.has(idx)) continue;
-            g.invertVisited!.add(idx);
-            const cur = next[idx];
-            if      (cur === 1) next[idx] = 2;
-            else if (cur === 2) next[idx] = 1;
-        }
-    } else {
-        next = paint_pixel(visible, W, H, x, y, g.color, symMask);
-    }
+    let next = paintOps[tool as PaintTool]({
+        visible, pattern, x, y,
+        color: g.color, primary: s.primaryColor,
+        invertVisited: g.invertVisited,
+        symMask, shifted,
+    });
 
     // Clip cells outside the float mask back to `before`. Skipped for
     // overlay — its painted cell is the inward neighbour, and the click-
@@ -427,7 +198,7 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
                 newFloatPixels[sy * W + sx] = next[cy * W + cx];
             }
         }
-        const newFloat: Float = { mask: s.float.mask, pixels: newFloatPixels, dx: fdx, dy: fdy };
+        const newFloat = Float.withPixels(s.float, newFloatPixels);
         store.commit(state => { state.float = newFloat; });
     } else {
         const newPixels = next;
@@ -512,116 +283,16 @@ function rotate(delta: number) {
     store.commit(s => { s.rotation += delta; }, { recompute: false });
 }
 
-// Lift every non-hole cell into a fresh float (anchoring any existing one).
-function selectAll() {
-    const s = store.state;
-    const visible = visiblePixels(s);
-    const mask = new Uint8Array(visible.length);
-    for (let i = 0; i < visible.length; i++) if (visible[i] !== 0) mask[i] = 1;
-    applySelectionMod(mask, "replace");
-}
-// Anchor the float at its current position and clear it.
-function anchorFloat() {
-    if (!store.state.float) return;
-    const newPixels = visiblePixels(store.state);
-    store.commit(s => { s.pixels = newPixels; s.float = null; }, { history: true });
-}
-function deselect() {
-    if (!store.state.float) return;
-    anchorFloat();
-}
-
-// ── Clipboard ────────────────────────────────────────────────────────────────
-// Bbox-bounded snapshot of a float, with its canvas-coord origin so paste
-// lands at the same visual position. In-memory only.
-let clipboard: {
-    pixels: Uint8Array; mask: Uint8Array;
-    w: number; h: number;
-    originX: number; originY: number;
-} | null = null;
-
-// Yank the float into the clipboard (bbox-bounded, in canvas coords). Does
-// NOT touch canvas pixels — copy / cut layer their own canvas effect on top.
-function yankFloatToClipboard(): boolean {
-    const f = store.state.float;
-    if (!f) return false;
-    const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
-    let minX = W, minY = H, maxX = -1, maxY = -1;
-    for (let sy = 0; sy < H; sy++) {
-        for (let sx = 0; sx < W; sx++) {
-            if (f.mask[sy * W + sx] === 0) continue;
-            const cx = sx + f.dx, cy = sy + f.dy;
-            if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
-            if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-        }
-    }
-    if (maxX < 0) return false;
-    const bw = maxX - minX + 1, bh = maxY - minY + 1;
-    const cbPixels = new Uint8Array(bw * bh);
-    const cbMask   = new Uint8Array(bw * bh);
-    for (let sy = 0; sy < H; sy++) {
-        for (let sx = 0; sx < W; sx++) {
-            if (f.mask[sy * W + sx] === 0) continue;
-            const cx = sx + f.dx, cy = sy + f.dy;
-            const bx = cx - minX, by = cy - minY;
-            cbPixels[by * bw + bx] = f.pixels[sy * W + sx];
-            cbMask[by * bw + bx]   = 1;
-        }
-    }
-    clipboard = { pixels: cbPixels, mask: cbMask, w: bw, h: bh, originX: minX, originY: minY };
-    return true;
-}
-
-// Copy: yank to clipboard AND stamp the float into the base canvas at its
-// current position. The float stays alive on top, so the user can keep
-// moving it; the stamp gives "I see this stays here even if I let the
-// float go" semantics. Mirror of cut.
-function copyFloat() {
-    if (!yankFloatToClipboard()) return;
-    const newPixels = visiblePixels(store.state);
-    store.commit(s => { s.pixels = newPixels; }, { history: true });
-}
-
-// Cut: yank to clipboard AND clear the base canvas under the float's
-// current visible position. Drops the float — the user has performed a
-// destructive operation, so the marquee goes with it (Photoshop-style).
-// A follow-up `Ctrl+V` brings the content back at the cut location.
-function cutFloat() {
-    if (!yankFloatToClipboard()) return;
-    const shifted = shiftedFloatMask(store.state);
-    const cleared = cutCells(store.state.pixels, store.state.pattern, shifted);
-    store.commit(s => { s.pixels = cleared; s.float = null; }, { history: true });
-}
-
-// Paste: anchor any pending float, then create a new float from the
-// clipboard at its original canvas coords. The new float is *uncut* — the
-// canvas is unchanged underneath, so a regular Move-drag of the paste
-// leaves the source pristine.
-function pasteClipboard() {
-    if (!clipboard) return;
-    const s = store.state;
-    if (s.float) anchorFloat();
-
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    const mask   = new Uint8Array(W * H);
-    const pixels = new Uint8Array(W * H);
-    let any = false;
-    for (let dy = 0; dy < clipboard.h; dy++) {
-        for (let dx = 0; dx < clipboard.w; dx++) {
-            if (clipboard.mask[dy * clipboard.w + dx] === 0) continue;
-            const cx = clipboard.originX + dx, cy = clipboard.originY + dy;
-            if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
-            if (store.state.pixels[cy * W + cx] === 0) continue;   // hole — drop
-            mask[cy * W + cx]   = 1;
-            pixels[cy * W + cx] = clipboard.pixels[dy * clipboard.w + dx];
-            any = true;
-        }
-    }
-    if (!any) return;
+// `Ctrl+V` extra: switch to the Move tool so the user can drag the paste.
+// `pasteClipboard` itself only touches state; the tool switch is a UI side
+// effect that lives here in the orchestrator.
+function onPaste() {
     if (store.state.activeTool !== "move") applyTool("move");
-    store.commit(state => {
-        state.float = { mask, pixels, dx: 0, dy: 0 };
-    }, { history: true });
+    if (!pasteClipboard(store)) {
+        // Couldn't paste (no clipboard, or all cells dropped). The
+        // `applyTool` above still ran; that's fine — switching to Move
+        // with no float is harmless.
+    }
 }
 
 // ── Pattern (Edit) popover ──────────────────────────────────────────────────
@@ -682,7 +353,7 @@ async function onSave() {
     // throwaway snapshot for the file, but leave the live float alone so
     // the selection survives across save.
     const snapshot: SessionState = store.state.float
-        ? { ...store.state, pixels: visiblePixels(store.state), float: null }
+        ? { ...store.state, ...anchorIntoCanvas(store.state) }
         : store.state;
     await saveToFile(snapshot);
 }
@@ -706,7 +377,9 @@ async function onExport() {
     // Export reflects the user-visible state. Bake the float into a local
     // pixels buffer for the export session but leave the live float alive —
     // closing the export dialog shouldn't drop the user's selection.
-    const exportPixels = store.state.float ? visiblePixels(store.state) : store.state.pixels;
+    const exportPixels = store.state.float
+        ? anchorIntoCanvas(store.state).pixels
+        : store.state.pixels;
     const dlg = ui.openExport();
     let cancelled = false;
     dlg.onClose(() => { cancelled = true; });
@@ -793,7 +466,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 // from the canvas at the new position.
                 prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
-                const emptied: Float = { mask: preFloat.mask, pixels: new Uint8Array(preFloat.pixels.length), dx: preFloat.dx, dy: preFloat.dy };
+                const emptied = Float.withPixels(preFloat, new Uint8Array(preFloat.pixels.length));
                 store.commit(s => { s.pixels = stamped; s.float = emptied; }, { persist: false });
             } else if (mode === "duplicate" && preFloat) {
                 // Pre-stamp the float into canvas so the duplicate is
@@ -856,9 +529,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             const newDx = gesture.drag.startDx + (p.x - gesture.drag.anchorX);
             const newDy = gesture.drag.startDy + (p.y - gesture.drag.anchorY);
             if (newDx !== f.dx || newDy !== f.dy) {
-                store.commit(s => {
-                    s.float = { mask: f.mask, pixels: f.pixels, dx: newDx, dy: newDy };
-                }, { persist: false });
+                store.commit(s => { s.float = Float.shifted(f, newDx, newDy); }, { persist: false });
             }
             return;
         }
@@ -886,7 +557,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             if (p.y < 0 || p.y >= store.state.pattern.canvasHeight) return;
             if (gesture.lastCell && gesture.lastCell.x === p.x && gesture.lastCell.y === p.y) return;
             gesture.lastCell = { x: p.x, y: p.y };
-            commitWandAt(p.x, p.y, gesture.mode);
+            commitWandAt(store, p.x, p.y, gesture.mode);
             return;
         }
         // gesture.kind === "paint"
@@ -915,6 +586,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         if (gesture.kind === "select") {
             if (gesture.rect) {
                 commitSelectRect(
+                    store,
                     gesture.rect.startX, gesture.rect.startY,
                     gesture.rect.endX,   gesture.rect.endY,
                     gesture.mode,
@@ -995,11 +667,11 @@ document.addEventListener("keydown", e => {
     if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
         else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
-        else if (e.key === "a" && !e.shiftKey) { e.preventDefault(); selectAll(); }
-        else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); deselect(); }
-        else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); copyFloat(); }
-        else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); cutFloat(); }
-        else if (e.key === "v" && !e.shiftKey) { e.preventDefault(); pasteClipboard(); }
+        else if (e.key === "a" && !e.shiftKey) { e.preventDefault(); selectAll(store); }
+        else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); deselect(store); }
+        else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); copyFloat(store); }
+        else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); cutFloat(store); }
+        else if (e.key === "v" && !e.shiftKey) { e.preventDefault(); onPaste(); }
         return;
     }
     if (e.altKey) return;
