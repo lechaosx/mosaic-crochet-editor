@@ -4,7 +4,7 @@
 // onto pixels with off-canvas / hole / pixels=0 drops.
 
 import { describe, test, expect } from "vitest";
-import { Store, visiblePixels } from "../src/store";
+import { Store, visiblePixels, outOfBounds, forEachCell } from "../src/store";
 import type { SessionState } from "../src/store";
 import { filledPixels, makeFloat, rowSession } from "./_helpers";
 
@@ -106,6 +106,16 @@ describe("Store commit chain", () => {
         expect(fired).toBe(2);
     });
 
+    test("persist=false suppresses persistFn", () => {
+        const s = newStore();
+        let persists = 0;
+        s.setPersistFn(() => { persists++; });
+        s.commit(() => {}, { persist: false });
+        expect(persists).toBe(0);
+        s.commit(() => {});
+        expect(persists).toBe(1);
+    });
+
     test("replace swaps state, recomputes plan, fires renderer", () => {
         const s = newStore();
         let renders = 0;
@@ -114,5 +124,55 @@ describe("Store commit chain", () => {
         s.replace(next);
         expect(s.state.hlOpacity).toBe(50);
         expect(renders).toBe(1);
+    });
+
+    test("replace with history=true triggers historyFn", () => {
+        const s = newStore();
+        let fired = 0;
+        s.setHistoryFn(() => { fired++; });
+        s.replace({ ...s.state });
+        expect(fired).toBe(0);
+        s.replace({ ...s.state }, { history: true });
+        expect(fired).toBe(1);
+    });
+
+    test("replace with persist=true triggers persistFn", () => {
+        const s = newStore();
+        let persists = 0;
+        s.setPersistFn(() => { persists++; });
+        s.replace({ ...s.state });
+        expect(persists).toBe(0);
+        s.replace({ ...s.state }, { persist: true });
+        expect(persists).toBe(1);
+    });
+});
+
+describe("outOfBounds", () => {
+    test("returns false for interior cell", () => {
+        expect(outOfBounds(1, 1, 3, 3)).toBe(false);
+    });
+    test("returns true when x < 0", () => {
+        expect(outOfBounds(-1, 1, 3, 3)).toBe(true);
+    });
+    test("returns true when x >= W", () => {
+        expect(outOfBounds(3, 1, 3, 3)).toBe(true);
+    });
+    test("returns true when y < 0", () => {
+        expect(outOfBounds(1, -1, 3, 3)).toBe(true);
+    });
+    test("returns true when y >= H", () => {
+        expect(outOfBounds(1, 3, 3, 3)).toBe(true);
+    });
+});
+
+describe("forEachCell", () => {
+    test("visits every cell in a W×H grid exactly once", () => {
+        const W = 3, H = 4;
+        const visited = new Set<string>();
+        forEachCell(W, H, (x, y) => { visited.add(`${x},${y}`); });
+        expect(visited.size).toBe(W * H);
+        for (let y = 0; y < H; y++)
+            for (let x = 0; x < W; x++)
+                expect(visited.has(`${x},${y}`)).toBe(true);
     });
 });

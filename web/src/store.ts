@@ -46,6 +46,18 @@ export type ObserverFn = (store: Store) => void;
 export type HistoryFn  = (s: Readonly<SessionState>) => void;
 export type PersistFn  = (s: Readonly<SessionState>) => void;
 
+// Returns true when (x, y) falls outside the [0, W) × [0, H) canvas.
+export function outOfBounds(x: number, y: number, W: number, H: number): boolean {
+    return x < 0 || x >= W || y < 0 || y >= H;
+}
+
+// Calls fn(x, y) for every cell in a W×H grid.
+export function forEachCell(W: number, H: number, fn: (x: number, y: number) => void): void {
+    for (let y = 0; y < H; y++)
+        for (let x = 0; x < W; x++)
+            fn(x, y);
+}
+
 // The visible canvas: `pixels` with `float` stamped at its current offset.
 // Off-canvas and over-hole destinations drop. A mask cell whose lifted
 // value is 0 means "selected, no content" (e.g., after cut) — those skip
@@ -55,19 +67,16 @@ export function visiblePixels(s: Readonly<SessionState>): Uint8Array {
     const { canvasWidth: W, canvasHeight: H } = s.pattern;
     const { mask, pixels: lifted, dx: fdx, dy: fdy } = s.float;
     const out = s.pixels.slice();
-    for (let sy = 0; sy < H; sy++) {
-        const srow = sy * W;
-        for (let sx = 0; sx < W; sx++) {
-            if (mask[srow + sx] === 0) continue;
-            const v = lifted[srow + sx];
-            if (v === 0) continue;   // empty mask cell (cut content)
-            const tx = sx + fdx, ty = sy + fdy;
-            if (tx < 0 || tx >= W || ty < 0 || ty >= H) continue;
-            const ti = ty * W + tx;
-            if (out[ti] === 0) continue;   // skip holes
-            out[ti] = v;
-        }
-    }
+    forEachCell(W, H, (sx, sy) => {
+        if (mask[sy * W + sx] === 0) return;
+        const v = lifted[sy * W + sx];
+        if (v === 0) return;   // empty mask cell (cut content)
+        const tx = sx + fdx, ty = sy + fdy;
+        if (outOfBounds(tx, ty, W, H)) return;
+        const ti = ty * W + tx;
+        if (out[ti] === 0) return;   // skip holes
+        out[ti] = v;
+    });
     return out;
 }
 

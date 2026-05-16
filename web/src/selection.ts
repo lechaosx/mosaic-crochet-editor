@@ -7,7 +7,7 @@
 import { wand_select,
          cut_to_natural_row, cut_to_natural_round } from "@mosaic/wasm";
 import { PatternState, Float } from "./types";
-import { Store, SessionState, visiblePixels } from "./store";
+import { Store, SessionState, visiblePixels, outOfBounds, forEachCell } from "./store";
 import { devAssert, assertNever } from "./dev";
 
 export type SelectMode = "replace" | "add" | "remove";
@@ -38,12 +38,12 @@ export function liftCells(
     const mask   = new Uint8Array(n);
     const lifted = new Uint8Array(n);
     let any = false;
-    for (let i = 0; i < n; i++) {
-        if (!liftMask[i]) continue;
+    liftMask.forEach((v, i) => {
+        if (!v) return;
         mask[i]   = 1;
         lifted[i] = pixels[i];
         any = true;
-    }
+    });
     if (!any) return { pixels, float: null };
     const newPixels = cutCells(pixels, pattern, mask);
     return { pixels: newPixels, float: { mask, pixels: lifted, dx: 0, dy: 0 } };
@@ -77,15 +77,12 @@ export function shiftedFloatMask(s: SessionState): Uint8Array {
     const out = new Uint8Array(W * H);
     if (!s.float) return out;
     const { mask, dx: fdx, dy: fdy } = s.float;
-    for (let sy = 0; sy < H; sy++) {
-        const srow = sy * W;
-        for (let sx = 0; sx < W; sx++) {
-            if (mask[srow + sx] === 0) continue;
-            const dx = sx + fdx, dy = sy + fdy;
-            if (dx < 0 || dx >= W || dy < 0 || dy >= H) continue;
-            out[dy * W + dx] = 1;
-        }
-    }
+    forEachCell(W, H, (sx, sy) => {
+        if (mask[sy * W + sx] === 0) return;
+        const dx = sx + fdx, dy = sy + fdy;
+        if (outOfBounds(dx, dy, W, H)) return;
+        out[dy * W + dx] = 1;
+    });
     return out;
 }
 
@@ -114,7 +111,7 @@ export function applySelectionMod(store: Store, region: Uint8Array, mode: Select
     if (mode === "replace") {
         const anchored = s.float ? visiblePixels(s) : s.pixels;
         const clean = region.slice();
-        for (let i = 0; i < n; i++) if (anchored[i] === 0) clean[i] = 0;
+        anchored.forEach((v, i) => { if (v === 0) clean[i] = 0; });
         const lifted = liftCells(anchored, s.pattern, clean);
         store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
         return;
@@ -124,7 +121,7 @@ export function applySelectionMod(store: Store, region: Uint8Array, mode: Select
         // No existing float: `add` lifts the region; `remove` is a no-op.
         if (mode === "add") {
             const clean = region.slice();
-            for (let i = 0; i < n; i++) if (s.pixels[i] === 0) clean[i] = 0;
+            s.pixels.forEach((v, i) => { if (v === 0) clean[i] = 0; });
             const lifted = liftCells(s.pixels, s.pattern, clean);
             store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
         }
@@ -137,19 +134,17 @@ export function applySelectionMod(store: Store, region: Uint8Array, mode: Select
         const newLifted = f.pixels.slice();
         const cutMask   = new Uint8Array(n);
         let any = false;
-        for (let cy = 0; cy < H; cy++) {
-            for (let cx = 0; cx < W; cx++) {
-                if (region[cy * W + cx] === 0) continue;
-                if (s.pixels[cy * W + cx] === 0) continue;   // hole
-                const sx = cx - f.dx, sy = cy - f.dy;
-                if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
-                if (newMask[sy * W + sx] === 1) continue;    // already in float
-                newMask[sy * W + sx]   = 1;
-                newLifted[sy * W + sx] = s.pixels[cy * W + cx];
-                cutMask[cy * W + cx]   = 1;
-                any = true;
-            }
-        }
+        forEachCell(W, H, (cx, cy) => {
+            if (region[cy * W + cx] === 0) return;
+            if (s.pixels[cy * W + cx] === 0) return;   // hole
+            const sx = cx - f.dx, sy = cy - f.dy;
+            if (outOfBounds(sx, sy, W, H)) return;
+            if (newMask[sy * W + sx] === 1) return;    // already in float
+            newMask[sy * W + sx]   = 1;
+            newLifted[sy * W + sx] = s.pixels[cy * W + cx];
+            cutMask[cy * W + cx]   = 1;
+            any = true;
+        });
         if (!any) return;
         const cutPixels = cutCells(s.pixels, s.pattern, cutMask);
         store.commit(state => {
@@ -164,22 +159,19 @@ export function applySelectionMod(store: Store, region: Uint8Array, mode: Select
     const newMask   = f.mask.slice();
     const newLifted = f.pixels.slice();
     let removed = false;
-    for (let cy = 0; cy < H; cy++) {
-        for (let cx = 0; cx < W; cx++) {
-            if (region[cy * W + cx] === 0) continue;
-            const sx = cx - f.dx, sy = cy - f.dy;
-            if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
-            if (newMask[sy * W + sx] === 0) continue;
-            if (newPixels[cy * W + cx] === 0) continue;     // hole — leave alone
-            newPixels[cy * W + cx] = newLifted[sy * W + sx];
-            newMask[sy * W + sx]   = 0;
-            newLifted[sy * W + sx] = 0;
-            removed = true;
-        }
-    }
+    forEachCell(W, H, (cx, cy) => {
+        if (region[cy * W + cx] === 0) return;
+        const sx = cx - f.dx, sy = cy - f.dy;
+        if (outOfBounds(sx, sy, W, H)) return;
+        if (newMask[sy * W + sx] === 0) return;
+        if (newPixels[cy * W + cx] === 0) return;     // hole — leave alone
+        newPixels[cy * W + cx] = newLifted[sy * W + sx];
+        newMask[sy * W + sx]   = 0;
+        newLifted[sy * W + sx] = 0;
+        removed = true;
+    });
     if (!removed) return;
-    let any = false;
-    for (let i = 0; i < n; i++) if (newMask[i]) { any = true; break; }
+    const any = newMask.some(Boolean);
     store.commit(state => {
         state.pixels = newPixels;
         state.float  = any ? { mask: newMask, pixels: newLifted, dx: f.dx, dy: f.dy } : null;
@@ -216,7 +208,7 @@ export function selectAll(store: Store): void {
     const s = store.state;
     const visible = visiblePixels(s);
     const mask = new Uint8Array(visible.length);
-    for (let i = 0; i < visible.length; i++) if (visible[i] !== 0) mask[i] = 1;
+    visible.forEach((v, i) => { if (v !== 0) mask[i] = 1; });
     applySelectionMod(store, mask, "replace");
 }
 
