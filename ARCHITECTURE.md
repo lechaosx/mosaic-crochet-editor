@@ -55,7 +55,10 @@ Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. State ownership and
 | Module | Owns | Shape |
 |---|---|---|
 | `store.ts` | `SessionState` (pattern, pixels, **float** layer, colours, tool, primary, symmetry, settings, rotation) + derived highlight plan + `visiblePixels(s)` helper that stamps the float onto pixels | **class** (`Store`) — `commit(mutate, opts?)` is the only path that runs the recompute → render → history → persist → observers chain; the invariant justifies the class |
-| `main.ts` | `init()` orchestrates: constructs `Store` + `RendererState`, wires renderer/history/persistence/observers, mounts UI + gestures, keyboard. Stroke-scoped state (`preStroke`, `invertVisited`, `strokeColor`) lives in the `init()` closure | free function |
+| `main.ts` | Boot + orchestration: constructs `Store` + `RendererState`, wires renderer/history/persistence/observers, mounts UI + gestures, dispatches keyboard. Owns the per-gesture `Gesture` union (paint / select / wand / move) for the duration of one pointerdown→up. | free functions |
+| `selection.ts` | Selection / float operations. Pure helpers (`liftCells`, `cutCells`, `rectMask`, `shiftedFloatMask`, `anchorIntoCanvas`) and store-mutating ops (`applySelectionMod` and the rect / wand / select-all / deselect / anchor wrappers around it). | free functions |
+| `clipboard.ts` | Module-level clipboard buffer + `copyFloat` / `cutFloat` / `pasteClipboard`. The tool-switch side effect of paste lives in `main.ts` (we don't import UI from here). | free functions |
+| `paint.ts` | `paintOps: Record<PaintTool, PaintFn>` — per-tool dispatch as a lookup table over the visible canvas + paint-context shape. Single surface area for adding/changing a tool. | free functions + data |
 | `render.ts` | `RendererState` struct (canvas, ctx, view pan/zoom, animation state, colour cache) + `render(r, store)`, `screenToPattern(r, …)`, `fitToView(r, …)`, `clampZoom`, `updateStatus` | **free functions + state struct** — no invariants, no resources to manage |
 | `gesture.ts` | pointer-event state machine. `mountGestures(r, callbacks)` takes the renderer state explicitly | free function |
 | `ui.ts` | toolbar wiring (tools, swatches, symmetry, popovers, dialogs) + `mountToolbarLayout` | free function returning a `UIHandle` |

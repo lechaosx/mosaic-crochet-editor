@@ -15,6 +15,20 @@ export interface Float {
     dy:     number;
 }
 
+// Tiny constructor namespace — we build floats from scratch in many places.
+// Keeping the field shape consistent matters for the renderer / store /
+// snapshot/serialiser, so the helpers are the single source of truth for
+// "what shape does a Float have".
+export const Float = {
+    // Float with the same mask / pixels / offset as `f` but a new offset.
+    shifted: (f: Float, dx: number, dy: number): Float =>
+        ({ mask: f.mask, pixels: f.pixels, dx, dy }),
+    // Float with `f`'s mask + offset but fresh pixels (used by mask-only
+    // drag to zero out content without losing the marquee).
+    withPixels: (f: Float, pixels: Uint8Array): Float =>
+        ({ mask: f.mask, pixels, dx: f.dx, dy: f.dy }),
+} as const;
+
 export interface RowState {
     mode:         "row";
     canvasWidth:  number;
