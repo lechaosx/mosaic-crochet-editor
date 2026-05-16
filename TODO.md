@@ -162,10 +162,11 @@ Phases 1 and 4 are independent — can be done in either order. Everything else 
 
 ### Test tightening (Stryker-driven)
 
-Mutation score baseline after the May 2026 pass: **72.98%** overall (target: ≥80% on every logic module). Already tightened: `storage` / `clipboard` / `pattern` / `selection`. Open:
+Mutation score after the May 2026 pass: **75.86%** overall. Modules at ≥80%: `store` (92%), `paint` (91%), `pattern` (85%), `symmetry` (85%). Remaining below target:
 
-- [ ] **`store.ts` (68%, 28 survivors)** — *next immediate step*. Mostly uncovered `commit` options (`persist: false`, `history: false`, `recompute: false`). These are architectural invariants (the chain that fires the renderer / history / persistence / observer on every state change); tests should pin which of the four side effects each option suppresses. Also `visiblePixels` stamping edges (off-canvas drop, hole skip) — already covered indirectly but not via direct assertions.
-- [ ] **`paint.ts` (66%, 8 survivors)** — small file, probably 2–3 targeted tests cover most of it. Look at the eraser / overlay mode branches and the `invertVisited` dedup.
-- [ ] **`history.ts` (72%, 23 survivors)** — most are localStorage error-handling paths (quota-exceeded retry, malformed-blob recovery). Hard to unit-test cleanly without a jsdom-storage mock; possibly drop to E2E for the recovery flows.
+- **`selection.ts` (73%, 66 survivors)** — coordinate arithmetic survivors in `applySelectionMod` (offset math, bounds checks). The obvious duplication was extracted (`outOfBounds`, `forEachCell`) and tested, cutting survivors from 98 → 66. Remaining are narrow boundary tests for each arithmetic expression — diminishing returns.
+- **`history.ts` (72%, 23 survivors)** — localStorage error-handling paths. Hard to unit-test cleanly; drop to E2E for the recovery flows.
+- **`storage.ts` (54%, 60 no-coverage)** — browser APIs (`showSaveFilePicker`, `FileReader`). Untestable in unit tests by design; covered by E2E.
+- **`clipboard.ts` (80%, 31 survivors)** — at target; survivors are minor.
 
 Run with `bun run --cwd web test:mutation`; HTML report at `web/reports/mutation/mutation.html` shows per-line survivor breakdown.
