@@ -31,6 +31,57 @@ describe("packPixels / unpackPixels", () => {
         expect(out[0]).toBe(1);
         expect(out[1]).toBe(2);
     });
+
+    test("packed byte count is ceil(N/8)", () => {
+        // Kills `Math.ceil(pixels.length / 8)` → `* 8` (output buffer
+        // would be 64× larger but bit positions still decode the same,
+        // so a round-trip test misses it — only the encoded length does).
+        for (const n of [1, 8, 9, 16, 17]) {
+            const out = atob(packPixels(new Uint8Array(n)));
+            expect(out.length).toBe(Math.ceil(n / 8));
+        }
+    });
+
+    test("hole cells stay 0 after unpack regardless of packed bits", () => {
+        // Kills `if (out[i] !== 0)` → `if (true)`: that mutation would
+        // overwrite hole cells with the packed A/B bit. We construct a
+        // round pattern where some cells are holes and verify they survive.
+        const pattern = {
+            mode: "round" as const,
+            canvasWidth: 8, canvasHeight: 8,
+            virtualWidth: 8, virtualHeight: 8,
+            offsetX: 0, offsetY: 0, rounds: 2,
+        };
+        // All-ones packed string → every non-hole cell becomes B (=2),
+        // every hole stays 0. If the guard were `true`, holes would
+        // become 1 or 2.
+        const allBits = btoa("\xff".repeat(8));   // 64 cells, all bits 1
+        const out = unpackPixels(allBits, pattern);
+        // Find at least one hole cell (round patterns have holes outside
+        // the rounded region) and assert it's still 0.
+        const holeCount = [...out].filter(v => v === 0).length;
+        expect(holeCount).toBeGreaterThan(0);
+    });
+
+    test("unpackPixels honours round-mode geometry (not the row default)", () => {
+        // Kills `state.mode === "row"` → `true`: would always use the row
+        // initializer, dropping the round-mode hole pattern.
+        const rowPat = { mode: "row" as const, canvasWidth: 8, canvasHeight: 8 };
+        const roundPat = {
+            mode: "round" as const,
+            canvasWidth: 8, canvasHeight: 8,
+            virtualWidth: 8, virtualHeight: 8,
+            offsetX: 0, offsetY: 0, rounds: 2,
+        };
+        const empty = packPixels(new Uint8Array(64));
+        const rowOut = unpackPixels(empty, rowPat);
+        const roundOut = unpackPixels(empty, roundPat);
+        // Row mode: no holes; round mode: at least one hole.
+        const rowHoles = [...rowOut].filter(v => v === 0).length;
+        const roundHoles = [...roundOut].filter(v => v === 0).length;
+        expect(rowHoles).toBe(0);
+        expect(roundHoles).toBeGreaterThan(0);
+    });
 });
 
 describe("packSelection / unpackSelection", () => {
@@ -38,6 +89,14 @@ describe("packSelection / unpackSelection", () => {
         const bits = new Uint8Array([1, 0, 1, 1, 0, 0, 1, 0, 0]);
         const out = unpackSelection(packSelection(bits), bits.length);
         for (let i = 0; i < bits.length; i++) expect(out[i]).toBe(bits[i]);
+    });
+
+    test("packed byte count is ceil(N/8)", () => {
+        // Same Math.ceil(/8) → *8 mutant as in packPixels.
+        for (const n of [1, 8, 9, 16, 17]) {
+            const out = atob(packSelection(new Uint8Array(n)));
+            expect(out.length).toBe(Math.ceil(n / 8));
+        }
     });
 });
 
@@ -97,8 +156,27 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loadFromLocalStorage()).toBeNull();
     });
 
-    test("wrong version → null (blob kept; only parse errors clear it)", () => {
-        localStorage.setItem("mosaic-pattern-v3", JSON.stringify({ version: 999 }));
+    test("wrong version → null even with otherwise-valid payload", () => {
+        // Kills LogicalOperator/ConditionalExpression survivors on the
+        // version check: writing a payload that's structurally valid
+        // EXCEPT for the version. If the version guard is skipped, the
+        // function would try to load and either return junk or throw —
+        // either way, not null in the structural-valid case unless the
+        // guard fires.
+        const valid = rowSession(3, 3);
+        saveToLocalStorage(valid);
+        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v3")!);
+        raw.version = 999;
+        localStorage.setItem("mosaic-pattern-v3", JSON.stringify(raw));
+        expect(loadFromLocalStorage()).toBeNull();
+    });
+
+    test("missing state → null", () => {
+        // Kills the `!data.state` term of the version guard. Without
+        // state, unpackPixels would throw on undefined.canvasWidth → null
+        // via catch. With state but wrong type, no throw → would not be
+        // null. We use a no-state payload to pin the state-existence guard.
+        localStorage.setItem("mosaic-pattern-v3", JSON.stringify({ version: 3, pixels: "" }));
         expect(loadFromLocalStorage()).toBeNull();
     });
 
@@ -106,5 +184,20 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         localStorage.setItem("mosaic-pattern-v3", "{not json");
         expect(loadFromLocalStorage()).toBeNull();
         expect(localStorage.getItem("mosaic-pattern-v3")).toBeNull();
+    });
+
+    test("non-square canvas with float round-trips correctly", () => {
+        // Kills `data.state.canvasWidth * data.state.canvasHeight` → `/`:
+        // for width=4, height=2 → cells=8 (correct) vs cells=2 (mutant).
+        // With cells=2, unpackFloat builds 2-length arrays and the
+        // mask bit at index 6 won't survive the round-trip.
+        const f = makeFloat(4, 2, [{ x: 3, y: 1, v: 2 }]);
+        const s = rowSession(4, 2, { pixels: filledPixels(4, 2, 1), float: f });
+        saveToLocalStorage(s);
+        const loaded = loadFromLocalStorage();
+        expect(loaded).not.toBeNull();
+        expect(loaded!.float!.mask.length).toBe(8);
+        expect(loaded!.float!.mask[1 * 4 + 3]).toBe(1);
+        expect(loaded!.float!.pixels[1 * 4 + 3]).toBe(2);
     });
 });

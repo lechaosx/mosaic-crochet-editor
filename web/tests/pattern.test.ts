@@ -58,16 +58,84 @@ describe("applyEditSettings (row mode)", () => {
 });
 
 describe("applyEditSettings (round mode)", () => {
-    test("switches to round geometry", () => {
-        // Flip the radio to round.
+    function selectRoundMode() {
         (document.querySelector('[name="edit-mode"][value="row"]') as HTMLInputElement).checked = false;
         (document.querySelector('[name="edit-mode"][value="round"]') as HTMLInputElement).checked = true;
+    }
+    function selectSubmode(value: "full" | "half" | "quarter") {
+        for (const v of ["full", "half", "quarter"] as const) {
+            (document.querySelector(`[name="edit-submode"][value="${v}"]`) as HTMLInputElement).checked = (v === value);
+        }
+    }
+
+    test("full mode: canvas = virtual = inner + 2*rounds in both dimensions", () => {
+        // Kills `rounds * 2` → `/ 2` on lines 13/14 (inside
+        // computeRoundDimensions) AND on lines 46/47 (the duplicate that
+        // populates newPattern.virtualWidth/Height).
+        selectRoundMode();
         const { pattern } = applyEditSettings();
         expect(pattern.mode).toBe("round");
         if (pattern.mode === "round") {
-            // full sub-mode: canvas = virtual = inner + 2*rounds.
             expect(pattern.canvasWidth).toBe(2 + 2 * 3);
+            expect(pattern.canvasHeight).toBe(2 + 2 * 3);
+            expect(pattern.virtualWidth).toBe(2 + 2 * 3);
+            expect(pattern.virtualHeight).toBe(2 + 2 * 3);
             expect(pattern.rounds).toBe(3);
         }
+        // Round-mode pixel buffer is non-trivial: must have at least one
+        // hole cell (the cells outside the rounded region).
+        const { pixels } = applyEditSettings();
+        expect([...pixels].some(v => v === 0)).toBe(true);
+    });
+
+    test("half sub-mode: canvas height = inner + rounds (single rim), offsetY = rounds", () => {
+        // Kills `if (subMode === "full")` → `if (true)`: skipping the
+        // half/quarter branches would force half-mode to take full's
+        // canvasHeight = inner + 2*rounds and offsetY = 0.
+        selectRoundMode();
+        selectSubmode("half");
+        const { pattern } = applyEditSettings();
+        expect(pattern.mode).toBe("round");
+        if (pattern.mode === "round") {
+            expect(pattern.canvasWidth).toBe(2 + 2 * 3);  // full width
+            expect(pattern.canvasHeight).toBe(2 + 3);     // inner + 1 rim
+            expect(pattern.offsetY).toBe(3);
+        }
+    });
+
+    test("quarter sub-mode: canvas width = inner + rounds too (one rim each axis)", () => {
+        selectRoundMode();
+        selectSubmode("quarter");
+        const { pattern } = applyEditSettings();
+        expect(pattern.mode).toBe("round");
+        if (pattern.mode === "round") {
+            expect(pattern.canvasWidth).toBe(2 + 3);     // inner + 1 rim
+            expect(pattern.canvasHeight).toBe(2 + 3);
+        }
+    });
+});
+
+describe("applyEditSettings (mode preservation)", () => {
+    test("row→round mode switch: doesn't run transfer_preserved_row (which would corrupt round indices)", () => {
+        // Kills mutations on `if (old.mode === "row" && newPattern.mode === "row")`:
+        // `||` instead of `&&`, or `if (true)` etc. would route a row
+        // source through the row transfer into a round buffer, producing
+        // either an error or pixel patterns inconsistent with the round
+        // initializer (no holes preserved).
+        (document.querySelector('[name="edit-mode"][value="row"]') as HTMLInputElement).checked = false;
+        (document.querySelector('[name="edit-mode"][value="round"]') as HTMLInputElement).checked = true;
+        const source = {
+            pattern: { mode: "row" as const, canvasWidth: 4, canvasHeight: 3 },
+            pixels:  new Uint8Array(12).fill(2),
+        };
+        const { pattern, pixels } = applyEditSettings(source);
+        expect(pattern.mode).toBe("round");
+        if (pattern.mode === "round") {
+            const totalCells = pattern.canvasWidth * pattern.canvasHeight;
+            expect(pixels.length).toBe(totalCells);
+        }
+        // Round buffer's hole pattern must be intact (i.e. the round
+        // initializer wasn't overwritten by a row-transfer call).
+        expect([...pixels].some(v => v === 0)).toBe(true);
     });
 });
