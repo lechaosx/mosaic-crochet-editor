@@ -160,10 +160,25 @@ Starts the Rust watcher and the Vite dev server in parallel. Open [http://localh
 ### Tests
 
 ```sh
-cargo test
+bun run test
 ```
 
-Runs the pure-Rust unit tests in `core/` (highlight computation, walk generators, pattern compression).
+Chains all three layers:
+
+- **Rust** (`cargo test`) — geometry, walk generators, pattern compression.
+- **TS unit + properties** (`bun run --cwd web test`, Vitest) — store / selection / paint / clipboard / symmetry / storage / history / pattern + `fast-check`-generated property assertions for pack/unpack round-trips, lift-anchor identity, wand BFS invariants, history undo/redo balance.
+- **E2E** (`bun run --cwd web test:e2e`, Playwright) — full UX flows: tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry mirroring, Edit popover.
+
+Run a subset:
+
+```sh
+bun run --cwd web test                # Vitest only
+bun run --cwd web test:watch          # Vitest interactive
+bun run --cwd web test:coverage       # Istanbul HTML report at web/coverage/index.html
+bun run --cwd web test:e2e            # Playwright only
+```
+
+> On NixOS, the dev shell provides `playwright-driver.browsers` and sets `PLAYWRIGHT_BROWSERS_PATH` for you. The `@playwright/test` npm version is pinned to match nixpkgs's bundled chromium.
 
 ### Production build
 

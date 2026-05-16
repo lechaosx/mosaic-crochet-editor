@@ -5,14 +5,23 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@mosaic/wasm": "workspace:*"
   },
   "devDependencies": {
+    "@playwright/test": "1.59.1",
+    "@vitest/coverage-istanbul": "^4.1.6",
+    "fast-check": "^4.8.0",
+    "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.13",
-    "vite-plugin-wasm": "^3.6.0"
+    "vite-plugin-wasm": "^3.6.0",
+    "vitest": "^4.1.6"
   }
 }

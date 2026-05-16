@@ -1,0 +1,76 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust (cargo test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo test
+
+  web:
+    name: TS unit + properties (Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with: { version: latest }
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run build:wasm
+      - run: bun run --cwd web test
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with: { version: latest }
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun run build:wasm
+      - run: bun run --cwd web build
+      # Use Playwright's own `install --with-deps` here — Ubuntu CI has
+      # sudo, so the system libs gap that NixOS has doesn't apply.
+      - run: bun --cwd web x playwright install chromium --with-deps
+      - run: bun run --cwd web test:e2e

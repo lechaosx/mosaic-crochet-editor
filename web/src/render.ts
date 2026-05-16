@@ -347,6 +347,10 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     const m = buildMatrix(canvas, view, dpr, rs.visualRotation, pattern);
     ctx.setTransform(m);
     ctx.imageSmoothingEnabled = false;
+    // E2E test hook: latest canvas-pixel transform so Playwright can map
+    // (cellX, cellY) → CSS click coords without coupling to view state.
+    // No-op for users; one property write per render.
+    (window as unknown as { __test_matrix__?: DOMMatrix }).__test_matrix__ = m;
 
     for (let y = 0; y < H; y++) {
         const row = y * W;
