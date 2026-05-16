@@ -75,7 +75,7 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 - [x] **Off-canvas float cells stay in the mask during drag** (rendered as a gap, not pruned) so dragging back restores them; commit / save / export drops them via the existing pixels-skip rules.
 - [x] **Tests:** Rust unit tests for `wand_select` / `cut_to_natural_*` / `paint_natural_*`. Vitest unit tests for `selection.ts`, `clipboard.ts`, `paint.ts`, `store.ts`, `history.ts`, `storage.ts`, `pattern.ts`, `types.ts` (97 cases). Vitest property tests for pack/unpack round-trips, lift-anchor identity, add-idempotence, wand BFS invariants, history undo/redo balance (9 properties, ~900 generated inputs). Playwright E2E for tool switching, paint pixel verification, selection / move / cut / copy / paste flows (31 specs).
 - [ ] **Arrow keys nudge the float by 1 cell; Shift+arrow by 5.** Quality-of-life, keyboard-only; not implemented.
-- [ ] **Two-consecutive-moves cumulative test.** Atomic-history-snapshot move flow gives this naturally; we don't have a regression test for the cumulative effect.
+- [x] **Two-consecutive-moves cumulative test.** Atomic-history-snapshot move flow gives this naturally; covered in `tests/selection.test.ts` ("cumulative move").
 
 **Decided not to ship:**
 
@@ -155,3 +155,17 @@ Phases 1 and 4 are independent — can be done in either order. Everything else 
 ## Suggested first move
 
 **Phase 1.** Smallest viable ship, unlocks Phases 2 and 3, doesn't touch the symmetry refactor (Phase 4). Selection-aware paint is a one-time tax on every WASM tool function; pay it once and the rest is gravy.
+
+---
+
+## Cross-cutting backlog (not phase-bound)
+
+### Test tightening (Stryker-driven)
+
+Mutation score baseline after the May 2026 pass: **72.98%** overall (target: ≥80% on every logic module). Already tightened: `storage` / `clipboard` / `pattern` / `selection`. Open:
+
+- [ ] **`store.ts` (68%, 28 survivors)** — *next immediate step*. Mostly uncovered `commit` options (`persist: false`, `history: false`, `recompute: false`). These are architectural invariants (the chain that fires the renderer / history / persistence / observer on every state change); tests should pin which of the four side effects each option suppresses. Also `visiblePixels` stamping edges (off-canvas drop, hole skip) — already covered indirectly but not via direct assertions.
+- [ ] **`paint.ts` (66%, 8 survivors)** — small file, probably 2–3 targeted tests cover most of it. Look at the eraser / overlay mode branches and the `invertVisited` dedup.
+- [ ] **`history.ts` (72%, 23 survivors)** — most are localStorage error-handling paths (quota-exceeded retry, malformed-blob recovery). Hard to unit-test cleanly without a jsdom-storage mock; possibly drop to E2E for the recovery flows.
+
+Run with `bun run --cwd web test:mutation`; HTML report at `web/reports/mutation/mutation.html` shows per-line survivor breakdown.

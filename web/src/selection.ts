@@ -8,6 +8,7 @@ import { wand_select,
          cut_to_natural_row, cut_to_natural_round } from "@mosaic/wasm";
 import { PatternState, Float } from "./types";
 import { Store, SessionState, visiblePixels } from "./store";
+import { devAssert, assertNever } from "./dev";
 
 export type SelectMode = "replace" | "add" | "remove";
 
@@ -158,7 +159,7 @@ export function applySelectionMod(store: Store, region: Uint8Array, mode: Select
         return;
     }
 
-    // mode === "remove"
+    if (mode !== "remove") assertNever(mode, "applySelectionMod");
     const newPixels = s.pixels.slice();
     const newMask   = f.mask.slice();
     const newLifted = f.pixels.slice();
@@ -203,7 +204,7 @@ export function commitSelectRect(
 export function commitWandAt(store: Store, x: number, y: number, mode: SelectMode): void {
     const s = store.state;
     const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
-    if (x < 0 || x >= W || y < 0 || y >= H) return;
+    devAssert(x >= 0 && x < W && y >= 0 && y < H, "commitWandAt out of bounds");
     const visible = visiblePixels(s);
     if (visible[y * W + x] === 0) return;   // hole click — no-op
     const region = wand_select(visible, W, H, x, y, 0, new Uint8Array(0));

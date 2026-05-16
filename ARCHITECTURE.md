@@ -67,10 +67,13 @@ Vite + TypeScript. Imports `@mosaic/wasm` by workspace name. State ownership and
 | `history.ts` | undo/redo snapshot stack, localStorage-backed; takes/returns `SessionState` slices | free functions |
 | `storage.ts` | localStorage + file save/load serialisation; takes/returns `SessionState` | free functions |
 | `dom.ts` | small helpers | free functions |
+| `dev.ts` | `devAssert(cond, msg)` + `assertNever(x, ctx)` — dev/test-only invariant guards (gated by `import.meta.env.DEV`, dead-code-eliminated in production builds) | free functions |
 
 — **your decision** (single-owner Store + free functions everywhere else); **Claude's choice** (specific shape of `Store.commit` opts and `RendererState`).
 
 **Object policy:** an object (class) is only justified by an **invariant** (constraint on state that must be enforced — `Store.commit` is the only path for state mutation) or **RAII** (resource lifetime). Without one of those, prefer free functions with an explicit state argument. No module-level mutable singletons; no factory closures.
+
+**Guard policy:** asserts are the default; `if`-guards are the exception. A function's preconditions live at the *caller*, not as silent defensive returns inside. Use `devAssert` / `assertNever` (`src/dev.ts`) for anything the caller must satisfy; functions read cleaner when the body assumes a valid input and the guarantee is documented up-front. Plain `if`-guards are reserved for **documented runtime drops** that fire on legitimate user actions — off-canvas float cells, hole-cell skips, rect fully outside, paste cells past the destination canvas edge, "no clipboard / no float" early returns. Anything else is an invariant: assert it. — **your decision**
 
 ---
 
@@ -147,6 +150,7 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - **Save / export keep the float alive**: `onSave` / `onExport` build a throwaway snapshot via `visiblePixels` for the file or export session; the live `store.state.float` is untouched, so the marquee survives across save. — **your decision**
 - Highlight render plan: Rust emits a flat `Int16Array` with stride-4 records `[type, dir, wrong_x, wrong_y]` once per paint stroke. TS renderer iterates the plan and picks glyph / colour / opacity from presentation rules — those can change without touching Rust. Per-cell highlight `Uint8Array` lives only inside Rust (used by the export pipeline). — **joint**
 - Plan enum values: `PlanType` / `PlanDir` are `#[wasm_bindgen]` enums in `wasm/src/lib.rs` (autogenerates TS bindings). Core uses matching `u8` constants for the Vec<i16> writes; a compile-time `const _` assert verifies the discriminants stay in lockstep. — **joint**
+- **Invariant guards via `devAssert` / `assertNever`** (`src/dev.ts`): bounds checks that are *callable invariants* (callers must satisfy) — `commitWandAt` coords, exhaustive enum dispatch in `applySelectionMod` / `applyEditSettings` — throw in dev/test and dead-code-eliminate in production. Documented runtime drops (off-canvas float cells, hole-cell skips, rect fully outside, paste cells past dest edge) remain plain `if` guards because they fire on legitimate user actions. The split surfaces real coordinate-computation bugs early instead of letting them silently no-op via TypedArray-OOB-write semantics. — **joint**
 
 ---
 

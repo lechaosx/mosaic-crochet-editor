@@ -8,6 +8,7 @@ import {
 } from "@mosaic/wasm";
 import { PatternState } from "./types";
 import { readClampedInt, radioValue } from "./dom";
+import { devAssert } from "./dev";
 
 function computeRoundDimensions(innerWidth: number, innerHeight: number, rounds: number, subMode: string) {
     const virtualWidth  = innerWidth  + rounds * 2;
@@ -17,6 +18,7 @@ function computeRoundDimensions(innerWidth: number, innerHeight: number, rounds:
     } else if (subMode === "half") {
         return { canvasWidth: virtualWidth, canvasHeight: innerHeight + rounds, offsetX: 0, offsetY: rounds };
     } else {
+        devAssert(subMode === "quarter", "unknown subMode");
         return { canvasWidth: innerWidth + rounds, canvasHeight: innerHeight + rounds, offsetX: 0, offsetY: rounds };
     }
 }
@@ -39,6 +41,7 @@ export function applyEditSettings(
         newPattern = { mode, canvasWidth: width, canvasHeight: height };
         newPixels  = initialize_row_pattern(width, height).slice();
     } else {
+        devAssert(mode === "round", "unknown edit-mode");
         const innerWidth  = readClampedInt("edit-inner-width",  0);
         const innerHeight = readClampedInt("edit-inner-height", 0);
         const rounds      = readClampedInt("edit-rounds",       1);
