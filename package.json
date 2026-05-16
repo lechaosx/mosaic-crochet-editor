@@ -1,9 +1,9 @@
 {
   "scripts": {
-    "build:wasm": "wasm-pack build wasm --target bundler --no-default-features && rm -rf wasm/pkg-release && mv wasm/pkg wasm/pkg-release",
+    "build:wasm": "wasm-pack build wasm --target bundler",
     "build:web": "bun run --cwd web build",
     "build": "bun run build:wasm && bun run build:web",
-    "dev:rust": "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler --dev && rm -rf wasm/pkg-debug && mv wasm/pkg wasm/pkg-debug'",
+    "dev:rust": "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler --dev'",
     "dev:web": "bun run --cwd web dev",
     "dev": "bun run dev:rust & bun run dev:web",
     "test:rust": "cargo test",

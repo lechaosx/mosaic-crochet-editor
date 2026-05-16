@@ -59,11 +59,6 @@ impl ExportSession {
     }
 }
 
-#[wasm_bindgen(start)]
-fn init() {
-    #[cfg(feature = "console_error_panic_hook")]
-    console_error_panic_hook::set_once();
-}
 
 fn to_array2(flat: &[u8], width: i32, height: i32) -> Array2<u8> {
     Array2::from_shape_vec(
