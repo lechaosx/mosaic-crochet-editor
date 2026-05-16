@@ -2,14 +2,6 @@
   "name": "@mosaic/wasm",
   "version": "0.1.0",
   "type": "module",
-  "exports": {
-    "debug": {
-      "types":   "./pkg-debug/mosaic_crochet_wasm.d.ts",
-      "default": "./pkg-debug/mosaic_crochet_wasm.js"
-    },
-    "default": {
-      "types":   "./pkg-release/mosaic_crochet_wasm.d.ts",
-      "default": "./pkg-release/mosaic_crochet_wasm.js"
-    }
-  }
+  "main":  "./pkg/mosaic_crochet_wasm.js",
+  "types": "./pkg/mosaic_crochet_wasm.d.ts"
 }

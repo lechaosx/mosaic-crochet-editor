@@ -11,7 +11,7 @@ This file records the technical decisions behind the codebase: structure, module
 ```
 mosaic-crochet-web/
 ├── core/   pure Rust logic (walk, pattern compression, highlight, drawing tools, export)
-├── wasm/   Rust → WASM binding layer (src/lib.rs only; pkg-debug/ and pkg-release/ are internal outputs)
+├── wasm/   Rust → WASM binding layer (src/lib.rs only; pkg/ is internal output)
 ├── web/    Vite + TypeScript application
 └── flake.nix, Cargo.toml, package.json
 ```
@@ -156,11 +156,10 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 
 ## Build & CI
 
-- `build:wasm` (wasm-pack, `--no-default-features` strips `console_error_panic_hook` from release) → `build:web` (Vite). `dev:rust` watches via `cargo-watch`. — **Claude's choice**
-- **Two separate wasm-pack output dirs**: `dev:rust` writes to `pkg-debug/` (with `console_error_panic_hook`); `build:wasm` writes to `pkg-release/` (without). `wasm/package.json` uses `exports` conditions — `"debug"` resolves to `pkg-debug/`, `"default"` to `pkg-release/`. Vite adds the `"debug"` condition in serve/test mode only. This prevents cargo-watch rebuilds from invalidating the Vite dev server's cached WASM import object. — **joint**
+- `build:wasm` (wasm-pack) → `build:web` (Vite). `dev:rust` watches via `cargo-watch`. Both write to `wasm/pkg/`. — **Claude's choice**
 - `flake.nix` provides rustup, wasm-pack, bun, cargo-watch, plus `playwright-driver.browsers` and the env vars to point Playwright at the nixpkgs-built chromium-headless-shell (downloaded binaries don't link against system libs on NixOS). — **joint**
 - `rust-toolchain.toml`: nightly + `wasm32-unknown-unknown`. — **Claude's choice**
-- GitHub Actions: single `ci.yml` — three parallel test jobs (`rust`, `web`, `e2e`), then `deploy` gated on all three + `master` push only. — **Claude's choice**; no custom packaging — **your decision**
+- GitHub Actions: single `ci.yml` — `rust` and `wasm` run in parallel; `web` and `build-web` fan out from `wasm`; `e2e` runs against the `build-web` artifact; `deploy` is gated on all three test jobs and reuses the `build-web` artifact. — **Claude's choice**; no custom packaging — **your decision**
 
 ## Testing
 
