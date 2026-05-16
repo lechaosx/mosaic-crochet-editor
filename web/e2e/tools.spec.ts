@@ -35,12 +35,12 @@ test.describe("toolbar buttons", () => {
     }
 });
 
-test("Alt held swaps to Move, release restores prior tool", async ({ page }) => {
+test("Alt held does not change the active tool", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await expect(page.locator("#tool-pencil")).toHaveClass(/btn--active/);
     await page.keyboard.down("Alt");
-    await expect(page.locator("#tool-move")).toHaveClass(/btn--active/);
+    await expect(page.locator("#tool-pencil")).toHaveClass(/btn--active/);
     await page.keyboard.up("Alt");
     await expect(page.locator("#tool-pencil")).toHaveClass(/btn--active/);
 });
