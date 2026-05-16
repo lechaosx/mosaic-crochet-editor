@@ -72,5 +72,6 @@ jobs:
       - run: bun run --cwd web build
       # Use Playwright's own `install --with-deps` here — Ubuntu CI has
       # sudo, so the system libs gap that NixOS has doesn't apply.
-      - run: bun --cwd web x playwright install chromium --with-deps
+      - run: bunx playwright install chromium --with-deps
+        working-directory: web
       - run: bun run --cwd web test:e2e
