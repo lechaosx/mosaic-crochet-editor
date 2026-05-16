@@ -153,6 +153,14 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 ## Build & CI
 
 - `build:wasm` (wasm-pack, `--no-default-features` strips `console_error_panic_hook` from release) → `build:web` (Vite). `dev:rust` watches via `cargo-watch`. — **Claude's choice**
-- `flake.nix` provides rustup, wasm-pack, bun, cargo-watch. — **joint**
+- `flake.nix` provides rustup, wasm-pack, bun, cargo-watch, plus `playwright-driver.browsers` and the env vars to point Playwright at the nixpkgs-built chromium-headless-shell (downloaded binaries don't link against system libs on NixOS). — **joint**
 - `rust-toolchain.toml`: nightly + `wasm32-unknown-unknown`. — **Claude's choice**
 - GitHub Actions: push to `master` → `build:wasm` → `build:web` → deploy `web/dist/` to GitHub Pages. — **Claude's choice**; no custom packaging — **your decision**
+
+## Testing
+
+- **Rust:** `cargo test` (156 tests). Per-tool BFS/flood/wand/cut/transfer specs live in `core/tests`; covers the geometry boundary that TS can't easily exercise.
+- **TS unit:** Vitest runs against the same `vite-plugin-wasm` config so wasm-pack's bundler-target output resolves identically to runtime. `tests/*.test.ts` cover `store`, `selection`, `paint`, `clipboard`, `symmetry`, `storage`, `history`, `pattern`, `types`. jsdom is opt-in per-file via `// @vitest-environment jsdom`. — **Claude's choice**
+- **TS properties:** `tests/properties.test.ts` uses `fast-check` to assert invariants over random inputs (pack/unpack round-trips, lift-then-anchor identity, `applySelectionMod` add idempotence, wand colour + 4-connectivity, history undo/redo balance). Each property runs 100 generated inputs per execution; counter-examples shrink to minimal failing cases. Mutation-tested: zeroing the lifted-pixel capture in `liftCells` causes the identity property to fail on the first random input, confirming the tests aren't vacuous. — **Claude's choice**
+- **E2E:** Playwright (pinned to 1.59.1 to match `playwright-driver`'s browsers version in current nixpkgs) drives a `vite preview` build. Tests in `e2e/*.spec.ts` cover boot, tool switching, paint pixel verification (via `getImageData`), selection / move / copy / cut / paste flows, symmetry, edit popover. `render.ts` exposes the latest canvas matrix on `window.__test_matrix__` so cell-relative clicks don't need to inspect view state. — **Claude's choice**
+- Root `test` script chains all three: `bun run test` → cargo + vitest + playwright. — **Claude's choice**

@@ -4,6 +4,14 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 **your decision** = decided by the user. **Claude's choice** = proposed and implemented without explicit instruction. **joint** = discussed and decided together.
 
+## Glossary
+
+- **Float** — a "lifted" layer sitting above the canvas. Selecting always lifts: the canvas at the selected cells is reset to natural baseline and the original pixel values move into the float. The float renders on top at a (`dx`, `dy`) offset.
+- **Lift** — the verb. The cells leave the canvas and enter the float; canvas cuts to baseline.
+- **Anchor / commit** — stamping the float back into the canvas at its current offset and clearing the float. Triggered by deselect, save / export bake, canvas resize, or modify-select.
+- **Marquee** — the marching-ants outline traced around the float's shifted mask. Same thing as the visible "selection box."
+- **Stamp** — copying float pixels into canvas. Used both for "anchor" and for Move-tool drag's release write.
+
 ---
 
 ## Pattern modes
