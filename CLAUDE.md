@@ -48,7 +48,7 @@ Tests live in three layers — all three must stay green and current with the co
 
 ### Rules
 
-- **Red → green.** Write the failing test first, run it and confirm it fails for the *expected* reason, then implement until it passes. Applies to both bug fixes (the test reproduces the bug) and new features (the test pins the desired behaviour). A test that lands green on the first run is suspicious — verify it would have caught the regression.
+- **Red → green. No exceptions.** Write the failing test first, run it and confirm it fails for the *expected* reason, then implement until it passes. Applies to both bug fixes (the test reproduces the bug) and new features (the test pins the desired behaviour). A test that lands green on the first run is suspicious — verify it would have caught the regression. Knowing what is broken from reading the code is not a valid reason to skip writing the test first — a test that passes vacuously (correct assertion, wrong reason) is worse than no test at all.
 - Pick the right layer: Rust for geometry, Vitest for module logic, Playwright for UX flows. A change touching more than one layer gets tests in each.
 - Renaming / removing API: update the tests in the same response. Never leave tests referencing the old shape.
 - Tests aren't optional. If a change can be tested, it should be. If it genuinely can't (e.g. visual render details), say so explicitly in the commit / PR rationale.

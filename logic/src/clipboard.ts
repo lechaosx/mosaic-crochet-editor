@@ -1,99 +1,88 @@
-// Module-level clipboard for selection pixels + mask, plus the three
-// operations users invoke from `Ctrl+C` / `Ctrl+X` / `Ctrl+V`. Stored
-// tightly bbox-bounded with the original canvas top-left, so paste lands
-// at the same visual position. In-memory only — never persisted to
-// localStorage, never written to `.mcw`.
+// Module-level clipboard for selection pixels, plus the three operations
+// users invoke from `Ctrl+C` / `Ctrl+X` / `Ctrl+V`. The clipboard stores a
+// compact Float (bbox-bounded at original canvas coords). In-memory only —
+// never persisted to localStorage, never written to `.mcw`.
 
 import { Float } from "./types";
-import { Store, visiblePixels } from "./store";
-import { cutCells, shiftedFloatMask, anchorFloat, deleteFloat } from "./selection";
+import { Store } from "./store";
+import { cutCells, anchorFloat, deleteFloat } from "./selection";
 
-interface ClipboardData {
-    pixels:  Uint8Array;
-    mask:    Uint8Array;
-    w:       number;
-    h:       number;
-    originX: number;
-    originY: number;
-}
-let clipboard: ClipboardData | null = null;
+// The clipboard is just a Float snapshot.
+let clipboard: Float | null = null;
 
-// Capture the current float (bbox-bounded, in canvas coords) into the
-// clipboard. Returns `false` if there's no float to capture. Does NOT
-// mutate canvas or float — pairs with copy/cut's separate canvas effect.
+// Capture the float into the clipboard. The float is already bbox-bounded
+// with absolute coords, so we just copy it. Returns false if no float.
 function yankFloat(store: Store): boolean {
     const f = store.state.float;
-    if (!f) return false;
-    const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
-    let minX = W, minY = H, maxX = -1, maxY = -1;
-    for (let sy = 0; sy < H; sy++) {
-        for (let sx = 0; sx < W; sx++) {
-            if (f.mask[sy * W + sx] === 0) continue;
-            const cx = sx + f.dx, cy = sy + f.dy;
-            if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
-            if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-        }
-    }
-    if (maxX < 0) return false;
-    const bw = maxX - minX + 1, bh = maxY - minY + 1;
-    const cbPixels = new Uint8Array(bw * bh);
-    const cbMask   = new Uint8Array(bw * bh);
-    for (let sy = 0; sy < H; sy++) {
-        for (let sx = 0; sx < W; sx++) {
-            if (f.mask[sy * W + sx] === 0) continue;
-            const cx = sx + f.dx, cy = sy + f.dy;
-            const bx = cx - minX, by = cy - minY;
-            cbPixels[by * bw + bx] = f.pixels[sy * W + sx];
-            cbMask[by * bw + bx]   = 1;
-        }
-    }
-    clipboard = { pixels: cbPixels, mask: cbMask, w: bw, h: bh, originX: minX, originY: minY };
+    if (!f || !f.pixels.some(v => v !== 0)) return false;
+    clipboard = { x: f.x, y: f.y, w: f.w, h: f.h, pixels: f.pixels.slice() };
     return true;
 }
 
-// Copy: yank to clipboard AND stamp the float into the base canvas at its
-// current position. The float stays alive on top — the user can keep
-// moving it; the stamp is "I'm OK with this content being here too."
+// Copy: yank to clipboard. Non-destructive — canvas and float are unchanged.
 export function copyFloat(store: Store): void {
-    if (!yankFloat(store)) return;
-    const newPixels = visiblePixels(store.state);
-    store.commit(s => { s.pixels = newPixels; }, { history: true });
+    yankFloat(store);
 }
 
-// Cut: yank to clipboard, clear canvas under float to baseline, drop float.
-// A follow-up `paste` brings the content back at the cut location.
+// Cut: yank to clipboard, drop float. Canvas cells are cleared to baseline only
+// when every float cell matches the underlying canvas — any mismatch means the
+// canvas is left untouched (only the float is removed).
 export function cutFloat(store: Store): void {
     if (!yankFloat(store)) return;
-    const shifted = shiftedFloatMask(store.state);
-    const cleared = cutCells(store.state.pixels, store.state.pattern, shifted);
-    store.commit(s => { s.pixels = cleared; s.float = null; }, { history: true });
+    const s = store.state;
+    const f = s.float!;
+    const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
+
+    let allMatch = true;
+    outer: for (let ly = 0; ly < f.h; ly++) {
+        for (let lx = 0; lx < f.w; lx++) {
+            const fv = f.pixels[ly * f.w + lx];
+            if (fv === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (cx < 0 || cx >= W || cy < 0 || cy >= H) { allMatch = false; break outer; }
+            const cv = s.pixels[cy * W + cx];
+            if (cv === 0 || cv !== fv) { allMatch = false; break outer; }
+        }
+    }
+
+    const cutMask = new Uint8Array(W * H);
+    if (allMatch) {
+        for (let ly = 0; ly < f.h; ly++)
+            for (let lx = 0; lx < f.w; lx++) {
+                const fv = f.pixels[ly * f.w + lx];
+                if (fv === 0) continue;
+                const cx = f.x + lx, cy = f.y + ly;
+                if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+                if (s.pixels[cy * W + cx] !== 0) cutMask[cy * W + cx] = 1;
+            }
+    }
+
+    const cleared = cutCells(s.pixels, s.pattern, cutMask);
+    store.commit(state => { state.pixels = cleared; state.float = null; }, { history: true });
 }
 
-// Paste from the clipboard at its original canvas coords as a
-// non-destructive uncut float — `pixels` underneath stays put. Anchors
-// any prior float first (separate snapshot). Caller is responsible for
-// switching to the Move tool (we don't import the UI from here).
+// Paste: non-destructive float at original canvas coords. Anchors any prior
+// float first. Cells that land on holes are dropped.
 export function pasteClipboard(store: Store): boolean {
     if (!clipboard) return false;
     if (store.state.float) anchorFloat(store);
 
     const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
-    const mask   = new Uint8Array(W * H);
-    const pixels = new Uint8Array(W * H);
+    const fp = new Uint8Array(clipboard.w * clipboard.h);
     let any = false;
-    for (let dy = 0; dy < clipboard.h; dy++) {
-        for (let dx = 0; dx < clipboard.w; dx++) {
-            if (clipboard.mask[dy * clipboard.w + dx] === 0) continue;
-            const cx = clipboard.originX + dx, cy = clipboard.originY + dy;
+    for (let ly = 0; ly < clipboard.h; ly++) {
+        for (let lx = 0; lx < clipboard.w; lx++) {
+            const v = clipboard.pixels[ly * clipboard.w + lx];
+            if (v === 0) continue;
+            const cx = clipboard.x + lx, cy = clipboard.y + ly;
             if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
             if (store.state.pixels[cy * W + cx] === 0) continue;   // hole — drop
-            mask[cy * W + cx]   = 1;
-            pixels[cy * W + cx] = clipboard.pixels[dy * clipboard.w + dx];
+            fp[ly * clipboard.w + lx] = v;
             any = true;
         }
     }
     if (!any) return false;
-    const newFloat: Float = { mask, pixels, dx: 0, dy: 0 };
+    const newFloat: Float = { x: clipboard.x, y: clipboard.y, w: clipboard.w, h: clipboard.h, pixels: fp };
     store.commit(s => { s.float = newFloat; }, { history: true });
     return true;
 }

@@ -18,6 +18,7 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         hlOpacity: 100,
         invalidIntensity: 65,
         float: null,
+        library: [],
         labelsVisible: true,
         lockInvalid: false,
         rotation: 0,
@@ -37,16 +38,17 @@ export function filledPixels(W: number, H: number, value: 1 | 2): Uint8Array {
     return p;
 }
 
-export function makeFloat(
-    W: number, H: number,
-    cells: { x: number; y: number; v: 1 | 2 }[],
-    dx = 0, dy = 0,
-): Float {
-    const mask = new Uint8Array(W * H);
-    const pixels = new Uint8Array(W * H);
-    for (const { x, y, v } of cells) {
-        mask[y * W + x] = 1;
-        pixels[y * W + x] = v;
+// Build a Float from a list of absolute cell positions + values.
+// Bounding box is auto-computed from the cells.
+export function makeFloat(cells: { x: number; y: number; v: 1 | 2 }[]): Float {
+    if (cells.length === 0) throw new Error("makeFloat: no cells");
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const { x, y } of cells) {
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
     }
-    return { mask, pixels, dx, dy };
+    const w = maxX - minX + 1, h = maxY - minY + 1;
+    const pixels = new Uint8Array(w * h);
+    for (const { x, y, v } of cells) pixels[(y - minY) * w + (x - minX)] = v;
+    return { x: minX, y: minY, w, h, pixels };
 }

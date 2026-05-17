@@ -20,26 +20,26 @@ describe("visiblePixels", () => {
     test("with float at dx=dy=0: stamps mask cells onto canvas", () => {
         const s = rowSession(3, 3, {
             pixels: filledPixels(3, 3, 1),
-            float: makeFloat(3, 3, [{ x: 0, y: 0, v: 2 }]),
+            float: makeFloat([{ x: 0, y: 0, v: 2 }]),
         });
         const out = visiblePixels(s);
         expect(out[0]).toBe(2);
     });
 
-    test("with offset: stamps at (source + offset)", () => {
+    test("with offset: stamps at canvas position (absolute coords)", () => {
         const s = rowSession(3, 3, {
             pixels: filledPixels(3, 3, 1),
-            float: makeFloat(3, 3, [{ x: 0, y: 0, v: 2 }], 1, 1),
+            float: makeFloat([{ x: 1, y: 1, v: 2 }]),
         });
         const out = visiblePixels(s);
-        expect(out[0 * 3 + 0]).toBe(1);   // source position unchanged in `pixels` (this fn doesn't touch base)
-        expect(out[1 * 3 + 1]).toBe(2);   // stamped at (0+1, 0+1)
+        expect(out[0 * 3 + 0]).toBe(1);   // (0,0) untouched
+        expect(out[1 * 3 + 1]).toBe(2);   // stamped at (1,1)
     });
 
     test("off-canvas destinations drop", () => {
         const s = rowSession(3, 3, {
             pixels: filledPixels(3, 3, 1),
-            float: makeFloat(3, 3, [{ x: 0, y: 0, v: 2 }], 10, 10),
+            float: makeFloat([{ x: 10, y: 10, v: 2 }]),
         });
         const out = visiblePixels(s);
         expect(out[0]).toBe(1);   // canvas unchanged everywhere
@@ -49,8 +49,8 @@ describe("visiblePixels", () => {
     test("pixels=0 cells in the float skip stamping (cut-content marquee)", () => {
         const s = rowSession(3, 3, {
             pixels: filledPixels(3, 3, 1),
-            // mask=1 but pixels=0 — won't stamp; canvas stays as is.
-            float: { mask: new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0, 0]), pixels: new Uint8Array(9), dx: 0, dy: 0 },
+            // Float at (0,0) with pixels=0 (absent) — won't stamp; canvas stays as is.
+            float: { x: 0, y: 0, w: 1, h: 1, pixels: new Uint8Array([0]) },
         });
         const out = visiblePixels(s);
         expect(out[0]).toBe(1);

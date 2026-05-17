@@ -35,7 +35,7 @@ describe("historySave / historyReset", () => {
     test("float changes are part of the dedupe key — pushing a float pushes a snapshot", () => {
         const s = rowSession(3, 3);
         historyReset(s);
-        historySave({ ...s, float: makeFloat(3, 3, [{ x: 0, y: 0, v: 1 }]) });
+        historySave({ ...s, float: makeFloat([{ x: 0, y: 0, v: 1 }]) });
         expect(canUndo()).toBe(true);
     });
 });

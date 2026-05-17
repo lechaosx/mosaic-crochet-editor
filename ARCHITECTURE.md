@@ -176,7 +176,7 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 
 ## Testing
 
-- **Rust:** `cargo test` (156 tests). Per-tool BFS/flood/wand/cut/transfer specs live in `core/tests`; covers the geometry boundary that TS can't easily exercise.
+- **Rust:** `cargo test` (160 tests). Per-tool BFS/flood/wand/cut/transfer specs live in `core/tests`; covers the geometry boundary that TS can't easily exercise.
 - **Logic unit + properties:** `logic/tests/` — Vitest with `vite-plugin-wasm`, no jsdom. Covers `store`, `selection`, `paint`, `clipboard`, `symmetry`, `storage`, `pattern`, `types` + cross-feature interaction tests. `properties.test.ts` uses `fast-check` for invariants over random inputs (pack/unpack round-trips, lift-anchor identity, `applySelectionMod` add idempotence, wand BFS, history undo/redo balance). — **Claude's choice**
 - **Web IO unit:** `web/tests/` — Vitest with jsdom. Covers `history.ts` (localStorage-backed undo) and `storage-io.ts` (localStorage persistence). jsdom required for `localStorage`. — **Claude's choice**
 - **Logic mutation:** Stryker with the vitest runner (`bun run test:mutation`) — ~780-mutant sweep across `logic/src/`, ~20s, 81% score. The script uses `node node_modules/.bin/stryker run`: Stryker's instrumenter relies on Node's CJS-default unwrap which Bun omits per the ESM spec, so Node must execute it. `nodejs` is pulled in via `flake.nix` for that reason. — **joint**

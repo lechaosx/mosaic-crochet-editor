@@ -11,7 +11,7 @@ import { liftCells, anchorIntoCanvas, applySelectionMod } from "../src/selection
 import { Store, visiblePixels } from "../src/store";
 import { wand_select } from "@mosaic/wasm";
 import { rowSession } from "./_helpers";
-import type { PatternState, Float } from "../src/types";
+import type { PatternState } from "../src/types";
 
 // ── Arbitraries ──────────────────────────────────────────────────────────────
 
@@ -60,27 +60,24 @@ describe("pack/unpack round-trips", () => {
         }));
     });
 
-    test("packFloat/unpackFloat: mask + masked pixels + offset preserved", () => {
-        fc.assert(fc.property(
-            rowPatternWithPixelsAndMask,
-            fc.integer({ min: -20, max: 20 }),
-            fc.integer({ min: -20, max: 20 }),
-            ({ pattern, pixels, mask }, dx, dy) => {
-                const W = pattern.canvasWidth, H = pattern.canvasHeight;
-                const f: Float = { mask, pixels, dx, dy };
-                const out = unpackFloat(packFloat(f), W * H);
-                if (out.dx !== dx || out.dy !== dy) return false;
-                for (let i = 0; i < W * H; i++) {
-                    if (out.mask[i] !== mask[i]) return false;
-                    if (mask[i]) {
-                        if (out.pixels[i] !== pixels[i]) return false;
-                    } else {
-                        if (out.pixels[i] !== 0) return false;
-                    }
-                }
-                return true;
-            },
-        ));
+    test("packFloat/unpackFloat: x/y/w/h/pixels preserved", () => {
+        const arbFloat = fc.tuple(
+            fc.integer({ min: -20, max: 20 }),   // x
+            fc.integer({ min: -20, max: 20 }),   // y
+            fc.integer({ min: 1,   max: 15  }),  // w
+            fc.integer({ min: 1,   max: 15  }),  // h
+        ).chain(([x, y, w, h]) =>
+            fc.array(fc.constantFrom<0 | 1 | 2>(0, 1, 2), { minLength: w * h, maxLength: w * h })
+              .map(arr => ({ x, y, w, h, pixels: Uint8Array.from(arr) }))
+        );
+        fc.assert(fc.property(arbFloat, f => {
+            const out = unpackFloat(packFloat(f));
+            if (out.x !== f.x || out.y !== f.y || out.w !== f.w || out.h !== f.h) return false;
+            for (let i = 0; i < f.pixels.length; i++) {
+                if (out.pixels[i] !== f.pixels[i]) return false;
+            }
+            return true;
+        }));
     });
 });
 
@@ -106,22 +103,36 @@ describe("lift / anchor", () => {
             const W = pattern.canvasWidth, H = pattern.canvasHeight;
             const s1 = new Store(rowSession(W, H, { pattern, pixels }));
             applySelectionMod(s1, mask, "add");
-            const after1 = {
-                pixels: s1.state.pixels.slice(),
-                mask:   s1.state.float ? s1.state.float.mask.slice() : null,
-            };
+            // Capture present-cell set after first add.
+            const after1Pixels = s1.state.pixels.slice();
+            const f1 = s1.state.float;
+            const after1Float = f1 ? { x: f1.x, y: f1.y, w: f1.w, h: f1.h, pixels: f1.pixels.slice() } : null;
+
             applySelectionMod(s1, mask, "add");
-            const after2 = {
-                pixels: s1.state.pixels.slice(),
-                mask:   s1.state.float ? s1.state.float.mask.slice() : null,
-            };
+            const after2Pixels = s1.state.pixels.slice();
+            const f2 = s1.state.float;
+            const after2Float = f2 ? { x: f2.x, y: f2.y, w: f2.w, h: f2.h, pixels: f2.pixels.slice() } : null;
+
             for (let i = 0; i < W * H; i++) {
-                if (after1.pixels[i] !== after2.pixels[i]) return false;
+                if (after1Pixels[i] !== after2Pixels[i]) return false;
             }
-            if ((after1.mask === null) !== (after2.mask === null)) return false;
-            if (after1.mask && after2.mask) {
-                for (let i = 0; i < W * H; i++) {
-                    if (after1.mask[i] !== after2.mask[i]) return false;
+            if ((after1Float === null) !== (after2Float === null)) return false;
+            if (after1Float && after2Float) {
+                // Compare present cells in canvas space.
+                for (let y = 0; y < H; y++) {
+                    for (let x = 0; x < W; x++) {
+                        const in1 = (() => {
+                            const lx = x - after1Float.x, ly = y - after1Float.y;
+                            if (lx < 0 || lx >= after1Float.w || ly < 0 || ly >= after1Float.h) return 0;
+                            return after1Float.pixels[ly * after1Float.w + lx];
+                        })();
+                        const in2 = (() => {
+                            const lx = x - after2Float.x, ly = y - after2Float.y;
+                            if (lx < 0 || lx >= after2Float.w || ly < 0 || ly >= after2Float.h) return 0;
+                            return after2Float.pixels[ly * after2Float.w + lx];
+                        })();
+                        if (in1 !== in2) return false;
+                    }
                 }
             }
             return true;

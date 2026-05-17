@@ -11,7 +11,7 @@ import {
     build_highlight_plan_row,
     build_highlight_plan_round,
 } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey, Float } from "./types";
+import { Tool, PatternState, SymKey, Float, LibItem } from "./types";
 
 export interface SessionState {
     pattern:       PatternState;
@@ -23,12 +23,13 @@ export interface SessionState {
     symmetry:      Set<SymKey>;          // directly active axes
     hlOpacity:        number;            // 0..100, matches the input range
     invalidIntensity: number;            // 0..100, drives ! marker saturation
-    // The lifted-selection layer. When present, `pixels` carries the canvas
-    // with the float's mask cells reset to natural baseline (cut on lift);
-    // `float.pixels` carries the lifted values, stamped at offset `(dx, dy)`
-    // on render. Commit (deselect / tool switch / etc.) writes the lifted
-    // pixels into `pixels` at the offset position and clears the float.
+    // The active lifted-selection layer (on or near canvas). When present,
+    // `pixels` carries the canvas with the float's cells cut to natural
+    // baseline; `float.pixels` stamps back on top at render. Commit writes
+    // lifted pixels back into the canvas and clears the float.
     float:         Float | null;
+    // Floats parked in the off-canvas scratch area.
+    library:       LibItem[];
     labelsVisible: boolean;
     lockInvalid:   boolean;
     rotation:      number;               // degrees (target — render.ts animates the visual)
@@ -58,25 +59,23 @@ export function forEachCell(W: number, H: number, fn: (x: number, y: number) => 
             fn(x, y);
 }
 
-// The visible canvas: `pixels` with `float` stamped at its current offset.
-// Off-canvas and over-hole destinations drop. A mask cell whose lifted
-// value is 0 means "selected, no content" (e.g., after cut) — those skip
-// stamping so the float doesn't punch holes into the canvas.
+// The visible canvas: `pixels` with `float` stamped at its absolute position.
+// Off-canvas float cells and holes are skipped.
 export function visiblePixels(s: Readonly<SessionState>): Uint8Array {
     if (!s.float) return s.pixels;
     const { canvasWidth: W, canvasHeight: H } = s.pattern;
-    const { mask, pixels: lifted, dx: fdx, dy: fdy } = s.float;
+    const f = s.float;
     const out = s.pixels.slice();
-    forEachCell(W, H, (sx, sy) => {
-        if (mask[sy * W + sx] === 0) return;
-        const v = lifted[sy * W + sx];
-        if (v === 0) return;   // empty mask cell (cut content)
-        const tx = sx + fdx, ty = sy + fdy;
-        if (outOfBounds(tx, ty, W, H)) return;
-        const ti = ty * W + tx;
-        if (out[ti] === 0) return;   // skip holes
-        out[ti] = v;
-    });
+    for (let ly = 0; ly < f.h; ly++) {
+        for (let lx = 0; lx < f.w; lx++) {
+            const v = f.pixels[ly * f.w + lx];
+            if (v === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (outOfBounds(cx, cy, W, H)) continue;
+            if (out[cy * W + cx] === 0) continue;   // hole
+            out[cy * W + cx] = v;
+        }
+    }
     return out;
 }
 

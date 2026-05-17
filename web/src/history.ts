@@ -7,13 +7,13 @@ import { PatternState, Float } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 
-const LS_KEY = "mosaic-history-v3";
+const LS_KEY = "mosaic-history-v4";
 const MAX    = 64;
 
 interface Snapshot {
     state:   PatternState;
     pixels:  string;             // 1-bit-packed, base64
-    float:   PackedFloat | null; // serialised float (mask + lifted + offset)
+    float:   PackedFloat | null; // bbox-compact float (x/y/w/h + raw pixels)
     colorA:  string;
     colorB:  string;
 }
@@ -60,8 +60,6 @@ function snapshotFrom(s: Readonly<SessionState>): Snapshot {
 export function historySave(s: Readonly<SessionState>) {
     const h    = read() ?? { snapshots: [], index: -1 };
     const snap = snapshotFrom(s);
-    // Skip redundant snapshots — same packed pixels, float, colours, and
-    // dims as the current head means nothing user-visible has changed.
     const head = h.index >= 0 ? h.snapshots[h.index] : null;
     if (head && head.pixels === snap.pixels
             && JSON.stringify(head.float) === JSON.stringify(snap.float)
@@ -80,8 +78,6 @@ export function historyReset(s: Readonly<SessionState>) {
     write({ snapshots: [snapshotFrom(s)], index: 0 });
 }
 
-// Seed history with the current state iff it's empty. Used on session restore
-// so existing snapshots survive a refresh untouched.
 export function historyEnsureInitialized(s: Readonly<SessionState>) {
     const h = read();
     if (!h || h.snapshots.length === 0) historyReset(s);
@@ -90,9 +86,6 @@ export function historyEnsureInitialized(s: Readonly<SessionState>) {
 export function canUndo(): boolean { const h = read(); return h !== null && h.index > 0; }
 export function canRedo(): boolean { const h = read(); return h !== null && h.index < h.snapshots.length - 1; }
 
-// Snapshots carry pattern + pixels + float + colours — the rest of
-// SessionState (tool / settings / view) is unchanged by undo/redo. Caller
-// merges these fields into the live session.
 export interface Restored {
     pattern: PatternState;
     pixels:  Uint8Array;
@@ -103,18 +96,15 @@ export interface Restored {
 
 function restoredAt(h: HistoryBlob): Restored {
     const s = h.snapshots[h.index];
-    const cells = s.state.canvasWidth * s.state.canvasHeight;
     return {
         pattern: s.state,
         pixels:  unpackPixels(s.pixels, s.state),
-        float:   s.float ? unpackFloat(s.float, cells) : null,
+        float:   s.float ? unpackFloat(s.float) : null,
         colorA:  s.colorA,
         colorB:  s.colorB,
     };
 }
 
-// Read the current head without moving the index — used as the "save point"
-// for the Edit popover (live preview reverts back to this on no-op close).
 export function historyPeek(): Restored | null {
     const h = read();
     if (!h || h.index < 0) return null;

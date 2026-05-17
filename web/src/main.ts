@@ -17,6 +17,37 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
 import { copyFloat, cutFloat, pasteClipboard } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 
+// Clip a float to only the cells that are within canvas bounds.
+// Returns null when ALL cells are out of bounds (caller should destroy the float).
+// Returns the original float object (no allocation) when nothing needs clipping.
+function clipFloatToCanvas(
+    f: import("@mosaic/logic/types").Float, W: number, H: number,
+): import("@mosaic/logic/types").Float | null {
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let ly = 0; ly < f.h; ly++) {
+        for (let lx = 0; lx < f.w; lx++) {
+            if (f.pixels[ly * f.w + lx] === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+            if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+            if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+        }
+    }
+    if (maxX < 0) return null;   // all out of bounds
+    if (minX === f.x && minY === f.y && maxX === f.x + f.w - 1 && maxY === f.y + f.h - 1) return f;
+    const fw = maxX - minX + 1, fh = maxY - minY + 1;
+    const fp = new Uint8Array(fw * fh);
+    for (let ly = 0; ly < f.h; ly++)
+        for (let lx = 0; lx < f.w; lx++) {
+            const v = f.pixels[ly * f.w + lx];
+            if (v === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+            fp[(cy - minY) * fw + (cx - minX)] = v;
+        }
+    return { x: minX, y: minY, w: fw, h: fh, pixels: fp };
+}
+
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
@@ -28,6 +59,7 @@ function defaultSession(): SessionState {
     return {
         pattern:       { mode: "row", canvasWidth: 9, canvasHeight: 9 },
         pixels:        new Uint8Array(81),
+        library:       [],
         colorA:        "#000000",
         colorB:        "#ffffff",
         activeTool:    "pencil",
@@ -100,7 +132,8 @@ type Gesture =
         preFloat: Float | null;
       };
 let gesture: Gesture | null = null;
-let maskArrowStamped = false;   // stamp happens once per modifier-press (Ctrl or Alt + Arrow)
+let maskArrowStamped    = false;          // stamp happens once per modifier-press
+let maskArrowPreFloat: import("@mosaic/logic/types").Float | null = null; // shape before zeroing (Alt+Arrow)
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -176,17 +209,17 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
 
     // Split paint result back into canvas + float.
     if (s.float) {
-        const newFloatPixels = s.float.pixels.slice();
-        const { mask, dx: fdx, dy: fdy } = s.float;
-        for (let sy = 0; sy < H; sy++) {
-            for (let sx = 0; sx < W; sx++) {
-                if (mask[sy * W + sx] === 0) continue;
-                const cx = sx + fdx, cy = sy + fdy;
+        const f = s.float;
+        const newFP = f.pixels.slice();
+        for (let ly = 0; ly < f.h; ly++) {
+            for (let lx = 0; lx < f.w; lx++) {
+                if (f.pixels[ly * f.w + lx] === 0) continue;
+                const cx = f.x + lx, cy = f.y + ly;
                 if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
-                newFloatPixels[sy * W + sx] = next[cy * W + cx];
+                newFP[ly * f.w + lx] = next[cy * W + cx];
             }
         }
-        const newFloat = Float.withPixels(s.float, newFloatPixels);
+        const newFloat = { ...f, pixels: newFP };
         store.commit(state => { state.float = newFloat; });
     } else {
         const newPixels = next;
@@ -433,16 +466,18 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             let prePixels: Uint8Array | null = null;
             const preFloat = store.state.float;
             if (mode === "mask-only" && preFloat) {
-                // Stamp the float into the canvas at its current position
-                // FIRST so the lifted content isn't lost when we clear the
-                // float's pixels. Then empty the float — during the drag
-                // the marquee moves but content is invisible (zero pixels
-                // skip stamping in `visiblePixels`). Release lifts cells
-                // from the canvas at the new position.
+                const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+                const clipped = clipFloatToCanvas(preFloat, W, H);
+                if (!clipped) {
+                    // Float entirely off-canvas — destroy it, don't start a drag.
+                    store.commit(s => { s.float = null; }, { history: true });
+                    return;
+                }
                 prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
-                const emptied = Float.withPixels(preFloat, new Uint8Array(preFloat.pixels.length));
-                store.commit(s => { s.pixels = stamped; s.float = emptied; }, { persist: false });
+                store.commit(s => { s.pixels = stamped; s.float = clipped; }, { persist: false });
+                gesture = { kind: "move", mode, drag: null, prePixels, preFloat: clipped };
+                return;
             } else if (mode === "duplicate" && preFloat) {
                 // Pre-stamp the float into canvas so the duplicate is
                 // visible throughout the drag.
@@ -493,18 +528,37 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 // float lives until explicit deselect / Ctrl+A / modify-select
                 // / etc., so a stray click can't accidentally anchor it.
                 if (!f) return;
-                const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
-                const sx = p.x - f.dx, sy = p.y - f.dy;
-                const insideFloat = sx >= 0 && sx < W && sy >= 0 && sy < H && f.mask[sy * W + sx] === 1;
+                const lx = p.x - f.x, ly = p.y - f.y;
+                const insideFloat = lx >= 0 && lx < f.w && ly >= 0 && ly < f.h && f.pixels[ly * f.w + lx] !== 0;
                 if (!insideFloat) return;
-                gesture.drag = { anchorX: p.x, anchorY: p.y, startDx: f.dx, startDy: f.dy };
+                gesture.drag = { anchorX: p.x, anchorY: p.y, startDx: f.x, startDy: f.y };
                 return;
             }
             if (!f) { gesture.drag = null; return; }
-            const newDx = gesture.drag.startDx + (p.x - gesture.drag.anchorX);
-            const newDy = gesture.drag.startDy + (p.y - gesture.drag.anchorY);
-            if (newDx !== f.dx || newDy !== f.dy) {
-                store.commit(s => { s.float = Float.shifted(f, newDx, newDy); }, { persist: false });
+            const rawX = gesture.drag.startDx + (p.x - gesture.drag.anchorX);
+            const rawY = gesture.drag.startDy + (p.y - gesture.drag.anchorY);
+            const isMaskOnly = gesture.mode === "mask-only" && gesture.preFloat !== null;
+            const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
+            const newX = isMaskOnly ? Math.max(0, Math.min(W - f.w, rawX)) : rawX;
+            const newY = isMaskOnly ? Math.max(0, Math.min(H - f.h, rawY)) : rawY;
+            if (newX !== f.x || newY !== f.y) {
+                if (isMaskOnly) {
+                    // Mirror canvas content at the new position into float.pixels
+                    // so visiblePixels stays a no-op and the marquee shows the shape.
+                    const pf = gesture.preFloat!;
+                    const newFP = new Uint8Array(pf.w * pf.h);
+                    for (let ly = 0; ly < pf.h; ly++) {
+                        for (let lx = 0; lx < pf.w; lx++) {
+                            if (pf.pixels[ly * pf.w + lx] === 0) continue;
+                            const cx = newX + lx, cy = newY + ly;
+                            if (cx >= 0 && cx < W && cy >= 0 && cy < H)
+                                newFP[ly * pf.w + lx] = store.state.pixels[cy * W + cx];
+                        }
+                    }
+                    store.commit(s => { if (s.float) s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; }, { persist: false });
+                } else {
+                    store.commit(s => { if (s.float) s.float = { ...s.float, x: newX, y: newY }; }, { persist: false });
+                }
             }
             return;
         }
@@ -543,9 +597,8 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         if (gesture.kind === "move") {
             if (!gesture.drag) { gesture = null; return; }
             if (gesture.mode === "mask-only" && store.state.float) {
-                // The float has been moving with empty pixels. Now lift the
-                // canvas content at the float's current shifted position —
-                // same shape as a fresh rect-select at the marquee's end.
+                // float.pixels mirrors canvas at current position — shiftedFloatMask
+                // gives the correct lift shape directly.
                 const shifted = shiftedFloatMask(store.state);
                 const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
                 store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
@@ -644,7 +697,7 @@ document.addEventListener("keydown", e => {
                     maskArrowStamped = true;
                 }
                 if (state.float)
-                    state.float = { ...state.float, dx: state.float.dx + ddx, dy: state.float.dy + ddy };
+                    state.float = { ...state.float, x: state.float.x + ddx, y: state.float.y + ddy };
             }, { history: !e.repeat });
         }
         return;
@@ -657,12 +710,31 @@ document.addEventListener("keydown", e => {
             const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
             store.commit(state => {
                 if (!maskArrowStamped && state.float) {
+                    const W = state.pattern.canvasWidth, H = state.pattern.canvasHeight;
                     state.pixels = visiblePixels(state);
-                    state.float  = { ...state.float, pixels: new Uint8Array(state.float.pixels.length) };
-                    maskArrowStamped = true;
+                    const clipped = clipFloatToCanvas(state.float, W, H);
+                    if (!clipped) { state.float = null; return; }   // entirely off-canvas — destroy
+                    state.float = clipped;
+                    maskArrowPreFloat = clipped;
+                    maskArrowStamped  = true;
                 }
-                if (state.float)
-                    state.float = { ...state.float, dx: state.float.dx + ddx, dy: state.float.dy + ddy };
+                if (state.float && maskArrowPreFloat) {
+                    const pf = maskArrowPreFloat;
+                    const W = state.pattern.canvasWidth, H = state.pattern.canvasHeight;
+                    const rawX = state.float.x + ddx, rawY = state.float.y + ddy;
+                    const newX = Math.max(0, Math.min(W - pf.w, rawX));
+                    const newY = Math.max(0, Math.min(H - pf.h, rawY));
+                    const newFP = new Uint8Array(pf.w * pf.h);
+                    for (let ly = 0; ly < pf.h; ly++) {
+                        for (let lx = 0; lx < pf.w; lx++) {
+                            if (pf.pixels[ly * pf.w + lx] === 0) continue;
+                            const cx = newX + lx, cy = newY + ly;
+                            if (cx >= 0 && cx < W && cy >= 0 && cy < H)
+                                newFP[ly * pf.w + lx] = state.pixels[cy * W + cx];
+                        }
+                    }
+                    state.float = { ...state.float, x: newX, y: newY, pixels: newFP };
+                }
             }, { history: !e.repeat });
         }
         return;
@@ -682,7 +754,7 @@ document.addEventListener("keydown", e => {
         const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
         const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
         store.commit(state => {
-            state.float = { ...state.float!, dx: state.float!.dx + ddx, dy: state.float!.dy + ddy };
+            state.float = { ...state.float!, x: state.float!.x + ddx, y: state.float!.y + ddy };
         }, { history: !e.repeat });
         return;
     }
@@ -708,21 +780,19 @@ document.addEventListener("keydown", e => {
 document.addEventListener("keyup", e => {
     if (e.key === "Control" || e.key === "Meta" || e.key === "Alt") {
         if (e.key === "Alt" && maskArrowStamped && store.state.float) {
-            // Float pixels were zeroed by Alt+Arrow mask-only ops — re-lift canvas
-            // at the marquee's current display position, same as Alt+drag release.
-            if (!store.state.float.pixels.some(v => v !== 0)) {
-                const shifted = shiftedFloatMask(store.state);
-                const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
-                store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
-            }
+            // float.pixels mirrors canvas at final position — shiftedFloatMask correct.
+            const shifted = shiftedFloatMask(store.state);
+            const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
+            store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
         }
-        maskArrowStamped = false;
+        maskArrowStamped  = false;
+        maskArrowPreFloat = null;
     }
 });
 
 window.addEventListener("blur", () => {
-    // On blur we can't distinguish which modifier was held, so just clear state.
-    maskArrowStamped = false;
+    maskArrowStamped  = false;
+    maskArrowPreFloat = null;
 });
 
 // Force the Edit popover to commit its live preview (via its `toggle`
