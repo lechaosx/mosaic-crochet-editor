@@ -172,16 +172,6 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         symMask, shifted,
     });
 
-    // Clip cells outside the float mask back to `before`. Skipped for
-    // overlay — its painted cell is the inward neighbour, and the click-
-    // cell gate above already covered user intent.
-    if (tool !== "overlay" && shifted) {
-        const clipped = next.slice();
-        for (let i = 0; i < clipped.length; i++) {
-            if (shifted[i] === 0) clipped[i] = before[i];
-        }
-        next = clipped;
-    }
     if (s.lockInvalid) next = lockAlwaysInvalid(pattern, before, next);
 
     // Split paint result back into canvas + float.

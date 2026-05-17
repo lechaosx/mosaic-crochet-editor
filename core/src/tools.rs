@@ -42,13 +42,13 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, mask: u8) -> Vec
     visited.into_iter().collect()
 }
 
-pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, mask: u8) -> Vec<u8> {
+pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, mask: u8, selection: &[u8]) -> Vec<u8> {
     let mut result = pixels.to_vec();
     for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
         let idx = (sy * width + sx) as usize;
-        if result[idx] != 0 {
-            result[idx] = color;
-        }
+        if result[idx] == 0 { continue; }
+        if !selection.is_empty() && selection[idx] == 0 { continue; }
+        result[idx] = color;
     }
     result
 }
@@ -79,12 +79,13 @@ pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color
 
 pub fn paint_natural_row(
     pixels: &[u8], width: i32, height: i32,
-    x: i32, y: i32, mask: u8, invert: bool,
+    x: i32, y: i32, mask: u8, invert: bool, selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
     for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
         let idx = (sy * width + sx) as usize;
         if result[idx] == COLOR_TRANSPARENT { continue; }
+        if !selection.is_empty() && selection[idx] == 0 { continue; }
         let nat = natural_color_row(height, sy);
         result[idx] = if invert { opposite_color(nat) } else { nat };
     }
@@ -96,7 +97,7 @@ pub fn paint_natural_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, mask: u8, invert: bool,
+    x: i32, y: i32, mask: u8, invert: bool, selection: &[u8],
 ) -> Vec<u8> {
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset       = IVec2::new(offset_x,      offset_y);
@@ -104,6 +105,7 @@ pub fn paint_natural_round(
     for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, mask) {
         let idx = (sy * canvas_width + sx) as usize;
         if result[idx] == COLOR_TRANSPARENT { continue; }
+        if !selection.is_empty() && selection[idx] == 0 { continue; }
         let nat = natural_color_round(virtual_size, offset, rounds, IVec2::new(sx, sy));
         result[idx] = if invert { opposite_color(nat) } else { nat };
     }
@@ -511,14 +513,14 @@ mod tests {
     fn paint_natural_row_restores_wrong_cell() {
         let mut pixels = row_grid(4, 4);
         pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1)); // wrong it
-        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, false);
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, false, &[]);
         assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1));
     }
 
     #[test]
     fn paint_natural_row_invert_wrongs_correct_cell() {
         let pixels = row_grid(4, 4);
-        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, true);
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, true, &[]);
         assert_eq!(out[1 * 4 + 2], opposite_color(natural_color_row(4, 1)));
     }
 
@@ -532,7 +534,7 @@ mod tests {
         let mut pixels = row_grid(4, 4);
         pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1));
         pixels[2 * 4 + 2] = opposite_color(natural_color_row(4, 2));
-        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 2, false);
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 2, false, &[]);
         assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1));
         assert_eq!(out[2 * 4 + 2], natural_color_row(4, 2));
     }
@@ -548,7 +550,7 @@ mod tests {
         pixels[4 * 9 + 1] = COLOR_A;
         // hole cell should already be 0; verify passthrough.
         assert_eq!(pixels[4 * 9 + 4], COLOR_TRANSPARENT);
-        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0, false);
+        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0, false, &[]);
         assert_eq!(out[4 * 9 + 1], COLOR_B);
         assert_eq!(out[4 * 9 + 4], COLOR_TRANSPARENT);
     }
@@ -557,7 +559,7 @@ mod tests {
     fn paint_natural_round_invert_mode() {
         let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
         // (1,4) natural is B; invert paints A.
-        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0, true);
+        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0, true, &[]);
         assert_eq!(out[4 * 9 + 1], COLOR_A);
     }
 
@@ -1070,5 +1072,51 @@ mod tests {
         assert_eq!(out[4 * 9 + 4], COLOR_TRANSPARENT);
         // (1, 4) was already natural, stays natural.
         assert_eq!(out[4 * 9 + 1], pixels[4 * 9 + 1]);
+    }
+
+    // ── selection clipping in paint functions ────────────────────────────────
+
+    #[test]
+    fn paint_pixel_skips_orbit_cells_outside_selection() {
+        // With V symmetry on 5×5, clicking (0,1) orbits to (4,1).
+        // Selection only includes (0,1) → (4,1) must not be painted.
+        let pixels = row_grid(5, 5);
+        let mut sel = vec![0u8; 25];
+        sel[1 * 5 + 0] = 1;
+        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, 1 /* V mask */, &sel);
+        assert_eq!(out[1 * 5 + 0], 2);   // selected cell painted
+        assert_eq!(out[1 * 5 + 4], pixels[1 * 5 + 4]); // mirrored cell untouched
+    }
+
+    #[test]
+    fn paint_pixel_empty_selection_paints_full_orbit() {
+        let pixels = row_grid(5, 5);
+        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, 1 /* V mask */, &[]);
+        assert_eq!(out[1 * 5 + 0], 2);
+        assert_eq!(out[1 * 5 + 4], 2); // mirror also painted (no clip)
+    }
+
+    #[test]
+    fn paint_natural_row_skips_cells_outside_selection() {
+        let mut pixels = row_grid(4, 4);
+        pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1));
+        let mut sel = vec![0u8; 16];
+        sel[1 * 4 + 2] = 1; // only (2,1) selected
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, false, &sel);
+        assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1)); // selected: restored
+    }
+
+    #[test]
+    fn paint_natural_round_skips_cells_outside_selection() {
+        let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
+        // Find a non-hole cell with a known wrong colour
+        let idx = pixels.iter().position(|&v| v != 0).unwrap();
+        let mut wrong = pixels.clone();
+        wrong[idx] = opposite_color(pixels[idx]);
+        let sel = vec![0u8; 81]; // nothing selected
+        let out = paint_natural_round(&wrong, 9, 9, 9, 9, 0, 0, 3,
+            (idx % 9) as i32, (idx / 9) as i32, 0, false, &sel);
+        // Not selected → not restored
+        assert_eq!(out[idx], wrong[idx]);
     }
 }

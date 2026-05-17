@@ -17,7 +17,7 @@
     "typecheck":     "tsc --noEmit",
     "test":          "vitest run",
     "test:watch":    "vitest",
-    "test:mutation": "node ./node_modules/@stryker-mutator/core/bin/stryker.js run"
+    "test:mutation": "node node_modules/.bin/stryker run"
   },
   "dependencies": {
     "@mosaic/wasm": "workspace:*"
