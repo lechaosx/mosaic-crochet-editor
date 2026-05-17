@@ -4,8 +4,8 @@
 // never persisted to localStorage, never written to `.mcw`.
 
 import { Float } from "./types";
-import { Store } from "./store";
-import { cutCells, anchorFloat, deleteFloat } from "./selection";
+import { Store, outOfBounds } from "./store";
+import { cutCells, matchedCutMask, anchorFloat, deleteFloat } from "./selection";
 
 // The clipboard is just a Float snapshot.
 let clipboard: Float | null = null;
@@ -25,39 +25,13 @@ export function copyFloat(store: Store): void {
 }
 
 // Cut: yank to clipboard, drop float. Canvas cells are cleared to baseline only
-// when every float cell matches the underlying canvas — any mismatch means the
-// canvas is left untouched (only the float is removed).
+// when every float cell matches the underlying canvas — any mismatch leaves
+// the canvas untouched (only the float is removed).
 export function cutFloat(store: Store): void {
     if (!yankFloat(store)) return;
     const s = store.state;
-    const f = s.float!;
-    const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
-
-    let allMatch = true;
-    outer: for (let ly = 0; ly < f.h; ly++) {
-        for (let lx = 0; lx < f.w; lx++) {
-            const fv = f.pixels[ly * f.w + lx];
-            if (fv === 0) continue;
-            const cx = f.x + lx, cy = f.y + ly;
-            if (cx < 0 || cx >= W || cy < 0 || cy >= H) { allMatch = false; break outer; }
-            const cv = s.pixels[cy * W + cx];
-            if (cv === 0 || cv !== fv) { allMatch = false; break outer; }
-        }
-    }
-
-    const cutMask = new Uint8Array(W * H);
-    if (allMatch) {
-        for (let ly = 0; ly < f.h; ly++)
-            for (let lx = 0; lx < f.w; lx++) {
-                const fv = f.pixels[ly * f.w + lx];
-                if (fv === 0) continue;
-                const cx = f.x + lx, cy = f.y + ly;
-                if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
-                if (s.pixels[cy * W + cx] !== 0) cutMask[cy * W + cx] = 1;
-            }
-    }
-
-    const cleared = cutCells(s.pixels, s.pattern, cutMask);
+    const cutMask = matchedCutMask(s.float!, s.pixels, s.pattern);
+    const cleared = cutMask ? cutCells(s.pixels, s.pattern, cutMask) : s.pixels;
     store.commit(state => { state.pixels = cleared; state.float = null; }, { history: true });
 }
 
@@ -75,7 +49,7 @@ export function pasteClipboard(store: Store): boolean {
             const v = clipboard.pixels[ly * clipboard.w + lx];
             if (v === 0) continue;
             const cx = clipboard.x + lx, cy = clipboard.y + ly;
-            if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+            if (outOfBounds(cx, cy, W, H)) continue;
             if (store.state.pixels[cy * W + cx] === 0) continue;   // hole — drop
             fp[ly * clipboard.w + lx] = v;
             any = true;

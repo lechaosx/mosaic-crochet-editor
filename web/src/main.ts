@@ -4,7 +4,7 @@ import { Tool, PatternState, SymKey, Float } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, screenToPattern, updateStatus } from "./render";
 import { applyEditSettings } from "./pattern";
-import { Store, SessionState, visiblePixels } from "@mosaic/logic/store";
+import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
 import { computeClosure, diagonalsAvailable, getSymmetryMask, pruneUnavailableDiagonals } from "@mosaic/logic/symmetry";
@@ -13,40 +13,9 @@ import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
-         deleteFloat } from "@mosaic/logic/selection";
+         deleteFloat, clipFloatToCanvas } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
-
-// Clip a float to only the cells that are within canvas bounds.
-// Returns null when ALL cells are out of bounds (caller should destroy the float).
-// Returns the original float object (no allocation) when nothing needs clipping.
-function clipFloatToCanvas(
-    f: import("@mosaic/logic/types").Float, W: number, H: number,
-): import("@mosaic/logic/types").Float | null {
-    let minX = W, minY = H, maxX = -1, maxY = -1;
-    for (let ly = 0; ly < f.h; ly++) {
-        for (let lx = 0; lx < f.w; lx++) {
-            if (f.pixels[ly * f.w + lx] === 0) continue;
-            const cx = f.x + lx, cy = f.y + ly;
-            if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
-            if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
-            if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
-        }
-    }
-    if (maxX < 0) return null;   // all out of bounds
-    if (minX === f.x && minY === f.y && maxX === f.x + f.w - 1 && maxY === f.y + f.h - 1) return f;
-    const fw = maxX - minX + 1, fh = maxY - minY + 1;
-    const fp = new Uint8Array(fw * fh);
-    for (let ly = 0; ly < f.h; ly++)
-        for (let lx = 0; lx < f.w; lx++) {
-            const v = f.pixels[ly * f.w + lx];
-            if (v === 0) continue;
-            const cx = f.x + lx, cy = f.y + ly;
-            if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
-            fp[(cy - minY) * fw + (cx - minX)] = v;
-        }
-    return { x: minX, y: minY, w: fw, h: fh, pixels: fp };
-}
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -82,14 +51,12 @@ const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
 
 // Move-tool drag mode, captured at paintdown from the modifiers:
-//   "move"       → no modifier; drag updates `float.dx/dy`, release records.
-//   "duplicate"  → Ctrl; pre-stamps the float into canvas at paintdown
-//                  (visible duplicate carried through the drag), release
-//                  records the moved float at the drag end.
-//   "mask-only"  → Alt (dominates Ctrl); paintdown stamps the float into
-//                  canvas at its current position and zeros `float.pixels`,
-//                  drag carries the empty marquee, release lifts the
-//                  canvas content at the new mask position.
+//   "move"      → no modifier; drag repositions the float, release records.
+//   "duplicate" → Ctrl; pre-stamps the float into canvas at paintdown so the
+//                 duplicate is visible during drag, release records the new pos.
+//   "mask-only" → Alt (dominates Ctrl); stamps at paintdown, drag carries the
+//                 marquee shape (pixels mirror canvas at the new position),
+//                 release re-lifts the canvas content at the final position.
 type MoveMode = "move" | "duplicate" | "mask-only";
 
 // One discriminated-union active per gesture, set at `onPaintStart`,
@@ -132,8 +99,8 @@ type Gesture =
         preFloat: Float | null;
       };
 let gesture: Gesture | null = null;
-let maskArrowStamped    = false;          // stamp happens once per modifier-press
-let maskArrowPreFloat: import("@mosaic/logic/types").Float | null = null; // shape before zeroing (Alt+Arrow)
+let ctrlArrowStamped = false;                        // bake happens once per Ctrl-down
+let maskArrowState: { preFloat: Float } | null = null; // non-null while Alt+Arrow is active
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -180,7 +147,7 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, pattern, clientX, clientY,
     );
     const { canvasWidth: W, canvasHeight: H } = pattern;
-    const inCanvas = x >= 0 && x < W && y >= 0 && y < H;
+    const inCanvas = !outOfBounds(x, y, W, H);
     const tool = s.activeTool;
 
     if (tool === "select" || tool === "wand" || tool === "move") return;
@@ -453,7 +420,7 @@ const clientToPattern = (cx: number, cy: number) => {
     const { x, y } = screenToPattern(
         viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, pattern, cx, cy,
     );
-    const inside = x >= 0 && y >= 0 && x < pattern.canvasWidth && y < pattern.canvasHeight;
+    const inside = !outOfBounds(x, y, pattern.canvasWidth, pattern.canvasHeight);
     return { x, y, inside };
 };
 
@@ -551,7 +518,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                         for (let lx = 0; lx < pf.w; lx++) {
                             if (pf.pixels[ly * pf.w + lx] === 0) continue;
                             const cx = newX + lx, cy = newY + ly;
-                            if (cx >= 0 && cx < W && cy >= 0 && cy < H)
+                            if (!outOfBounds(cx, cy, W, H))
                                 newFP[ly * pf.w + lx] = store.state.pixels[cy * W + cx];
                         }
                     }
@@ -691,10 +658,9 @@ document.addEventListener("keydown", e => {
             const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
             const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
             store.commit(state => {
-                if (!maskArrowStamped && state.float) {
-                    // Bake current position into canvas (duplicate), keep float pixels intact.
+                if (!ctrlArrowStamped && state.float) {
                     state.pixels     = visiblePixels(state);
-                    maskArrowStamped = true;
+                    ctrlArrowStamped = true;
                 }
                 if (state.float)
                     state.float = { ...state.float, x: state.float.x + ddx, y: state.float.y + ddy };
@@ -709,17 +675,16 @@ document.addEventListener("keydown", e => {
             const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
             const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
             store.commit(state => {
-                if (!maskArrowStamped && state.float) {
+                if (!maskArrowState && state.float) {
                     const W = state.pattern.canvasWidth, H = state.pattern.canvasHeight;
                     state.pixels = visiblePixels(state);
                     const clipped = clipFloatToCanvas(state.float, W, H);
                     if (!clipped) { state.float = null; return; }   // entirely off-canvas — destroy
                     state.float = clipped;
-                    maskArrowPreFloat = clipped;
-                    maskArrowStamped  = true;
+                    maskArrowState = { preFloat: clipped };
                 }
-                if (state.float && maskArrowPreFloat) {
-                    const pf = maskArrowPreFloat;
+                if (state.float && maskArrowState) {
+                    const pf = maskArrowState.preFloat;
                     const W = state.pattern.canvasWidth, H = state.pattern.canvasHeight;
                     const rawX = state.float.x + ddx, rawY = state.float.y + ddy;
                     const newX = Math.max(0, Math.min(W - pf.w, rawX));
@@ -729,7 +694,7 @@ document.addEventListener("keydown", e => {
                         for (let lx = 0; lx < pf.w; lx++) {
                             if (pf.pixels[ly * pf.w + lx] === 0) continue;
                             const cx = newX + lx, cy = newY + ly;
-                            if (cx >= 0 && cx < W && cy >= 0 && cy < H)
+                            if (!outOfBounds(cx, cy, W, H))
                                 newFP[ly * pf.w + lx] = state.pixels[cy * W + cx];
                         }
                     }
@@ -778,21 +743,23 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
-    if (e.key === "Control" || e.key === "Meta" || e.key === "Alt") {
-        if (e.key === "Alt" && maskArrowStamped && store.state.float) {
-            // float.pixels mirrors canvas at final position — shiftedFloatMask correct.
+    if (e.key === "Alt") {
+        if (maskArrowState && store.state.float) {
             const shifted = shiftedFloatMask(store.state);
             const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
             store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
         }
-        maskArrowStamped  = false;
-        maskArrowPreFloat = null;
+        maskArrowState   = null;
+        ctrlArrowStamped = false;
+    } else if (e.key === "Control" || e.key === "Meta") {
+        ctrlArrowStamped = false;
+        maskArrowState   = null;   // safety reset
     }
 });
 
 window.addEventListener("blur", () => {
-    maskArrowStamped  = false;
-    maskArrowPreFloat = null;
+    ctrlArrowStamped = false;
+    maskArrowState   = null;
 });
 
 // Force the Edit popover to commit its live preview (via its `toggle`

@@ -7,7 +7,7 @@ import { describe, test, expect } from "vitest";
 import {
     liftCells, cutCells, rectMask, shiftedFloatMask, anchorIntoCanvas,
     applySelectionMod, commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
-    deleteFloat,
+    deleteFloat, matchedCutMask, clipFloatToCanvas,
 } from "../src/selection";
 import { Store, visiblePixels } from "../src/store";
 import { initialize_row_pattern, initialize_round_pattern } from "@mosaic/wasm";
@@ -33,6 +33,57 @@ function floatCellCount(f: { pixels: Uint8Array }): number {
     for (let i = 0; i < f.pixels.length; i++) if (f.pixels[i] !== 0) n++;
     return n;
 }
+
+describe("matchedCutMask", () => {
+    const pattern = rowPattern(3, 3);
+    test("all match → returns canvas-sized mask with float cells set", () => {
+        const pixels = filledPixels(3, 3, 2);   // all B
+        const f = makeFloat([{ x: 0, y: 0, v: 2 }, { x: 1, y: 0, v: 2 }]);
+        const mask = matchedCutMask(f, pixels, pattern);
+        expect(mask).not.toBeNull();
+        expect(mask![0]).toBe(1);   // (0,0) set
+        expect(mask![1]).toBe(1);   // (1,0) set
+        expect(mask![2]).toBe(0);   // (2,0) not in float
+    });
+    test("any mismatch → returns null", () => {
+        const pixels = filledPixels(3, 3, 1);   // all A
+        const f = makeFloat([{ x: 0, y: 0, v: 1 }, { x: 1, y: 0, v: 2 }]);  // (1,0) mismatches
+        expect(matchedCutMask(f, pixels, pattern)).toBeNull();
+    });
+    test("out-of-bounds float cell → returns null", () => {
+        const pixels = filledPixels(3, 3, 2);
+        // Float at x=2 with w=2 means cell (3,0) is OOB.
+        const f = makeFloat([{ x: 2, y: 0, v: 2 }, { x: 3, y: 0, v: 2 }]);
+        // makeFloat builds bbox; cell (3,0) would be out-of-bounds for a 3×3 canvas.
+        // Simulate by building a Float directly with the right shape.
+        const oobFloat = { x: 2, y: 0, w: 2, h: 1, pixels: new Uint8Array([2, 2]) };
+        expect(matchedCutMask(oobFloat, pixels, pattern)).toBeNull();
+    });
+    test("hole cell under float → returns null", () => {
+        const pixels = filledPixels(3, 3, 2);
+        pixels[1] = 0;   // hole at (1,0)
+        const f = makeFloat([{ x: 0, y: 0, v: 2 }, { x: 1, y: 0, v: 2 }]);
+        expect(matchedCutMask(f, pixels, pattern)).toBeNull();
+    });
+});
+
+describe("clipFloatToCanvas", () => {
+    test("fully in-bounds → returns same object (no allocation)", () => {
+        const f = makeFloat([{ x: 1, y: 1, v: 2 }]);
+        expect(clipFloatToCanvas(f, 4, 4)).toBe(f);
+    });
+    test("partially OOB → returns clipped float covering only in-bounds cells", () => {
+        // Float at x=2, w=3 → cells (2,0),(3,0),(4,0); canvas W=4 so (4,0) is OOB.
+        const f = { x: 2, y: 0, w: 3, h: 1, pixels: new Uint8Array([1, 1, 1]) };
+        const c = clipFloatToCanvas(f, 4, 4);
+        expect(c).not.toBeNull();
+        expect(c!.x).toBe(2); expect(c!.w).toBe(2);   // only (2,0)+(3,0) remain
+    });
+    test("entirely OOB → returns null", () => {
+        const f = { x: 10, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 1]) };
+        expect(clipFloatToCanvas(f, 4, 4)).toBeNull();
+    });
+});
 
 describe("liftCells", () => {
     test("lifts the masked cells, cuts canvas to natural baseline", () => {

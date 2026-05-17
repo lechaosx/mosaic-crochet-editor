@@ -23,6 +23,62 @@ export function cutCells(pixels: Uint8Array, pattern: PatternState, mask: Uint8A
         );
 }
 
+// All-or-nothing match check: returns a canvas-sized cut mask when every
+// non-zero float cell matches the underlying canvas pixel; returns null if any
+// cell is out of bounds, a hole, or has a different value than the float.
+// Callers use the null path to "clear only the float, leave canvas alone."
+export function matchedCutMask(
+    f: Float, pixels: Uint8Array, pattern: PatternState,
+): Uint8Array | null {
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    for (let ly = 0; ly < f.h; ly++) {
+        for (let lx = 0; lx < f.w; lx++) {
+            const fv = f.pixels[ly * f.w + lx];
+            if (fv === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (outOfBounds(cx, cy, W, H)) return null;
+            const cv = pixels[cy * W + cx];
+            if (cv === 0 || cv !== fv) return null;
+        }
+    }
+    // All float cells are in-bounds, non-hole, and match — build the cut mask.
+    const mask = new Uint8Array(W * H);
+    for (let ly = 0; ly < f.h; ly++)
+        for (let lx = 0; lx < f.w; lx++)
+            if (f.pixels[ly * f.w + lx] !== 0)
+                mask[(f.y + ly) * W + (f.x + lx)] = 1;
+    return mask;
+}
+
+// Clip a float to only the cells within canvas bounds.
+// Returns null when ALL cells are out of bounds (caller should destroy the float).
+// Returns the original float object (no allocation) when nothing needs clipping.
+export function clipFloatToCanvas(f: Float, W: number, H: number): Float | null {
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let ly = 0; ly < f.h; ly++) {
+        for (let lx = 0; lx < f.w; lx++) {
+            if (f.pixels[ly * f.w + lx] === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (outOfBounds(cx, cy, W, H)) continue;
+            if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+            if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
+        }
+    }
+    if (maxX < 0) return null;
+    if (minX === f.x && minY === f.y && maxX === f.x + f.w - 1 && maxY === f.y + f.h - 1) return f;
+    const fw = maxX - minX + 1, fh = maxY - minY + 1;
+    const fp = new Uint8Array(fw * fh);
+    for (let ly = 0; ly < f.h; ly++)
+        for (let lx = 0; lx < f.w; lx++) {
+            const v = f.pixels[ly * f.w + lx];
+            if (v === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (outOfBounds(cx, cy, W, H)) continue;
+            fp[(cy - minY) * fw + (cx - minX)] = v;
+        }
+    return { x: minX, y: minY, w: fw, h: fh, pixels: fp };
+}
+
 // Lift the cells indicated by `liftMask` from `pixels` into a new float.
 // Computes the bounding box, creates a compact Float, cuts the canvas.
 // Returns `float: null` if no non-hole cells qualify.
@@ -222,40 +278,16 @@ export function deselect(store: Store): void {
     anchorFloat(store);
 }
 
-// Delete: if every float cell matches the underlying canvas, cut canvas to
-// baseline and re-lift the baseline so the selection stays active. If any
-// cell differs, only clear the float content (re-lift canvas as-is); the
-// canvas is left untouched.
+// Delete: all-or-nothing. If every float cell matches the canvas, cut canvas to
+// baseline and re-lift so the selection stays active (pressing Delete twice
+// always clears both). If any cell differs, re-lift canvas as-is — canvas untouched.
 export function deleteFloat(store: Store): void {
     if (!store.state.float) return;
     const s = store.state;
     const f = s.float!;
     const { canvasWidth: W, canvasHeight: H } = s.pattern;
-
-    let allMatch = true;
-    outer: for (let ly = 0; ly < f.h; ly++) {
-        for (let lx = 0; lx < f.w; lx++) {
-            const fv = f.pixels[ly * f.w + lx];
-            if (fv === 0) continue;
-            const cx = f.x + lx, cy = f.y + ly;
-            if (outOfBounds(cx, cy, W, H)) { allMatch = false; break outer; }
-            const cv = s.pixels[cy * W + cx];
-            if (cv === 0 || cv !== fv) { allMatch = false; break outer; }
-        }
-    }
-
-    const cutMask = new Uint8Array(W * H);
-    if (allMatch) {
-        for (let ly = 0; ly < f.h; ly++)
-            for (let lx = 0; lx < f.w; lx++) {
-                if (f.pixels[ly * f.w + lx] === 0) continue;
-                const cx = f.x + lx, cy = f.y + ly;
-                if (!outOfBounds(cx, cy, W, H) && s.pixels[cy * W + cx] !== 0)
-                    cutMask[cy * W + cx] = 1;
-            }
-    }
-
-    const cleared = cutCells(s.pixels, s.pattern, cutMask);
+    const cutMask = matchedCutMask(f, s.pixels, s.pattern);
+    const cleared = cutMask ? cutCells(s.pixels, s.pattern, cutMask) : s.pixels;
     const newFP = new Uint8Array(f.w * f.h);
     for (let ly = 0; ly < f.h; ly++) {
         for (let lx = 0; lx < f.w; lx++) {
