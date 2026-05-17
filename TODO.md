@@ -51,8 +51,7 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 - [x] Selection-aware `flood_fill` walker (Rust): BFS stops at unselected cells. 3 new Rust tests cover empty-selection (unchanged), stop-at-boundary, and disconnected-islands (the previously-broken case where same-colour paths through unselected cells leaked fill into another island).
 
 **Phase 2 follow-ups (queue with Phase 2 ops):**
-- [ ] Move per-tool clipping into Rust: `paint_pixel`, `paint_natural_*` take a `selection: &[u8]` param (empty = no clip) and skip writes at the source rather than via TS clip-after. Overlay variants stay parameterless (click-gate covers them). Drops the TS `clipToSelection` helper.
-- [ ] **Touch-friendly mask-only move.** Keyboard: Ctrl+Arrow stamps content and moves the empty marquee (shipped). Touch/drag: no modifier-free drag path yet. Pick one of: (a) dragging the marquee outline on the Select tool moves the mask, (c) a dedicated "Move Selection" tool, (d) a Move-tool mode toggle in the toolbar.
+- [x] Move per-tool clipping into Rust: `paint_pixel`, `paint_natural_*` take a `selection: &[u8]` param (empty = no clip) and skip writes at the source. Overlay stays parameterless (click-gate covers it). TS clip-after loop removed. — **your decision**
 
 **Risk noted:** Marching-ants edge computation. Done — single `beginPath()` per render call batches all edges.
 
@@ -162,6 +161,12 @@ Phases 1 and 4 are independent — can be done in either order. Everything else 
 ---
 
 ## Cross-cutting backlog (not phase-bound)
+
+### Touch-friendly mask-only move
+
+Keyboard path done (Alt+Arrow). Touch/drag: no modifier-free drag path yet. Pick one when ready: (a) dragging the marquee outline on the Select tool moves the mask, (c) a dedicated "Move Selection" tool, (d) a Move-tool mode toggle in the toolbar.
+
+
 
 ### Test tightening (Stryker-driven)
 

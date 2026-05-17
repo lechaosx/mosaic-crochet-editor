@@ -11,9 +11,8 @@ import { SymKey } from "../src/types";
 
 describe("symmetry-aware paint inside selection", () => {
     test("with Vertical symmetry, painting (0, 1) clipped to a mask that doesn't include the mirrored cell only paints (0, 1)", () => {
-        // The clip happens AFTER paint at the TS layer (see `paintAt`),
-        // so paint+symmetry's natural behaviour writes to both orbit
-        // cells, and the clip reverts the unselected one.
+        // Clipping is now done inside paint_pixel (Rust-side), so the
+        // mirrored cell (4, 1) is skipped because it's outside the selection.
         const W = 5, H = 5;
         const visible = filledPixels(W, H, 1);
         const pattern = rowPattern(W, H);
@@ -28,11 +27,9 @@ describe("symmetry-aware paint inside selection", () => {
             invertVisited: null,
             symMask, shifted,
         });
-        // The Rust `paint_pixel` writes both orbit cells. The selection
-        // clipping (caller's job, not the op's) would then revert the
-        // mirrored cell — but at the paintOp level, both are written.
+        // Rust clips to selection: only (0, 1) painted, mirrored (4, 1) skipped.
         expect(out[1 * W + 0]).toBe(2);
-        expect(out[1 * W + 4]).toBe(2);
+        expect(out[1 * W + 4]).toBe(1);
         // The selection mask itself doesn't mirror — shifted[1, 4] is still 0.
         expect(shifted[1 * W + 4]).toBe(0);
     });

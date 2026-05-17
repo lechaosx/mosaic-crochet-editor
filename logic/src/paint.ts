@@ -29,23 +29,23 @@ export interface PaintCtx {
 type PaintOp = (c: PaintCtx) => Uint8Array;
 
 export const paintOps: Record<PaintTool, PaintOp> = {
-    pencil: ({ visible, pattern: p, x, y, color, symMask }) =>
-        paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, symMask),
+    pencil: ({ visible, pattern: p, x, y, color, symMask, shifted }) =>
+        paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, symMask, shifted),
 
     fill: ({ visible, pattern: p, x, y, color, symMask, shifted }) =>
-        flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, symMask, shifted ?? new Uint8Array(0)),
+        flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, symMask, shifted),
 
     // Left click = primary = restore baseline; right click = secondary =
     // paint the *opposite* baseline (deliberately wrong placement).
-    eraser: ({ visible, pattern: p, x, y, color, primary, symMask }) => {
+    eraser: ({ visible, pattern: p, x, y, color, primary, symMask, shifted }) => {
         const invert = color !== primary;
         return p.mode === "row"
-            ? paint_natural_row(visible, p.canvasWidth, p.canvasHeight, x, y, symMask, invert)
+            ? paint_natural_row(visible, p.canvasWidth, p.canvasHeight, x, y, symMask, invert, shifted)
             : paint_natural_round(
                 visible, p.canvasWidth, p.canvasHeight,
                 p.virtualWidth, p.virtualHeight,
                 p.offsetX, p.offsetY, p.rounds,
-                x, y, symMask, invert,
+                x, y, symMask, invert, shifted,
             );
     },
 
@@ -65,11 +65,12 @@ export const paintOps: Record<PaintTool, PaintOp> = {
 
     // Flip pixels between primary and secondary on each *first* visit; a
     // single stroke never inverts the same cell twice.
-    invert: ({ visible, pattern: p, x, y, invertVisited, symMask }) => {
+    invert: ({ visible, pattern: p, x, y, invertVisited, symMask, shifted }) => {
         const out = visible.slice();
         const indices = symmetric_orbit_indices(p.canvasWidth, p.canvasHeight, x, y, symMask);
         for (const idx of indices) {
             if (invertVisited!.has(idx)) continue;
+            if (shifted && shifted[idx] === 0) continue;
             invertVisited!.add(idx);
             const cur = out[idx];
             if      (cur === 1) out[idx] = 2;

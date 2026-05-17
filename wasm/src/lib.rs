@@ -174,18 +174,23 @@ pub fn initialize_round_pattern(
     grid
 }
 
+// Selection parameters on paint functions are `Option<Vec<u8>>` rather than
+// `&[u8]` so JS callers can pass `null` / `undefined` for "no selection"
+// instead of an empty typed array. The core functions take `&[u8]`; the
+// binding unwraps to an empty slice for the None case.
+
 #[wasm_bindgen]
-pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, symmetry_mask: u8) -> Vec<u8> {
-    tools::paint_pixel(pixels, width, height, x, y, color, symmetry_mask)
+pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, symmetry_mask: u8, selection: Option<Vec<u8>>) -> Vec<u8> {
+    tools::paint_pixel(pixels, width, height, x, y, color, symmetry_mask, selection.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
 pub fn flood_fill(
     pixels: &[u8], width: i32, height: i32,
     start_x: i32, start_y: i32, fill_color: u8, symmetry_mask: u8,
-    selection: &[u8],
+    selection: Option<Vec<u8>>,
 ) -> Vec<u8> {
-    tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, symmetry_mask, selection)
+    tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, symmetry_mask, selection.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
@@ -249,9 +254,9 @@ pub fn lock_invalid_round(
 #[wasm_bindgen]
 pub fn paint_natural_row(
     pixels: &[u8], width: i32, height: i32,
-    x: i32, y: i32, symmetry_mask: u8, invert: bool,
+    x: i32, y: i32, symmetry_mask: u8, invert: bool, selection: Option<Vec<u8>>,
 ) -> Vec<u8> {
-    tools::paint_natural_row(pixels, width, height, x, y, symmetry_mask, invert)
+    tools::paint_natural_row(pixels, width, height, x, y, symmetry_mask, invert, selection.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
@@ -260,12 +265,12 @@ pub fn paint_natural_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, symmetry_mask: u8, invert: bool,
+    x: i32, y: i32, symmetry_mask: u8, invert: bool, selection: Option<Vec<u8>>,
 ) -> Vec<u8> {
     tools::paint_natural_round(
         pixels, canvas_width, canvas_height,
         virtual_width, virtual_height, offset_x, offset_y, rounds,
-        x, y, symmetry_mask, invert,
+        x, y, symmetry_mask, invert, selection.as_deref().unwrap_or(&[]),
     )
 }
 
