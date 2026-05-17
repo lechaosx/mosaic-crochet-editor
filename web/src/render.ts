@@ -379,18 +379,14 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
     const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
     if (float && !rs.hideCommittedSelection) {
-        // Trace the float's shifted mask, clipped to canvas + non-hole —
-        // matches what the commit will keep.
         const shifted = new Uint8Array(W * H);
-        const { mask, dx: fdx, dy: fdy } = float;
-        for (let sy = 0; sy < H; sy++) {
-            const srow = sy * W;
-            for (let sx = 0; sx < W; sx++) {
-                if (mask[srow + sx] === 0) continue;
-                const dx = sx + fdx, dy = sy + fdy;
-                if (dx < 0 || dx >= W || dy < 0 || dy >= H) continue;
-                if (pixels[dy * W + dx] === 0) continue;   // holes drop
-                shifted[dy * W + dx] = 1;
+        for (let ly = 0; ly < float.h; ly++) {
+            for (let lx = 0; lx < float.w; lx++) {
+                if (float.pixels[ly * float.w + lx] === 0) continue;
+                const cx = float.x + lx, cy = float.y + ly;
+                if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+                if (pixels[cy * W + cx] === 0) continue;   // holes drop
+                shifted[cy * W + cx] = 1;
             }
         }
         renderSelection(ctx, view, dpr, pattern, shifted, rs.invalidColor, dashOffsetSnapped);

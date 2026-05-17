@@ -3,7 +3,7 @@ import {
     packPixels, unpackPixels, packSelection, unpackSelection,
     packFloat, unpackFloat,
 } from "../src/storage";
-import { filledPixels, makeFloat } from "./_helpers";
+import { filledPixels } from "./_helpers";
 
 describe("packPixels / unpackPixels", () => {
     test("round-trip preserves A/B values on non-hole cells", () => {
@@ -76,15 +76,14 @@ describe("packSelection / unpackSelection", () => {
 });
 
 describe("packFloat / unpackFloat", () => {
-    test("round-trip preserves mask, lifted pixels at masked positions, and offset", () => {
-        const f = makeFloat(4, 4, [{ x: 0, y: 0, v: 1 }, { x: 2, y: 2, v: 2 }], 3, -1);
-        const out = unpackFloat(packFloat(f), 16);
-        expect(out.dx).toBe(3);
-        expect(out.dy).toBe(-1);
-        expect(out.mask[0]).toBe(1);
-        expect(out.mask[2 * 4 + 2]).toBe(1);
-        expect(out.pixels[0]).toBe(1);
-        expect(out.pixels[2 * 4 + 2]).toBe(2);
-        expect(out.pixels[1]).toBe(0);
+    test("round-trip preserves x, y, w, h, and pixels", () => {
+        const fp = new Uint8Array([0, 1, 0, 2, 1, 0]);   // 3×2 bounding box
+        const f = { x: -2, y: 5, w: 3, h: 2, pixels: fp };
+        const out = unpackFloat(packFloat(f));
+        expect(out.x).toBe(-2);
+        expect(out.y).toBe(5);
+        expect(out.w).toBe(3);
+        expect(out.h).toBe(2);
+        expect(Array.from(out.pixels)).toEqual([0, 1, 0, 2, 1, 0]);
     });
 });

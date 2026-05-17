@@ -20,17 +20,52 @@ test("Ctrl+X clears the canvas under the float and drops the selection", async (
     expect(r).toBeGreaterThan(200);   // baseline B
 });
 
-test("Ctrl+C stamps the float into the canvas (keeps selection alive)", async ({ page }) => {
+test("Ctrl+C does not stamp the float into the canvas", async ({ page }) => {
     await bootApp(page);
-    // Cell (0, 1): baseline B; paint A; lift; copy; verify cell stays A.
+    // Paint A at (0,1), lift it — canvas[0,1] reverts to B baseline.
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
     await page.keyboard.press("s");
     await dragCells(page, 0, 1, 0, 1);
+    // Copy. Old behaviour stamped the float content back into canvas[0,1].
     await page.keyboard.press("Control+c");
+    // Move the float right to reveal the underlying canvas cell (0,1).
+    await page.keyboard.press("ArrowRight");
     const c = await cellCoord(page, 0, 1);
-    const [r, g, b] = await pixelRGB(page, c.cx, c.cy);
-    expect([r, g, b]).toEqual(A);   // still A (the lifted content stamped back)
+    const [r] = await pixelRGB(page, c.cx, c.cy);
+    expect(r).toBeGreaterThan(200);   // still B — Ctrl+C must not stamp
+});
+
+test("Ctrl+X does not clear canvas where content differs from the float", async ({ page }) => {
+    await bootApp(page);
+    // Paint A at (3,1) — canvas[3,1] = A (row 1 baseline = B, so A is non-baseline).
+    await page.keyboard.press("p");
+    await clickCell(page, 3, 1);
+    // Select (1,1) — baseline B → float = B.
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);
+    // Move float right × 2 → float at (3,1). float=B, canvas[3,1]=A → mismatch.
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    // Ctrl+X: float(B) ≠ canvas(A) → must NOT clear (3,1).
+    await page.keyboard.press("Control+x");
+    const c = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // A still there
+});
+
+test("Delete does not clear canvas where content differs from the float", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 3, 1);   // canvas[3,1] = A
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);   // float = B
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");   // float → (3,1); float=B, canvas=A
+    await page.keyboard.press("Delete");
+    // Move float away to expose canvas[3,1]
+    await page.keyboard.press("ArrowRight");
+    const c = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // A still there
 });
 
 test("Cut then paste restores the content at the same position", async ({ page }) => {

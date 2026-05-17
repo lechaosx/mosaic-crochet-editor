@@ -1,13 +1,19 @@
-import { PatternState, Tool, SymKey } from "@mosaic/logic/types";
+import { PatternState, Tool, SymKey, LibItem } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 
-const LS_KEY       = "mosaic-pattern-v3";
-const FILE_VERSION = 2;
-const LS_VERSION   = 3;
+const LS_KEY       = "mosaic-pattern-v4";
+const FILE_VERSION = 2;   // bumped when library is added to .mcw (Phase 3 serialisation)
+const LS_VERSION   = 4;
 
-interface LocalSaveV3 {
-    version:          3;
+interface PackedLibItem {
+    id:    string;
+    float: PackedFloat;
+    name?: string;
+}
+
+interface LocalSaveV4 {
+    version:          4;
     state:            PatternState;
     pixels:           string;
     colorA:           string;
@@ -18,13 +24,14 @@ interface LocalSaveV3 {
     hlOpacity:        number;
     invalidIntensity: number;
     float:            PackedFloat | null;
+    library:          PackedLibItem[];
     labelsVisible:    boolean;
     lockInvalid:      boolean;
     canvasRotation:   number;
 }
 
 export function saveToLocalStorage(s: Readonly<SessionState>) {
-    const data: LocalSaveV3 = {
+    const data: LocalSaveV4 = {
         version:          LS_VERSION,
         state:            s.pattern,
         pixels:           packPixels(s.pixels),
@@ -36,6 +43,10 @@ export function saveToLocalStorage(s: Readonly<SessionState>) {
         hlOpacity:        s.hlOpacity,
         invalidIntensity: s.invalidIntensity,
         float:            s.float ? packFloat(s.float) : null,
+        library:          s.library.map(item => ({
+                              id: item.id, float: packFloat(item.float),
+                              ...(item.name !== undefined ? { name: item.name } : {}),
+                          })),
         labelsVisible:    s.labelsVisible,
         lockInvalid:      s.lockInvalid,
         canvasRotation:   s.rotation,
@@ -47,9 +58,8 @@ export function loadFromLocalStorage(): SessionState | null {
     const saved = localStorage.getItem(LS_KEY);
     if (!saved) return null;
     try {
-        const data = JSON.parse(saved) as LocalSaveV3;
+        const data = JSON.parse(saved) as LocalSaveV4;
         if (!data || data.version !== LS_VERSION || !data.state) return null;
-        const cells = data.state.canvasWidth * data.state.canvasHeight;
         return {
             pattern:          data.state,
             pixels:           unpackPixels(data.pixels, data.state),
@@ -60,7 +70,11 @@ export function loadFromLocalStorage(): SessionState | null {
             symmetry:         new Set(data.symmetry as SymKey[]),
             hlOpacity:        data.hlOpacity,
             invalidIntensity: data.invalidIntensity,
-            float:            data.float ? unpackFloat(data.float, cells) : null,
+            float:            data.float ? unpackFloat(data.float) : null,
+            library:          (data.library ?? []).map(item => ({
+                                  id: item.id, float: unpackFloat(item.float),
+                                  ...(item.name !== undefined ? { name: item.name } : {}),
+                              })) as LibItem[],
             labelsVisible:    data.labelsVisible,
             lockInvalid:      data.lockInvalid,
             rotation:         data.canvasRotation,

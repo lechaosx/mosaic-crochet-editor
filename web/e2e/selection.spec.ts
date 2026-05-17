@@ -273,3 +273,125 @@ test("Shift+drag on Move is regular move (Shift has no special Move meaning)", a
     expect(await pixelRGB(page, dst.cx, dst.cy)).toEqual([0, 0, 0]);
     expect(await pixelRGB(page, src.cx, src.cy)).not.toEqual([0, 0, 0]);
 });
+
+test("Alt+drag re-lifts canvas content at new position on release", async ({ page }) => {
+    // Paint B at destination (3,0) — row 0 baseline = A (black).
+    // After re-lift: canvas[3,0] = A, float contains B at (3,0).
+    // Move the float away, then canvas[3,0] is exposed as A (not B).
+    // Without re-lift: float = null, canvas[3,0] = B → stays white.
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 1, 0, { button: "right" });   // paint B at source (1,0)
+    await clickCell(page, 3, 0, { button: "right" });   // paint B at destination (3,0)
+    await page.keyboard.press("s");
+    await dragCells(page, 1, 0, 1, 0);   // drag-select (1,0) — triggers onPaintAt
+    await page.keyboard.press("m");
+    const src = await cellCoord(page, 1, 0);
+    const dst = await cellCoord(page, 3, 0);
+    await page.keyboard.down("Alt");
+    await page.mouse.move(src.cx, src.cy);
+    await page.mouse.down();
+    await page.mouse.move(dst.cx, dst.cy, { steps: 5 });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
+    // Float now at (3,0) with re-lifted content. Move it right so (3,0) is uncovered.
+    await page.keyboard.press("ArrowRight");   // float → (4,0)
+    // Now (3,0) canvas is exposed: A (black) if re-lift worked, B (white) if not.
+    const c = await cellCoord(page, 3, 0);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // A ← re-lift cut canvas to baseline
+});
+
+test("Alt+Arrow destroys float when it is entirely outside the canvas", async ({ page }) => {
+    await bootApp(page);
+    // Paint A at (0,1) so we can detect if the float re-lands there unexpectedly.
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    // Lift (1,1) — baseline B — then move it left until fully off-canvas (x = -4).
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);
+    for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
+    // Alt+ArrowRight: without fix the float jumps to (0,1) and re-lifts the A there.
+    // With fix it is destroyed immediately (no float, no jump).
+    await page.keyboard.down("Alt");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.up("Alt");
+    // If float survived (bug): ArrowRight + Escape would stamp A at (1,1).
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Escape");
+    const c = await cellCoord(page, 1, 1);
+    const [r] = await pixelRGB(page, c.cx, c.cy);
+    expect(r).toBeGreaterThan(200);   // B (white) — float destroyed, not jumped
+});
+
+test("Alt+Arrow clips float to in-bounds cells — does not jump or expand selection", async ({ page }) => {
+    // Lift (6,0)+(7,0)+(8,0) — 3 cells. Move right × 2: only (8,0) stays in canvas.
+    // Without fix: clamping snaps the 3-cell float back to x=6, covering all 3 cells again.
+    // With fix: clips to just the 1 visible cell (8,0), so (6,0)/(7,0) are never re-included.
+    await bootApp(page);
+    await page.keyboard.press("s");
+    await dragCells(page, 6, 0, 8, 0);      // lift 3 cells in row 0 (baseline A)
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight"); // float now at x=8, covering (8,0),(9,0),(10,0)
+    await page.keyboard.down("Alt");
+    await page.keyboard.press("ArrowLeft");  // without fix: jumps to x=6 (3-cell); with fix: x=7 (1-cell)
+    await page.keyboard.up("Alt");
+    // Paint B at (8,0). Without fix (8,0) is in the expanded float → paint succeeds.
+    // With fix (8,0) is outside the 1-cell float at (7,0) → paint rejected, stays A (black).
+    await page.keyboard.press("p");
+    await clickCell(page, 8, 0, { button: "right" });
+    const c = await cellCoord(page, 8, 0);
+    const [r] = await pixelRGB(page, c.cx, c.cy);
+    expect(r).toBeLessThan(50);   // A (black) — (8,0) not in float
+});
+
+test("Alt+Arrow is clamped to canvas bounds — float is not lost when pressing into an edge", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);   // paint A at left edge (0,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);   // lift it — float = A at (0,1)
+    // Alt+ArrowLeft: float is at x=0; trying to move to x=-1 must be clamped.
+    await page.keyboard.down("Alt");
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.up("Alt");   // re-lift at clamped (0,1), not at (-1,1)
+    // Float must still exist. Move right to expose the canvas and confirm content.
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Escape");
+    const c = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // float had A content
+});
+
+test("Alt+drag is clamped to canvas bounds — float is not lost at edge", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);   // paint A at (0,1)
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);   // select (1,1) — baseline B
+    await page.keyboard.press("m");
+    // Alt+drag from (1,1) to (-3,1) — past the left edge.
+    // Clamped: float stays at (0,1) on release.
+    await dragCells(page, 1, 1, -3, 1, ["Alt"]);
+    // Float must still exist at (0,1) with re-lifted canvas[0,1] = A.
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Escape");
+    const c = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // re-lifted A anchored at (1,1)
+});
+
+test("Alt+Arrow re-lifts at new position on Alt release", async ({ page }) => {
+    // Paint B at (3,0). Alt+ArrowRight moves float to (3,0), Alt release re-lifts.
+    // After re-lift: canvas[3,0] = A, float at (3,0). Move float right to expose (3,0).
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 2, 0, { button: "right" });   // paint B at source (2,0)
+    await clickCell(page, 3, 0, { button: "right" });   // paint B at destination (3,0)
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 0);   // select (2,0)
+    await page.keyboard.down("Alt");
+    await page.keyboard.press("ArrowRight");   // stamp (2,0), marquee → (3,0)
+    await page.keyboard.up("Alt");             // re-lift from (3,0), cuts canvas[3,0] to A
+    // Float is now at (3,0) covering the re-lifted cell. Move it right to expose (3,0).
+    await page.keyboard.press("ArrowRight");   // float → (4,0)
+    const c = await cellCoord(page, 3, 0);
+    expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // A ← canvas was cut on re-lift
+});

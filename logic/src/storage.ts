@@ -63,21 +63,22 @@ export function unpackPixels(s: string, state: PatternState): Uint8Array {
     return out;
 }
 
+// ── Float serialisation (current format) ─────────────────────────────────────
+// Floats are stored bbox-compact: x/y/w/h integers + raw pixels base64.
+// The pixels array is w×h bytes: 0=absent, 1=A, 2=B.
+
+import { Float } from "./types";
+
 export interface PackedFloat {
-    mask:   string;
-    pixels: string;
-    dx:     number;
-    dy:     number;
+    x:      number;
+    y:      number;
+    w:      number;
+    h:      number;
+    pixels: string;   // base64 of raw w×h bytes (0/1/2)
 }
-export function packFloat(f: { mask: Uint8Array; pixels: Uint8Array; dx: number; dy: number }): PackedFloat {
-    return { mask: packSelection(f.mask), pixels: packPixels(f.pixels), dx: f.dx, dy: f.dy };
+export function packFloat(f: Float): PackedFloat {
+    return { x: f.x, y: f.y, w: f.w, h: f.h, pixels: u8ToB64(f.pixels) };
 }
-export function unpackFloat(p: PackedFloat, length: number): { mask: Uint8Array; pixels: Uint8Array; dx: number; dy: number } {
-    const mask   = unpackSelection(p.mask, length);
-    const packed = b64ToU8(p.pixels);
-    const pixels = new Uint8Array(length);
-    for (let i = 0; i < length; i++) {
-        if (mask[i]) pixels[i] = ((packed[i >> 3] >> (i & 7)) & 1) ? 2 : 1;
-    }
-    return { mask, pixels, dx: p.dx, dy: p.dy };
+export function unpackFloat(p: PackedFloat): Float {
+    return { x: p.x, y: p.y, w: p.w, h: p.h, pixels: b64ToU8(p.pixels) };
 }

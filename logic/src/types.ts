@@ -1,33 +1,25 @@
 export type Tool   = "pencil" | "fill" | "eraser" | "invert" | "overlay" | "select" | "wand" | "move";
 export type SymKey = "V" | "H" | "C" | "D1" | "D2";
 
-// A "float" is the lifted-selection layer that sits above the canvas. The
-// pixels at `mask` cells were physically removed from `pixels` (replaced
-// with natural baseline) when the float was created; rendering pastes them
-// back on top at offset `(dx, dy)`. Commit (deselect / tool switch / etc.)
-// stamps them at the offset position and clears the float. The mask and
-// pixels are stored in **source coordinates** — i.e., wherever the cells
-// were when first lifted; the offset accumulates moves.
+// A "float" is a lifted selection layer positioned at absolute canvas-cell
+// coordinates (x, y). Cells outside the canvas bounds are valid — floats
+// can live in the off-canvas scratch area. `pixels` is a w×h row-major
+// array: 0 = absent (not in float), 1 = color A, 2 = color B. There is no
+// separate mask — `pixels[i] !== 0` determines membership.
 export interface Float {
-    mask:   Uint8Array;   // W*H, 1 where the float covers (source positions)
-    pixels: Uint8Array;   // W*H, lifted pixel values at mask cells (else 0)
-    dx:     number;
-    dy:     number;
+    x:      number;      // top-left in canvas-cell coords, can be negative / > W
+    y:      number;
+    w:      number;      // bounding box width
+    h:      number;      // bounding box height
+    pixels: Uint8Array;  // w×h, 0=absent, 1=A, 2=B
 }
 
-// Tiny constructor namespace — we build floats from scratch in many places.
-// Keeping the field shape consistent matters for the renderer / store /
-// snapshot/serialiser, so the helpers are the single source of truth for
-// "what shape does a Float have".
-export const Float = {
-    // Float with the same mask / pixels / offset as `f` but a new offset.
-    shifted: (f: Float, dx: number, dy: number): Float =>
-        ({ mask: f.mask, pixels: f.pixels, dx, dy }),
-    // Float with `f`'s mask + offset but fresh pixels (used by mask-only
-    // drag to zero out content without losing the marquee).
-    withPixels: (f: Float, pixels: Uint8Array): Float =>
-        ({ mask: f.mask, pixels, dx: f.dx, dy: f.dy }),
-} as const;
+// A named library item wrapping a float parked in the scratch area.
+export interface LibItem {
+    id:    string;
+    float: Float;
+    name?: string;
+}
 
 export interface RowState {
     mode:         "row";
