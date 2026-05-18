@@ -41,6 +41,38 @@ test("dragging the V symmetry guide moves the mirror axis", async ({ page }) => 
     expect(b).toBeLessThan(50);
 });
 
+test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").click();
+    // Add a V axis.
+    await page.locator("#add-sym-v").click();
+    const row = page.locator(".sym-list-row").first();
+    await expect(row).toBeVisible();
+    await expect(row).not.toHaveClass(/is-inactive/);
+    // Toggle it off — visual class flips.
+    await row.locator("button[title='Disable axis']").click();
+    await expect(page.locator(".sym-list-row").first()).toHaveClass(/is-inactive/);
+    // Delete — row disappears.
+    await page.locator(".sym-list-row button[title='Delete axis']").click();
+    await expect(page.locator(".sym-list-row")).toHaveCount(0);
+});
+
+test("dragging an axis far off the canvas deletes it", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("v");        // adds V at canonical centre
+    await page.keyboard.press("m");        // Move tool
+    // V guide is at render x=4.5 on a 9-wide canvas; click and drag far left.
+    const start = await cellCoord(page, 4, 4);
+    const farOff = await cellCoord(page, -10, 4);
+    await page.mouse.move(start.cx, start.cy);
+    await page.mouse.down();
+    await page.mouse.move(farOff.cx, farOff.cy, { steps: 8 });
+    await page.mouse.up();
+    // Open popover — list should be empty.
+    await page.locator("#btn-sym-toggle").click();
+    await expect(page.locator(".sym-list-row")).toHaveCount(0);
+});
+
 test("Edit popover changes the canvas dimensions", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-edit").click();

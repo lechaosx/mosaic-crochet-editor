@@ -7,6 +7,7 @@ import {
     historyUndo, historyRedo, canUndo, canRedo, historyPeek,
 } from "../src/history";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
+import { addAxis } from "@mosaic/logic/symmetry";
 
 beforeEach(() => { localStorage.clear(); });
 
@@ -39,29 +40,21 @@ describe("historySave / historyReset", () => {
         expect(canUndo()).toBe(true);
     });
 
-    test("axis changes are part of the dedupe key — toggling activates a snapshot", () => {
+    test("axis changes are part of the dedupe key — adding an axis pushes a snapshot", () => {
         const s = rowSession(3, 3);
         historyReset(s);
-        // Toggle V on by mutating the V preset's `active`.
-        const flipped = s.axes.map(a =>
-            a.kind === "V" ? { ...a, active: true } : a
-        );
-        historySave({ ...s, axes: flipped });
+        historySave({ ...s, axes: addAxis([], "V", 3, 3) });
         expect(canUndo()).toBe(true);
     });
 
-    test("axis position survives undo: drag V to x=2, snapshot, undo restores", () => {
+    test("axis position survives undo: add V, drag to x=0, undo restores canonical", () => {
         const s = rowSession(3, 3);
         historyReset(s);
-        // Snapshot with V active at canonical x=1.
-        const v1 = s.axes.map(a =>
-            a.kind === "V" ? { ...a, active: true } : a
-        );
+        // Snapshot 1: V added at canonical x=1.
+        const v1 = addAxis([], "V", 3, 3);
         historySave({ ...s, axes: v1 });
-        // Now snapshot with V moved to x=0 (still active).
-        const v2 = s.axes.map(a =>
-            a.kind === "V" ? { ...a, active: true, x: 0 } : a
-        );
+        // Snapshot 2: V moved to x=0 (same id, new position).
+        const v2 = v1.map(a => a.kind === "V" ? { ...a, x: 0 } : a);
         historySave({ ...s, axes: v2 });
         // Undo back to V@x=1.
         const r = historyUndo();

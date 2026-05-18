@@ -15,6 +15,11 @@ const KIND_CODE: Record<SymKey, number> = {
     V: 0, H: 1, C: 2, D1: 3, D2: 4,
 };
 
+// Whether the canonical D1 c = (W-H)/2 is integer. Phase 4 Slice C made
+// diagonals user-placed, so any integer `c` is a valid axis regardless of
+// (W-H) parity — this only matters for the "+D1 at canonical centre" button
+// (it rounds to the nearest integer when W-H is odd). Kept for backwards
+// compatibility with callers that want the parity check.
 export function diagonalsAvailable(canvasWidth: number, canvasHeight: number): boolean {
     return (canvasWidth - canvasHeight) % 2 === 0;
 }
@@ -39,20 +44,6 @@ export function axesToFlat(axes: ReadonlyArray<Axis>): Float64Array {
         }
     }
     return out;
-}
-
-// Deactivate D1/D2 presets when the canvas can't represent diagonal mirrors
-// at the canonical position. We deactivate rather than delete so the user
-// keeps the preset around for when the canvas becomes diagonal-capable again.
-export function pruneUnavailableDiagonals(
-    axes: ReadonlyArray<Axis>, canvasWidth: number, canvasHeight: number,
-): Axis[] {
-    if (diagonalsAvailable(canvasWidth, canvasHeight)) return [...axes];
-    return axes.map(a =>
-        (a.kind === "D1" || a.kind === "D2") && a.active
-            ? { ...a, active: false }
-            : a
-    );
 }
 
 // Sugar: which kinds are currently active? Used by the UI to drive the
@@ -100,34 +91,50 @@ export function closureKinds(axes: ReadonlyArray<Axis>, canvasWidth: number, can
 }
 
 // ── Canonical-position factory ───────────────────────────────────────────────
-// One preset per kind at the canonical (canvas-centred) position. Slice A
-// guarantees these are the only axes that ever exist; Slice B adds the
-// per-canvas-click "place a new axis" flow that produces additional entries.
+// Slice C: default session has zero axes. The user adds what they want
+// via the toolbar Symmetry popover; each placement seeds a fresh axis at
+// the canonical (canvas-centred) position and the user drags it from there.
 
-function canonicalAxisV(W: number): Axis {
-    return { kind: "V", id: "preset-V", active: false, x: (W - 1) / 2 };
-}
-function canonicalAxisH(H: number): Axis {
-    return { kind: "H", id: "preset-H", active: false, y: (H - 1) / 2 };
-}
-function canonicalAxisC(W: number, H: number): Axis {
-    return { kind: "C", id: "preset-C", active: false, x: (W - 1) / 2, y: (H - 1) / 2 };
-}
-function canonicalAxisD1(W: number, H: number): Axis {
-    return { kind: "D1", id: "preset-D1", active: false, c: (W - H) / 2 };
-}
-function canonicalAxisD2(W: number, H: number): Axis {
-    return { kind: "D2", id: "preset-D2", active: false, c: (W + H - 2) / 2 };
+function newAxisId(): string {
+    return `axis-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function defaultAxes(canvasWidth: number, canvasHeight: number): Axis[] {
-    return [
-        canonicalAxisV(canvasWidth),
-        canonicalAxisH(canvasHeight),
-        canonicalAxisC(canvasWidth, canvasHeight),
-        canonicalAxisD1(canvasWidth, canvasHeight),
-        canonicalAxisD2(canvasWidth, canvasHeight),
-    ];
+// Build a fresh axis of the given kind at its canonical centre. Caller
+// usually flips `active: true` on the result via the spread in `addAxis`.
+// D1 / D2 round to the nearest integer because non-integer `c` would
+// produce off-grid mirror partners.
+function canonicalAxis(kind: SymKey, W: number, H: number): Axis {
+    switch (kind) {
+        case "V":  return { kind: "V",  id: newAxisId(), active: false, x: (W - 1) / 2 };
+        case "H":  return { kind: "H",  id: newAxisId(), active: false, y: (H - 1) / 2 };
+        case "C":  return { kind: "C",  id: newAxisId(), active: false, x: (W - 1) / 2, y: (H - 1) / 2 };
+        case "D1": return { kind: "D1", id: newAxisId(), active: false, c: Math.round((W - H) / 2) };
+        case "D2": return { kind: "D2", id: newAxisId(), active: false, c: Math.round((W + H - 2) / 2) };
+    }
+}
+
+// Default for a fresh session — empty. (Slice A seeded the 5 presets; Slice C
+// dropped that in favour of the "add to list" model.)
+export function defaultAxes(_canvasWidth: number, _canvasHeight: number): Axis[] {
+    return [];
+}
+
+// Add a new axis of the given kind at its canonical centre, active.
+// Pushes a fresh-id record; multiple axes of the same kind coexist.
+export function addAxis(
+    axes: ReadonlyArray<Axis>, kind: SymKey, canvasWidth: number, canvasHeight: number,
+): Axis[] {
+    return [...axes, { ...canonicalAxis(kind, canvasWidth, canvasHeight), active: true }];
+}
+
+// Remove an axis by id. No-op when the id is absent.
+export function removeAxis(axes: ReadonlyArray<Axis>, id: string): Axis[] {
+    return axes.filter(a => a.id !== id);
+}
+
+// Flip one axis's `active` by id. No-op when the id is absent.
+export function toggleAxisActive(axes: ReadonlyArray<Axis>, id: string): Axis[] {
+    return axes.map(a => a.id === id ? { ...a, active: !a.active } : a);
 }
 
 // Distance (in cell-units) from a fractional pattern-space point to an axis.
@@ -140,6 +147,25 @@ export function distanceToAxis(a: Axis, px: number, py: number): number {
         case "D1": return Math.abs(px - py - a.c)         / Math.SQRT2;
         case "D2": return Math.abs(px + py - (a.c + 1))   / Math.SQRT2;
         case "C":  return Math.hypot(px - (a.x + 0.5), py - (a.y + 0.5));
+    }
+}
+
+// True when the axis can't mirror two distinct in-canvas cells — i.e. the
+// drag-to-delete trigger. "Touching the boundary" is dead because at the
+// edge only a single cell can ever self-mirror (no useful pair). Per kind:
+//   V  — useful iff a.x ∈ (0, W − 1). At a.x = 0 only cell 0 self-mirrors.
+//   H  — symmetric on Y.
+//   C  — rotation point; useful iff (a.x, a.y) ∈ (0, W − 1) × (0, H − 1).
+//   D1 — line x − y = c; useful iff c ∈ (−(H − 1), W − 1).
+//   D2 — line x + y = c; useful iff c ∈ (0, W + H − 2).
+export function axisOffCanvas(a: Axis, W: number, H: number): boolean {
+    switch (a.kind) {
+        case "V":  return a.x <= 0 || a.x >= W - 1;
+        case "H":  return a.y <= 0 || a.y >= H - 1;
+        case "C":  return a.x <= 0 || a.x >= W - 1
+                       || a.y <= 0 || a.y >= H - 1;
+        case "D1": return a.c <= -(H - 1) || a.c >= W - 1;
+        case "D2": return a.c <= 0 || a.c >= W + H - 2;
     }
 }
 
@@ -157,6 +183,24 @@ export function pickAxisAt(
         if (d < bestDist) { bestDist = d; best = a; }
     }
     return best;
+}
+
+// Pick at most ONE active axis per kind whose guide is within `tolerance`
+// of the click. Multi-axis drag: clicking at an intersection grabs one of
+// each kind. Two parallel V axes at the same x → only the closer one is
+// returned so the user can drag it away to separate them.
+export function pickAxesAt(
+    axes: ReadonlyArray<Axis>, px: number, py: number, tolerance: number,
+): Axis[] {
+    const byKind = new Map<SymKey, { axis: Axis; dist: number }>();
+    for (const a of axes) {
+        if (!a.active) continue;
+        const d = distanceToAxis(a, px, py);
+        if (d >= tolerance) continue;
+        const cur = byKind.get(a.kind);
+        if (!cur || d < cur.dist) byKind.set(a.kind, { axis: a, dist: d });
+    }
+    return [...byKind.values()].map(v => v.axis);
 }
 
 // Snap a scalar to the nearest half-integer (0, 0.5, 1, 1.5, …). Used for
@@ -191,9 +235,3 @@ export function setAxisPosition(
     });
 }
 
-// Flip one preset's `active`. Caller picks the kind; helper finds-or-no-ops.
-// (Slice B will replace this with by-id; Slice A still tracks kinds because
-// the existing UI buttons / shortcuts are kind-based.)
-export function toggleAxisKind(axes: ReadonlyArray<Axis>, kind: SymKey): Axis[] {
-    return axes.map(a => a.kind === kind ? { ...a, active: !a.active } : a);
-}

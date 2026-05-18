@@ -7,9 +7,10 @@ import { applyEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
-import { diagonalsAvailable, axesToFlat, pruneUnavailableDiagonals,
-         defaultAxes, toggleAxisKind, activeKinds, closureKinds,
-         pickAxisAt, setAxisPosition, snapHalf, snapInt } from "@mosaic/logic/symmetry";
+import { axesToFlat,
+         addAxis, removeAxis, toggleAxisActive,
+         pickAxesAt, setAxisPosition, snapHalf, snapInt,
+         axisOffCanvas } from "@mosaic/logic/symmetry";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "./storage-io";
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
@@ -34,7 +35,7 @@ function defaultSession(): SessionState {
         colorB:        "#ffffff",
         activeTool:    "pencil",
         primaryColor:  1,
-        axes:           defaultAxes(9, 9),
+        axes:           [],
         hlOpacity:        100,
         invalidIntensity: 65,
         float:           null,
@@ -100,8 +101,11 @@ type Gesture =
         preFloat: Float | null;
       }
     | { kind: "axis-drag";
-        axisId: string;
-        axisKind: SymKey;
+        // One pick per kind: clicking an intersection grabs one of each
+        // kind so dragging moves them together. Parallel overlapping axes
+        // of the same kind are disambiguated by closeness (only the
+        // nearest is picked), so the user can drag it away to separate.
+        picks: { id: string; kind: SymKey }[];
         // Snapshot the axes list so cancel can revert without recomputing.
         preAxes: Axis[];
       };
@@ -220,12 +224,24 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    ui.setSymmetry(activeKinds(store.state.axes), closureKinds(store.state.axes, W, H));
-    ui.setDiagonalEnabled(diagonalsAvailable(W, H));
+    ui.setAxes(store.state.axes);
 }
-function toggleSym(k: SymKey) {
-    store.commit(s => { s.axes = toggleAxisKind(s.axes, k); }, { recompute: false, history: true });
+// Slice C: keyboard shortcuts and toolbar "+" buttons add a new axis to
+// the list (active, canonical position). Multiple of same kind coexist;
+// the user manages active/delete via the Symmetry popover.
+function addAxisOfKind(k: SymKey) {
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    store.commit(s => { s.axes = addAxis(s.axes, k, W, H); }, { recompute: false, history: true });
+    refreshSymmetryUi();
+}
+
+function deleteAxisById(id: string) {
+    store.commit(s => { s.axes = removeAxis(s.axes, id); }, { history: true });
+    refreshSymmetryUi();
+}
+
+function toggleAxisById(id: string) {
+    store.commit(s => { s.axes = toggleAxisActive(s.axes, id); }, { history: true });
     refreshSymmetryUi();
 }
 
@@ -299,7 +315,6 @@ function onEditChange() {
     store.commit(s => {
         s.pattern  = pattern;
         s.pixels   = pixels;
-        s.axes = pruneUnavailableDiagonals(s.axes, pattern.canvasWidth, pattern.canvasHeight);
         // Float coords no longer match the new geometry; the content (if any)
         // was baked into the source pixels above before the resize.
         s.float    = null;
@@ -410,7 +425,9 @@ const ui: UIHandle = mountUI({
     onPrimaryColor: setPrimary,
     onColorChange:  onColorInput,
     onColorCommit,
-    onSym: toggleSym,
+    onAddAxis:    addAxisOfKind,
+    onToggleAxis: toggleAxisById,
+    onDeleteAxis: deleteAxisById,
     onHighlightChange:         onHlOpacityInput,
     onInvalidIntensityChange:  onInvalidIntensityInput,
     onLabelsVisibleChange:     onLabelsToggle,
@@ -505,10 +522,10 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                     viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
                     store.state.pattern, cx, cy,
                 );
-                const hitAxis = pickAxisAt(store.state.axes, frac.x, frac.y, AXIS_HIT_TOLERANCE);
-                if (hitAxis) {
+                const hits = pickAxesAt(store.state.axes, frac.x, frac.y, AXIS_HIT_TOLERANCE);
+                if (hits.length > 0) {
                     gesture = { kind: "axis-drag",
-                                axisId: hitAxis.id, axisKind: hitAxis.kind,
+                                picks: hits.map(a => ({ id: a.id, kind: a.kind })),
                                 preAxes: [...store.state.axes] };
                     return;
                 }
@@ -553,17 +570,36 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
                 store.state.pattern, cx, cy,
             );
-            const kind = gesture.axisKind;
-            const id = gesture.axisId;
-            let pos: { x?: number; y?: number; c?: number };
-            switch (kind) {
-                case "V":  pos = { x: snapHalf(frac.x - 0.5) }; break;
-                case "H":  pos = { y: snapHalf(frac.y - 0.5) }; break;
-                case "C":  pos = { x: snapHalf(frac.x - 0.5), y: snapHalf(frac.y - 0.5) }; break;
-                case "D1": pos = { c: snapInt(frac.x - frac.y) }; break;
-                case "D2": pos = { c: snapInt(frac.x + frac.y - 1) }; break;
+            const picks = gesture.picks;
+            // Each picked axis tracks the cursor along its own kind's
+            // projection — V follows x, H follows y, C follows both, D1/D2
+            // follow the line constant. Multi-axis just iterates this.
+            store.commit(s => {
+                for (const p of picks) {
+                    let pos: { x?: number; y?: number; c?: number };
+                    switch (p.kind) {
+                        case "V":  pos = { x: snapHalf(frac.x - 0.5) }; break;
+                        case "H":  pos = { y: snapHalf(frac.y - 0.5) }; break;
+                        case "C":  pos = { x: snapHalf(frac.x - 0.5), y: snapHalf(frac.y - 0.5) }; break;
+                        case "D1": pos = { c: snapInt(frac.x - frac.y) }; break;
+                        case "D2": pos = { c: snapInt(frac.x + frac.y - 1) }; break;
+                    }
+                    s.axes = setAxisPosition(s.axes, p.id, pos);
+                }
+            }, { persist: false });
+            // Recompute delete-zone membership across all picked axes.
+            const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+            const next = new Set<string>();
+            for (const p of picks) {
+                const a = store.state.axes.find(x => x.id === p.id);
+                if (a && axisOffCanvas(a, W, H)) next.add(p.id);
             }
-            store.commit(s => { s.axes = setAxisPosition(s.axes, id, pos); }, { persist: false });
+            const changed = next.size !== rs.axesInDeleteZone.size
+                || [...next].some(id => !rs.axesInDeleteZone.has(id));
+            if (changed) {
+                rs.axesInDeleteZone = next;
+                render(viewport, ctx, rs, store);
+            }
             return;
         }
         if (gesture.kind === "select") {
@@ -637,9 +673,30 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             return;
         }
         if (gesture.kind === "axis-drag") {
-            // Push a snapshot only if the axis actually moved.
-            const changed = JSON.stringify(gesture.preAxes) !== JSON.stringify(store.state.axes);
-            if (changed) store.commit(() => {}, { recompute: false, render: false, history: true });
+            // Each picked axis is independently checked: those in the
+            // delete zone get removed, the rest just have their new
+            // position committed. One snapshot covers the whole release.
+            const g = gesture;
+            const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+            const toRemove: string[] = [];
+            for (const p of g.picks) {
+                const a = store.state.axes.find(x => x.id === p.id);
+                if (a && axisOffCanvas(a, W, H)) toRemove.push(p.id);
+            }
+            const dropped = toRemove.length > 0;
+            const moved = !dropped && JSON.stringify(g.preAxes) !== JSON.stringify(store.state.axes);
+            if (dropped) {
+                store.commit(s => {
+                    for (const id of toRemove) s.axes = removeAxis(s.axes, id);
+                }, { history: true });
+            } else if (moved) {
+                store.commit(() => {}, { recompute: false, render: false, history: true });
+            }
+            // Always refresh — the popover's per-row position display picks
+            // up the new x/y/c from `s.axes`, otherwise it'd show stale values
+            // after a position-only drag.
+            if (dropped || moved) refreshSymmetryUi();
+            rs.axesInDeleteZone = new Set();
             gesture = null;
             return;
         }
@@ -678,6 +735,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         if (gesture.kind === "axis-drag") {
             const { preAxes } = gesture;
             gesture = null;
+            rs.axesInDeleteZone = new Set();
             store.commit(s => { s.axes = preAxes; });
             return;
         }
@@ -782,11 +840,11 @@ document.addEventListener("keydown", e => {
     else if (k === "s") setTool("select");
     else if (k === "w") setTool("wand");
     else if (k === "m") setTool("move");
-    else if (k === "v") toggleSym("V");
-    else if (k === "h") toggleSym("H");
-    else if (k === "c") toggleSym("C");
-    else if (k === "d") toggleSym("D1");
-    else if (k === "a") toggleSym("D2");
+    else if (k === "v") addAxisOfKind("V");
+    else if (k === "h") addAxisOfKind("H");
+    else if (k === "c") addAxisOfKind("C");
+    else if (k === "d") addAxisOfKind("D1");
+    else if (k === "a") addAxisOfKind("D2");
     else if (k === "r") rotate(e.shiftKey ? -45 : 45);
     else if (k === "1") setPrimary(1);
     else if (k === "2") setPrimary(2);

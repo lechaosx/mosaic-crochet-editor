@@ -1,4 +1,4 @@
-import { Tool, SymKey, PatternState } from "@mosaic/logic/types";
+import { Tool, SymKey, PatternState, Axis } from "@mosaic/logic/types";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 
 // ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────
@@ -24,13 +24,14 @@ function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => v
     target.addEventListener("pointerleave",  cancel);
 }
 
-// ─── Symmetry button ids ──────────────────────────────────────────────────────
-const SYM_BUTTONS: { id: string; key: SymKey }[] = [
-    { id: "sym-vertical",   key: "V"  },
-    { id: "sym-horizontal", key: "H"  },
-    { id: "sym-central",    key: "C"  },
-    { id: "sym-diag1",      key: "D1" },
-    { id: "sym-diag2",      key: "D2" },
+// ─── Symmetry-popover button ids ──────────────────────────────────────────────
+// One "Add <kind>" button per kind in the popover's add row.
+const SYM_ADD_BUTTONS: { id: string; key: SymKey; glyph: string }[] = [
+    { id: "add-sym-v",  key: "V",  glyph: "↔" },
+    { id: "add-sym-h",  key: "H",  glyph: "↕" },
+    { id: "add-sym-c",  key: "C",  glyph: "⊕" },
+    { id: "add-sym-d1", key: "D1", glyph: "╲" },
+    { id: "add-sym-d2", key: "D2", glyph: "╱" },
 ];
 
 // ─── Public surface ───────────────────────────────────────────────────────────
@@ -39,7 +40,9 @@ export interface UICallbacks {
     onPrimaryColor:    (slot: 1 | 2) => void;
     onColorChange:     () => void;
     onColorCommit:     () => void;
-    onSym:             (k: SymKey) => void;
+    onAddAxis:         (k: SymKey) => void;
+    onToggleAxis:      (id: string) => void;
+    onDeleteAxis:      (id: string) => void;
     onHighlightChange:        () => void;
     onInvalidIntensityChange: () => void;
     onLabelsVisibleChange:    () => void;
@@ -59,8 +62,7 @@ export interface UIHandle {
     setTool:            (t: Tool) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
-    setSymmetry:        (direct: Set<SymKey>, closure: Set<SymKey>) => void;
-    setDiagonalEnabled: (enabled: boolean) => void;
+    setAxes:            (axes: ReadonlyArray<Axis>) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     syncEditInputs:     (s: PatternState) => void;
     closeEdit:          () => void;
@@ -129,23 +131,69 @@ export function mountUI(cb: UICallbacks): UIHandle {
         swatchB.style.background = b;
     }
 
-    /* ── Symmetry ─────────────────────────────────────────────────────── */
-    SYM_BUTTONS.forEach(({ id, key }) =>
-        el(id).addEventListener("click", () => cb.onSym(key))
-    );
-    function setSymmetry(direct: Set<SymKey>, closure: Set<SymKey>) {
-        SYM_BUTTONS.forEach(({ id, key }) => {
-            const btn = el(id);
-            btn.classList.toggle("btn--active",  direct.has(key));
-            btn.classList.toggle("btn--implied", !direct.has(key) && closure.has(key));
-        });
-    }
-    function setDiagonalEnabled(enabled: boolean) {
-        (["sym-diag1", "sym-diag2"] as const).forEach(id =>
-            el<HTMLButtonElement>(id).disabled = !enabled
-        );
-    }
+    /* ── Symmetry popover ─────────────────────────────────────────────── */
+    const symPopover = el("sym-popover");
+    const symList    = el("sym-list");
+    const symToggle  = el("btn-sym-toggle");
 
+    symToggle.addEventListener("click", e => {
+        e.preventDefault();
+        if (symPopover.matches(":popover-open")) { symPopover.hidePopover(); return; }
+        positionPopover(symPopover, symToggle, "right");
+        symPopover.showPopover();
+    });
+
+    SYM_ADD_BUTTONS.forEach(({ id, key }) =>
+        el(id).addEventListener("click", () => cb.onAddAxis(key))
+    );
+
+    function formatPosition(a: Axis): string {
+        switch (a.kind) {
+            case "V":  return `x=${a.x}`;
+            case "H":  return `y=${a.y}`;
+            case "C":  return `(${a.x}, ${a.y})`;
+            case "D1":
+            case "D2": return `c=${a.c}`;
+        }
+    }
+    const KIND_GLYPH: Record<SymKey, string> = { V: "↔", H: "↕", C: "⊕", D1: "╲", D2: "╱" };
+
+    function setAxes(axes: ReadonlyArray<Axis>) {
+        // Rebuild the list. The list size is bounded (5 presets + a handful
+        // user-added) so re-rendering on every commit is cheap and avoids
+        // diffing complexity.
+        symList.replaceChildren(...axes.map(a => {
+            const row = document.createElement("div");
+            row.className = "sym-list-row" + (a.active ? "" : " is-inactive");
+            row.dataset.axisId = a.id;
+
+            const kind = document.createElement("span");
+            kind.className = "sym-list-row__kind";
+            kind.textContent = KIND_GLYPH[a.kind];
+
+            const pos = document.createElement("span");
+            pos.className = "sym-list-row__pos";
+            pos.textContent = formatPosition(a);
+
+            const toggle = document.createElement("button");
+            toggle.className = "btn btn--icon";
+            toggle.type = "button";
+            toggle.title = a.active ? "Disable axis" : "Enable axis";
+            toggle.textContent = a.active ? "●" : "○";
+            toggle.addEventListener("click", () => cb.onToggleAxis(a.id));
+
+            const del = document.createElement("button");
+            del.className = "btn btn--icon";
+            del.type = "button";
+            del.title = "Delete axis";
+            del.setAttribute("aria-label", "Delete axis");
+            del.textContent = "×";
+            del.addEventListener("click", () => cb.onDeleteAxis(a.id));
+
+            row.append(kind, pos, toggle, del);
+            return row;
+        }));
+    }
     /* ── Highlight popover ────────────────────────────────────────────── */
     const hlPopover = el("hl-popover");
 
@@ -344,7 +392,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setPrimary, setColors, setSymmetry, setDiagonalEnabled,
+        setTool, setPrimary, setColors, setAxes,
         setHistory,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,
@@ -371,7 +419,7 @@ const LO_SAMPLE = 2 / 3;
 
 function mountToolbarLayout() {
     const toolbar  = document.getElementById("toolbar") as HTMLElement;
-    const groupSel = [".g-file", ".g-tools", ".g-sym", ".g-colors", ".g-hlrot"] as const;
+    const groupSel = [".g-file", ".g-paint", ".g-transform", ".g-colors", ".g-hlrot"] as const;
     type Widths = Record<typeof groupSel[number], number>;
 
     let bpSingleRow_full = Infinity;
@@ -391,10 +439,10 @@ function mountToolbarLayout() {
     function thresholds(w: Widths, padding: number, gap: number) {
         return {
             singleRow: padding + 4 * gap +
-                w[".g-file"] + w[".g-tools"] + w[".g-sym"] + w[".g-colors"] + w[".g-hlrot"],
+                w[".g-file"] + w[".g-paint"] + w[".g-transform"] + w[".g-colors"] + w[".g-hlrot"],
             twoRow: Math.max(
-                padding + gap     + w[".g-file"]  + w[".g-hlrot"],
-                padding + 2 * gap + w[".g-tools"] + w[".g-sym"] + w[".g-colors"],
+                padding + gap     + w[".g-file"]   + w[".g-hlrot"],
+                padding + 2 * gap + w[".g-paint"]  + w[".g-transform"] + w[".g-colors"],
             ),
         };
     }

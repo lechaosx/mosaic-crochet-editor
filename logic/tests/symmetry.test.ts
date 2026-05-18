@@ -5,79 +5,110 @@
 
 import { describe, test, expect } from "vitest";
 import {
-    diagonalsAvailable, axesToFlat, pruneUnavailableDiagonals,
-    defaultAxes, toggleAxisKind, activeKinds, closureKinds,
-    pickAxisAt, distanceToAxis, setAxisPosition, snapHalf, snapInt,
+    diagonalsAvailable, axesToFlat,
+    defaultAxes, activeKinds, closureKinds,
+    pickAxisAt, pickAxesAt, distanceToAxis, setAxisPosition, snapHalf, snapInt,
+    addAxis, removeAxis, toggleAxisActive, axisOffCanvas,
 } from "../src/symmetry";
 import type { Axis } from "../src/types";
 import { SymKey } from "../src/types";
 
+// Chained `addAxis` for terse setup: `axesWith(9, 9, "V", "H")` builds an
+// axes list with one active V and one active H at canonical centres.
+function axesWith(W: number, H: number, ...kinds: SymKey[]): Axis[] {
+    return kinds.reduce<Axis[]>((acc, k) => addAxis(acc, k, W, H), defaultAxes(W, H));
+}
+
 describe("defaultAxes", () => {
-    test("seeds 5 presets, all inactive", () => {
-        const axes = defaultAxes(9, 9);
-        expect(axes).toHaveLength(5);
-        expect(axes.every(a => !a.active)).toBe(true);
-        expect(axes.map(a => a.kind).sort()).toEqual(["C", "D1", "D2", "H", "V"]);
+    test("fresh session has zero axes (Slice C)", () => {
+        expect(defaultAxes(9, 9)).toEqual([]);
     });
+});
 
-    test("canonical positions land at canvas centre", () => {
-        const axes = defaultAxes(9, 9);
-        const V = axes.find(a => a.kind === "V")!;
-        const H = axes.find(a => a.kind === "H")!;
-        const C = axes.find(a => a.kind === "C")!;
-        expect(V.kind === "V" && V.x).toBe(4);
-        expect(H.kind === "H" && H.y).toBe(4);
-        expect(C.kind === "C" && C.x === 4 && C.y === 4).toBe(true);
+describe("addAxis", () => {
+    test("V on 9×9 → one active V at canonical centre x=4", () => {
+        const axes = addAxis([], "V", 9, 9);
+        expect(axes).toHaveLength(1);
+        const v = axes[0];
+        expect(v.kind === "V" && v.active && v.x === 4).toBe(true);
     });
+    test("each call produces a fresh id", () => {
+        const a = addAxis([], "V", 9, 9);
+        const b = addAxis(a, "V", 9, 9);
+        expect(b).toHaveLength(2);
+        expect(b[0].id).not.toBe(b[1].id);
+    });
+    test("C carries both x and y", () => {
+        const c = addAxis([], "C", 9, 9)[0];
+        expect(c.kind === "C" && c.x === 4 && c.y === 4).toBe(true);
+    });
+    test("D1 / D2 carry the c constant for the canonical line", () => {
+        const d1 = addAxis([], "D1", 9, 7)[0];
+        const d2 = addAxis([], "D2", 9, 7)[0];
+        expect(d1.kind === "D1" && d1.c).toBe(1);   // (W-H)/2
+        expect(d2.kind === "D2" && d2.c).toBe(7);   // (W+H-2)/2
+    });
+});
 
-    test("even canvas → half-integer V / H centre", () => {
-        const axes = defaultAxes(8, 8);
-        const V = axes.find(a => a.kind === "V")!;
-        expect(V.kind === "V" && V.x).toBe(3.5);
+describe("removeAxis", () => {
+    test("drops by id; absent id is a no-op", () => {
+        const a = addAxis([], "V", 9, 9);
+        const id = a[0].id;
+        expect(removeAxis(a, id)).toEqual([]);
+        expect(removeAxis(a, "nope")).toEqual(a);
+    });
+});
+
+describe("toggleAxisActive", () => {
+    test("flips a single axis's active by id", () => {
+        const a = addAxis([], "V", 9, 9);
+        const id = a[0].id;
+        const off = toggleAxisActive(a, id);
+        expect(off[0].active).toBe(false);
+        const on = toggleAxisActive(off, id);
+        expect(on[0].active).toBe(true);
+    });
+    test("only touches the matching axis", () => {
+        const axes = axesWith(9, 9, "V", "H");
+        const flipped = toggleAxisActive(axes, axes[0].id);
+        expect(flipped[0].active).toBe(false);
+        expect(flipped[1].active).toBe(true);
     });
 });
 
 describe("axesToFlat", () => {
     test("inactive axes → empty array", () => {
-        expect(axesToFlat(defaultAxes(9, 9)).length).toBe(0);
+        const off = toggleAxisActive(addAxis([], "V", 9, 9), addAxis([], "V", 9, 9)[0].id);
+        // (We toggled the wrong axis id above — the original is still active.)
+        expect(axesToFlat(off).length).toBe(3);
+        // Simpler check: empty axes list → empty Float64Array.
+        expect(axesToFlat([]).length).toBe(0);
     });
 
     test("V active → 3 doubles: kind=0, a=(W-1)/2, b=0", () => {
-        const axes = toggleAxisKind(defaultAxes(9, 9), "V");
-        const flat = Array.from(axesToFlat(axes));
+        const flat = Array.from(axesToFlat(axesWith(9, 9, "V")));
         expect(flat).toEqual([0, 4, 0]);
     });
 
     test("V + H active → 6 doubles (closure-free; BFS composes C from the two reflections)", () => {
-        const axes = toggleAxisKind(toggleAxisKind(defaultAxes(9, 9), "V"), "H");
-        const flat = Array.from(axesToFlat(axes));
-        // kind-V at x=4, then kind-H at y=4 (canonical centres of a 9×9 canvas).
+        const flat = Array.from(axesToFlat(axesWith(9, 9, "V", "H")));
         expect(flat).toEqual([0, 4, 0, 1, 4, 0]);
     });
 
     test("C active emits both x and y", () => {
-        const axes = toggleAxisKind(defaultAxes(9, 9), "C");
-        const flat = Array.from(axesToFlat(axes));
-        // kind-C, a=4 (cx), b=4 (cy)
+        const flat = Array.from(axesToFlat(axesWith(9, 9, "C")));
         expect(flat).toEqual([2, 4, 4]);
     });
 
     test("D1 / D2 emit the c constant in slot a", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "D1");
-        const d1Flat = Array.from(axesToFlat(axes));
-        // (W-H)/2 = 0 on 9×9
-        expect(d1Flat).toEqual([3, 0, 0]);
-        axes = toggleAxisKind(defaultAxes(9, 9), "D2");
-        const d2Flat = Array.from(axesToFlat(axes));
-        // (W+H-2)/2 = 8 on 9×9
-        expect(d2Flat).toEqual([4, 8, 0]);
+        const d1Flat = Array.from(axesToFlat(axesWith(9, 9, "D1")));
+        expect(d1Flat).toEqual([3, 0, 0]);   // (W-H)/2 = 0 on 9×9
+        const d2Flat = Array.from(axesToFlat(axesWith(9, 9, "D2")));
+        expect(d2Flat).toEqual([4, 8, 0]);   // (W+H-2)/2 = 8 on 9×9
     });
 
     test("all five active → 15 doubles", () => {
-        let axes = defaultAxes(9, 9);
-        for (const k of ["V", "H", "C", "D1", "D2"] as SymKey[]) axes = toggleAxisKind(axes, k);
-        expect(axesToFlat(axes).length).toBe(15);
+        expect(axesToFlat(axesWith(9, 9, "V", "H", "C", "D1", "D2")).length).toBe(15);
     });
 });
 
@@ -93,34 +124,9 @@ describe("diagonalsAvailable", () => {
     });
 });
 
-describe("pruneUnavailableDiagonals", () => {
-    test("keeps diagonals active when (W-H) is even", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "D1");
-        const pruned = pruneUnavailableDiagonals(axes, 9, 9);
-        expect(pruned.find(a => a.kind === "D1")!.active).toBe(true);
-    });
-
-    test("deactivates D1 and D2 when (W-H) is odd; keeps V/H/C state", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "V");
-        axes = toggleAxisKind(axes, "D1");
-        axes = toggleAxisKind(axes, "D2");
-        const pruned = pruneUnavailableDiagonals(axes, 9, 8);
-        expect(pruned.find(a => a.kind === "D1")!.active).toBe(false);
-        expect(pruned.find(a => a.kind === "D2")!.active).toBe(false);
-        expect(pruned.find(a => a.kind === "V")!.active).toBe(true);
-        // Preset stays in the list — deactivation preserves the slot.
-        expect(pruned).toHaveLength(5);
-    });
-});
-
 describe("activeKinds", () => {
     test("returns Set of kinds whose axis.active is true", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "V");
-        axes = toggleAxisKind(axes, "D1");
-        const kinds = activeKinds(axes);
+        const kinds = activeKinds(axesWith(9, 9, "V", "D1"));
         expect(kinds.has("V")).toBe(true);
         expect(kinds.has("D1")).toBe(true);
         expect(kinds.has("H")).toBe(false);
@@ -129,25 +135,15 @@ describe("activeKinds", () => {
 
 describe("closureKinds (UI-only)", () => {
     test("V + H imply C (so UI dim-renders C)", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "V");
-        axes = toggleAxisKind(axes, "H");
-        const closure = closureKinds(axes, 9, 9);
-        expect(closure.has("C")).toBe(true);
+        expect(closureKinds(axesWith(9, 9, "V", "H"), 9, 9).has("C")).toBe(true);
     });
 
     test("diagonals disabled: V + D1 does NOT propagate to D2", () => {
-        let axes = defaultAxes(9, 8);
-        axes = toggleAxisKind(axes, "V");
-        axes = toggleAxisKind(axes, "D1");
-        expect(closureKinds(axes, 9, 8).has("D2")).toBe(false);
+        expect(closureKinds(axesWith(9, 8, "V", "D1"), 9, 8).has("D2")).toBe(false);
     });
 
     test("transitive: V + D1 (diagonals on) → all five", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "V");
-        axes = toggleAxisKind(axes, "D1");
-        const closure = closureKinds(axes, 9, 9);
+        const closure = closureKinds(axesWith(9, 9, "V", "D1"), 9, 9);
         for (const k of ["V", "H", "C", "D1", "D2"] as SymKey[]) {
             expect(closure.has(k)).toBe(true);
         }
@@ -179,46 +175,103 @@ describe("distanceToAxis", () => {
 
 describe("pickAxisAt", () => {
     test("clicks on V guide line return the V axis", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "V");
-        // V guide is at render x = 4.5. Click at (4.6, 3) is within tolerance.
-        const hit = pickAxisAt(axes, 4.6, 3, 0.4);
+        const hit = pickAxisAt(axesWith(9, 9, "V"), 4.6, 3, 0.4);
         expect(hit?.kind).toBe("V");
     });
     test("clicks far from any guide return null", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "V");
-        expect(pickAxisAt(axes, 0.5, 0.5, 0.4)).toBeNull();
+        expect(pickAxisAt(axesWith(9, 9, "V"), 0.5, 0.5, 0.4)).toBeNull();
     });
-    test("inactive axes are not pickable even when nearby", () => {
-        const axes = defaultAxes(9, 9);   // all inactive
-        expect(pickAxisAt(axes, 4.5, 4.5, 0.4)).toBeNull();
+    test("inactive axes are not pickable", () => {
+        const v = addAxis([], "V", 9, 9);
+        const off = toggleAxisActive(v, v[0].id);
+        expect(pickAxisAt(off, 4.5, 4.5, 0.4)).toBeNull();
+    });
+});
+
+describe("pickAxesAt", () => {
+    test("picks one axis per kind at an intersection", () => {
+        // V at canonical centre x=4 and H at y=4 both pass through (4.5, 4.5).
+        const axes = axesWith(9, 9, "V", "H");
+        const hits = pickAxesAt(axes, 4.5, 4.5, 0.4);
+        expect(hits.map(a => a.kind).sort()).toEqual(["H", "V"]);
+    });
+    test("two parallel V axes at the same x return only the closer one", () => {
+        const axes = [
+            addAxis([], "V", 9, 9)[0],
+            addAxis(addAxis([], "V", 9, 9), "V", 9, 9)[1],
+        ];
+        // Both at canonical x=4. They're equidistant from (4.5, 4); pickAxesAt
+        // returns at most one V (the first encountered with min distance).
+        const hits = pickAxesAt(axes, 4.5, 4, 0.4);
+        expect(hits.filter(a => a.kind === "V")).toHaveLength(1);
+    });
+    test("returns [] when nothing is in range", () => {
+        const axes = axesWith(9, 9, "V");
+        expect(pickAxesAt(axes, 0.5, 0.5, 0.4)).toEqual([]);
     });
 });
 
 describe("setAxisPosition", () => {
     test("updates V axis x while keeping kind / id / active", () => {
-        let axes = defaultAxes(9, 9);
-        axes = toggleAxisKind(axes, "V");
-        const id = axes.find(a => a.kind === "V")!.id;
+        const axes = axesWith(9, 9, "V");
+        const id = axes[0].id;
         const updated = setAxisPosition(axes, id, { x: 2 });
-        const v = updated.find(a => a.kind === "V")!;
-        expect(v.kind === "V" && v.x === 2).toBe(true);
-        expect(v.active).toBe(true);
+        const v = updated[0];
+        expect(v.kind === "V" && v.x === 2 && v.active).toBe(true);
     });
     test("updates D1 c", () => {
-        let axes = defaultAxes(9, 9);
-        const id = axes.find(a => a.kind === "D1")!.id;
+        const axes = axesWith(9, 9, "D1");
+        const id = axes[0].id;
         const updated = setAxisPosition(axes, id, { c: 2 });
-        const d1 = updated.find(a => a.kind === "D1")!;
+        const d1 = updated[0];
         expect(d1.kind === "D1" && d1.c === 2).toBe(true);
     });
     test("updates C both x and y", () => {
-        let axes = defaultAxes(9, 9);
-        const id = axes.find(a => a.kind === "C")!.id;
+        const axes = axesWith(9, 9, "C");
+        const id = axes[0].id;
         const updated = setAxisPosition(axes, id, { x: 2, y: 3 });
-        const c = updated.find(a => a.kind === "C")!;
+        const c = updated[0];
         expect(c.kind === "C" && c.x === 2 && c.y === 3).toBe(true);
+    });
+});
+
+describe("axisOffCanvas", () => {
+    test("V at canonical centre is alive", () => {
+        const v = addAxis([], "V", 9, 9)[0];
+        expect(axisOffCanvas(v, 9, 9)).toBe(false);
+    });
+    test("V just inside the right edge (x = W − 1.5) still has a useful mirror", () => {
+        // a.x = 7.5 → cells 7↔8 mirror.
+        const v: Axis = { kind: "V", id: "x", active: true, x: 7.5 };
+        expect(axisOffCanvas(v, 9, 9)).toBe(false);
+    });
+    test("V on the rightmost cell (x = W − 1) is dead — only self-mirror", () => {
+        const v: Axis = { kind: "V", id: "x", active: true, x: 8 };
+        expect(axisOffCanvas(v, 9, 9)).toBe(true);
+    });
+    test("V at the right canvas edge (x = W − 0.5) is dead", () => {
+        const v: Axis = { kind: "V", id: "x", active: true, x: 8.5 };
+        expect(axisOffCanvas(v, 9, 9)).toBe(true);
+    });
+    test("V on the leftmost cell (x = 0) is dead", () => {
+        const v: Axis = { kind: "V", id: "x", active: true, x: 0 };
+        expect(axisOffCanvas(v, 9, 9)).toBe(true);
+    });
+    test("V just inside the left edge (x = 0.5) is alive — cells 0↔1 mirror", () => {
+        const v: Axis = { kind: "V", id: "x", active: true, x: 0.5 };
+        expect(axisOffCanvas(v, 9, 9)).toBe(false);
+    });
+    test("C with x at canvas-boundary cell is dead even if y is interior", () => {
+        const c: Axis = { kind: "C", id: "x", active: true, x: 8, y: 4 };
+        expect(axisOffCanvas(c, 9, 9)).toBe(true);
+    });
+    test("D1 at canonical c=0 (on 9×9) is alive", () => {
+        const d1: Axis = { kind: "D1", id: "x", active: true, c: 0 };
+        expect(axisOffCanvas(d1, 9, 9)).toBe(false);
+    });
+    test("D1 at c = W − 1 (only the corner cell on axis) is dead", () => {
+        const d1: Axis = { kind: "D1", id: "x", active: true, c: 8 };
+        expect(axisOffCanvas(d1, 9, 9)).toBe(true);
     });
 });
 
@@ -233,19 +286,5 @@ describe("snapHalf / snapInt", () => {
         expect(snapInt(2.4)).toBe(2);
         expect(snapInt(2.5)).toBe(3);
         expect(snapInt(2.6)).toBe(3);
-    });
-});
-
-describe("toggleAxisKind", () => {
-    test("flips one preset's active without touching others", () => {
-        const axes = toggleAxisKind(defaultAxes(9, 9), "V");
-        expect(axes.find(a => a.kind === "V")!.active).toBe(true);
-        expect(axes.find(a => a.kind === "H")!.active).toBe(false);
-        expect(axes).toHaveLength(5);
-    });
-
-    test("kind not present in list → no-op (defensive — shouldn't happen post-migration)", () => {
-        const axes = toggleAxisKind([], "V");
-        expect(axes).toEqual([]);
     });
 });

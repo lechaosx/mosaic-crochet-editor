@@ -5,7 +5,7 @@
 
 import { describe, test, expect } from "vitest";
 import { paintOps } from "../src/paint";
-import { axesToFlat, defaultAxes, toggleAxisKind } from "../src/symmetry";
+import { axesToFlat, addAxis } from "../src/symmetry";
 import { filledPixels, rowPattern } from "./_helpers";
 
 describe("symmetry-aware paint inside selection", () => {
@@ -19,7 +19,7 @@ describe("symmetry-aware paint inside selection", () => {
         // canvas, (0, 1) mirrors to (4, 1).
         const shifted = new Uint8Array(W * H);
         shifted[1 * W + 0] = 1;
-        const symAxes = axesToFlat(toggleAxisKind(defaultAxes(W, H), "V"));
+        const symAxes = axesToFlat(addAxis([], "V", W, H));
         const out = paintOps.pencil({
             visible, pattern, x: 0, y: 1,
             color: 2, primary: 1,
@@ -43,7 +43,7 @@ describe("symmetry-aware paint inside selection", () => {
         // No function in `symmetry.ts` or `selection.ts` should expand
         // `mask` based on active axes. The visible marquee is exactly
         // these cells.
-        const symAxes = axesToFlat(toggleAxisKind(toggleAxisKind(defaultAxes(W, H), "V"), "H"));
+        const symAxes = axesToFlat(addAxis(addAxis([], "V", W, H), "H", W, H));
         // We just assert that axesToFlat returns a Float64Array;
         // the selection bitmask is unaffected.
         expect(symAxes).toBeInstanceOf(Float64Array);

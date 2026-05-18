@@ -119,13 +119,16 @@ Cut into two slices because the type/state refactor touches every symmetry call 
 - [x] Move-tool drag near an active guide grabs the axis instead of starting a float-move. Snap-to-grid: half-integer for V/H/C; integer for D1/D2 (diagonals can't sit between cells without breaking the cell-to-cell mirror invariant). One history snapshot per drag; cancel reverts. Hit tolerance is 0.4 cell-units. — **Agent's choice**; snap-to-grid resolution — **your decision** (Open decision pre-answered)
 - [x] Tests: 5 new Rust `symmetric_orbit` cases (canonical V, off-canonical V, half-integer H on even canvas, C rotation, V+H composition without C in axes); 13 new logic specs (axesToFlat shape, distanceToAxis, pickAxisAt, setAxisPosition, snap helpers); 1 E2E (V axis dragged left changes the mirror partner). — **Agent's choice**
 
-### Slice C — placement UX (deferred)
+### Slice C — placement UX **— SHIPPED**
 
-- [ ] Axis-placement: 4 toolbar buttons ("Add V / H / D1 / D2 axis"). Click on canvas places at the click cell (snap-to-grid). C kind doesn't need a placement button — Move-drag a V or H to wherever, compose to C via BFS.
-- [ ] Axis-list UI in the symmetry panel: per-row toggle + delete + position display.
-- [ ] Decide: does each placement produce a new id (multiple V axes can coexist), or replace the existing kind's preset? Likely the former, but the renderer / hit-test path already handles arbitrary ids — so this is a UX question, not a code one.
+- [x] Toolbar regrouped: paint (pencil/fill/eraser/invert/overlay) split from transform (select/wand/move/+symmetry). The 5 old V/H/C/D1/D2 toggle buttons collapse into one "Symmetry" popover-trigger button next to select/wand/move. — **your decision** (group rework)
+- [x] Symmetry popover: "Add axis" row with 5 buttons (+V/+H/+C/+D1/+D2); below it a list of all current axes with per-row kind icon + position + active toggle + delete (×). D1/D2 add buttons disable when diagonals unavailable (W−H odd). — **Agent's choice**
+- [x] Keyboard shortcuts V/H/C/D/A now ADD an axis instead of toggling — matches the popover "add to list" model. Multiple axes of the same kind coexist (wallpaper symmetry). — **your decision** (add-to-list semantics)
+- [x] Drag axis far off-canvas → axis deleted. `axisOffCanvas(a, W, H)` uses distance from canvas centre to the axis line; threshold = max(W,H)/2 + 2. — **Agent's choice**
+- [x] `defaultAxes(W, H)` → `[]`. Fresh sessions start with no axes; the 5 presets are gone (existing sessions keep whatever they had loaded). — **your decision** (zero-axes default)
+- [x] Tests: 11 new logic specs (addAxis/removeAxis/toggleAxisActive/axisOffCanvas + setup-helper rewrite); 2 new E2E (popover add+toggle+delete; drag-off-canvas deletes). — **Agent's choice**
 
-**Risk:** Orbit BFS could grow large with many user-added interacting axes. For ≤ 50×50 canvases the orbit is bounded by total cells (~thousands). Cap iterations as a safety net.
+**Risk:** Orbit BFS could grow large with many user-added interacting axes. For ≤ 50×50 canvases the orbit is bounded by total cells (~thousands). Cap iterations as a safety net (deferred — no observed case yet).
 
 ## Phase 5 — Apply-to-selection
 

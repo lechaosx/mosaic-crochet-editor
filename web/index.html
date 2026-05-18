@@ -27,23 +27,19 @@
     </div>
 
     <div class="tb-row">
-      <div class="tb-group g-tools" role="radiogroup" aria-label="Tool">
+      <div class="tb-group g-paint" role="radiogroup" aria-label="Paint tools">
         <button class="btn btn--icon" id="tool-pencil" title="Pencil (P)" aria-label="Pencil">✏️</button>
         <button class="btn btn--icon" id="tool-fill"   title="Fill (F)"   aria-label="Fill">🪣</button>
         <button class="btn btn--icon" id="tool-eraser"  title="Eraser (E) — restore natural; right-click adds overlay" aria-label="Eraser">🧹</button>
         <button class="btn btn--icon" id="tool-overlay" title="Overlay (O) — paint ✕ stitches; right-click restores natural" aria-label="Overlay">✕</button>
         <button class="btn btn--icon" id="tool-invert"  title="Invert (I)" aria-label="Invert">⇋</button>
+      </div>
+
+      <div class="tb-group g-transform" aria-label="Transform">
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select">▭</button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand">✨</button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection to shift its pixels. Alt+drag with any tool does the same." aria-label="Move">✥</button>
-      </div>
-
-      <div class="tb-group g-sym" aria-label="Symmetry">
-        <button class="btn btn--icon" id="sym-vertical"   title="Vertical mirror (V)"     aria-label="Vertical symmetry">↔</button>
-        <button class="btn btn--icon" id="sym-horizontal" title="Horizontal mirror (H)"   aria-label="Horizontal symmetry">↕</button>
-        <button class="btn btn--icon" id="sym-central"    title="Central symmetry (C)"    aria-label="Central symmetry">⊕</button>
-        <button class="btn btn--icon" id="sym-diag1"      title="Diagonal ╲ (D)"          aria-label="Diagonal symmetry">╲</button>
-        <button class="btn btn--icon" id="sym-diag2"      title="Anti-diagonal ╱ (A)"     aria-label="Anti-diagonal symmetry">╱</button>
+        <button class="btn btn--icon" id="btn-sym-toggle" popovertarget="sym-popover" title="Symmetry — manage mirror / rotation axes" aria-haspopup="dialog" aria-expanded="false" aria-label="Symmetry">⊕</button>
       </div>
 
       <div class="tb-group g-colors" aria-label="Colours">
@@ -82,6 +78,21 @@
       <input type="checkbox" id="lock-invalid">
       <span class="toggle-track"></span>
     </label>
+  </div>
+
+  <!-- ── Symmetry popover ────────────────────────────────────────────── -->
+  <div id="sym-popover" popover>
+    <div class="popover-row">
+      <span class="popover-label">Add axis</span>
+      <div class="sym-add-row">
+        <button class="btn btn--icon" id="add-sym-v"  title="Add vertical mirror (V)"     aria-label="Add vertical">↔</button>
+        <button class="btn btn--icon" id="add-sym-h"  title="Add horizontal mirror (H)"   aria-label="Add horizontal">↕</button>
+        <button class="btn btn--icon" id="add-sym-c"  title="Add central rotation (C)"    aria-label="Add central">⊕</button>
+        <button class="btn btn--icon" id="add-sym-d1" title="Add diagonal ╲ (D)"          aria-label="Add diagonal">╲</button>
+        <button class="btn btn--icon" id="add-sym-d2" title="Add anti-diagonal ╱ (A)"     aria-label="Add anti-diagonal">╱</button>
+      </div>
+    </div>
+    <div id="sym-list" class="sym-list" aria-label="Axes"></div>
   </div>
 
   <!-- ── Pattern (Edit) popover ──────────────────────────────────────── -->

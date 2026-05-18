@@ -95,15 +95,15 @@ input  { font: inherit; color: inherit; }
 }
 
 /* Wide layout: tb-row wrappers vanish, the 5 groups participate in the
-   toolbar's own flex layout in DOM order: file, hl-rot, tools, sym, colours.
-   `order` rearranges them visually to file, tools, sym, colours, hl-rot. */
+   toolbar's own flex layout in DOM order: file, hl-rot, paint, transform, colours.
+   `order` rearranges them visually to file, paint, transform, colours, hl-rot. */
 .tb-row { display: contents; }
 
-.g-file   { order: 1; }
-.g-tools  { order: 2; }
-.g-sym    { order: 3; }
-.g-colors { order: 4; }
-.g-hlrot  { order: 5; }
+.g-file      { order: 1; }
+.g-paint     { order: 2; }
+.g-transform { order: 3; }
+.g-colors    { order: 4; }
+.g-hlrot     { order: 5; }
 
 /* Narrow layout: each tb-row becomes a full-width flex container. The
    toolbar wraps to exactly two visible rows; row-1 holds file + hl-rot,
@@ -293,6 +293,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 /* Popovers default to display:none from the UA stylesheet; only opt in when open. */
 #new-pattern-widget:popover-open,
 #edit-pattern-widget:popover-open,
+#sym-popover:popover-open,
 #hl-popover:popover-open {
   display: flex;
   flex-direction: column;
@@ -302,7 +303,70 @@ input[type="checkbox"] { accent-color: var(--accent); }
 #new-pattern-widget,
 #edit-pattern-widget { min-width: 16rem; }
 
-#hl-popover { min-width: 18rem; }
+#hl-popover  { min-width: 18rem; }
+#sym-popover { min-width: 22rem; }
+
+/* "Add axis" row pushes the 5 +V/+H/+C/+D1/+D2 buttons to the right edge
+   so they form a tidy cluster opposite the label. */
+.sym-add-row {
+  display: flex;
+  gap: var(--space-1);
+  justify-content: flex-end;
+}
+
+/* Separator between the add row and the axis list. */
+.sym-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 18rem;
+  overflow-y: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--bg-3, rgba(255, 255, 255, 0.08));
+}
+
+.sym-list:empty::before {
+  content: "No axes yet — add one above";
+  color: var(--fg-2);
+  font-size: var(--font-sm);
+  font-style: italic;
+  padding: var(--space-2);
+  text-align: center;
+}
+
+/* Grid alignment so kind icon / position / toggle / delete columns line up
+   across every row, regardless of position-string length. */
+.sym-list-row {
+  display: grid;
+  grid-template-columns: 1.75em 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-1);
+  background: var(--bg-2);
+  transition: opacity 0.15s;
+}
+.sym-list-row.is-inactive { opacity: 0.45; }
+
+.sym-list-row__kind {
+  font-size: 1.2em;
+  text-align: center;
+  line-height: 1;
+}
+.sym-list-row__pos {
+  color: var(--fg-2);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+/* Toggle / delete buttons inside the list use a smaller hit target than the
+   toolbar to keep rows compact. */
+.sym-list-row .btn--icon {
+  --hit: var(--hit-sm, 28px);
+  min-width: var(--hit);
+  height: var(--hit);
+  font-size: 0.9em;
+}
 
 .popover-footer {
   display: flex;

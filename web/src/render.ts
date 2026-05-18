@@ -84,8 +84,8 @@ export interface RendererState {
     // hole sentinel — render loops skip; `null` makes accidental reads fail loud.
     colors: (string | null)[];
     // Third palette colour for the ! invalid marker, chosen at render time
-    // to contrast nicely with both user colours. See `chooseInvalidColor`.
-    invalidColor: string;
+    // to contrast nicely with both user colours. See `chooseContrastingColor`.
+    contrastingColor: string;
     // During a replace-mode select drag, the existing float outline is
     // hidden (the drag is about to drop it). For add/remove modes it stays
     // visible so the user can see what they're modifying.
@@ -99,6 +99,10 @@ export interface RendererState {
     // Marching-ants phase. Animated in `frame` while any float (committed
     // or drag preview) is on-screen; used as `lineDashOffset` for the outline.
     selectionDashOffset: number;
+    // Axes currently dragged into the off-canvas delete zone (multi-axis
+    // intersection drag picks up to one per kind). Renderer draws those
+    // guides at reduced alpha so the user can see "release = gone."
+    axesInDeleteZone: Set<string>;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
 }
@@ -116,10 +120,11 @@ export function makeRendererState(): RendererState {
         lastFrameTime:  0,
         lastStore:      null,
         colors:         [null, "#000000", "#ffffff"],
-        invalidColor:     "hsl(0, 70%, 50%)",
+        contrastingColor:     "hsl(0, 70%, 50%)",
         hideCommittedSelection: false,
         dragRect:               null,
         selectionDashOffset:    0,
+        axesInDeleteZone:       new Set<string>(),
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
     };
@@ -135,7 +140,7 @@ export function makeRendererState(): RendererState {
 // constraint — their `Infinity` is filtered by `Math.min`. If both inputs
 // are grayscale, every hue is equally good; we default to red (conventional
 // warning colour).
-function chooseInvalidColor(a: string, b: string, intensity: number): string {
+function chooseContrastingColor(a: string, b: string, intensity: number): string {
     const sat = Math.max(0, Math.min(100, intensity));
     const { h: ha, s: sa } = hexToHsl(a);
     const { h: hb, s: sb } = hexToHsl(b);
@@ -329,7 +334,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
     rs.lastStore    = store;
     rs.colors[1]    = store.state.colorA;
     rs.colors[2]    = store.state.colorB;
-    rs.invalidColor = chooseInvalidColor(store.state.colorA, store.state.colorB, store.state.invalidIntensity);
+    rs.contrastingColor = chooseContrastingColor(store.state.colorA, store.state.colorB, store.state.invalidIntensity);
     syncRotation(rs, store.state.rotation, vp, ctx);
     // Kick off the rAF loop whenever any marching-ants outline is on-screen
     // (committed selection that isn't hidden, or an in-flight drag rect).
@@ -384,8 +389,8 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.invalidColor, pattern, previewPixels, store.plan, m, hlOpacity / 100);
-    renderSymmetryGuides(ctx, view, dpr, pattern, axes);
+    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, store.plan, m, hlOpacity / 100);
+    renderSymmetryGuides(ctx, view, dpr, pattern, axes, rs.contrastingColor, rs.axesInDeleteZone);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
@@ -403,9 +408,9 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
                 shifted[cy * W + cx] = 1;
             }
         }
-        renderSelection(ctx, view, dpr, pattern, shifted, rs.invalidColor, dashOffsetSnapped);
+        renderSelection(ctx, view, dpr, pattern, shifted, rs.contrastingColor, dashOffsetSnapped);
     }
-    if (rs.dragRect) renderDragRect(ctx, view, dpr, rs.dragRect, rs.invalidColor, dashOffsetSnapped);
+    if (rs.dragRect) renderDragRect(ctx, view, dpr, rs.dragRect, rs.contrastingColor, dashOffsetSnapped);
     if (labelsVisible) {
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
@@ -415,7 +420,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 
 // Outline of a selection: walk all selected cells, emit a line segment for
 // each side that borders an unselected cell (or canvas edge). Drawn in the
-// existing `invalidColor` — already a palette-distinct contrast pick — so
+// existing `contrastingColor` — already a palette-distinct contrast pick — so
 // it's visible against either palette. Static dashes; animating the offset
 // in the rAF loop is a Phase 1 follow-up.
 // Trace the selection's boundary as one or more closed polylines (one per
@@ -514,7 +519,7 @@ function renderDragRect(
 //   colour the glyph lands on, so the glyph is readable against either
 //   palette).
 // ! for INVALID — screen coords (always points down regardless of canvas
-//   rotation, like axis labels). Drawn in `invalidColor` — a third palette
+//   rotation, like axis labels). Drawn in `contrastingColor` — a third palette
 //   colour chosen at render time to contrast with both user colours so the
 //   marker reads against any cell underneath.
 // Both ✕ and ! are dimmable via the user's opacity slider. Round-mode corners
@@ -522,7 +527,7 @@ function renderDragRect(
 // directions; each draws independently.
 function renderHighlightSymbols(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    colors: (string | null)[], invalidColor: string,
+    colors: (string | null)[], contrastingColor: string,
     pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
     m: DOMMatrix, opacity: number,
 ) {
@@ -574,7 +579,7 @@ function renderHighlightSymbols(
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    ctx.strokeStyle = invalidColor;
+    ctx.strokeStyle = contrastingColor;
     ctx.lineWidth   = cellPx * 0.16;
     ctx.beginPath();
     for (let i = 0; i < plan.length; i += 4) {
@@ -588,7 +593,7 @@ function renderHighlightSymbols(
     }
     ctx.stroke();
 
-    ctx.fillStyle = invalidColor;
+    ctx.fillStyle = contrastingColor;
     ctx.beginPath();
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] !== PlanType.Invalid) continue;
@@ -694,6 +699,7 @@ function renderTopIndicator(
 function renderSymmetryGuides(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     pattern: PatternState, axes: ReadonlyArray<Axis>,
+    color: string, deleteZoneIds: ReadonlySet<string>,
 ) {
     const active = axes.filter(a => a.active);
     if (active.length === 0) return;
@@ -706,7 +712,7 @@ function renderSymmetryGuides(
     const dashGap  = dash * 0.55;
 
     const draw = (x1: number, y1: number, x2: number, y2: number) => {
-        ctx.strokeStyle = "rgba(255, 80, 180, 0.85)";
+        ctx.strokeStyle = color;
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
@@ -718,6 +724,9 @@ function renderSymmetryGuides(
     ctx.setLineDash([dash, dashGap]);
 
     for (const a of active) {
+        // Dragging into the off-canvas delete zone fades the guide so the
+        // user sees the "release here = delete" intent visually.
+        ctx.globalAlpha = deleteZoneIds.has(a.id) ? 0.25 : 1;
         switch (a.kind) {
             case "V": {
                 // Vertical mirror line at cell-edge x; +0.5 shifts cell-index to render coords.
@@ -750,7 +759,7 @@ function renderSymmetryGuides(
             }
             case "C": {
                 ctx.setLineDash([]);
-                ctx.fillStyle = "rgba(255, 80, 180, 0.95)";
+                ctx.fillStyle = color;
                 ctx.beginPath();
                 ctx.arc(a.x + 0.5, a.y + 0.5, 0.35, 0, Math.PI * 2);
                 ctx.fill();
