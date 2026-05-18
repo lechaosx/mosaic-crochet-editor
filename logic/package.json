@@ -3,15 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "exports": {
-    "./types":     "./src/types.ts",
-    "./dev":       "./src/dev.ts",
-    "./store":     "./src/store.ts",
-    "./selection": "./src/selection.ts",
-    "./paint":     "./src/paint.ts",
-    "./pattern":   "./src/pattern.ts",
-    "./symmetry":  "./src/symmetry.ts",
-    "./clipboard": "./src/clipboard.ts",
-    "./storage":   "./src/storage.ts"
+    "./*": "./src/*.ts"
   },
   "scripts": {
     "typecheck":     "tsc --noEmit",

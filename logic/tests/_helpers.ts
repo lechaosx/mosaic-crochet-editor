@@ -18,7 +18,6 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         hlOpacity: 100,
         invalidIntensity: 65,
         float: null,
-        library: [],
         labelsVisible: true,
         lockInvalid: false,
         rotation: 0,

@@ -28,7 +28,6 @@ function defaultSession(): SessionState {
     return {
         pattern:       { mode: "row", canvasWidth: 9, canvasHeight: 9 },
         pixels:        new Uint8Array(81),
-        library:       [],
         colorA:        "#000000",
         colorB:        "#ffffff",
         activeTool:    "pencil",

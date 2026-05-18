@@ -11,7 +11,7 @@ import {
     build_highlight_plan_row,
     build_highlight_plan_round,
 } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey, Float, LibItem } from "./types";
+import { Tool, PatternState, SymKey, Float } from "./types";
 
 export interface SessionState {
     pattern:       PatternState;
@@ -28,8 +28,6 @@ export interface SessionState {
     // baseline; `float.pixels` stamps back on top at render. Commit writes
     // lifted pixels back into the canvas and clears the float.
     float:         Float | null;
-    // Floats parked in the off-canvas scratch area.
-    library:       LibItem[];
     labelsVisible: boolean;
     lockInvalid:   boolean;
     rotation:      number;               // degrees (target — render.ts animates the visual)

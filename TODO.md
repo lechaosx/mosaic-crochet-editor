@@ -26,7 +26,7 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 
 - [x] **Esc on transient float**: commit/anchor (GIMP). — **your decision**
 - [ ] **Selection serialisation**: 1 bit / cell (matches existing pixel packing) or 1 byte / cell (simpler)? Suggested: 1 bit, reuse the existing packPixels machinery.
-- [ ] **Library panel position**: sidebar, floating modal, or another popover? Affects toolbar layout.
+- [x] ~~**Library panel position**~~: moot — Phase 3 cancelled. — **your decision**
 - [ ] **Mirror axis position**: snap to cell grid or pixel-precise? Suggested: snap to grid — half-integer placements (between cells) are useful (even mirrors), integer are useful (odd mirrors with a cell on the axis), but no in-between.
 
 ---
@@ -85,19 +85,17 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 
 **Risk (mitigated):** Modifier-semantics depend on cursor location. The `pointerdown` / `paintAt` flow hit-tests against the current float's shifted mask before deciding. Covered by E2E specs.
 
-## Phase 3 — Persistent floats (library)
+## Phase 3 — Persistent floats (library) **— CANCELLED**
 
-**Ships:** off-canvas storage for named motifs; drag in/out of canvas.
+Built (state + lift gesture + stamp gesture + scratch-area render + hover/click), then removed in the same sitting. Reason: the foundation worked, but every follow-up question (paint into items, eraser baseline, edge-anchored resize, ctrl+drag clone, layer-order rules) required guessing user workflows we don't actually have. The user called the result "very clunky" and chose to roll back rather than design speculatively. The `library: LibItem[]` field, the `library.ts` module, the renderer's scratch-area pass, and the gesture hooks all came out. The `Library panel position` Open decision is moot. — **your decision**
 
-- [ ] Add `SessionState.floats: Float[]` where `Float = { id: string, pixels: Uint8Array, mask: Uint8Array, x: number, y: number, name?: string }`.
-- [ ] Lift gesture: drag a selection past the canvas border → instead of disposing the transient float on release, insert it into `floats`.
-- [ ] Stamp gesture: drag a persistent float onto the canvas → on release, stamp into canvas pixels + dispose from `floats`.
-- [ ] Render floats in the scratch area (extend view past the canvas border — gesture can already pan there; just need to render them and the canvas boundary visually).
-- [ ] Library panel UI: list of floats, name field, delete button. (See Open decision for placement.)
-- [ ] Save/load: serialise `floats` alongside canvas pixels. Bump file/localStorage version.
-- [ ] Hover on a float in the scratch area shows its outline; click acts like a selection of just that float's cells.
+If this comes back, the design needs:
+- Painting parity: paint tools target the layer under the cursor (currently they assume canvas).
+- Edge-anchored library items so canvas resize doesn't strand or absorb them.
+- Ctrl+drag clone, no hover outline, item visible during drag.
+- Decisions on cross-layer selection, eraser baseline on items, symmetry/highlight scope.
 
-**Risk:** Scratch-area UX. Need a clear visual demarcation between canvas (real pattern) and scratch (library). Probably: canvas keeps current background; scratch is one shade darker with a faint grid showing it's free space. Get this wrong and the canvas border is invisible.
+Don't pick this up again until there are real users doing real motif workflows.
 
 ## Phase 4 — Custom symmetry axes
 
@@ -144,7 +142,6 @@ Working plan for the next big feature set. Six phases, each shippable on its own
 ```
 Phase 1 (selection foundation)
   ├── Phase 2 (operations on selection)
-  │     └── Phase 3 (persistent floats / library)
   └── Phase 5 (apply-to-selection)  [also needs Phase 4]
 
 Phase 4 (custom axes)
@@ -152,11 +149,11 @@ Phase 4 (custom axes)
         └── Phase 6 (repeat grids)
 ```
 
-Phases 1 and 4 are independent — can be done in either order. Everything else has dependencies as drawn.
+Phases 1 and 4 are independent — can be done in either order. Phase 3 (library) is cancelled.
 
-## Suggested first move
+## Suggested next move
 
-**Phase 1.** Smallest viable ship, unlocks Phases 2 and 3, doesn't touch the symmetry refactor (Phase 4). Selection-aware paint is a one-time tax on every WASM tool function; pay it once and the rest is gravy.
+**Phase 4.** Phases 1 and 2 are shipped; Phase 3 is cancelled; Phase 4 is the next independent piece, replacing the 5-flag symmetry mask with arbitrary user-placed axes. Self-contained — doesn't touch selection / paint internals.
 
 ---
 

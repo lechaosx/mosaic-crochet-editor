@@ -1,16 +1,10 @@
-import { PatternState, Tool, SymKey, LibItem } from "@mosaic/logic/types";
+import { PatternState, Tool, SymKey } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 
 const LS_KEY       = "mosaic-pattern-v4";
-const FILE_VERSION = 2;   // bumped when library is added to .mcw (Phase 3 serialisation)
+const FILE_VERSION = 2;
 const LS_VERSION   = 4;
-
-interface PackedLibItem {
-    id:    string;
-    float: PackedFloat;
-    name?: string;
-}
 
 interface LocalSaveV4 {
     version:          4;
@@ -24,7 +18,6 @@ interface LocalSaveV4 {
     hlOpacity:        number;
     invalidIntensity: number;
     float:            PackedFloat | null;
-    library:          PackedLibItem[];
     labelsVisible:    boolean;
     lockInvalid:      boolean;
     canvasRotation:   number;
@@ -43,10 +36,6 @@ export function saveToLocalStorage(s: Readonly<SessionState>) {
         hlOpacity:        s.hlOpacity,
         invalidIntensity: s.invalidIntensity,
         float:            s.float ? packFloat(s.float) : null,
-        library:          s.library.map(item => ({
-                              id: item.id, float: packFloat(item.float),
-                              ...(item.name !== undefined ? { name: item.name } : {}),
-                          })),
         labelsVisible:    s.labelsVisible,
         lockInvalid:      s.lockInvalid,
         canvasRotation:   s.rotation,
@@ -71,10 +60,6 @@ export function loadFromLocalStorage(): SessionState | null {
             hlOpacity:        data.hlOpacity,
             invalidIntensity: data.invalidIntensity,
             float:            data.float ? unpackFloat(data.float) : null,
-            library:          (data.library ?? []).map(item => ({
-                                  id: item.id, float: unpackFloat(item.float),
-                                  ...(item.name !== undefined ? { name: item.name } : {}),
-                              })) as LibItem[],
             labelsVisible:    data.labelsVisible,
             lockInvalid:      data.lockInvalid,
             rotation:         data.canvasRotation,

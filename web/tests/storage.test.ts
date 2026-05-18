@@ -40,7 +40,6 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.float!.x).toBe(2);
         expect(loaded!.float!.y).toBe(0);
         expect(loaded!.float!.pixels[0]).toBe(1);
-        expect(loaded!.library).toEqual([]);
     });
 
     test("nothing in localStorage → null", () => {
