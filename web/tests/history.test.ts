@@ -38,6 +38,37 @@ describe("historySave / historyReset", () => {
         historySave({ ...s, float: makeFloat([{ x: 0, y: 0, v: 1 }]) });
         expect(canUndo()).toBe(true);
     });
+
+    test("axis changes are part of the dedupe key — toggling activates a snapshot", () => {
+        const s = rowSession(3, 3);
+        historyReset(s);
+        // Toggle V on by mutating the V preset's `active`.
+        const flipped = s.axes.map(a =>
+            a.kind === "V" ? { ...a, active: true } : a
+        );
+        historySave({ ...s, axes: flipped });
+        expect(canUndo()).toBe(true);
+    });
+
+    test("axis position survives undo: drag V to x=2, snapshot, undo restores", () => {
+        const s = rowSession(3, 3);
+        historyReset(s);
+        // Snapshot with V active at canonical x=1.
+        const v1 = s.axes.map(a =>
+            a.kind === "V" ? { ...a, active: true } : a
+        );
+        historySave({ ...s, axes: v1 });
+        // Now snapshot with V moved to x=0 (still active).
+        const v2 = s.axes.map(a =>
+            a.kind === "V" ? { ...a, active: true, x: 0 } : a
+        );
+        historySave({ ...s, axes: v2 });
+        // Undo back to V@x=1.
+        const r = historyUndo();
+        expect(r).not.toBeNull();
+        const v = r!.axes.find(a => a.kind === "V")!;
+        expect(v.kind === "V" && v.x === 1).toBe(true);
+    });
 });
 
 describe("historyUndo / Redo navigation", () => {

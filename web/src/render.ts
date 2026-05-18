@@ -1,6 +1,5 @@
-import { PatternState, RowState, RoundState, SymKey } from "@mosaic/logic/types";
+import { PatternState, RowState, RoundState, Axis, SymKey } from "@mosaic/logic/types";
 import { PlanType, PlanDir } from "@mosaic/wasm";
-import { computeClosure, diagonalsAvailable } from "@mosaic/logic/symmetry";
 import { Store, visiblePixels } from "@mosaic/logic/store";
 
 const ZOOM_MIN     = 2;
@@ -208,6 +207,21 @@ export function screenToPattern(
     return { x: Math.floor(p.x), y: Math.floor(p.y) };
 }
 
+// Same as `screenToPattern` but keeps the fractional cell coordinates —
+// callers that need to hit-test against sub-cell features (axis lines,
+// rotation points) want continuous coords, not floored cell indices.
+export function screenToPatternFrac(
+    canvas: HTMLCanvasElement, view: ViewState, dpr: number, visualRotation: number,
+    pattern: PatternState, clientX: number, clientY: number,
+): { x: number; y: number } {
+    const rect = canvas.getBoundingClientRect();
+    const cx = (clientX - rect.left) * dpr;
+    const cy = (clientY - rect.top)  * dpr;
+    const p = buildMatrix(canvas, view, dpr, visualRotation, pattern)
+        .inverse().transformPoint({ x: cx, y: cy });
+    return { x: p.x, y: p.y };
+}
+
 export function fitToView(
     canvas: HTMLCanvasElement, view: ViewState, pattern: PatternState, rotationDeg: number,
 ) {
@@ -328,7 +342,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
 }
 
 function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
-    const { pattern, pixels, float, symmetry, hlOpacity, labelsVisible } = store.state;
+    const { pattern, pixels, float, axes, hlOpacity, labelsVisible } = store.state;
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { canvas, view, dpr } = vp;
 
@@ -371,7 +385,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     ctx.stroke();
 
     renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.invalidColor, pattern, previewPixels, store.plan, m, hlOpacity / 100);
-    renderSymmetryGuides(ctx, view, dpr, pattern, symmetry);
+    renderSymmetryGuides(ctx, view, dpr, pattern, axes);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
@@ -679,62 +693,71 @@ function renderTopIndicator(
 
 function renderSymmetryGuides(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    pattern: PatternState, active: Set<SymKey>,
+    pattern: PatternState, axes: ReadonlyArray<Axis>,
 ) {
-    if (active.size === 0) return;
+    const active = axes.filter(a => a.active);
+    if (active.length === 0) return;
     const { canvasWidth: W, canvasHeight: H } = pattern;
-    const closure = computeClosure(active, diagonalsAvailable(W, H));
-    if (closure.size === 0) return;
 
-    const cx = W / 2, cy = H / 2;
     const overhang = 1;                       // pattern px past each side
     const ovhDiag  = overhang / Math.SQRT2;   // along-line equivalent for diagonals
     const lw       = 1.6 / (view.zoom * dpr);
     const dash     = 8   / (view.zoom * dpr);
     const dashGap  = dash * 0.55;
 
-    const draw = (x1: number, y1: number, x2: number, y2: number, direct: boolean) => {
-        ctx.strokeStyle = direct ? "rgba(255, 80, 180, 0.85)" : "rgba(255, 80, 180, 0.35)";
+    const draw = (x1: number, y1: number, x2: number, y2: number) => {
+        ctx.strokeStyle = "rgba(255, 80, 180, 0.85)";
         ctx.beginPath();
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
         ctx.stroke();
     };
-    const d = (k: SymKey) => active.has(k);
 
     ctx.save();
     ctx.lineWidth = lw;
     ctx.setLineDash([dash, dashGap]);
 
-    if (closure.has("V")) draw(cx, -overhang, cx, H + overhang, d("V"));
-    if (closure.has("H")) draw(-overhang, cy, W + overhang, cy, d("H"));
-
-    if (closure.has("D1")) {
-        // D1 axis (x − y = (W−H)/2). Compute the endpoints where it exits
-        // the pattern, then extend by `overhang` along the line direction.
-        const off  = (W - H) / 2;
-        const yMin = Math.max(0, -off);
-        const yMax = Math.min(H, W - off);
-        draw(yMin + off - ovhDiag, yMin - ovhDiag,
-             yMax + off + ovhDiag, yMax + ovhDiag, d("D1"));
-    }
-    if (closure.has("D2")) {
-        // D2 axis. In pixel-index coords it's x + y = (W+H−2)/2; in render
-        // coords (each pixel spans [n, n+1], both x and y shift by +0.5)
-        // it becomes x + y = (W+H)/2.
-        const sum  = (W + H) / 2;
-        const yMin = Math.max(0, sum - W);
-        const yMax = Math.min(H, sum);
-        draw(sum - yMin + ovhDiag, yMin - ovhDiag,
-             sum - yMax - ovhDiag, yMax + ovhDiag, d("D2"));
-    }
-
-    if (closure.has("C")) {
-        ctx.setLineDash([]);
-        ctx.fillStyle = d("C") ? "rgba(255, 80, 180, 0.95)" : "rgba(255, 80, 180, 0.45)";
-        ctx.beginPath();
-        ctx.arc(cx, cy, 0.35, 0, Math.PI * 2);
-        ctx.fill();
+    for (const a of active) {
+        switch (a.kind) {
+            case "V": {
+                // Vertical mirror line at cell-edge x; +0.5 shifts cell-index to render coords.
+                const x = a.x + 0.5;
+                draw(x, -overhang, x, H + overhang);
+                break;
+            }
+            case "H": {
+                const y = a.y + 0.5;
+                draw(-overhang, y, W + overhang, y);
+                break;
+            }
+            case "D1": {
+                // x − y = c (cell coords) ⇒ render x − y = c (cell+0.5 cancels).
+                const c = a.c;
+                const yMin = Math.max(0, -c);
+                const yMax = Math.min(H, W - c);
+                draw(yMin + c - ovhDiag, yMin - ovhDiag,
+                     yMax + c + ovhDiag, yMax + ovhDiag);
+                break;
+            }
+            case "D2": {
+                // x + y = c (cell coords) ⇒ render x + y = c + 1 (each cell shifts by +0.5).
+                const s = a.c + 1;
+                const yMin = Math.max(0, s - W);
+                const yMax = Math.min(H, s);
+                draw(s - yMin + ovhDiag, yMin - ovhDiag,
+                     s - yMax - ovhDiag, yMax + ovhDiag);
+                break;
+            }
+            case "C": {
+                ctx.setLineDash([]);
+                ctx.fillStyle = "rgba(255, 80, 180, 0.95)";
+                ctx.beginPath();
+                ctx.arc(a.x + 0.5, a.y + 0.5, 0.35, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.setLineDash([dash, dashGap]);
+                break;
+            }
+        }
     }
     ctx.restore();
 }

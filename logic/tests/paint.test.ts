@@ -17,7 +17,7 @@ function ctx(tool: PaintTool, opts: Partial<PaintCtx> = {}): PaintCtx {
         x: 1, y: 1,
         color: 1, primary: 1,
         invertVisited: tool === "invert" ? new Set() : null,
-        symMask: 0,
+        symAxes: new Float64Array(0),
         shifted: null,
         ...opts,
     };
@@ -107,7 +107,7 @@ describe("paintOps", () => {
         const visible = natural.slice();
         for (let i = 0; i < visible.length; i++) if (visible[i] !== 0) visible[i] = 2;
         const x = testIdx % W, y = Math.floor(testIdx / W);
-        const out = paintOps.eraser({ visible, pattern, x, y, color: 1, primary: 1, invertVisited: null, symMask: 0, shifted: null });
+        const out = paintOps.eraser({ visible, pattern, x, y, color: 1, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
         // Round mode restores the round natural color, not the row natural.
         expect(out[testIdx]).toBe(natural[testIdx]);
         expect(out[testIdx]).not.toBe(rowNat[testIdx]);
@@ -133,12 +133,12 @@ describe("paintOps", () => {
         for (let i = 0; i < natural.length && paintX < 0; i++) {
             if (natural[i] === 0) continue;
             const cx = i % W, cy = Math.floor(i / W);
-            const painted = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: cx, y: cy, color: 1, primary: 1, invertVisited: null, symMask: 0, shifted: null });
+            const painted = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: cx, y: cy, color: 1, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
             if (!painted.every((v, j) => v === natural[j])) { paintX = cx; paintY = cy; }
         }
         if (paintX < 0) return;   // no valid cell in this pattern (shouldn't happen for 8×8/2 rounds)
-        const withMarker = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: paintX, y: paintY, color: 1, primary: 1, invertVisited: null, symMask: 0, shifted: null });
-        const cleared    = paintOps.overlay({ visible: withMarker,      pattern: roundPat, x: paintX, y: paintY, color: 2, primary: 1, invertVisited: null, symMask: 0, shifted: null });
+        const withMarker = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: paintX, y: paintY, color: 1, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
+        const cleared    = paintOps.overlay({ visible: withMarker,      pattern: roundPat, x: paintX, y: paintY, color: 2, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
         expect(Array.from(withMarker)).not.toEqual(Array.from(natural));
         expect(Array.from(cleared)).toEqual(Array.from(natural));
     });

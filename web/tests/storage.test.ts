@@ -4,17 +4,19 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import { saveToLocalStorage, loadFromLocalStorage } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
+import { toggleAxisKind } from "@mosaic/logic/symmetry";
 
 beforeEach(() => { localStorage.clear(); });
 
 describe("saveToLocalStorage / loadFromLocalStorage", () => {
     test("round-trip preserves all serialised session fields", () => {
+        const baseAxes = rowSession(3, 3).axes;
         const s = rowSession(3, 3, {
             colorA: "#11ff22",
             colorB: "#abcdef",
             activeTool: "fill",
             primaryColor: 2,
-            symmetry: new Set(["V", "H"]),
+            axes: toggleAxisKind(toggleAxisKind(baseAxes, "V"), "H"),
             hlOpacity: 42,
             invalidIntensity: 17,
             labelsVisible: false,
@@ -29,7 +31,9 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.colorA).toBe("#11ff22");
         expect(loaded!.activeTool).toBe("fill");
         expect(loaded!.primaryColor).toBe(2);
-        expect(loaded!.symmetry.has("V")).toBe(true);
+        expect(loaded!.axes.find(a => a.kind === "V")!.active).toBe(true);
+        expect(loaded!.axes.find(a => a.kind === "H")!.active).toBe(true);
+        expect(loaded!.axes.find(a => a.kind === "C")!.active).toBe(false);
         expect(loaded!.hlOpacity).toBe(42);
         expect(loaded!.invalidIntensity).toBe(17);
         expect(loaded!.labelsVisible).toBe(false);

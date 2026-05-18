@@ -59,10 +59,11 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Symmetry
 
 - Five axes: vertical, horizontal, central, diagonal, anti-diagonal. — **your decision**
-- Closure inference: enabling two axes that imply a third activates it automatically. Implied axes display dimmed; directly toggled ones display bright. — **your decision**
+- Closure inference (UI hint only): enabling two axes that imply a third dim-renders the implied button so the user sees "you're getting this for free". The BFS itself doesn't need closure — composition emerges from the active-axis transforms — but the dim-button affordance survives because it's the clearer mental model. — **your decision** (keep the implied affordance after the Phase 4 Slice A refactor)
 - Diagonals disabled when `(W − H)` is odd. — **your decision** (condition); **Agent's choice** (the integer-arithmetic algorithm that needs it)
 - Symmetry applies to pencil, fill, eraser, and invert. — **Agent's choice**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
+- **Drag a guide to move the mirror.** With the Move tool, clicking near an active axis guide grabs it; drag repositions the axis snapped to half-cells (V/H/C) or whole cells (D1/D2). Released positions persist. Painting and selection still work normally — the hit affordance is narrow (~0.4 cell-units), so a stray click in an unrelated cell doesn't catch the guide. — **Agent's choice** (Phase 4 Slice B)
 
 ## Highlights
 
@@ -100,6 +101,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v3`). On refresh the saved stack is restored as-is. — **your decision**
 - Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
 - Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
+- Symmetry axis state is part of undo: toggling V/H/C/D1/D2 pushes a snapshot, and so does releasing an axis-drag. Undo restores both the active set and each axis's position. — **your decision** (Phase 4 Slice B follow-up: once axes carry non-trivial positions, undo has to track them)
 - Redundant snapshots (same packed pixels + same state + same colours as the head) are skipped. — **Agent's choice**
 
 ## Persistence

@@ -64,7 +64,7 @@ Pure TypeScript — no DOM, `lib: ["ESNext"]` enforced. All modules are free fun
 | `symmetry.ts` | `computeClosure`, `getSymmetryMask`, `pruneUnavailableDiagonals` | free functions |
 | `pattern.ts` | `applyEditSettings(settings: EditSettings, source?)` — pure; DOM-reading adapter lives in `web/src/pattern.ts` | free functions |
 | `storage.ts` | `packPixels` / `unpackPixels` / `packFloat` / `unpackFloat` / `packSelection` / `unpackSelection` — serialisation only | free functions |
-| `types.ts` | `PatternState`, `Float`, `Tool`, `SymKey` | types |
+| `types.ts` | `PatternState`, `Float`, `Tool`, `SymKey`, `Axis` (discriminated union: V / H / D1 / D2 / C) | types |
 | `dev.ts` | `devAssert` / `assertNever` — dead-code-eliminated in production | free functions |
 
 ### `web`
@@ -137,7 +137,7 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - Observers fire after every commit and replace the boilerplate of e.g. `ui.setHistory(canUndo(), canRedo())` repeated at every mutation site. — **Agent's choice**
 - Pass things in — never reach for them: every module receives its dependencies as arguments. No module-level mutable singletons; no factory closures that hide state. — **your decision**
 - Renderer state is data (`RendererState` struct) operated on by free functions. The renderer has no invariant to enforce, so no class. — **joint**
-- Symmetry mask: TS computes the closure, passes a `u8` bitmask to Rust. — **Agent's choice**
+- Symmetry axes: `SessionState.axes: Axis[]` (5 canonical-position presets seeded by `defaultAxes`; each carries a kind-specific position scalar). TS compiles the active axes to a flat `Float64Array` (3 doubles per active axis: `kind`, `a`, `b`) via `axesToFlat` and passes it to Rust; the Rust BFS builds per-axis reflection closures from those positions. The BFS handles composition (V + H produces the 4-cell orbit; C bit isn't needed). The closure logic survives in `closureKinds` for dim-rendering symmetry buttons that are induced — UI affordance only, not part of the BFS path. Move-tool drag near an active guide starts an `axis-drag` gesture; release snaps to half-cell (V/H/C) or whole-cell (D1/D2). The WASM build needs `--enable-nontrapping-float-to-int` because the orbit walker's `f64 as i32` casts emit `i32.trunc_sat_f64_s`. — **Agent's choice** (axes refactor); **your decision** (keep C as a kind, presets deletable, keep the implied-button dim affordance, snap to half-cell)
 - Dirty detection: pixel-array diff against a baseline snapshot (`preStroke`). — **your decision**
 - Stroke optimisation: pre-stroke snapshot compared on stroke end; unchanged → no history entry. — **Agent's choice**
 - Diagonal symmetries: integer arithmetic for `f(f(p)) = p`. — **Agent's choice**

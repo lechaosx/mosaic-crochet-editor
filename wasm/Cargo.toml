@@ -13,5 +13,7 @@ glam                     = { workspace = true }
 ndarray                  = { workspace = true }
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-O", "--enable-bulk-memory"]
+# `--enable-nontrapping-float-to-int` lets `wasm-opt` keep `i32.trunc_sat_f64_s`
+# instructions (emitted by `f64 as i32` casts in the symmetric-orbit walker).
+wasm-opt = ["-O", "--enable-bulk-memory", "--enable-nontrapping-float-to-int"]
 

@@ -16,6 +16,31 @@ test("vertical symmetry mirrors paint horizontally", async ({ page }) => {
     expect(b).toBeLessThan(50);
 });
 
+test("dragging the V symmetry guide moves the mirror axis", async ({ page }) => {
+    // V axis sits at canonical centre (x=4 on 9-wide). Drag its guide to
+    // x=2; painting (0, 1) should now mirror to (4, 1) instead of (8, 1).
+    await bootApp(page);
+    await page.keyboard.press("v");        // toggle V on
+    await page.keyboard.press("m");        // Move tool — axis-drag only fires here
+    // Guide line for canonical V is at render x = 4.5. Click at (4.5, 4) cell coords.
+    const start = await cellCoord(page, 4, 4);
+    const end   = await cellCoord(page, 2, 4);
+    // Offset by half a cell width so we land on the guide (render x=4.5), not the
+    // cell-corner. cellCoord gives the centre, so it's already at render x=4.5.
+    await page.mouse.move(start.cx, start.cy);
+    await page.mouse.down();
+    await page.mouse.move(end.cx, end.cy, { steps: 8 });
+    await page.mouse.up();
+    // Switch to pencil and paint (0, 1) — should mirror to (4, 1) per the new V at x=2.
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    const mirrored = await cellCoord(page, 4, 1);
+    const [r, g, b] = await pixelRGB(page, mirrored.cx, mirrored.cy);
+    expect(r).toBeLessThan(50);
+    expect(g).toBeLessThan(50);
+    expect(b).toBeLessThan(50);
+});
+
 test("Edit popover changes the canvas dimensions", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-edit").click();

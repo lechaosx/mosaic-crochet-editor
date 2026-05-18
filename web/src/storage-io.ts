@@ -1,6 +1,7 @@
-import { PatternState, Tool, SymKey } from "@mosaic/logic/types";
+import { PatternState, Tool, Axis } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
+import { defaultAxes } from "@mosaic/logic/symmetry";
 
 const LS_KEY       = "mosaic-pattern-v4";
 const FILE_VERSION = 2;
@@ -14,7 +15,7 @@ interface LocalSaveV4 {
     colorB:           string;
     activeTool:       string;
     primaryColor:     number;
-    symmetry:         string[];
+    axes:             Axis[];
     hlOpacity:        number;
     invalidIntensity: number;
     float:            PackedFloat | null;
@@ -32,7 +33,7 @@ export function saveToLocalStorage(s: Readonly<SessionState>) {
         colorB:           s.colorB,
         activeTool:       s.activeTool,
         primaryColor:     s.primaryColor,
-        symmetry:         [...s.symmetry],
+        axes:             s.axes,
         hlOpacity:        s.hlOpacity,
         invalidIntensity: s.invalidIntensity,
         float:            s.float ? packFloat(s.float) : null,
@@ -56,7 +57,7 @@ export function loadFromLocalStorage(): SessionState | null {
             colorB:           data.colorB,
             activeTool:       data.activeTool as Tool,
             primaryColor:     data.primaryColor as 1 | 2,
-            symmetry:         new Set(data.symmetry as SymKey[]),
+            axes:             data.axes ?? defaultAxes(data.state.canvasWidth, data.state.canvasHeight),
             hlOpacity:        data.hlOpacity,
             invalidIntensity: data.invalidIntensity,
             float:            data.float ? unpackFloat(data.float) : null,

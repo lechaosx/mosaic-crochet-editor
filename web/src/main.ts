@@ -1,13 +1,15 @@
 import { PlanType, lock_invalid_row, lock_invalid_round,
          export_start_row, export_start_round } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey, Float } from "@mosaic/logic/types";
+import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
-         render, fitToView, screenToPattern, updateStatus } from "./render";
+         render, fitToView, screenToPattern, screenToPatternFrac, updateStatus } from "./render";
 import { applyEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
-import { computeClosure, diagonalsAvailable, getSymmetryMask, pruneUnavailableDiagonals } from "@mosaic/logic/symmetry";
+import { diagonalsAvailable, axesToFlat, pruneUnavailableDiagonals,
+         defaultAxes, toggleAxisKind, activeKinds, closureKinds,
+         pickAxisAt, setAxisPosition, snapHalf, snapInt } from "@mosaic/logic/symmetry";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "./storage-io";
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
@@ -32,7 +34,7 @@ function defaultSession(): SessionState {
         colorB:        "#ffffff",
         activeTool:    "pencil",
         primaryColor:  1,
-        symmetry:        new Set<SymKey>(),
+        axes:           defaultAxes(9, 9),
         hlOpacity:        100,
         invalidIntensity: 65,
         float:           null,
@@ -96,7 +98,18 @@ type Gesture =
         drag: { anchorX: number; anchorY: number; startDx: number; startDy: number } | null;
         prePixels: Uint8Array | null;
         preFloat: Float | null;
+      }
+    | { kind: "axis-drag";
+        axisId: string;
+        axisKind: SymKey;
+        // Snapshot the axes list so cancel can revert without recomputing.
+        preAxes: Axis[];
       };
+// Click within this many cell-units of an active axis guide starts an
+// axis-drag instead of float-move. ~0.4 keeps the affordance close to the
+// 1-cell-wide visual line without being so wide that float-move suffers.
+const AXIS_HIT_TOLERANCE = 0.4;
+
 let gesture: Gesture | null = null;
 let ctrlArrowStamped = false;                        // bake happens once per Ctrl-down
 let maskArrowState: { preFloat: Float } | null = null; // non-null while Alt+Arrow is active
@@ -162,13 +175,13 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
     // of the click, but the click cell itself still has to be in the float.
     if (inCanvas && shifted && shifted[y * W + x] === 0) return;
 
-    const symMask = getSymmetryMask(s.symmetry, W, H);
+    const symAxes = axesToFlat(s.axes);
     const before  = visible;
     let next = paintOps[tool as PaintTool]({
         visible, pattern, x, y,
         color: g.color, primary: s.primaryColor,
         invertVisited: g.invertVisited,
-        symMask, shifted,
+        symAxes, shifted,
     });
 
     if (s.lockInvalid) next = lockAlwaysInvalid(pattern, before, next);
@@ -208,16 +221,11 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    const closure = computeClosure(store.state.symmetry, diagonalsAvailable(W, H));
-    ui.setSymmetry(store.state.symmetry, closure);
+    ui.setSymmetry(activeKinds(store.state.axes), closureKinds(store.state.axes, W, H));
     ui.setDiagonalEnabled(diagonalsAvailable(W, H));
 }
 function toggleSym(k: SymKey) {
-    store.commit(s => {
-        const next = new Set(s.symmetry);
-        if (next.has(k)) next.delete(k); else next.add(k);
-        s.symmetry = next;
-    }, { recompute: false });
+    store.commit(s => { s.axes = toggleAxisKind(s.axes, k); }, { recompute: false, history: true });
     refreshSymmetryUi();
 }
 
@@ -291,7 +299,7 @@ function onEditChange() {
     store.commit(s => {
         s.pattern  = pattern;
         s.pixels   = pixels;
-        s.symmetry = pruneUnavailableDiagonals(s.symmetry, pattern.canvasWidth, pattern.canvasHeight);
+        s.axes = pruneUnavailableDiagonals(s.axes, pattern.canvasWidth, pattern.canvasHeight);
         // Float coords no longer match the new geometry; the content (if any)
         // was baked into the source pixels above before the resize.
         s.float    = null;
@@ -309,7 +317,7 @@ function applyRestored(r: Restored) {
     if (dimsChanged) fitToView(viewport.canvas, viewport.view, r.pattern, store.state.rotation);
     store.replace(
         { ...store.state, pattern: r.pattern, pixels: r.pixels, float: r.float,
-          colorA: r.colorA, colorB: r.colorB },
+          axes: r.axes, colorA: r.colorA, colorB: r.colorB },
         { persist: true },
     );
     (document.getElementById("color-a") as HTMLInputElement).value = r.colorA;
@@ -489,10 +497,22 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             );
             const f = store.state.float;
             if (!gesture.drag) {
-                // First paintAt: try to start a drag. Click must land inside
-                // the float's shifted mask. Clicks outside are a no-op — the
-                // float lives until explicit deselect / Ctrl+A / modify-select
-                // / etc., so a stray click can't accidentally anchor it.
+                // First paintAt: choose between axis-drag and float-move.
+                // Axis-drag wins when the click lands on an active guide
+                // line — the float, if any, isn't disturbed. The click must
+                // also be in the cell under the cursor, not the float's mask.
+                const frac = screenToPatternFrac(
+                    viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+                    store.state.pattern, cx, cy,
+                );
+                const hitAxis = pickAxisAt(store.state.axes, frac.x, frac.y, AXIS_HIT_TOLERANCE);
+                if (hitAxis) {
+                    gesture = { kind: "axis-drag",
+                                axisId: hitAxis.id, axisKind: hitAxis.kind,
+                                preAxes: [...store.state.axes] };
+                    return;
+                }
+                // Otherwise the existing float-move path.
                 if (!f) return;
                 const lx = p.x - f.x, ly = p.y - f.y;
                 const insideFloat = lx >= 0 && lx < f.w && ly >= 0 && ly < f.h && f.pixels[ly * f.w + lx] !== 0;
@@ -526,6 +546,24 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                     store.commit(s => { if (s.float) s.float = { ...s.float, x: newX, y: newY }; }, { persist: false });
                 }
             }
+            return;
+        }
+        if (gesture.kind === "axis-drag") {
+            const frac = screenToPatternFrac(
+                viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+                store.state.pattern, cx, cy,
+            );
+            const kind = gesture.axisKind;
+            const id = gesture.axisId;
+            let pos: { x?: number; y?: number; c?: number };
+            switch (kind) {
+                case "V":  pos = { x: snapHalf(frac.x - 0.5) }; break;
+                case "H":  pos = { y: snapHalf(frac.y - 0.5) }; break;
+                case "C":  pos = { x: snapHalf(frac.x - 0.5), y: snapHalf(frac.y - 0.5) }; break;
+                case "D1": pos = { c: snapInt(frac.x - frac.y) }; break;
+                case "D2": pos = { c: snapInt(frac.x + frac.y - 1) }; break;
+            }
+            store.commit(s => { s.axes = setAxisPosition(s.axes, id, pos); }, { persist: false });
             return;
         }
         if (gesture.kind === "select") {
@@ -598,6 +636,13 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             gesture = null;
             return;
         }
+        if (gesture.kind === "axis-drag") {
+            // Push a snapshot only if the axis actually moved.
+            const changed = JSON.stringify(gesture.preAxes) !== JSON.stringify(store.state.axes);
+            if (changed) store.commit(() => {}, { recompute: false, render: false, history: true });
+            gesture = null;
+            return;
+        }
         // gesture.kind === "paint" — dedupe-push if state actually changed.
         const changed = !arraysEqual(gesture.prePixels, store.state.pixels)
                      || gesture.preFloat !== store.state.float;
@@ -628,6 +673,12 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             const { prePixels, preFloat } = gesture;
             gesture = null;
             store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
+            return;
+        }
+        if (gesture.kind === "axis-drag") {
+            const { preAxes } = gesture;
+            gesture = null;
+            store.commit(s => { s.axes = preAxes; });
             return;
         }
         // gesture.kind === "paint"

@@ -1,28 +1,64 @@
 //! Drawing tools.
 //!
 //! Each tool walks the *symmetric orbit* of the click point under the active
-//! symmetry mask (`symmetric_orbit`, BFS over up to five reflections) and
-//! writes per-orbit-cell. The orbit walker is also exported through wasm so
-//! the TS-side Invert tool can reuse it for per-stroke deduping.
+//! axes (`symmetric_orbit`, BFS over per-axis reflections) and writes
+//! per-orbit-cell. The orbit walker is also exported through wasm so the
+//! TS-side Invert tool can reuse it for per-stroke deduping.
 
 use std::collections::{HashSet, VecDeque};
 use glam::IVec2;
 use crate::common::{COLOR_TRANSPARENT, natural_color_row, natural_color_round, opposite_color, inward_cell_row, inward_cell_round, is_always_invalid_row, is_always_invalid_round};
 
-// Symmetry mask bits: V=1, H=2, C=4, D1=8, D2=16
+// Axis wire format (Phase 4 Slice B): `axes` is a flat `&[f64]` of triplets
+// `(kind, a, b)`. Kind codes match the TS-side encoding:
+//   0 = V  — vertical mirror at x = a
+//   1 = H  — horizontal mirror at y = a
+//   2 = C  — 180° rotation about (a, b)
+//   3 = D1 — diagonal x − y = a
+//   4 = D2 — anti-diagonal x + y = a
+// Positions can be half-integer (snap-to-grid) — V/H/C use `2*a` which stays
+// integer; D1/D2's `a` is integer (the diagonals-disabled gate ensures it).
 
-pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, mask: u8) -> Vec<(i32, i32)> {
-    let d1_offset = (width - height).div_euclid(2);
-    let d2_sum    = (width + height - 2) / 2;
+const AXIS_STRIDE: usize = 3;
+const KIND_V:  i32 = 0;
+const KIND_H:  i32 = 1;
+const KIND_C:  i32 = 2;
+const KIND_D1: i32 = 3;
+const KIND_D2: i32 = 4;
 
+pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) -> Vec<(i32, i32)> {
     type Transform = Box<dyn Fn(i32, i32) -> (i32, i32)>;
     let mut transforms: Vec<Transform> = Vec::new();
 
-    if mask &  1 != 0 { transforms.push(Box::new(move |px, py| (width  - 1 - px, py))); }
-    if mask &  2 != 0 { transforms.push(Box::new(move |px, py| (px, height - 1 - py))); }
-    if mask &  4 != 0 { transforms.push(Box::new(move |px, py| (width  - 1 - px, height - 1 - py))); }
-    if mask &  8 != 0 { transforms.push(Box::new(move |px, py| (py + d1_offset, px - d1_offset))); }
-    if mask & 16 != 0 { transforms.push(Box::new(move |px, py| (d2_sum - py, d2_sum - px))); }
+    for chunk in axes.chunks_exact(AXIS_STRIDE) {
+        let kind = chunk[0] as i32;
+        let a = chunk[1];
+        let b = chunk[2];
+        match kind {
+            k if k == KIND_V => {
+                let ax2 = (2.0 * a) as i32;
+                transforms.push(Box::new(move |px, py| (ax2 - px, py)));
+            }
+            k if k == KIND_H => {
+                let ay2 = (2.0 * a) as i32;
+                transforms.push(Box::new(move |px, py| (px, ay2 - py)));
+            }
+            k if k == KIND_C => {
+                let cx2 = (2.0 * a) as i32;
+                let cy2 = (2.0 * b) as i32;
+                transforms.push(Box::new(move |px, py| (cx2 - px, cy2 - py)));
+            }
+            k if k == KIND_D1 => {
+                let c = a as i32;
+                transforms.push(Box::new(move |px, py| (py + c, px - c)));
+            }
+            k if k == KIND_D2 => {
+                let c = a as i32;
+                transforms.push(Box::new(move |px, py| (c - py, c - px)));
+            }
+            _ => {}
+        }
+    }
 
     let mut visited: HashSet<(i32, i32)> = HashSet::new();
     let mut queue:   VecDeque<(i32, i32)> = VecDeque::new();
@@ -42,9 +78,9 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, mask: u8) -> Vec
     visited.into_iter().collect()
 }
 
-pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, mask: u8, selection: &[u8]) -> Vec<u8> {
+pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, axes: &[f64], selection: &[u8]) -> Vec<u8> {
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
+    for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
         let idx = (sy * width + sx) as usize;
         if result[idx] == 0 { continue; }
         if !selection.is_empty() && selection[idx] == 0 { continue; }
@@ -79,10 +115,10 @@ pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color
 
 pub fn paint_natural_row(
     pixels: &[u8], width: i32, height: i32,
-    x: i32, y: i32, mask: u8, invert: bool, selection: &[u8],
+    x: i32, y: i32, axes: &[f64], invert: bool, selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
+    for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
         let idx = (sy * width + sx) as usize;
         if result[idx] == COLOR_TRANSPARENT { continue; }
         if !selection.is_empty() && selection[idx] == 0 { continue; }
@@ -97,12 +133,12 @@ pub fn paint_natural_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, mask: u8, invert: bool, selection: &[u8],
+    x: i32, y: i32, axes: &[f64], invert: bool, selection: &[u8],
 ) -> Vec<u8> {
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset       = IVec2::new(offset_x,      offset_y);
     let mut result   = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, mask) {
+    for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
         let idx = (sy * canvas_width + sx) as usize;
         if result[idx] == COLOR_TRANSPARENT { continue; }
         if !selection.is_empty() && selection[idx] == 0 { continue; }
@@ -112,11 +148,11 @@ pub fn paint_natural_round(
     result
 }
 
-pub fn paint_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, mask: u8) -> Vec<u8> {
+pub fn paint_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, axes: &[f64]) -> Vec<u8> {
     let canvas_size = IVec2::new(width, height);
     if x < 0 || x >= width || y < 0 || y >= height { return pixels.to_vec(); }
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
+    for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
         let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else { continue };
         let ti = (inner.y * width + inner.x) as usize;
         if result[ti] == COLOR_TRANSPARENT { continue; }
@@ -125,13 +161,13 @@ pub fn paint_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32,
     result
 }
 
-pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, mask: u8) -> Vec<u8> {
+pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, axes: &[f64]) -> Vec<u8> {
     let canvas_size = IVec2::new(width, height);
     let in_canvas   = x >= 0 && x < width && y >= 0 && y < height;
     let mut result  = pixels.to_vec();
 
     if in_canvas {
-        for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
+        for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
             let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else { continue };
             let ti = (inner.y * width + inner.x) as usize;
             if result[ti] == COLOR_TRANSPARENT { continue; }
@@ -139,7 +175,7 @@ pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32,
         }
     } else {
         let Some(inner) = inward_cell_row(canvas_size, IVec2::new(x, y)) else { return result };
-        for (sx, sy) in symmetric_orbit(inner.x, inner.y, width, height, mask) {
+        for (sx, sy) in symmetric_orbit(inner.x, inner.y, width, height, axes) {
             let idx = (sy * width + sx) as usize;
             if result[idx] == COLOR_TRANSPARENT { continue; }
             result[idx] = natural_color_row(height, sy);
@@ -153,14 +189,14 @@ pub fn paint_overlay_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, mask: u8,
+    x: i32, y: i32, axes: &[f64],
 ) -> Vec<u8> {
     let canvas_size  = IVec2::new(canvas_width,  canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset       = IVec2::new(offset_x,      offset_y);
     if x < 0 || x >= canvas_width || y < 0 || y >= canvas_height { return pixels.to_vec(); }
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, mask) {
+    for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
         let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy)) else { continue };
         let ti = (inner.y * canvas_width + inner.x) as usize;
         if result[ti] == COLOR_TRANSPARENT { continue; }
@@ -174,7 +210,7 @@ pub fn clear_overlay_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, mask: u8,
+    x: i32, y: i32, axes: &[f64],
 ) -> Vec<u8> {
     let canvas_size  = IVec2::new(canvas_width,  canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
@@ -183,7 +219,7 @@ pub fn clear_overlay_round(
     let mut result   = pixels.to_vec();
 
     if in_canvas {
-        for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, mask) {
+        for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
             let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy)) else { continue };
             let ti = (inner.y * canvas_width + inner.x) as usize;
             if result[ti] == COLOR_TRANSPARENT { continue; }
@@ -191,7 +227,7 @@ pub fn clear_overlay_round(
         }
     } else {
         let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(x, y)) else { return result };
-        for (sx, sy) in symmetric_orbit(inner.x, inner.y, canvas_width, canvas_height, mask) {
+        for (sx, sy) in symmetric_orbit(inner.x, inner.y, canvas_width, canvas_height, axes) {
             let idx = (sy * canvas_width + sx) as usize;
             if result[idx] == COLOR_TRANSPARENT { continue; }
             result[idx] = natural_color_round(virtual_size, offset, rounds, IVec2::new(sx, sy));
@@ -347,7 +383,7 @@ pub fn transfer_preserved_round(
 // handles mirror cells that land outside the selection.
 pub fn flood_fill(
     pixels: &[u8], width: i32, height: i32,
-    start_x: i32, start_y: i32, fill_color: u8, mask: u8,
+    start_x: i32, start_y: i32, fill_color: u8, axes: &[f64],
     selection: &[u8],
 ) -> Vec<u8> {
     let mut result       = pixels.to_vec();
@@ -375,7 +411,7 @@ pub fn flood_fill(
     }
 
     for (x, y) in filled {
-        for (sx, sy) in symmetric_orbit(x, y, width, height, mask) {
+        for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
             let idx = (sy * width + sx) as usize;
             if result[idx] != 0 {
                 result[idx] = fill_color;
@@ -507,20 +543,80 @@ mod tests {
         g
     }
 
+    // ── symmetric_orbit (Phase 4 axes) ──────────────────────────────────────
+
+    #[test]
+    fn orbit_v_at_canonical_position_mirrors_left_right() {
+        // V axis at x=4 on a 9-wide canvas mirrors 0↔8.
+        let axes = [0.0_f64, 4.0, 0.0];
+        let orbit: std::collections::HashSet<_> =
+            symmetric_orbit(0, 3, 9, 9, &axes).into_iter().collect();
+        assert!(orbit.contains(&(0, 3)));
+        assert!(orbit.contains(&(8, 3)));
+        assert_eq!(orbit.len(), 2);
+    }
+
+    #[test]
+    fn orbit_v_at_offset_position_mirrors_around_axis() {
+        // V axis at x=2 on a 9-wide canvas mirrors 0↔4 (and out-of-bounds dropped for x>4).
+        let axes = [0.0_f64, 2.0, 0.0];
+        let orbit: std::collections::HashSet<_> =
+            symmetric_orbit(0, 3, 9, 9, &axes).into_iter().collect();
+        assert!(orbit.contains(&(0, 3)));
+        assert!(orbit.contains(&(4, 3)));
+        assert_eq!(orbit.len(), 2);
+    }
+
+    #[test]
+    fn orbit_h_at_half_integer_position_on_even_canvas() {
+        // H axis at y=3.5 (between cells on 8-tall canvas) mirrors 0↔7.
+        let axes = [1.0_f64, 3.5, 0.0];
+        let orbit: std::collections::HashSet<_> =
+            symmetric_orbit(2, 0, 8, 8, &axes).into_iter().collect();
+        assert!(orbit.contains(&(2, 0)));
+        assert!(orbit.contains(&(2, 7)));
+        assert_eq!(orbit.len(), 2);
+    }
+
+    #[test]
+    fn orbit_c_at_canonical_position_rotates_180() {
+        // C axis at (4, 4) on 9×9 rotates (1, 2) to (7, 6).
+        let axes = [2.0_f64, 4.0, 4.0];
+        let orbit: std::collections::HashSet<_> =
+            symmetric_orbit(1, 2, 9, 9, &axes).into_iter().collect();
+        assert!(orbit.contains(&(1, 2)));
+        assert!(orbit.contains(&(7, 6)));
+        assert_eq!(orbit.len(), 2);
+    }
+
+    #[test]
+    fn orbit_v_plus_h_composes_to_c_equivalent_orbit() {
+        // V + H mask in the old encoding produced a 4-cell orbit via closure.
+        // With per-axis positions and no closure, BFS still finds all 4.
+        let axes = [0.0_f64, 4.0, 0.0,   1.0_f64, 4.0, 0.0];
+        let orbit: std::collections::HashSet<_> =
+            symmetric_orbit(1, 2, 9, 9, &axes).into_iter().collect();
+        assert!(orbit.contains(&(1, 2)));
+        assert!(orbit.contains(&(7, 2)));
+        assert!(orbit.contains(&(1, 6)));
+        assert!(orbit.contains(&(7, 6)));
+        assert_eq!(orbit.len(), 4);
+    }
+
     // ── paint_natural_row ────────────────────────────────────────────────────
 
     #[test]
     fn paint_natural_row_restores_wrong_cell() {
         let mut pixels = row_grid(4, 4);
         pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1)); // wrong it
-        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, false, &[]);
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, &[], false, &[]);
         assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1));
     }
 
     #[test]
     fn paint_natural_row_invert_wrongs_correct_cell() {
         let pixels = row_grid(4, 4);
-        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, true, &[]);
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, &[], true, &[]);
         assert_eq!(out[1 * 4 + 2], opposite_color(natural_color_row(4, 1)));
     }
 
@@ -534,7 +630,9 @@ mod tests {
         let mut pixels = row_grid(4, 4);
         pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1));
         pixels[2 * 4 + 2] = opposite_color(natural_color_row(4, 2));
-        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 2, false, &[]);
+        // H axis at canonical centre of a 4-tall canvas → y = 1.5.
+        let h_axis = [1.0_f64, 1.5, 0.0];
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, &h_axis, false, &[]);
         assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1));
         assert_eq!(out[2 * 4 + 2], natural_color_row(4, 2));
     }
@@ -550,7 +648,7 @@ mod tests {
         pixels[4 * 9 + 1] = COLOR_A;
         // hole cell should already be 0; verify passthrough.
         assert_eq!(pixels[4 * 9 + 4], COLOR_TRANSPARENT);
-        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0, false, &[]);
+        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, &[], false, &[]);
         assert_eq!(out[4 * 9 + 1], COLOR_B);
         assert_eq!(out[4 * 9 + 4], COLOR_TRANSPARENT);
     }
@@ -559,7 +657,7 @@ mod tests {
     fn paint_natural_round_invert_mode() {
         let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
         // (1,4) natural is B; invert paints A.
-        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0, true, &[]);
+        let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, &[], true, &[]);
         assert_eq!(out[4 * 9 + 1], COLOR_A);
     }
 
@@ -569,7 +667,7 @@ mod tests {
     fn paint_overlay_row_inverts_inward_neighbour() {
         // Click at (2, 1) → inward (2, 2) is painted opposite-of-natural.
         let pixels = row_grid(4, 4);
-        let out = paint_overlay_row(&pixels, 4, 4, 2, 1, 0);
+        let out = paint_overlay_row(&pixels, 4, 4, 2, 1, &[]);
         assert_eq!(out[2 * 4 + 2], opposite_color(natural_color_row(4, 2)));
         // Click cell itself unchanged.
         assert_eq!(out[1 * 4 + 2], pixels[1 * 4 + 2]);
@@ -579,7 +677,7 @@ mod tests {
     fn paint_overlay_row_innermost_click_is_noop() {
         // Click at the foundation row (y=H-1) has no inward (y+1 ≥ H).
         let pixels = row_grid(4, 4);
-        let out = paint_overlay_row(&pixels, 4, 4, 2, 3, 0);
+        let out = paint_overlay_row(&pixels, 4, 4, 2, 3, &[]);
         assert_eq!(out, pixels);
     }
 
@@ -587,7 +685,7 @@ mod tests {
     fn paint_overlay_row_gutter_click_is_noop() {
         // Gutter click (y < 0): paint mode can't operate, no-op.
         let pixels = row_grid(4, 4);
-        let out = paint_overlay_row(&pixels, 4, 4, 2, -1, 0);
+        let out = paint_overlay_row(&pixels, 4, 4, 2, -1, &[]);
         assert_eq!(out, pixels);
     }
 
@@ -598,7 +696,7 @@ mod tests {
         // (1, 1) is a diagonal corner — no single inward axis. inward_cell
         // returns None → paint_overlay is a no-op there.
         let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
-        let out = paint_overlay_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 1, 0);
+        let out = paint_overlay_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 1, &[]);
         assert_eq!(out, pixels);
     }
 
@@ -607,7 +705,7 @@ mod tests {
         // (1, 4): rfe=1, non-corner. Inward is (2, 4) (step toward centre).
         // Paint should make (2, 4) opposite-of-natural.
         let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
-        let out = paint_overlay_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0);
+        let out = paint_overlay_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, &[]);
         let nat_24 = natural_color_round(v(9, 9), v(0, 0), 3, v(2, 4));
         assert_eq!(out[4 * 9 + 2], opposite_color(nat_24));
     }
@@ -619,7 +717,7 @@ mod tests {
         // Pre-paint inward (2, 2) wrong; clear at click (2, 1) restores it.
         let mut pixels = row_grid(4, 4);
         pixels[2 * 4 + 2] = opposite_color(natural_color_row(4, 2));
-        let out = clear_overlay_row(&pixels, 4, 4, 2, 1, 0);
+        let out = clear_overlay_row(&pixels, 4, 4, 2, 1, &[]);
         assert_eq!(out[2 * 4 + 2], natural_color_row(4, 2));
     }
 
@@ -629,7 +727,7 @@ mod tests {
         // orbit (no symmetry → just itself) should be restored to natural.
         let mut pixels = row_grid(4, 4);
         pixels[0 * 4 + 2] = opposite_color(natural_color_row(4, 0));
-        let out = clear_overlay_row(&pixels, 4, 4, 2, -1, 0);
+        let out = clear_overlay_row(&pixels, 4, 4, 2, -1, &[]);
         assert_eq!(out[0 * 4 + 2], natural_color_row(4, 0));
     }
 
@@ -641,7 +739,7 @@ mod tests {
         let mut pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
         let nat_24 = natural_color_round(v(9, 9), v(0, 0), 3, v(2, 4));
         pixels[4 * 9 + 2] = opposite_color(nat_24);
-        let out = clear_overlay_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, 0);
+        let out = clear_overlay_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, &[]);
         assert_eq!(out[4 * 9 + 2], nat_24);
     }
 
@@ -954,7 +1052,7 @@ mod tests {
         // Empty selection slice = no selection clipping; behavior unchanged
         // from before the selection-aware refactor.
         let pixels = vec![COLOR_A; 5];
-        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, 0, &[]);
+        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, &[], &[]);
         assert_eq!(&out[..], &[COLOR_B, COLOR_B, COLOR_B, COLOR_B, COLOR_B]);
     }
 
@@ -965,7 +1063,7 @@ mod tests {
         // boundary, leaving cells 3–4 at A.
         let pixels = vec![COLOR_A; 5];
         let selection: Vec<u8> = vec![1, 1, 1, 0, 0];
-        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, 0, &selection);
+        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, &[], &selection);
         assert_eq!(&out[..], &[COLOR_B, COLOR_B, COLOR_B, COLOR_A, COLOR_A]);
     }
 
@@ -978,7 +1076,7 @@ mod tests {
         // containing the click.
         let pixels = vec![COLOR_A; 5];
         let selection: Vec<u8> = vec![1, 0, 0, 0, 1];
-        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, 0, &selection);
+        let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, &[], &selection);
         assert_eq!(&out[..], &[COLOR_B, COLOR_A, COLOR_A, COLOR_A, COLOR_A]);
     }
 
@@ -1083,7 +1181,7 @@ mod tests {
         let pixels = row_grid(5, 5);
         let mut sel = vec![0u8; 25];
         sel[1 * 5 + 0] = 1;
-        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, 1 /* V mask */, &sel);
+        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, &[0.0_f64, 2.0, 0.0] /* V at x=2 (canonical for W=5) */, &sel);
         assert_eq!(out[1 * 5 + 0], 2);   // selected cell painted
         assert_eq!(out[1 * 5 + 4], pixels[1 * 5 + 4]); // mirrored cell untouched
     }
@@ -1091,7 +1189,7 @@ mod tests {
     #[test]
     fn paint_pixel_empty_selection_paints_full_orbit() {
         let pixels = row_grid(5, 5);
-        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, 1 /* V mask */, &[]);
+        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, &[0.0_f64, 2.0, 0.0] /* V at x=2 (canonical for W=5) */, &[]);
         assert_eq!(out[1 * 5 + 0], 2);
         assert_eq!(out[1 * 5 + 4], 2); // mirror also painted (no clip)
     }
@@ -1102,7 +1200,7 @@ mod tests {
         pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1));
         let mut sel = vec![0u8; 16];
         sel[1 * 4 + 2] = 1; // only (2,1) selected
-        let out = paint_natural_row(&pixels, 4, 4, 2, 1, 0, false, &sel);
+        let out = paint_natural_row(&pixels, 4, 4, 2, 1, &[], false, &sel);
         assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1)); // selected: restored
     }
 
@@ -1115,7 +1213,7 @@ mod tests {
         wrong[idx] = opposite_color(pixels[idx]);
         let sel = vec![0u8; 81]; // nothing selected
         let out = paint_natural_round(&wrong, 9, 9, 9, 9, 0, 0, 3,
-            (idx % 9) as i32, (idx / 9) as i32, 0, false, &sel);
+            (idx % 9) as i32, (idx / 9) as i32, &[], false, &sel);
         // Not selected → not restored
         assert_eq!(out[idx], wrong[idx]);
     }

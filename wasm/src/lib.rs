@@ -180,17 +180,17 @@ pub fn initialize_round_pattern(
 // binding unwraps to an empty slice for the None case.
 
 #[wasm_bindgen]
-pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, symmetry_mask: u8, selection: Option<Vec<u8>>) -> Vec<u8> {
-    tools::paint_pixel(pixels, width, height, x, y, color, symmetry_mask, selection.as_deref().unwrap_or(&[]))
+pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, axes: Option<Vec<f64>>, selection: Option<Vec<u8>>) -> Vec<u8> {
+    tools::paint_pixel(pixels, width, height, x, y, color, axes.as_deref().unwrap_or(&[]), selection.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
 pub fn flood_fill(
     pixels: &[u8], width: i32, height: i32,
-    start_x: i32, start_y: i32, fill_color: u8, symmetry_mask: u8,
+    start_x: i32, start_y: i32, fill_color: u8, axes: Option<Vec<f64>>,
     selection: Option<Vec<u8>>,
 ) -> Vec<u8> {
-    tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, symmetry_mask, selection.as_deref().unwrap_or(&[]))
+    tools::flood_fill(pixels, width, height, start_x, start_y, fill_color, axes.as_deref().unwrap_or(&[]), selection.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
@@ -254,9 +254,9 @@ pub fn lock_invalid_round(
 #[wasm_bindgen]
 pub fn paint_natural_row(
     pixels: &[u8], width: i32, height: i32,
-    x: i32, y: i32, symmetry_mask: u8, invert: bool, selection: Option<Vec<u8>>,
+    x: i32, y: i32, axes: Option<Vec<f64>>, invert: bool, selection: Option<Vec<u8>>,
 ) -> Vec<u8> {
-    tools::paint_natural_row(pixels, width, height, x, y, symmetry_mask, invert, selection.as_deref().unwrap_or(&[]))
+    tools::paint_natural_row(pixels, width, height, x, y, axes.as_deref().unwrap_or(&[]), invert, selection.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
@@ -265,23 +265,23 @@ pub fn paint_natural_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, symmetry_mask: u8, invert: bool, selection: Option<Vec<u8>>,
+    x: i32, y: i32, axes: Option<Vec<f64>>, invert: bool, selection: Option<Vec<u8>>,
 ) -> Vec<u8> {
     tools::paint_natural_round(
         pixels, canvas_width, canvas_height,
         virtual_width, virtual_height, offset_x, offset_y, rounds,
-        x, y, symmetry_mask, invert, selection.as_deref().unwrap_or(&[]),
+        x, y, axes.as_deref().unwrap_or(&[]), invert, selection.as_deref().unwrap_or(&[]),
     )
 }
 
 #[wasm_bindgen]
-pub fn paint_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u8> {
-    tools::paint_overlay_row(pixels, width, height, x, y, symmetry_mask)
+pub fn paint_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, axes: Option<Vec<f64>>) -> Vec<u8> {
+    tools::paint_overlay_row(pixels, width, height, x, y, axes.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
-pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u8> {
-    tools::clear_overlay_row(pixels, width, height, x, y, symmetry_mask)
+pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, axes: Option<Vec<f64>>) -> Vec<u8> {
+    tools::clear_overlay_row(pixels, width, height, x, y, axes.as_deref().unwrap_or(&[]))
 }
 
 #[wasm_bindgen]
@@ -290,12 +290,12 @@ pub fn paint_overlay_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, symmetry_mask: u8,
+    x: i32, y: i32, axes: Option<Vec<f64>>,
 ) -> Vec<u8> {
     tools::paint_overlay_round(
         pixels, canvas_width, canvas_height,
         virtual_width, virtual_height, offset_x, offset_y, rounds,
-        x, y, symmetry_mask,
+        x, y, axes.as_deref().unwrap_or(&[]),
     )
 }
 
@@ -305,12 +305,12 @@ pub fn clear_overlay_round(
     canvas_width: i32, canvas_height: i32,
     virtual_width: i32, virtual_height: i32,
     offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, symmetry_mask: u8,
+    x: i32, y: i32, axes: Option<Vec<f64>>,
 ) -> Vec<u8> {
     tools::clear_overlay_round(
         pixels, canvas_width, canvas_height,
         virtual_width, virtual_height, offset_x, offset_y, rounds,
-        x, y, symmetry_mask,
+        x, y, axes.as_deref().unwrap_or(&[]),
     )
 }
 
@@ -337,8 +337,8 @@ pub fn cut_to_natural_round(
 }
 
 #[wasm_bindgen]
-pub fn symmetric_orbit_indices(canvas_width: i32, canvas_height: i32, x: i32, y: i32, symmetry_mask: u8) -> Vec<u32> {
-    tools::symmetric_orbit(x, y, canvas_width, canvas_height, symmetry_mask)
+pub fn symmetric_orbit_indices(canvas_width: i32, canvas_height: i32, x: i32, y: i32, axes: Option<Vec<f64>>) -> Vec<u32> {
+    tools::symmetric_orbit(x, y, canvas_width, canvas_height, axes.as_deref().unwrap_or(&[]))
         .into_iter()
         .map(|(sx, sy)| (sy * canvas_width + sx) as u32)
         .collect()

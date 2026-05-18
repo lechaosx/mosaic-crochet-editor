@@ -11,7 +11,7 @@ import {
     build_highlight_plan_row,
     build_highlight_plan_round,
 } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey, Float } from "./types";
+import { Tool, PatternState, Float, Axis } from "./types";
 
 export interface SessionState {
     pattern:       PatternState;
@@ -20,7 +20,7 @@ export interface SessionState {
     colorB:        string;               // hex
     activeTool:    Tool;
     primaryColor:  1 | 2;
-    symmetry:      Set<SymKey>;          // directly active axes
+    axes:          Axis[];               // every symmetry axis (5 presets + future user-placed)
     hlOpacity:        number;            // 0..100, matches the input range
     invalidIntensity: number;            // 0..100, drives ! marker saturation
     // The active lifted-selection layer (on or near canvas). When present,

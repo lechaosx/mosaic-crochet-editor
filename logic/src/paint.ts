@@ -22,52 +22,52 @@ export interface PaintCtx {
     color:          1 | 2;
     primary:        1 | 2;
     invertVisited:  Set<number> | null;
-    symMask:        number;             // bitfield from `getSymmetryMask`
+    symAxes:        Float64Array;       // flat triplets from `axesToFlat`
     shifted:        Uint8Array | null;
 }
 
 type PaintOp = (c: PaintCtx) => Uint8Array;
 
 export const paintOps: Record<PaintTool, PaintOp> = {
-    pencil: ({ visible, pattern: p, x, y, color, symMask, shifted }) =>
-        paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, symMask, shifted),
+    pencil: ({ visible, pattern: p, x, y, color, symAxes, shifted }) =>
+        paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, symAxes, shifted),
 
-    fill: ({ visible, pattern: p, x, y, color, symMask, shifted }) =>
-        flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, symMask, shifted),
+    fill: ({ visible, pattern: p, x, y, color, symAxes, shifted }) =>
+        flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, symAxes, shifted),
 
     // Left click = primary = restore baseline; right click = secondary =
     // paint the *opposite* baseline (deliberately wrong placement).
-    eraser: ({ visible, pattern: p, x, y, color, primary, symMask, shifted }) => {
+    eraser: ({ visible, pattern: p, x, y, color, primary, symAxes, shifted }) => {
         const invert = color !== primary;
         return p.mode === "row"
-            ? paint_natural_row(visible, p.canvasWidth, p.canvasHeight, x, y, symMask, invert, shifted)
+            ? paint_natural_row(visible, p.canvasWidth, p.canvasHeight, x, y, symAxes, invert, shifted)
             : paint_natural_round(
                 visible, p.canvasWidth, p.canvasHeight,
                 p.virtualWidth, p.virtualHeight,
                 p.offsetX, p.offsetY, p.rounds,
-                x, y, symMask, invert, shifted,
+                x, y, symAxes, invert, shifted,
             );
     },
 
     // Left click = paint a ✕ at the click cell (writes its *inward
     // neighbour*); right click = clear it.
-    overlay: ({ visible, pattern: p, x, y, color, primary, symMask }) => {
+    overlay: ({ visible, pattern: p, x, y, color, primary, symAxes }) => {
         const clear = color !== primary;
         if (p.mode === "row") {
             return clear
-                ? clear_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, symMask)
-                : paint_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, symMask);
+                ? clear_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, symAxes)
+                : paint_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, symAxes);
         }
         return clear
-            ? clear_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, symMask)
-            : paint_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, symMask);
+            ? clear_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, symAxes)
+            : paint_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, symAxes);
     },
 
     // Flip pixels between primary and secondary on each *first* visit; a
     // single stroke never inverts the same cell twice.
-    invert: ({ visible, pattern: p, x, y, invertVisited, symMask, shifted }) => {
+    invert: ({ visible, pattern: p, x, y, invertVisited, symAxes, shifted }) => {
         const out = visible.slice();
-        const indices = symmetric_orbit_indices(p.canvasWidth, p.canvasHeight, x, y, symMask);
+        const indices = symmetric_orbit_indices(p.canvasWidth, p.canvasHeight, x, y, symAxes);
         for (const idx of indices) {
             if (invertVisited!.has(idx)) continue;
             if (shifted && shifted[idx] === 0) continue;

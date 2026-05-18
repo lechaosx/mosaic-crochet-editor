@@ -101,13 +101,29 @@ Don't pick this up again until there are real users doing real motif workflows.
 
 **Ships:** AA + 45° diagonal mirror axes at arbitrary positions, replacing the 5-flag mask.
 
-- [ ] Replace `SessionState.symmetry: Set<SymKey>` with `SessionState.axes: Axis[]` where `Axis = { id: string, kind: "V"|"H"|"D1"|"D2", offset: number, active: boolean }`.
-- [ ] Migration: existing 5 symmetries become 5 preset axes at canonical positions, all initially in the list. Old saved sessions auto-upgrade.
-- [ ] Axis-placement tools: 4 buttons in the symmetry panel — "Add V axis", "Add H axis", "Add D1 axis", "Add D2 axis". Click on canvas to place.
-- [ ] Generalise Rust `symmetric_orbit` to take `&[Axis]` instead of mask byte. Same BFS; transforms derived per axis.
-- [ ] Render each axis as a guide line (extend `renderSymmetryGuides`).
-- [ ] Axis-list UI in the existing symmetry panel: each row = position + active toggle + delete button. Presets are styled differently from user-added axes (visual hint).
-- [ ] Closure semantics: drop the implied-axis logic from `computeClosure`. With arbitrary axes the closure is the orbit; let the BFS handle it.
+Cut into two slices because the type/state refactor touches every symmetry call site while the new placement UX is independent additive work.
+
+### Slice A — pure refactor (no new UX) **— SHIPPED**
+
+- [x] Replace `SessionState.symmetry: Set<SymKey>` with `SessionState.axes: Axis[]`. `Axis` is a discriminated union keyed on `kind: V|H|D1|D2|C`; each variant carries its kind-specific position fields (`x` / `y` / `c` / `(x,y)`). Position fields are stored but unused in Slice A — the Rust BFS still takes a u8 mask, compiled from `kind` + `active` by `axesToMask`. C is kept as a kind (per Open-decision answer) so existing C-only sessions migrate cleanly. — **your decision** (keep C, presets deletable)
+- [x] Migration: old `symmetry: string[]` payloads load via `axesFromLegacySet` — five canonical-position presets, active flag transferred per kind. localStorage stays at v4 (loader prefers new `axes` field; falls back to legacy `symmetry` field). History snapshots don't carry symmetry by design (pre-existing), so no history migration needed. — **Agent's choice** (legacy fallback over version bump)
+- [x] Closure dropped from the model. `computeClosure` is gone; the BFS handles composition naturally (V + H mask = 3, the orbit still includes the C-equivalent cell via V∘H). UI loses the "implied" dim styling — small visible regression, accepted as cleaner model. — **Agent's choice**
+- [x] Renderer reads `axes[]`. Each active axis at its canonical position is drawn in the bright style; no dim/closure rendering. — **Agent's choice**
+- [x] `pruneUnavailableDiagonals` deactivates D1/D2 presets when the canvas becomes diagonal-incompatible (vs deleting them); preset returns when canvas re-allows diagonals. — **your decision** (presets deletable, so preserving the slot is less destructive)
+
+### Slice B — drag-to-move axes **— SHIPPED**
+
+- [x] Rust `symmetric_orbit` takes `axes: &[f64]` (3 doubles per axis: kind, a, b) instead of the u8 mask. Per-axis reflection: `V(a): x → 2a − x`, `H(a): y → 2a − y`, `D1(a): (px, py) → (py + a, px − a)`, `D2(a): (px, py) → (a − py, a − px)`, `C(a, b): (2a − x, 2b − y)`. WASM bindings updated; the `f64 → i32` cast forced enabling `nontrapping-float-to-int` in the wasm-opt config. — **Agent's choice**
+- [x] TS compiles axes to a flat `Float64Array` via `axesToFlat`; `paintOps`'s `symMask: number` is now `symAxes: Float64Array`. — **Agent's choice**
+- [x] Renderer draws each active axis's guide at its actual position (V/H lines at `a.x + 0.5` / `a.y + 0.5`; D1/D2 lines parameterised by `c`; C dot at the rotation point). — **Agent's choice**
+- [x] Move-tool drag near an active guide grabs the axis instead of starting a float-move. Snap-to-grid: half-integer for V/H/C; integer for D1/D2 (diagonals can't sit between cells without breaking the cell-to-cell mirror invariant). One history snapshot per drag; cancel reverts. Hit tolerance is 0.4 cell-units. — **Agent's choice**; snap-to-grid resolution — **your decision** (Open decision pre-answered)
+- [x] Tests: 5 new Rust `symmetric_orbit` cases (canonical V, off-canonical V, half-integer H on even canvas, C rotation, V+H composition without C in axes); 13 new logic specs (axesToFlat shape, distanceToAxis, pickAxisAt, setAxisPosition, snap helpers); 1 E2E (V axis dragged left changes the mirror partner). — **Agent's choice**
+
+### Slice C — placement UX (deferred)
+
+- [ ] Axis-placement: 4 toolbar buttons ("Add V / H / D1 / D2 axis"). Click on canvas places at the click cell (snap-to-grid). C kind doesn't need a placement button — Move-drag a V or H to wherever, compose to C via BFS.
+- [ ] Axis-list UI in the symmetry panel: per-row toggle + delete + position display.
+- [ ] Decide: does each placement produce a new id (multiple V axes can coexist), or replace the existing kind's preset? Likely the former, but the renderer / hit-test path already handles arbitrary ids — so this is a UX question, not a code one.
 
 **Risk:** Orbit BFS could grow large with many user-added interacting axes. For ≤ 50×50 canvases the orbit is bounded by total cells (~thousands). Cap iterations as a safety net.
 

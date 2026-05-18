@@ -3,9 +3,10 @@
 // On QuotaExceededError we drop the oldest snapshot(s) and retry until the new
 // one fits — the freshly-added snapshot at the tail is always preserved.
 
-import { PatternState, Float } from "@mosaic/logic/types";
+import { PatternState, Float, Axis } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
+import { defaultAxes } from "@mosaic/logic/symmetry";
 
 const LS_KEY = "mosaic-history-v4";
 const MAX    = 64;
@@ -14,6 +15,7 @@ interface Snapshot {
     state:   PatternState;
     pixels:  string;             // 1-bit-packed, base64
     float:   PackedFloat | null; // bbox-compact float (x/y/w/h + raw pixels)
+    axes?:   Axis[];             // Phase-4 axis positions; optional for pre-upgrade blobs
     colorA:  string;
     colorB:  string;
 }
@@ -52,6 +54,7 @@ function snapshotFrom(s: Readonly<SessionState>): Snapshot {
         state:  s.pattern,
         pixels: packPixels(s.pixels),
         float:  s.float ? packFloat(s.float) : null,
+        axes:   s.axes,
         colorA: s.colorA,
         colorB: s.colorB,
     };
@@ -63,6 +66,7 @@ export function historySave(s: Readonly<SessionState>) {
     const head = h.index >= 0 ? h.snapshots[h.index] : null;
     if (head && head.pixels === snap.pixels
             && JSON.stringify(head.float) === JSON.stringify(snap.float)
+            && JSON.stringify(head.axes) === JSON.stringify(snap.axes)
             && head.colorA === snap.colorA && head.colorB === snap.colorB
             && JSON.stringify(head.state) === JSON.stringify(snap.state)) {
         return;
@@ -90,6 +94,7 @@ export interface Restored {
     pattern: PatternState;
     pixels:  Uint8Array;
     float:   Float | null;
+    axes:    Axis[];
     colorA:  string;
     colorB:  string;
 }
@@ -100,6 +105,9 @@ function restoredAt(h: HistoryBlob): Restored {
         pattern: s.state,
         pixels:  unpackPixels(s.pixels, s.state),
         float:   s.float ? unpackFloat(s.float) : null,
+        // Pre-upgrade snapshots have no axes; fall back to fresh canonical
+        // presets. Going forward, every commit includes them.
+        axes:    s.axes ?? defaultAxes(s.state.canvasWidth, s.state.canvasHeight),
         colorA:  s.colorA,
         colorB:  s.colorB,
     };

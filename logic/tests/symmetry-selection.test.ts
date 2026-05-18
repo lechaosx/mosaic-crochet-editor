@@ -5,9 +5,8 @@
 
 import { describe, test, expect } from "vitest";
 import { paintOps } from "../src/paint";
-import { getSymmetryMask } from "../src/symmetry";
+import { axesToFlat, defaultAxes, toggleAxisKind } from "../src/symmetry";
 import { filledPixels, rowPattern } from "./_helpers";
-import { SymKey } from "../src/types";
 
 describe("symmetry-aware paint inside selection", () => {
     test("with Vertical symmetry, painting (0, 1) clipped to a mask that doesn't include the mirrored cell only paints (0, 1)", () => {
@@ -20,12 +19,12 @@ describe("symmetry-aware paint inside selection", () => {
         // canvas, (0, 1) mirrors to (4, 1).
         const shifted = new Uint8Array(W * H);
         shifted[1 * W + 0] = 1;
-        const symMask = getSymmetryMask(new Set<SymKey>(["V"]), W, H);
+        const symAxes = axesToFlat(toggleAxisKind(defaultAxes(W, H), "V"));
         const out = paintOps.pencil({
             visible, pattern, x: 0, y: 1,
             color: 2, primary: 1,
             invertVisited: null,
-            symMask, shifted,
+            symAxes, shifted,
         });
         // Rust clips to selection: only (0, 1) painted, mirrored (4, 1) skipped.
         expect(out[1 * W + 0]).toBe(2);
@@ -44,10 +43,10 @@ describe("symmetry-aware paint inside selection", () => {
         // No function in `symmetry.ts` or `selection.ts` should expand
         // `mask` based on active axes. The visible marquee is exactly
         // these cells.
-        const symMask = getSymmetryMask(new Set<SymKey>(["V", "H"]), W, H);
-        // We just assert that getSymmetryMask returns a numeric bitfield;
+        const symAxes = axesToFlat(toggleAxisKind(toggleAxisKind(defaultAxes(W, H), "V"), "H"));
+        // We just assert that axesToFlat returns a Float64Array;
         // the selection bitmask is unaffected.
-        expect(typeof symMask).toBe("number");
+        expect(symAxes).toBeInstanceOf(Float64Array);
         expect(mask[1 * W + 4]).toBe(0);
     });
 });
