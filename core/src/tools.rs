@@ -5,9 +5,12 @@
 //! per-orbit-cell. The orbit walker is also exported through wasm so the
 //! TS-side Invert tool can reuse it for per-stroke deduping.
 
-use std::collections::{HashSet, VecDeque};
+use crate::common::{
+    COLOR_TRANSPARENT, inward_cell_round, inward_cell_row, is_always_invalid_round,
+    is_always_invalid_row, natural_color_round, natural_color_row, opposite_color,
+};
 use glam::IVec2;
-use crate::common::{COLOR_TRANSPARENT, natural_color_row, natural_color_round, opposite_color, inward_cell_row, inward_cell_round, is_always_invalid_row, is_always_invalid_round};
+use std::collections::{HashSet, VecDeque};
 
 // Axis wire format: `axes` is a flat `&[f64]` of triplets
 // `(kind, a, b)`. Kind codes match the TS-side encoding:
@@ -20,9 +23,9 @@ use crate::common::{COLOR_TRANSPARENT, natural_color_row, natural_color_round, o
 // D1/D2 require integer `a` so reflections remain on the cell grid.
 
 const AXIS_STRIDE: usize = 3;
-const KIND_V:  i32 = 0;
-const KIND_H:  i32 = 1;
-const KIND_C:  i32 = 2;
+const KIND_V: i32 = 0;
+const KIND_H: i32 = 1;
+const KIND_C: i32 = 2;
 const KIND_D1: i32 = 3;
 const KIND_D2: i32 = 4;
 
@@ -61,14 +64,16 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) ->
     }
 
     let mut visited: HashSet<(i32, i32)> = HashSet::new();
-    let mut queue:   VecDeque<(i32, i32)> = VecDeque::new();
+    let mut queue: VecDeque<(i32, i32)> = VecDeque::new();
     visited.insert((x, y));
     queue.push_back((x, y));
 
     while let Some((cx, cy)) = queue.pop_front() {
         for transform in &transforms {
             let (nx, ny) = transform(cx, cy);
-            if nx < 0 || nx >= width || ny < 0 || ny >= height { continue; }
+            if nx < 0 || nx >= width || ny < 0 || ny >= height {
+                continue;
+            }
             if visited.insert((nx, ny)) {
                 queue.push_back((nx, ny));
             }
@@ -78,12 +83,25 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) ->
     visited.into_iter().collect()
 }
 
-pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color: u8, axes: &[f64], selection: &[u8]) -> Vec<u8> {
+pub fn paint_pixel(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    x: i32,
+    y: i32,
+    color: u8,
+    axes: &[f64],
+    selection: &[u8],
+) -> Vec<u8> {
     let mut result = pixels.to_vec();
     for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
         let idx = (sy * width + sx) as usize;
-        if result[idx] == 0 { continue; }
-        if !selection.is_empty() && selection[idx] == 0 { continue; }
+        if result[idx] == 0 {
+            continue;
+        }
+        if !selection.is_empty() && selection[idx] == 0 {
+            continue;
+        }
         result[idx] = color;
     }
     result
@@ -114,14 +132,24 @@ pub fn paint_pixel(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, color
 // mirrored writes don't smear the click row across the whole orbit.
 
 pub fn paint_natural_row(
-    pixels: &[u8], width: i32, height: i32,
-    x: i32, y: i32, axes: &[f64], invert: bool, selection: &[u8],
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    x: i32,
+    y: i32,
+    axes: &[f64],
+    invert: bool,
+    selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
     for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
         let idx = (sy * width + sx) as usize;
-        if result[idx] == COLOR_TRANSPARENT { continue; }
-        if !selection.is_empty() && selection[idx] == 0 { continue; }
+        if result[idx] == COLOR_TRANSPARENT {
+            continue;
+        }
+        if !selection.is_empty() && selection[idx] == 0 {
+            continue;
+        }
         let nat = natural_color_row(height, sy);
         result[idx] = if invert { opposite_color(nat) } else { nat };
     }
@@ -130,54 +158,94 @@ pub fn paint_natural_row(
 
 pub fn paint_natural_round(
     pixels: &[u8],
-    canvas_width: i32, canvas_height: i32,
-    virtual_width: i32, virtual_height: i32,
-    offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, axes: &[f64], invert: bool, selection: &[u8],
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    rounds: i32,
+    x: i32,
+    y: i32,
+    axes: &[f64],
+    invert: bool,
+    selection: &[u8],
 ) -> Vec<u8> {
     let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset       = IVec2::new(offset_x,      offset_y);
-    let mut result   = pixels.to_vec();
+    let offset = IVec2::new(offset_x, offset_y);
+    let mut result = pixels.to_vec();
     for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
         let idx = (sy * canvas_width + sx) as usize;
-        if result[idx] == COLOR_TRANSPARENT { continue; }
-        if !selection.is_empty() && selection[idx] == 0 { continue; }
+        if result[idx] == COLOR_TRANSPARENT {
+            continue;
+        }
+        if !selection.is_empty() && selection[idx] == 0 {
+            continue;
+        }
         let nat = natural_color_round(virtual_size, offset, rounds, IVec2::new(sx, sy));
         result[idx] = if invert { opposite_color(nat) } else { nat };
     }
     result
 }
 
-pub fn paint_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, axes: &[f64]) -> Vec<u8> {
+pub fn paint_overlay_row(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    x: i32,
+    y: i32,
+    axes: &[f64],
+) -> Vec<u8> {
     let canvas_size = IVec2::new(width, height);
-    if x < 0 || x >= width || y < 0 || y >= height { return pixels.to_vec(); }
+    if x < 0 || x >= width || y < 0 || y >= height {
+        return pixels.to_vec();
+    }
     let mut result = pixels.to_vec();
     for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
-        let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else { continue };
+        let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else {
+            continue;
+        };
         let ti = (inner.y * width + inner.x) as usize;
-        if result[ti] == COLOR_TRANSPARENT { continue; }
+        if result[ti] == COLOR_TRANSPARENT {
+            continue;
+        }
         result[ti] = opposite_color(natural_color_row(height, inner.y));
     }
     result
 }
 
-pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32, axes: &[f64]) -> Vec<u8> {
+pub fn clear_overlay_row(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    x: i32,
+    y: i32,
+    axes: &[f64],
+) -> Vec<u8> {
     let canvas_size = IVec2::new(width, height);
-    let in_canvas   = x >= 0 && x < width && y >= 0 && y < height;
-    let mut result  = pixels.to_vec();
+    let in_canvas = x >= 0 && x < width && y >= 0 && y < height;
+    let mut result = pixels.to_vec();
 
     if in_canvas {
         for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
-            let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else { continue };
+            let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else {
+                continue;
+            };
             let ti = (inner.y * width + inner.x) as usize;
-            if result[ti] == COLOR_TRANSPARENT { continue; }
+            if result[ti] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[ti] = natural_color_row(height, inner.y);
         }
     } else {
-        let Some(inner) = inward_cell_row(canvas_size, IVec2::new(x, y)) else { return result };
+        let Some(inner) = inward_cell_row(canvas_size, IVec2::new(x, y)) else {
+            return result;
+        };
         for (sx, sy) in symmetric_orbit(inner.x, inner.y, width, height, axes) {
             let idx = (sy * width + sx) as usize;
-            if result[idx] == COLOR_TRANSPARENT { continue; }
+            if result[idx] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[idx] = natural_color_row(height, sy);
         }
     }
@@ -186,20 +254,33 @@ pub fn clear_overlay_row(pixels: &[u8], width: i32, height: i32, x: i32, y: i32,
 
 pub fn paint_overlay_round(
     pixels: &[u8],
-    canvas_width: i32, canvas_height: i32,
-    virtual_width: i32, virtual_height: i32,
-    offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, axes: &[f64],
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    rounds: i32,
+    x: i32,
+    y: i32,
+    axes: &[f64],
 ) -> Vec<u8> {
-    let canvas_size  = IVec2::new(canvas_width,  canvas_height);
+    let canvas_size = IVec2::new(canvas_width, canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset       = IVec2::new(offset_x,      offset_y);
-    if x < 0 || x >= canvas_width || y < 0 || y >= canvas_height { return pixels.to_vec(); }
+    let offset = IVec2::new(offset_x, offset_y);
+    if x < 0 || x >= canvas_width || y < 0 || y >= canvas_height {
+        return pixels.to_vec();
+    }
     let mut result = pixels.to_vec();
     for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
-        let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy)) else { continue };
+        let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy))
+        else {
+            continue;
+        };
         let ti = (inner.y * canvas_width + inner.x) as usize;
-        if result[ti] == COLOR_TRANSPARENT { continue; }
+        if result[ti] == COLOR_TRANSPARENT {
+            continue;
+        }
         result[ti] = opposite_color(natural_color_round(virtual_size, offset, rounds, inner));
     }
     result
@@ -207,29 +288,46 @@ pub fn paint_overlay_round(
 
 pub fn clear_overlay_round(
     pixels: &[u8],
-    canvas_width: i32, canvas_height: i32,
-    virtual_width: i32, virtual_height: i32,
-    offset_x: i32, offset_y: i32, rounds: i32,
-    x: i32, y: i32, axes: &[f64],
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    rounds: i32,
+    x: i32,
+    y: i32,
+    axes: &[f64],
 ) -> Vec<u8> {
-    let canvas_size  = IVec2::new(canvas_width,  canvas_height);
+    let canvas_size = IVec2::new(canvas_width, canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset       = IVec2::new(offset_x,      offset_y);
-    let in_canvas    = x >= 0 && x < canvas_width && y >= 0 && y < canvas_height;
-    let mut result   = pixels.to_vec();
+    let offset = IVec2::new(offset_x, offset_y);
+    let in_canvas = x >= 0 && x < canvas_width && y >= 0 && y < canvas_height;
+    let mut result = pixels.to_vec();
 
     if in_canvas {
         for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
-            let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy)) else { continue };
+            let Some(inner) =
+                inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy))
+            else {
+                continue;
+            };
             let ti = (inner.y * canvas_width + inner.x) as usize;
-            if result[ti] == COLOR_TRANSPARENT { continue; }
+            if result[ti] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[ti] = natural_color_round(virtual_size, offset, rounds, inner);
         }
     } else {
-        let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(x, y)) else { return result };
+        let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(x, y))
+        else {
+            return result;
+        };
         for (sx, sy) in symmetric_orbit(inner.x, inner.y, canvas_width, canvas_height, axes) {
             let idx = (sy * canvas_width + sx) as usize;
-            if result[idx] == COLOR_TRANSPARENT { continue; }
+            if result[idx] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[idx] = natural_color_round(virtual_size, offset, rounds, IVec2::new(sx, sy));
         }
     }
@@ -245,33 +343,46 @@ pub fn clear_overlay_round(
 pub fn lock_invalid_row(before: &[u8], after: &[u8], width: i32, height: i32) -> Vec<u8> {
     let mut result = after.to_vec();
     for y in 0..height {
-        if !is_always_invalid_row(IVec2::new(0, y)) { continue; }
+        if !is_always_invalid_row(IVec2::new(0, y)) {
+            continue;
+        }
         for x in 0..width {
-            let i   = (y * width + x) as usize;
+            let i = (y * width + x) as usize;
             let nat = natural_color_row(height, y);
-            if before[i] == nat && result[i] != nat { result[i] = before[i]; }
+            if before[i] == nat && result[i] != nat {
+                result[i] = before[i];
+            }
         }
     }
     result
 }
 
 pub fn lock_invalid_round(
-    before: &[u8], after: &[u8],
-    canvas_width: i32, canvas_height: i32,
-    virtual_width: i32, virtual_height: i32,
-    offset_x: i32, offset_y: i32, rounds: i32,
+    before: &[u8],
+    after: &[u8],
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    rounds: i32,
 ) -> Vec<u8> {
-    let canvas_size  = IVec2::new(canvas_width,  canvas_height);
+    let canvas_size = IVec2::new(canvas_width, canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset       = IVec2::new(offset_x,      offset_y);
-    let mut result   = after.to_vec();
+    let offset = IVec2::new(offset_x, offset_y);
+    let mut result = after.to_vec();
     for y in 0..canvas_size.y {
         for x in 0..canvas_size.x {
             let coord = IVec2::new(x, y);
-            if !is_always_invalid_round(virtual_size, offset, rounds, coord) { continue; }
-            let i   = (y * canvas_width + x) as usize;
+            if !is_always_invalid_round(virtual_size, offset, rounds, coord) {
+                continue;
+            }
+            let i = (y * canvas_width + x) as usize;
             let nat = natural_color_round(virtual_size, offset, rounds, coord);
-            if before[i] == nat && result[i] != nat { result[i] = before[i]; }
+            if before[i] == nat && result[i] != nat {
+                result[i] = before[i];
+            }
         }
     }
     result
@@ -285,20 +396,32 @@ pub fn lock_invalid_round(
 // right; shrinking truncates from the same far edges. Holes are skipped on
 // both sides — `new_pixels` already encodes its hole layout.
 pub fn transfer_preserved_row(
-    old_pixels: &[u8], old_width: i32, old_height: i32,
-    new_pixels: &[u8], new_width: i32, new_height: i32,
+    old_pixels: &[u8],
+    old_width: i32,
+    old_height: i32,
+    new_pixels: &[u8],
+    new_width: i32,
+    new_height: i32,
 ) -> Vec<u8> {
     let mut result = new_pixels.to_vec();
     let dy = old_height - new_height;
     for new_py in 0..new_height {
         let old_py = new_py + dy;
-        if old_py < 0 || old_py >= old_height { continue; }
+        if old_py < 0 || old_py >= old_height {
+            continue;
+        }
         for new_px in 0..new_width {
-            if new_px >= old_width { continue; }
+            if new_px >= old_width {
+                continue;
+            }
             let v = old_pixels[(old_py * old_width + new_px) as usize];
-            if v == COLOR_TRANSPARENT { continue; }
+            if v == COLOR_TRANSPARENT {
+                continue;
+            }
             let new_idx = (new_py * new_width + new_px) as usize;
-            if result[new_idx] == COLOR_TRANSPARENT { continue; }
+            if result[new_idx] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[new_idx] = v;
         }
     }
@@ -323,51 +446,81 @@ pub fn transfer_preserved_row(
 // shrinking takes its losses, always from the side opposite the anchor.
 pub fn transfer_preserved_round(
     old_pixels: &[u8],
-    old_canvas_width: i32, old_canvas_height: i32,
-    old_virtual_width: i32, old_virtual_height: i32,
-    old_offset_x: i32, old_offset_y: i32, old_rounds: i32,
+    old_canvas_width: i32,
+    old_canvas_height: i32,
+    old_virtual_width: i32,
+    old_virtual_height: i32,
+    old_offset_x: i32,
+    old_offset_y: i32,
+    old_rounds: i32,
     new_pixels: &[u8],
-    new_canvas_width: i32, new_canvas_height: i32,
-    new_virtual_width: i32, new_virtual_height: i32,
-    new_offset_x: i32, new_offset_y: i32, new_rounds: i32,
+    new_canvas_width: i32,
+    new_canvas_height: i32,
+    new_virtual_width: i32,
+    new_virtual_height: i32,
+    new_offset_x: i32,
+    new_offset_y: i32,
+    new_rounds: i32,
 ) -> Vec<u8> {
     let mut result = new_pixels.to_vec();
-    let d_vw = new_virtual_width  - old_virtual_width;
+    let d_vw = new_virtual_width - old_virtual_width;
     let d_vh = new_virtual_height - old_virtual_height;
-    let d_r  = new_rounds          - old_rounds;
+    let d_r = new_rounds - old_rounds;
 
     for old_py in 0..old_canvas_height {
         let old_vy = old_py + old_offset_y;
         let on_top = old_vy < old_rounds;
         let on_bot = old_vy >= old_virtual_height - old_rounds;
         for old_px in 0..old_canvas_width {
-            let old_vx  = old_px + old_offset_x;
-            let on_left  = old_vx < old_rounds;
+            let old_vx = old_px + old_offset_x;
+            let on_left = old_vx < old_rounds;
             let on_right = old_vx >= old_virtual_width - old_rounds;
 
             // Inner-hole cells (not in any corner or strip): skipped.
-            if !on_top && !on_bot && !on_left && !on_right { continue; }
+            if !on_top && !on_bot && !on_left && !on_right {
+                continue;
+            }
 
             // x: left-anchored. y: TOP-corner cells stay near the top (+Δr),
             // everything else (BOTTOM-corner OR LEFT/RIGHT strip) anchors to
             // the bottom (+ΔVH − Δr).
-            let new_vx = if on_right { old_vx + d_vw - d_r } else { old_vx + d_r };
-            let new_vy = if on_top   { old_vy + d_r       } else { old_vy + d_vh - d_r };
+            let new_vx = if on_right {
+                old_vx + d_vw - d_r
+            } else {
+                old_vx + d_r
+            };
+            let new_vy = if on_top {
+                old_vy + d_r
+            } else {
+                old_vy + d_vh - d_r
+            };
 
-            let is_h_strip = (on_top  || on_bot)   && !on_left && !on_right;
-            if is_h_strip && (new_vx < new_rounds || new_vx > new_virtual_width  - 1 - new_rounds) { continue; }
-            let is_v_strip = (on_left || on_right) && !on_top  && !on_bot;
-            if is_v_strip && (new_vy < new_rounds || new_vy > new_virtual_height - 1 - new_rounds) { continue; }
+            let is_h_strip = (on_top || on_bot) && !on_left && !on_right;
+            if is_h_strip && (new_vx < new_rounds || new_vx > new_virtual_width - 1 - new_rounds) {
+                continue;
+            }
+            let is_v_strip = (on_left || on_right) && !on_top && !on_bot;
+            if is_v_strip && (new_vy < new_rounds || new_vy > new_virtual_height - 1 - new_rounds) {
+                continue;
+            }
 
             let new_px = new_vx - new_offset_x;
             let new_py = new_vy - new_offset_y;
-            if new_px < 0 || new_px >= new_canvas_width  { continue; }
-            if new_py < 0 || new_py >= new_canvas_height { continue; }
+            if new_px < 0 || new_px >= new_canvas_width {
+                continue;
+            }
+            if new_py < 0 || new_py >= new_canvas_height {
+                continue;
+            }
 
             let v = old_pixels[(old_py * old_canvas_width + old_px) as usize];
-            if v == COLOR_TRANSPARENT { continue; }
+            if v == COLOR_TRANSPARENT {
+                continue;
+            }
             let new_idx = (new_py * new_canvas_width + new_px) as usize;
-            if result[new_idx] == COLOR_TRANSPARENT { continue; }
+            if result[new_idx] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[new_idx] = v;
         }
     }
@@ -382,32 +535,45 @@ pub fn transfer_preserved_round(
 // The symmetric-orbit fill at the end is unaffected; TS-side clip-after
 // handles mirror cells that land outside the selection.
 pub fn flood_fill(
-    pixels: &[u8], width: i32, height: i32,
-    start_x: i32, start_y: i32, fill_color: u8, axes: &[f64],
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    start_x: i32,
+    start_y: i32,
+    fill_color: u8,
+    axes: &[f64],
     selection: &[u8],
 ) -> Vec<u8> {
-    let mut result       = pixels.to_vec();
-    let     target_color = result[(start_y * width + start_x) as usize];
-    if target_color == fill_color || target_color == 0 { return result; }
+    let mut result = pixels.to_vec();
+    let target_color = result[(start_y * width + start_x) as usize];
+    if target_color == fill_color || target_color == 0 {
+        return result;
+    }
     let use_sel = !selection.is_empty();
 
-    let mut visited: HashSet<i32>          = HashSet::new();
-    let mut queue:   VecDeque<(i32, i32)>  = VecDeque::new();
-    let mut filled:  Vec<(i32, i32)>       = Vec::new();
+    let mut visited: HashSet<i32> = HashSet::new();
+    let mut queue: VecDeque<(i32, i32)> = VecDeque::new();
+    let mut filled: Vec<(i32, i32)> = Vec::new();
 
     queue.push_back((start_x, start_y));
 
     while let Some((x, y)) = queue.pop_front() {
-        if x < 0 || x >= width || y < 0 || y >= height { continue; }
+        if x < 0 || x >= width || y < 0 || y >= height {
+            continue;
+        }
         let idx = y * width + x;
-        if visited.contains(&idx) || result[idx as usize] != target_color { continue; }
-        if use_sel && selection[idx as usize] == 0 { continue; }
+        if visited.contains(&idx) || result[idx as usize] != target_color {
+            continue;
+        }
+        if use_sel && selection[idx as usize] == 0 {
+            continue;
+        }
         visited.insert(idx);
         filled.push((x, y));
         queue.push_back((x + 1, y));
         queue.push_back((x - 1, y));
-        queue.push_back((x,     y + 1));
-        queue.push_back((x,     y - 1));
+        queue.push_back((x, y + 1));
+        queue.push_back((x, y - 1));
     }
 
     for (x, y) in filled {
@@ -432,39 +598,51 @@ pub fn flood_fill(
 // tolerance — pixel values are discrete A / B / hole). Returns the new
 // selection bitset (1 byte per cell, 1 = selected).
 pub fn wand_select(
-    pixels: &[u8], width: i32, height: i32,
-    start_x: i32, start_y: i32,
-    mode: u8, existing: &[u8],
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    start_x: i32,
+    start_y: i32,
+    mode: u8,
+    existing: &[u8],
 ) -> Vec<u8> {
     let n = (width * height) as usize;
     let mut result: Vec<u8> = if mode == 0 {
-        vec![0u8; n]                     // replace: start empty
+        vec![0u8; n] // replace: start empty
     } else if existing.is_empty() {
-        vec![0u8; n]                     // add / remove with no existing → empty start
+        vec![0u8; n] // add / remove with no existing → empty start
     } else {
-        existing.to_vec()                // add / remove: copy existing
+        existing.to_vec() // add / remove: copy existing
     };
 
     // Hole or out-of-bounds click: nothing to flood — return the start state.
-    if start_x < 0 || start_x >= width || start_y < 0 || start_y >= height { return result; }
+    if start_x < 0 || start_x >= width || start_y < 0 || start_y >= height {
+        return result;
+    }
     let start_idx = (start_y * width + start_x) as usize;
     let target_color = pixels[start_idx];
-    if target_color == COLOR_TRANSPARENT { return result; }
+    if target_color == COLOR_TRANSPARENT {
+        return result;
+    }
 
-    let mut visited: HashSet<i32>         = HashSet::new();
-    let mut queue:   VecDeque<(i32, i32)> = VecDeque::new();
+    let mut visited: HashSet<i32> = HashSet::new();
+    let mut queue: VecDeque<(i32, i32)> = VecDeque::new();
     queue.push_back((start_x, start_y));
 
     while let Some((x, y)) = queue.pop_front() {
-        if x < 0 || x >= width || y < 0 || y >= height { continue; }
+        if x < 0 || x >= width || y < 0 || y >= height {
+            continue;
+        }
         let idx = y * width + x;
-        if visited.contains(&idx) || pixels[idx as usize] != target_color { continue; }
+        if visited.contains(&idx) || pixels[idx as usize] != target_color {
+            continue;
+        }
         visited.insert(idx);
         result[idx as usize] = if mode == 2 { 0 } else { 1 };
         queue.push_back((x + 1, y));
         queue.push_back((x - 1, y));
-        queue.push_back((x,     y + 1));
-        queue.push_back((x,     y - 1));
+        queue.push_back((x, y + 1));
+        queue.push_back((x, y - 1));
     }
     result
 }
@@ -476,15 +654,17 @@ pub fn wand_select(
 // the selection (or where `selection[i] == 0`) pass through unchanged.
 // Hole cells are skipped both ways — they stay transparent regardless of
 // selection.
-pub fn cut_to_natural_row(
-    pixels: &[u8], width: i32, height: i32, selection: &[u8],
-) -> Vec<u8> {
+pub fn cut_to_natural_row(pixels: &[u8], width: i32, height: i32, selection: &[u8]) -> Vec<u8> {
     let mut result = pixels.to_vec();
     for y in 0..height {
         for x in 0..width {
             let i = (y * width + x) as usize;
-            if i >= selection.len() || selection[i] == 0 { continue; }
-            if result[i] == COLOR_TRANSPARENT { continue; }
+            if i >= selection.len() || selection[i] == 0 {
+                continue;
+            }
+            if result[i] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[i] = natural_color_row(height, y);
         }
     }
@@ -493,19 +673,27 @@ pub fn cut_to_natural_row(
 
 pub fn cut_to_natural_round(
     pixels: &[u8],
-    canvas_width: i32, canvas_height: i32,
-    virtual_width: i32, virtual_height: i32,
-    offset_x: i32, offset_y: i32, rounds: i32,
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    rounds: i32,
     selection: &[u8],
 ) -> Vec<u8> {
     let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset       = IVec2::new(offset_x,      offset_y);
-    let mut result   = pixels.to_vec();
+    let offset = IVec2::new(offset_x, offset_y);
+    let mut result = pixels.to_vec();
     for y in 0..canvas_height {
         for x in 0..canvas_width {
             let i = (y * canvas_width + x) as usize;
-            if i >= selection.len() || selection[i] == 0 { continue; }
-            if result[i] == COLOR_TRANSPARENT { continue; }
+            if i >= selection.len() || selection[i] == 0 {
+                continue;
+            }
+            if result[i] == COLOR_TRANSPARENT {
+                continue;
+            }
             result[i] = natural_color_round(virtual_size, offset, rounds, IVec2::new(x, y));
         }
     }
@@ -518,28 +706,34 @@ mod tests {
     use super::*;
     use crate::common::{COLOR_A, COLOR_B, get_color_index, get_round_from_edge};
 
-    fn v(x: i32, y: i32) -> IVec2 { IVec2::new(x, y) }
+    fn v(x: i32, y: i32) -> IVec2 {
+        IVec2::new(x, y)
+    }
 
     /// Natural alternating row grid of width × height.
     fn row_grid(w: i32, h: i32) -> Vec<u8> {
         let mut g = vec![0u8; (w * h) as usize];
-        for y in 0..h { for x in 0..w {
-            g[(y * w + x) as usize] = get_color_index(h - 1 - y);
-        }}
+        for y in 0..h {
+            for x in 0..w {
+                g[(y * w + x) as usize] = get_color_index(h - 1 - y);
+            }
+        }
         g
     }
 
     /// Natural round grid (with hole cleared) for the given geometry.
     fn round_grid(w: i32, h: i32, vw: i32, vh: i32, ox: i32, oy: i32, rounds: i32) -> Vec<u8> {
         let mut g = vec![0u8; (w * h) as usize];
-        for y in 0..h { for x in 0..w {
-            let rfe = get_round_from_edge(v(vw, vh), v(x + ox, y + oy));
-            g[(y * w + x) as usize] = if rfe >= rounds {
-                COLOR_TRANSPARENT
-            } else {
-                get_color_index(rounds - 1 - rfe)
-            };
-        }}
+        for y in 0..h {
+            for x in 0..w {
+                let rfe = get_round_from_edge(v(vw, vh), v(x + ox, y + oy));
+                g[(y * w + x) as usize] = if rfe >= rounds {
+                    COLOR_TRANSPARENT
+                } else {
+                    get_color_index(rounds - 1 - rfe)
+                };
+            }
+        }
         g
     }
 
@@ -593,7 +787,7 @@ mod tests {
     fn orbit_v_plus_h_composes_to_c_equivalent_orbit() {
         // The BFS must close over composed transforms, not just apply each
         // axis once to the starting cell.
-        let axes = [0.0_f64, 4.0, 0.0,   1.0_f64, 4.0, 0.0];
+        let axes = [0.0_f64, 4.0, 0.0, 1.0_f64, 4.0, 0.0];
         let orbit: std::collections::HashSet<_> =
             symmetric_orbit(1, 2, 9, 9, &axes).into_iter().collect();
         assert!(orbit.contains(&(1, 2)));
@@ -830,8 +1024,8 @@ mod tests {
         // The new right columns (vx=4, 5) and top row added cells appear
         // freshly natural.
         let mut old_g = row_grid(4, 4);
-        put(&mut old_g, 4, 0, 3, COLOR_A);  // foundation-left (vx=0 row 3 → already A, just mark explicitly)
-        put(&mut old_g, 4, 3, 0, COLOR_A);  // top-right cell
+        put(&mut old_g, 4, 0, 3, COLOR_A); // foundation-left (vx=0 row 3 → already A, just mark explicitly)
+        put(&mut old_g, 4, 3, 0, COLOR_A); // top-right cell
         let new_g = row_grid(6, 4);
         let out = transfer_preserved_row(&old_g, 4, 4, &new_g, 6, 4);
         assert_eq!(get(&out, 6, 0, 3), COLOR_A);
@@ -846,12 +1040,12 @@ mod tests {
         // at new vy=5. Old top row (vy=0) moves to new vy=2 (rows added at
         // the TOP).
         let mut old_g = row_grid(4, 4);
-        put(&mut old_g, 4, 2, 0, COLOR_A);  // old top
-        put(&mut old_g, 4, 1, 3, COLOR_B);  // old foundation
+        put(&mut old_g, 4, 2, 0, COLOR_A); // old top
+        put(&mut old_g, 4, 1, 3, COLOR_B); // old foundation
         let new_g = row_grid(4, 6);
         let out = transfer_preserved_row(&old_g, 4, 4, &new_g, 4, 6);
-        assert_eq!(get(&out, 4, 2, 2), COLOR_A);  // old top → new vy=2
-        assert_eq!(get(&out, 4, 1, 5), COLOR_B);  // old foundation → new vy=5
+        assert_eq!(get(&out, 4, 2, 2), COLOR_A); // old top → new vy=2
+        assert_eq!(get(&out, 4, 1, 5), COLOR_B); // old foundation → new vy=5
     }
 
     #[test]
@@ -859,12 +1053,12 @@ mod tests {
         // Old 6×6, new 4×4 (shrink). Foundation-left stays. Cells at the
         // right side or top of old that fall outside new are lost.
         let mut old_g = row_grid(6, 6);
-        put(&mut old_g, 6, 0, 5, COLOR_A);  // foundation-left → keeps
-        put(&mut old_g, 6, 5, 5, COLOR_A);  // foundation-far-right → truncated (vx=5 >= new W=4)
-        put(&mut old_g, 6, 0, 0, COLOR_A);  // top-left → truncated (vy=0 → new vy=-2)
+        put(&mut old_g, 6, 0, 5, COLOR_A); // foundation-left → keeps
+        put(&mut old_g, 6, 5, 5, COLOR_A); // foundation-far-right → truncated (vx=5 >= new W=4)
+        put(&mut old_g, 6, 0, 0, COLOR_A); // top-left → truncated (vy=0 → new vy=-2)
         let new_g = row_grid(4, 4);
         let out = transfer_preserved_row(&old_g, 6, 6, &new_g, 4, 4);
-        assert_eq!(get(&out, 4, 0, 3), COLOR_A);                    // foundation-left preserved
+        assert_eq!(get(&out, 4, 0, 3), COLOR_A); // foundation-left preserved
         // Right cell at vx=5 is outside the new canvas; new (3, 3) holds natural.
         assert_eq!(get(&out, 4, 3, 3), natural_color_row(4, 3));
     }
@@ -874,12 +1068,19 @@ mod tests {
     /// Round-grid with paint markers at specified virtual coords. Returns
     /// `(canvas grid, virtual_size, offset, rounds)` for assertions.
     fn round_grid_marked(
-        cw: i32, ch: i32, vw: i32, vh: i32, ox: i32, oy: i32, rounds: i32,
-        marks: &[(i32, i32, u8)],  // (vx, vy, marker)
+        cw: i32,
+        ch: i32,
+        vw: i32,
+        vh: i32,
+        ox: i32,
+        oy: i32,
+        rounds: i32,
+        marks: &[(i32, i32, u8)], // (vx, vy, marker)
     ) -> Vec<u8> {
         let mut g = round_grid(cw, ch, vw, vh, ox, oy, rounds);
         for &(vx, vy, marker) in marks {
-            let px = vx - ox; let py = vy - oy;
+            let px = vx - ox;
+            let py = vy - oy;
             if px >= 0 && px < cw && py >= 0 && py < ch {
                 g[(py * cw + px) as usize] = marker;
             }
@@ -892,17 +1093,28 @@ mod tests {
         // 8×8 (inner 4, r=2) → 10×8 (inner 6, r=2). Mark all four canvas
         // corners; after the transfer they should sit at the new canvas
         // corners. Specifically the BL corner stays at canvas BL.
-        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2,
-            &[(0, 0, COLOR_A), (7, 0, COLOR_A), (0, 7, COLOR_A), (7, 7, COLOR_A)]);
-        let new_init = round_grid(10, 8, 10, 8, 0, 0, 2);
-        let out = transfer_preserved_round(
-            &old, 8, 8, 8, 8, 0, 0, 2,
-            &new_init, 10, 8, 10, 8, 0, 0, 2,
+        let old = round_grid_marked(
+            8,
+            8,
+            8,
+            8,
+            0,
+            0,
+            2,
+            &[
+                (0, 0, COLOR_A),
+                (7, 0, COLOR_A),
+                (0, 7, COLOR_A),
+                (7, 7, COLOR_A),
+            ],
         );
-        assert_eq!(get(&out, 10, 0, 0), COLOR_A);  // TL canvas corner
-        assert_eq!(get(&out, 10, 9, 0), COLOR_A);  // TR canvas corner
-        assert_eq!(get(&out, 10, 0, 7), COLOR_A);  // BL canvas corner
-        assert_eq!(get(&out, 10, 9, 7), COLOR_A);  // BR canvas corner
+        let new_init = round_grid(10, 8, 10, 8, 0, 0, 2);
+        let out =
+            transfer_preserved_round(&old, 8, 8, 8, 8, 0, 0, 2, &new_init, 10, 8, 10, 8, 0, 0, 2);
+        assert_eq!(get(&out, 10, 0, 0), COLOR_A); // TL canvas corner
+        assert_eq!(get(&out, 10, 9, 0), COLOR_A); // TR canvas corner
+        assert_eq!(get(&out, 10, 0, 7), COLOR_A); // BL canvas corner
+        assert_eq!(get(&out, 10, 9, 7), COLOR_A); // BR canvas corner
     }
 
     #[test]
@@ -914,13 +1126,14 @@ mod tests {
         // freshly natural.
         let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2, &[(2, 0, COLOR_A)]);
         let new_init = round_grid(10, 8, 10, 8, 0, 0, 2);
-        let out = transfer_preserved_round(
-            &old, 8, 8, 8, 8, 0, 0, 2,
-            &new_init, 10, 8, 10, 8, 0, 0, 2,
-        );
+        let out =
+            transfer_preserved_round(&old, 8, 8, 8, 8, 0, 0, 2, &new_init, 10, 8, 10, 8, 0, 0, 2);
         assert_eq!(get(&out, 10, 2, 0), COLOR_A);
         // New TOP strip cells in the middle should hold natural colour.
-        assert_eq!(get(&out, 10, 6, 0), natural_color_round(v(10, 8), v(0, 0), 2, v(6, 0)));
+        assert_eq!(
+            get(&out, 10, 6, 0),
+            natural_color_round(v(10, 8), v(0, 0), 2, v(6, 0))
+        );
     }
 
     #[test]
@@ -932,13 +1145,14 @@ mod tests {
         // (vy=2, 3) gets freshly natural cells.
         let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2, &[(0, 5, COLOR_A)]);
         let new_init = round_grid(8, 10, 8, 10, 0, 0, 2);
-        let out = transfer_preserved_round(
-            &old, 8, 8, 8, 8, 0, 0, 2,
-            &new_init, 8, 10, 8, 10, 0, 0, 2,
-        );
-        assert_eq!(get(&out, 8, 0, 7), COLOR_A);  // moved down by ΔVH=2
+        let out =
+            transfer_preserved_round(&old, 8, 8, 8, 8, 0, 0, 2, &new_init, 8, 10, 8, 10, 0, 0, 2);
+        assert_eq!(get(&out, 8, 0, 7), COLOR_A); // moved down by ΔVH=2
         // New cell at top of LEFT strip should still be natural.
-        assert_eq!(get(&out, 8, 0, 2), natural_color_round(v(8, 10), v(0, 0), 2, v(0, 2)));
+        assert_eq!(
+            get(&out, 8, 0, 2),
+            natural_color_round(v(8, 10), v(0, 0), 2, v(0, 2))
+        );
     }
 
     #[test]
@@ -950,11 +1164,9 @@ mod tests {
         //   TR corner.
         let old = round_grid_marked(10, 8, 10, 8, 0, 0, 2, &[(2, 0, COLOR_A), (7, 0, COLOR_A)]);
         let new_init = round_grid(8, 8, 8, 8, 0, 0, 2);
-        let out = transfer_preserved_round(
-            &old, 10, 8, 10, 8, 0, 0, 2,
-            &new_init, 8, 8, 8, 8, 0, 0, 2,
-        );
-        assert_eq!(get(&out, 8, 2, 0), COLOR_A);  // left end preserved
+        let out =
+            transfer_preserved_round(&old, 10, 8, 10, 8, 0, 0, 2, &new_init, 8, 8, 8, 8, 0, 0, 2);
+        assert_eq!(get(&out, 8, 2, 0), COLOR_A); // left end preserved
         // Right end was dropped; new (5, 0) is filled by old TR corner cell,
         // which we didn't mark — should be natural.
         let nat_50 = natural_color_round(v(8, 8), v(0, 0), 2, v(5, 0));
@@ -970,12 +1182,14 @@ mod tests {
         let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2, &[(0, 0, COLOR_A)]);
         let new_init = round_grid(10, 10, 10, 10, 0, 0, 3);
         let out = transfer_preserved_round(
-            &old, 8, 8, 8, 8, 0, 0, 2,
-            &new_init, 10, 10, 10, 10, 0, 0, 3,
+            &old, 8, 8, 8, 8, 0, 0, 2, &new_init, 10, 10, 10, 10, 0, 0, 3,
         );
         assert_eq!(get(&out, 10, 1, 1), COLOR_A);
         // New outermost-TL cell (0, 0) should be natural.
-        assert_eq!(get(&out, 10, 0, 0), natural_color_round(v(10, 10), v(0, 0), 3, v(0, 0)));
+        assert_eq!(
+            get(&out, 10, 0, 0),
+            natural_color_round(v(10, 10), v(0, 0), 3, v(0, 0))
+        );
     }
 
     #[test]
@@ -984,12 +1198,10 @@ mod tests {
         // ring 3 should be dropped (new pattern has no ring 3). Old ring 2
         // (e.g. old (1, 1)) should become new ring 2 = new outermost at TL,
         // i.e. new (0, 0).
-        let old = round_grid_marked(10, 10, 10, 10, 0, 0, 3,
-            &[(0, 0, COLOR_A), (1, 1, COLOR_B)]);
+        let old = round_grid_marked(10, 10, 10, 10, 0, 0, 3, &[(0, 0, COLOR_A), (1, 1, COLOR_B)]);
         let new_init = round_grid(8, 8, 8, 8, 0, 0, 2);
         let out = transfer_preserved_round(
-            &old, 10, 10, 10, 10, 0, 0, 3,
-            &new_init, 8, 8, 8, 8, 0, 0, 2,
+            &old, 10, 10, 10, 10, 0, 0, 3, &new_init, 8, 8, 8, 8, 0, 0, 2,
         );
         // Old ring 2 corner → new outermost-TL.
         assert_eq!(get(&out, 8, 0, 0), COLOR_B);
@@ -1004,10 +1216,8 @@ mod tests {
         // After widening, it should remain at new (0, 0).
         let old = round_grid_marked(8, 6, 8, 8, 0, 2, 2, &[(0, 2, COLOR_A)]);
         let new_init = round_grid(10, 6, 10, 8, 0, 2, 2);
-        let out = transfer_preserved_round(
-            &old, 8, 6, 8, 8, 0, 2, 2,
-            &new_init, 10, 6, 10, 8, 0, 2, 2,
-        );
+        let out =
+            transfer_preserved_round(&old, 8, 6, 8, 8, 0, 2, 2, &new_init, 10, 6, 10, 8, 0, 2, 2);
         assert_eq!(get(&out, 10, 0, 0), COLOR_A);
     }
 
@@ -1018,12 +1228,10 @@ mod tests {
         // should be ring 2 = rfe=1 at TL → new (1, 1). Old TR canvas corner
         // (7, 0) was ring 2; in new it should be ring 2 at TR → rfe=1, i.e.
         // new (newVW-2, 1) = (10, 1).
-        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2,
-            &[(0, 0, COLOR_A), (7, 0, COLOR_B)]);
+        let old = round_grid_marked(8, 8, 8, 8, 0, 0, 2, &[(0, 0, COLOR_A), (7, 0, COLOR_B)]);
         let new_init = round_grid(12, 12, 12, 12, 0, 0, 3);
         let out = transfer_preserved_round(
-            &old, 8, 8, 8, 8, 0, 0, 2,
-            &new_init, 12, 12, 12, 12, 0, 0, 3,
+            &old, 8, 8, 8, 8, 0, 0, 2, &new_init, 12, 12, 12, 12, 0, 0, 3,
         );
         assert_eq!(get(&out, 12, 1, 1), COLOR_A);
         assert_eq!(get(&out, 12, 10, 1), COLOR_B);
@@ -1037,10 +1245,8 @@ mod tests {
         // with that "value" — both sides skip transparent cells.
         let old = round_grid(9, 9, 9, 9, 0, 0, 3);
         let new_init = round_grid(9, 9, 9, 9, 0, 0, 3);
-        let out = transfer_preserved_round(
-            &old, 9, 9, 9, 9, 0, 0, 3,
-            &new_init, 9, 9, 9, 9, 0, 0, 3,
-        );
+        let out =
+            transfer_preserved_round(&old, 9, 9, 9, 9, 0, 0, 3, &new_init, 9, 9, 9, 9, 0, 0, 3);
         // Inner-hole cell stays transparent.
         assert_eq!(get(&out, 9, 4, 4), COLOR_TRANSPARENT);
     }
@@ -1094,7 +1300,7 @@ mod tests {
     #[test]
     fn wand_replace_drops_existing_selection() {
         let pixels = vec![COLOR_A, COLOR_A, COLOR_B, COLOR_A, COLOR_A];
-        let existing: Vec<u8> = vec![0, 0, 0, 1, 1];   // cells 3,4 selected
+        let existing: Vec<u8> = vec![0, 0, 0, 1, 1]; // cells 3,4 selected
         let out = wand_select(&pixels, 5, 1, 0, 0, /*replace*/ 0, &existing);
         // Replace mode: existing 3,4 dropped, only the wand region remains.
         assert_eq!(&out[..], &[1, 1, 0, 0, 0]);
@@ -1124,9 +1330,9 @@ mod tests {
         // selection returned untouched (for add / remove) or empty (replace).
         let pixels = vec![COLOR_A, COLOR_TRANSPARENT, COLOR_A];
         let existing: Vec<u8> = vec![1, 0, 1];
-        let out_add     = wand_select(&pixels, 3, 1, 1, 0, /*add*/ 1, &existing);
+        let out_add = wand_select(&pixels, 3, 1, 1, 0, /*add*/ 1, &existing);
         let out_replace = wand_select(&pixels, 3, 1, 1, 0, /*replace*/ 0, &existing);
-        assert_eq!(&out_add[..],     &[1, 0, 1]);
+        assert_eq!(&out_add[..], &[1, 0, 1]);
         assert_eq!(&out_replace[..], &[0, 0, 0]);
     }
 
@@ -1164,8 +1370,8 @@ mod tests {
         // it transparent — holes are pattern shape, not paint state.
         let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
         let mut sel = vec![0u8; 81];
-        sel[4 * 9 + 4] = 1;   // hole cell
-        sel[4 * 9 + 1] = 1;   // non-hole cell
+        sel[4 * 9 + 4] = 1; // hole cell
+        sel[4 * 9 + 1] = 1; // non-hole cell
         let out = cut_to_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, &sel);
         assert_eq!(out[4 * 9 + 4], COLOR_TRANSPARENT);
         // (1, 4) was already natural, stays natural.
@@ -1181,15 +1387,33 @@ mod tests {
         let pixels = row_grid(5, 5);
         let mut sel = vec![0u8; 25];
         sel[1 * 5 + 0] = 1;
-        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, &[0.0_f64, 2.0, 0.0] /* V at x=2 (canonical for W=5) */, &sel);
-        assert_eq!(out[1 * 5 + 0], 2);   // selected cell painted
+        let out = paint_pixel(
+            &pixels,
+            5,
+            5,
+            0,
+            1,
+            2,
+            &[0.0_f64, 2.0, 0.0], /* V at x=2 (canonical for W=5) */
+            &sel,
+        );
+        assert_eq!(out[1 * 5 + 0], 2); // selected cell painted
         assert_eq!(out[1 * 5 + 4], pixels[1 * 5 + 4]); // mirrored cell untouched
     }
 
     #[test]
     fn paint_pixel_empty_selection_paints_full_orbit() {
         let pixels = row_grid(5, 5);
-        let out = paint_pixel(&pixels, 5, 5, 0, 1, 2, &[0.0_f64, 2.0, 0.0] /* V at x=2 (canonical for W=5) */, &[]);
+        let out = paint_pixel(
+            &pixels,
+            5,
+            5,
+            0,
+            1,
+            2,
+            &[0.0_f64, 2.0, 0.0], /* V at x=2 (canonical for W=5) */
+            &[],
+        );
         assert_eq!(out[1 * 5 + 0], 2);
         assert_eq!(out[1 * 5 + 4], 2); // mirror also painted (no clip)
     }
@@ -1212,8 +1436,21 @@ mod tests {
         let mut wrong = pixels.clone();
         wrong[idx] = opposite_color(pixels[idx]);
         let sel = vec![0u8; 81]; // nothing selected
-        let out = paint_natural_round(&wrong, 9, 9, 9, 9, 0, 0, 3,
-            (idx % 9) as i32, (idx / 9) as i32, &[], false, &sel);
+        let out = paint_natural_round(
+            &wrong,
+            9,
+            9,
+            9,
+            9,
+            0,
+            0,
+            3,
+            (idx % 9) as i32,
+            (idx / 9) as i32,
+            &[],
+            false,
+            &sel,
+        );
         // Not selected → not restored
         assert_eq!(out[idx], wrong[idx]);
     }

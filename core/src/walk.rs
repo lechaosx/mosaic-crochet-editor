@@ -17,25 +17,45 @@ pub fn row_walk_at(size: IVec2, row_index: usize) -> impl Iterator<Item = IVec2>
 struct Segment {
     start_coord: IVec2,
     step_vector: IVec2,
-    count:       i32,
+    count: i32,
 }
 
 pub fn round_walk_at(size: IVec2, rounds: i32, round: i32) -> impl Iterator<Item = (IVec2, IVec2)> {
-    let edge_distance     = rounds - round;
+    let edge_distance = rounds - round;
     let left_right_length = size.y - 2 * edge_distance - 2;
     let top_bottom_length = size.x - 2 * edge_distance - 2;
-    let inner_edge        = edge_distance + 1;
-    let inner_bound       = IVec2::new(inner_edge,               inner_edge);
-    let outer_bound       = IVec2::new(size.x - 1 - inner_edge, size.y - 1 - inner_edge);
+    let inner_edge = edge_distance + 1;
+    let inner_bound = IVec2::new(inner_edge, inner_edge);
+    let outer_bound = IVec2::new(size.x - 1 - inner_edge, size.y - 1 - inner_edge);
 
     let project_inward = move |coord: IVec2| coord.clamp(inner_bound, outer_bound);
 
     let segments = [
-        Segment { start_coord: IVec2::new(edge_distance + 1,           edge_distance              ), step_vector: IVec2::new(-1,  0), count: 1                    },  // pre-start (one right of TL)
-        Segment { start_coord: IVec2::new(edge_distance,               edge_distance              ), step_vector: IVec2::new( 0,  1), count: 1 + left_right_length },  // TL corner + left↓
-        Segment { start_coord: IVec2::new(edge_distance,               size.y - 1 - edge_distance ), step_vector: IVec2::new( 1,  0), count: 1 + top_bottom_length },  // BL corner + bottom→
-        Segment { start_coord: IVec2::new(size.x - 1 - edge_distance, size.y - 1 - edge_distance ), step_vector: IVec2::new( 0, -1), count: 1 + left_right_length },  // BR corner + right↑
-        Segment { start_coord: IVec2::new(size.x - 1 - edge_distance, edge_distance              ), step_vector: IVec2::new(-1,  0), count: top_bottom_length     },  // TR corner + top← (excl. pre-start)
+        Segment {
+            start_coord: IVec2::new(edge_distance + 1, edge_distance),
+            step_vector: IVec2::new(-1, 0),
+            count: 1,
+        }, // pre-start (one right of TL)
+        Segment {
+            start_coord: IVec2::new(edge_distance, edge_distance),
+            step_vector: IVec2::new(0, 1),
+            count: 1 + left_right_length,
+        }, // TL corner + left↓
+        Segment {
+            start_coord: IVec2::new(edge_distance, size.y - 1 - edge_distance),
+            step_vector: IVec2::new(1, 0),
+            count: 1 + top_bottom_length,
+        }, // BL corner + bottom→
+        Segment {
+            start_coord: IVec2::new(size.x - 1 - edge_distance, size.y - 1 - edge_distance),
+            step_vector: IVec2::new(0, -1),
+            count: 1 + left_right_length,
+        }, // BR corner + right↑
+        Segment {
+            start_coord: IVec2::new(size.x - 1 - edge_distance, edge_distance),
+            step_vector: IVec2::new(-1, 0),
+            count: top_bottom_length,
+        }, // TR corner + top← (excl. pre-start)
     ];
 
     gen move {
@@ -53,7 +73,7 @@ pub fn window(coord: IVec2, size: IVec2) -> bool {
 }
 
 pub fn is_corner_coord(physical_coord: IVec2, offset: IVec2, virtual_size: IVec2) -> bool {
-    let virtual_coord           = physical_coord + offset;
+    let virtual_coord = physical_coord + offset;
     let distance_from_near_edge = virtual_coord.min(virtual_size - IVec2::ONE - virtual_coord);
     distance_from_near_edge.x == distance_from_near_edge.y
 }
@@ -63,14 +83,19 @@ pub fn is_corner_coord(physical_coord: IVec2, offset: IVec2, virtual_size: IVec2
 mod tests {
     use super::*;
 
-    fn v(x: i32, y: i32) -> IVec2 { IVec2::new(x, y) }
+    fn v(x: i32, y: i32) -> IVec2 {
+        IVec2::new(x, y)
+    }
 
     fn collect_round(size: IVec2, rounds: i32, round: i32) -> Vec<(IVec2, IVec2)> {
         round_walk_at(size, rounds, round).collect()
     }
 
     fn count_corners(pairs: &[(IVec2, IVec2)], offset: IVec2, virtual_size: IVec2) -> usize {
-        pairs.iter().filter(|&&(c, _)| is_corner_coord(c, offset, virtual_size)).count()
+        pairs
+            .iter()
+            .filter(|&&(c, _)| is_corner_coord(c, offset, virtual_size))
+            .count()
     }
 
     // ── row_walk_at ──────────────────────────────────────────────────────────
@@ -130,7 +155,7 @@ mod tests {
     #[test]
     fn round_walk_total_coords_inner_width_1() {
         // vW=vH=2*rounds+1; total per round r = 8r
-        assert_eq!(round_walk_at(v(7, 7), 3, 1).count(),  8);
+        assert_eq!(round_walk_at(v(7, 7), 3, 1).count(), 8);
         assert_eq!(round_walk_at(v(7, 7), 3, 2).count(), 16);
         assert_eq!(round_walk_at(v(7, 7), 3, 3).count(), 24);
     }
@@ -185,10 +210,10 @@ mod tests {
 
     #[test]
     fn window_outside_bounds() {
-        assert!(!window(v(-1,  0), v(5, 5)));
-        assert!(!window(v( 5,  0), v(5, 5)));
-        assert!(!window(v( 0,  5), v(5, 5)));
-        assert!(!window(v( 0, -1), v(5, 5)));
+        assert!(!window(v(-1, 0), v(5, 5)));
+        assert!(!window(v(5, 0), v(5, 5)));
+        assert!(!window(v(0, 5), v(5, 5)));
+        assert!(!window(v(0, -1), v(5, 5)));
     }
 
     #[test]
@@ -207,7 +232,7 @@ mod tests {
     #[test]
     fn round_walk_plus_window_half_mode_2_corners() {
         let canvas = v(5, 5);
-        let vsize  = v(5, 10);
+        let vsize = v(5, 10);
         let offset = v(0, 5);
         for r in 1..=1 {
             let windowed: Vec<_> = round_walk_at(vsize, 1, r)
@@ -221,7 +246,7 @@ mod tests {
     #[test]
     fn round_walk_plus_window_quarter_mode_1_corner() {
         let canvas = v(3, 5);
-        let vsize  = v(5, 10);
+        let vsize = v(5, 10);
         let offset = v(0, 5);
         for r in 1..=1 {
             let windowed: Vec<_> = round_walk_at(vsize, 1, r)
@@ -238,17 +263,17 @@ mod tests {
     fn corner_coord_detects_ring_corners_5x5() {
         let no_off = v(0, 0);
         let gs = v(5, 5);
-        assert!( is_corner_coord(v(1, 1), no_off, gs), "TL (1,1)");
-        assert!( is_corner_coord(v(1, 3), no_off, gs), "BL (1,3)");
-        assert!( is_corner_coord(v(3, 3), no_off, gs), "BR (3,3)");
-        assert!( is_corner_coord(v(3, 1), no_off, gs), "TR (3,1)");
+        assert!(is_corner_coord(v(1, 1), no_off, gs), "TL (1,1)");
+        assert!(is_corner_coord(v(1, 3), no_off, gs), "BL (1,3)");
+        assert!(is_corner_coord(v(3, 3), no_off, gs), "BR (3,3)");
+        assert!(is_corner_coord(v(3, 1), no_off, gs), "TR (3,1)");
         assert!(!is_corner_coord(v(1, 2), no_off, gs), "left side");
         assert!(!is_corner_coord(v(2, 3), no_off, gs), "bottom side");
     }
 
     #[test]
     fn corner_coord_with_offset() {
-        assert!( is_corner_coord(v(0, 0), v(1, 1), v(5, 5))); // virtual (1,1) is corner
+        assert!(is_corner_coord(v(0, 0), v(1, 1), v(5, 5))); // virtual (1,1) is corner
         assert!(!is_corner_coord(v(0, 1), v(1, 1), v(5, 5))); // virtual (1,2) is not
     }
 
@@ -256,10 +281,10 @@ mod tests {
     fn corner_coord_outermost_ring_7x7() {
         let no_off = v(0, 0);
         let gs = v(7, 7);
-        assert!( is_corner_coord(v(0, 0), no_off, gs));
-        assert!( is_corner_coord(v(0, 6), no_off, gs));
-        assert!( is_corner_coord(v(6, 6), no_off, gs));
-        assert!( is_corner_coord(v(6, 0), no_off, gs));
+        assert!(is_corner_coord(v(0, 0), no_off, gs));
+        assert!(is_corner_coord(v(0, 6), no_off, gs));
+        assert!(is_corner_coord(v(6, 6), no_off, gs));
+        assert!(is_corner_coord(v(6, 0), no_off, gs));
         assert!(!is_corner_coord(v(0, 3), no_off, gs));
     }
 }

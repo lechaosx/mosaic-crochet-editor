@@ -8,11 +8,11 @@ use ndarray::Array2;
 // "this cell is a hole, don't touch" guard across every tool (`!= 0`).
 // On-disk storage uses a separate 1-bit-per-pixel packing and reconstructs the
 // hole sentinel from geometry on load — see `storage.ts`.
-pub const COLOR_TRANSPARENT:        u8 = 0;
-pub const COLOR_A:                  u8 = 1;
-pub const COLOR_B:                  u8 = 2;
-pub const HIGHLIGHT_VALID_OVERLAY:  u8 = 3;
-pub const HIGHLIGHT_INVALID:        u8 = 4;
+pub const COLOR_TRANSPARENT: u8 = 0;
+pub const COLOR_A: u8 = 1;
+pub const COLOR_B: u8 = 2;
+pub const HIGHLIGHT_VALID_OVERLAY: u8 = 3;
+pub const HIGHLIGHT_INVALID: u8 = 4;
 
 // Highlight render plan. `build_highlight_plan_*` emits a flat sequence of
 // stride-4 records: [type, direction, wrong_x, wrong_y, ...].
@@ -28,16 +28,20 @@ pub const HIGHLIGHT_INVALID:        u8 = 4;
 // `wasm/src/lib.rs` — those enums are the names TS sees.
 pub const PLAN_STRIDE: usize = 4;
 
-pub const PLAN_TYPE_VALID:   u8 = 0;
+pub const PLAN_TYPE_VALID: u8 = 0;
 pub const PLAN_TYPE_INVALID: u8 = 1;
 
-pub const PLAN_DIR_UP:    u8 = 0;
-pub const PLAN_DIR_DOWN:  u8 = 1;
-pub const PLAN_DIR_LEFT:  u8 = 2;
+pub const PLAN_DIR_UP: u8 = 0;
+pub const PLAN_DIR_DOWN: u8 = 1;
+pub const PLAN_DIR_LEFT: u8 = 2;
 pub const PLAN_DIR_RIGHT: u8 = 3;
 
 fn plan_type_for(highlight: u8) -> u8 {
-    if highlight == HIGHLIGHT_VALID_OVERLAY { PLAN_TYPE_VALID } else { PLAN_TYPE_INVALID }
+    if highlight == HIGHLIGHT_VALID_OVERLAY {
+        PLAN_TYPE_VALID
+    } else {
+        PLAN_TYPE_INVALID
+    }
 }
 
 pub fn get_color_index(index: i32) -> u8 {
@@ -52,16 +56,22 @@ pub fn natural_color_row(height: i32, y: i32) -> u8 {
     get_color_index(height - 1 - y)
 }
 
-pub fn natural_color_round(
-    virtual_size: IVec2, offset: IVec2, rounds: i32, coord: IVec2,
-) -> u8 {
+pub fn natural_color_round(virtual_size: IVec2, offset: IVec2, rounds: i32, coord: IVec2) -> u8 {
     let rfe = get_round_from_edge(virtual_size, coord + offset);
-    if rfe >= rounds { COLOR_TRANSPARENT } else { get_color_index(rounds - 1 - rfe) }
+    if rfe >= rounds {
+        COLOR_TRANSPARENT
+    } else {
+        get_color_index(rounds - 1 - rfe)
+    }
 }
 
 // Flip COLOR_A ↔ COLOR_B; passes the hole sentinel through unchanged.
 pub fn opposite_color(c: u8) -> u8 {
-    match c { COLOR_A => COLOR_B, COLOR_B => COLOR_A, _ => c }
+    match c {
+        COLOR_A => COLOR_B,
+        COLOR_B => COLOR_A,
+        _ => c,
+    }
 }
 
 // Per-axis distance from `virtual_coord` to the closer of its two virtual
@@ -83,8 +93,16 @@ pub fn get_round_from_edge(virtual_size: IVec2, virtual_coord: IVec2) -> i32 {
 // `outward_cells_round` / `inward_cell_round`).
 pub fn step_toward_center(virtual_size: IVec2, virtual_coord: IVec2) -> IVec2 {
     IVec2::new(
-        if virtual_coord.x * 2 >= virtual_size.x { -1 } else { 1 },
-        if virtual_coord.y * 2 >= virtual_size.y { -1 } else { 1 },
+        if virtual_coord.x * 2 >= virtual_size.x {
+            -1
+        } else {
+            1
+        },
+        if virtual_coord.y * 2 >= virtual_size.y {
+            -1
+        } else {
+            1
+        },
     )
 }
 
@@ -105,9 +123,16 @@ pub fn is_always_invalid_row(coord: IVec2) -> bool {
     coord.y == 0
 }
 
-pub fn is_always_invalid_round(virtual_size: IVec2, offset: IVec2, rounds: i32, coord: IVec2) -> bool {
+pub fn is_always_invalid_round(
+    virtual_size: IVec2,
+    offset: IVec2,
+    rounds: i32,
+    coord: IVec2,
+) -> bool {
     let min_dist = min_dist_axes(virtual_size, coord + offset);
-    if min_dist.x.min(min_dist.y) >= rounds { return false; }
+    if min_dist.x.min(min_dist.y) >= rounds {
+        return false;
+    }
     always_invalid_at(min_dist)
 }
 
@@ -121,16 +146,18 @@ pub fn outward_cells_row(coord: IVec2) -> Vec<IVec2> {
 }
 
 pub fn outward_cells_round(virtual_size: IVec2, offset: IVec2, coord: IVec2) -> Vec<IVec2> {
-    let v        = coord + offset;
+    let v = coord + offset;
     let min_dist = min_dist_axes(virtual_size, v);
-    let step     = step_toward_center(virtual_size, v);
+    let step = step_toward_center(virtual_size, v);
     if min_dist.x == min_dist.y {
-        vec![IVec2::new(coord.x - step.x, coord.y),
-             IVec2::new(coord.x,          coord.y - step.y)]
+        vec![
+            IVec2::new(coord.x - step.x, coord.y),
+            IVec2::new(coord.x, coord.y - step.y),
+        ]
     } else if min_dist.x < min_dist.y {
         vec![IVec2::new(coord.x - step.x, coord.y)]
     } else {
-        vec![IVec2::new(coord.x,          coord.y - step.y)]
+        vec![IVec2::new(coord.x, coord.y - step.y)]
     }
 }
 
@@ -144,20 +171,27 @@ pub fn inward_cell_row(canvas_size: IVec2, coord: IVec2) -> Option<IVec2> {
     (inner.y < canvas_size.y).then_some(inner)
 }
 
-pub fn inward_cell_round(canvas_size: IVec2, virtual_size: IVec2, offset: IVec2, coord: IVec2) -> Option<IVec2> {
-    let v        = coord + offset;
+pub fn inward_cell_round(
+    canvas_size: IVec2,
+    virtual_size: IVec2,
+    offset: IVec2,
+    coord: IVec2,
+) -> Option<IVec2> {
+    let v = coord + offset;
     let min_dist = min_dist_axes(virtual_size, v);
-    let in_canvas = coord.x >= 0 && coord.x < canvas_size.x
-                 && coord.y >= 0 && coord.y < canvas_size.y;
-    if in_canvas && min_dist.x == min_dist.y { return None; }
-    let step  = step_toward_center(virtual_size, v);
+    let in_canvas =
+        coord.x >= 0 && coord.x < canvas_size.x && coord.y >= 0 && coord.y < canvas_size.y;
+    if in_canvas && min_dist.x == min_dist.y {
+        return None;
+    }
+    let step = step_toward_center(virtual_size, v);
     let inner = if min_dist.x < min_dist.y {
         IVec2::new(coord.x + step.x, coord.y)
     } else {
-        IVec2::new(coord.x,          coord.y + step.y)
+        IVec2::new(coord.x, coord.y + step.y)
     };
-    let inner_in_canvas = inner.x >= 0 && inner.x < canvas_size.x
-                       && inner.y >= 0 && inner.y < canvas_size.y;
+    let inner_in_canvas =
+        inner.x >= 0 && inner.x < canvas_size.x && inner.y >= 0 && inner.y < canvas_size.y;
     inner_in_canvas.then_some(inner)
 }
 
@@ -167,16 +201,14 @@ pub fn inward_cell_round(canvas_size: IVec2, virtual_size: IVec2, offset: IVec2,
 // foundation — every wrong cell asks the same question ("is the overlay this
 // would create structurally valid?") and writes V/I at its own position. The
 // renderer's `outwardCell` does the visual displacement.
-pub fn compute_row_highlights(
-    size:       IVec2,
-    pixels:     &Array2<u8>,
-    highlights: &mut Array2<u8>,
-) {
+pub fn compute_row_highlights(size: IVec2, pixels: &Array2<u8>, highlights: &mut Array2<u8>) {
     for y in 0..size.y {
         let color_index = get_color_index(size.y - 1 - y);
         for x in 0..size.x {
             let [xi, yi] = [x as usize, y as usize];
-            if color_index == pixels[[yi, xi]] { continue; }
+            if color_index == pixels[[yi, xi]] {
+                continue;
+            }
 
             let result = if y == 0 {
                 // Top row: no row above to anchor an overlay against.
@@ -186,8 +218,11 @@ pub fn compute_row_highlights(
                 HIGHLIGHT_VALID_OVERLAY
             } else {
                 let inner_pixel = pixels[[y as usize + 1, xi]];
-                if color_index == inner_pixel { HIGHLIGHT_INVALID }
-                else                          { HIGHLIGHT_VALID_OVERLAY }
+                if color_index == inner_pixel {
+                    HIGHLIGHT_INVALID
+                } else {
+                    HIGHLIGHT_VALID_OVERLAY
+                }
             };
             highlights[[yi, xi]] = result;
         }
@@ -195,25 +230,29 @@ pub fn compute_row_highlights(
 }
 
 pub fn compute_round_highlights(
-    canvas_size:  IVec2,
+    canvas_size: IVec2,
     virtual_size: IVec2,
-    offset:       IVec2,
-    rounds:       i32,
-    pixels:       &Array2<u8>,
-    highlights:   &mut Array2<u8>,
+    offset: IVec2,
+    rounds: i32,
+    pixels: &Array2<u8>,
+    highlights: &mut Array2<u8>,
 ) {
     for y in 0..canvas_size.y {
         for x in 0..canvas_size.x {
-            let physical_coord  = IVec2::new(x, y);
-            let virtual_coord   = physical_coord + offset;
-            let min_dist        = min_dist_axes(virtual_size, virtual_coord);
+            let physical_coord = IVec2::new(x, y);
+            let virtual_coord = physical_coord + offset;
+            let min_dist = min_dist_axes(virtual_size, virtual_coord);
             let round_from_edge = min_dist.x.min(min_dist.y);
 
-            if round_from_edge >= rounds { continue; }
+            if round_from_edge >= rounds {
+                continue;
+            }
 
             let color_index = get_color_index(rounds - 1 - round_from_edge);
-            let [xi, yi]    = [x as usize, y as usize];
-            if color_index == pixels[[yi, xi]] { continue; }
+            let [xi, yi] = [x as usize, y as usize];
+            if color_index == pixels[[yi, xi]] {
+                continue;
+            }
 
             // Outermost ring or any diagonal corner: no well-defined outward
             // target. Force INVALID at the wrong cell — renderer handles the
@@ -230,9 +269,11 @@ pub fn compute_round_highlights(
                     IVec2::new(0, step_full.y)
                 };
 
-                let neighbor           = physical_coord + step;
-                let neighbor_in_bounds = neighbor.x >= 0 && neighbor.x < canvas_size.x
-                                      && neighbor.y >= 0 && neighbor.y < canvas_size.y;
+                let neighbor = physical_coord + step;
+                let neighbor_in_bounds = neighbor.x >= 0
+                    && neighbor.x < canvas_size.x
+                    && neighbor.y >= 0
+                    && neighbor.y < canvas_size.y;
 
                 let is_seam = !neighbor_in_bounds || {
                     let neighbor_rfe = get_round_from_edge(virtual_size, neighbor + offset);
@@ -267,7 +308,9 @@ pub fn build_highlight_plan_row(canvas_size: IVec2, pixels: &Array2<u8>) -> Vec<
     for y in 0..canvas_size.y {
         for x in 0..canvas_size.x {
             let v = hl[[y as usize, x as usize]];
-            if v == 0 { continue; }
+            if v == 0 {
+                continue;
+            }
             push_entry(&mut plan, plan_type_for(v), PLAN_DIR_UP, x, y);
         }
     }
@@ -275,11 +318,11 @@ pub fn build_highlight_plan_row(canvas_size: IVec2, pixels: &Array2<u8>) -> Vec<
 }
 
 pub fn build_highlight_plan_round(
-    canvas_size:  IVec2,
+    canvas_size: IVec2,
     virtual_size: IVec2,
-    offset:       IVec2,
-    rounds:       i32,
-    pixels:       &Array2<u8>,
+    offset: IVec2,
+    rounds: i32,
+    pixels: &Array2<u8>,
 ) -> Vec<i16> {
     let mut hl = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
     compute_round_highlights(canvas_size, virtual_size, offset, rounds, pixels, &mut hl);
@@ -288,13 +331,23 @@ pub fn build_highlight_plan_round(
     for y in 0..canvas_size.y {
         for x in 0..canvas_size.x {
             let v = hl[[y as usize, x as usize]];
-            if v == 0 { continue; }
-            let type_id       = plan_type_for(v);
+            if v == 0 {
+                continue;
+            }
+            let type_id = plan_type_for(v);
             let virtual_coord = IVec2::new(x, y) + offset;
-            let min_dist      = min_dist_axes(virtual_size, virtual_coord);
-            let step          = step_toward_center(virtual_size, virtual_coord);
-            let dir_x         = if step.x == 1 { PLAN_DIR_LEFT } else { PLAN_DIR_RIGHT };
-            let dir_y         = if step.y == 1 { PLAN_DIR_UP   } else { PLAN_DIR_DOWN  };
+            let min_dist = min_dist_axes(virtual_size, virtual_coord);
+            let step = step_toward_center(virtual_size, virtual_coord);
+            let dir_x = if step.x == 1 {
+                PLAN_DIR_LEFT
+            } else {
+                PLAN_DIR_RIGHT
+            };
+            let dir_y = if step.y == 1 {
+                PLAN_DIR_UP
+            } else {
+                PLAN_DIR_DOWN
+            };
 
             // Outermost ring: outward direction is *outside* the canvas. We
             // still emit it — the renderer chooses what to do (typically
@@ -304,7 +357,11 @@ pub fn build_highlight_plan_round(
                 push_entry(&mut plan, type_id, dir_x, x, y);
                 push_entry(&mut plan, type_id, dir_y, x, y);
             } else {
-                let dir = if min_dist.x < min_dist.y { dir_x } else { dir_y };
+                let dir = if min_dist.x < min_dist.y {
+                    dir_x
+                } else {
+                    dir_y
+                };
                 push_entry(&mut plan, type_id, dir, x, y);
             }
         }
@@ -319,14 +376,18 @@ mod tests {
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    fn v(x: i32, y: i32) -> IVec2 { IVec2::new(x, y) }
+    fn v(x: i32, y: i32) -> IVec2 {
+        IVec2::new(x, y)
+    }
 
     /// Build a W×H pixel grid initialised to natural row colours.
     fn make_row_grid(w: i32, h: i32) -> Array2<u8> {
         let mut p = Array2::zeros((h as usize, w as usize));
         for y in 0..h {
             let ci = get_color_index(h - 1 - y);
-            for x in 0..w { p[[y as usize, x as usize]] = ci; }
+            for x in 0..w {
+                p[[y as usize, x as usize]] = ci;
+            }
         }
         p
     }
@@ -335,14 +396,24 @@ mod tests {
     /// Overrides: (x, y, colour).
     fn run_row_hl(w: i32, h: i32, overrides: &[(usize, usize, u8)]) -> Array2<u8> {
         let mut pixels = make_row_grid(w, h);
-        for &(x, y, c) in overrides { pixels[[y, x]] = c; }
+        for &(x, y, c) in overrides {
+            pixels[[y, x]] = c;
+        }
         let mut hl = Array2::zeros((h as usize, w as usize));
         compute_row_highlights(v(w, h), &pixels, &mut hl);
         hl
     }
 
     /// Build a W×H pixel grid initialised to the natural round colour pattern.
-    fn make_round_grid(w: i32, h: i32, vw: i32, vh: i32, off_x: i32, off_y: i32, rounds: i32) -> Array2<u8> {
+    fn make_round_grid(
+        w: i32,
+        h: i32,
+        vw: i32,
+        vh: i32,
+        off_x: i32,
+        off_y: i32,
+        rounds: i32,
+    ) -> Array2<u8> {
         let vs = v(vw, vh);
         let mut p = Array2::zeros((h as usize, w as usize));
         for y in 0..h {
@@ -361,11 +432,19 @@ mod tests {
     /// Run round-highlight computation with optional overrides.
     /// Returns (highlights, pixels_after_hole_clear).
     fn run_round_hl(
-        w: i32, h: i32, vw: i32, vh: i32, off_x: i32, off_y: i32,
-        rounds: i32, overrides: &[(usize, usize, u8)],
+        w: i32,
+        h: i32,
+        vw: i32,
+        vh: i32,
+        off_x: i32,
+        off_y: i32,
+        rounds: i32,
+        overrides: &[(usize, usize, u8)],
     ) -> (Array2<u8>, Array2<u8>) {
         let mut pixels = make_round_grid(w, h, vw, vh, off_x, off_y, rounds);
-        for &(x, y, c) in overrides { pixels[[y, x]] = c; }
+        for &(x, y, c) in overrides {
+            pixels[[y, x]] = c;
+        }
         // Re-enforce inner hole (overrides may have set non-transparent on hole pixels)
         let vs = v(vw, vh);
         for y in 0..h {
@@ -396,11 +475,17 @@ mod tests {
     // ── row index (inline: h - 1 - y) ────────────────────────────────────────
 
     #[test]
-    fn row_index_top_maps_to_max() { assert_eq!(9 - 1 - 0, 8); }
+    fn row_index_top_maps_to_max() {
+        assert_eq!(9 - 1 - 0, 8);
+    }
     #[test]
-    fn row_index_bottom_maps_to_zero() { assert_eq!(9 - 1 - 8, 0); }
+    fn row_index_bottom_maps_to_zero() {
+        assert_eq!(9 - 1 - 8, 0);
+    }
     #[test]
-    fn row_index_middle() { assert_eq!(9 - 1 - 4, 4); }
+    fn row_index_middle() {
+        assert_eq!(9 - 1 - 4, 4);
+    }
 
     // ── get_round_from_edge ──────────────────────────────────────────────────
 
@@ -426,12 +511,12 @@ mod tests {
 
     #[test]
     fn rfe_limited_by_shorter_dim_rectangular() {
-        assert_eq!(get_round_from_edge(v(16, 6), v(0,  0)), 0);
-        assert_eq!(get_round_from_edge(v(16, 6), v(3,  0)), 0);
-        assert_eq!(get_round_from_edge(v(16, 6), v(3,  1)), 1);
-        assert_eq!(get_round_from_edge(v(16, 6), v(3,  2)), 2);
-        assert_eq!(get_round_from_edge(v(16, 6), v(8,  2)), 2);
-        assert_eq!(get_round_from_edge(v(16, 6), v(8,  3)), 2);
+        assert_eq!(get_round_from_edge(v(16, 6), v(0, 0)), 0);
+        assert_eq!(get_round_from_edge(v(16, 6), v(3, 0)), 0);
+        assert_eq!(get_round_from_edge(v(16, 6), v(3, 1)), 1);
+        assert_eq!(get_round_from_edge(v(16, 6), v(3, 2)), 2);
+        assert_eq!(get_round_from_edge(v(16, 6), v(8, 2)), 2);
+        assert_eq!(get_round_from_edge(v(16, 6), v(8, 3)), 2);
         assert_eq!(get_round_from_edge(v(16, 6), v(15, 5)), 0);
     }
 
@@ -470,9 +555,9 @@ mod tests {
     #[test]
     fn round_index_values_16x6_r3() {
         let ri = |x, y| 3 - 1 - get_round_from_edge(v(16, 6), v(x, y));
-        assert_eq!(ri(0,  0), 2);
-        assert_eq!(ri(8,  2), 0);
-        assert_eq!(ri(8,  3), 0);
+        assert_eq!(ri(0, 0), 2);
+        assert_eq!(ri(8, 2), 0);
+        assert_eq!(ri(8, 3), 0);
         assert_eq!(ri(15, 5), 2);
     }
 
@@ -532,7 +617,11 @@ mod tests {
         let overrides: Vec<(usize, usize, u8)> = (0..6).map(|x| (x, 1, COLOR_B)).collect();
         let hl = run_row_hl(6, 4, &overrides);
         for x in 0..6usize {
-            assert_eq!(hl[[1, x]], V, "col {x}: expected VALID at the wrong cell y=1");
+            assert_eq!(
+                hl[[1, x]],
+                V,
+                "col {x}: expected VALID at the wrong cell y=1"
+            );
         }
     }
 
@@ -578,18 +667,40 @@ mod tests {
 
     #[test]
     fn round_hl_full_inner_hole_cleared() {
-        let overrides: Vec<_> = (3..=5).flat_map(|y| (3..=5).map(move |x| (x, y, COLOR_A))).collect();
+        let overrides: Vec<_> = (3..=5)
+            .flat_map(|y| (3..=5).map(move |x| (x, y, COLOR_A)))
+            .collect();
         let (_, pixels) = run_round_hl(9, 9, 9, 9, 0, 0, 3, &overrides);
-        for y in 3..=5usize { for x in 3..=5usize { assert_eq!(pixels[[y, x]], COLOR_TRANSPARENT); } }
+        for y in 3..=5usize {
+            for x in 3..=5usize {
+                assert_eq!(pixels[[y, x]], COLOR_TRANSPARENT);
+            }
+        }
     }
 
     #[test]
     fn round_hl_full_adjacent_wrong_pixels_regression() {
-        let a = COLOR_A; let b = COLOR_B;
-        let (hl, _) = run_round_hl(9, 9, 9, 9, 0, 0, 3, &[
-            (0,4,b),(1,4,a), (8,4,b),(7,4,a),
-            (4,0,b),(4,1,a), (4,8,b),(4,7,a),
-        ]);
+        let a = COLOR_A;
+        let b = COLOR_B;
+        let (hl, _) = run_round_hl(
+            9,
+            9,
+            9,
+            9,
+            0,
+            0,
+            3,
+            &[
+                (0, 4, b),
+                (1, 4, a),
+                (8, 4, b),
+                (7, 4, a),
+                (4, 0, b),
+                (4, 1, a),
+                (4, 8, b),
+                (4, 7, a),
+            ],
+        );
         assert_eq!(hl[[4, 0]], I, "left outer INVALID");
         assert_ne!(hl[[4, 1]], I, "left inner not INVALID (regression)");
         assert_eq!(hl[[4, 8]], I, "right outer INVALID");
@@ -632,7 +743,11 @@ mod tests {
     #[test]
     fn round_hl_half_inner_hole() {
         let (_, pixels) = run_round_hl(9, 6, 9, 12, 0, 6, 3, &[]);
-        for y in 0..3usize { for x in 3..6usize { assert_eq!(pixels[[y, x]], COLOR_TRANSPARENT); } }
+        for y in 0..3usize {
+            for x in 3..6usize {
+                assert_eq!(pixels[[y, x]], COLOR_TRANSPARENT);
+            }
+        }
         assert_ne!(pixels[[0, 2]], COLOR_TRANSPARENT);
         assert_ne!(pixels[[3, 3]], COLOR_TRANSPARENT);
     }
@@ -656,7 +771,11 @@ mod tests {
     #[test]
     fn round_hl_quarter_inner_hole() {
         let (_, pixels) = run_round_hl(6, 6, 12, 12, 0, 6, 3, &[]);
-        for y in 0..3usize { for x in 3..6usize { assert_eq!(pixels[[y, x]], COLOR_TRANSPARENT); } }
+        for y in 0..3usize {
+            for x in 3..6usize {
+                assert_eq!(pixels[[y, x]], COLOR_TRANSPARENT);
+            }
+        }
         assert_ne!(pixels[[0, 2]], COLOR_TRANSPARENT);
         assert_ne!(pixels[[3, 3]], COLOR_TRANSPARENT);
     }
@@ -702,7 +821,9 @@ mod tests {
 
     /// Iterate a plan as (type, dir, wrong_x, wrong_y) tuples.
     fn plan_entries(plan: &[i16]) -> Vec<(u8, u8, i16, i16)> {
-        plan.chunks_exact(PLAN_STRIDE).map(|c| (c[0] as u8, c[1] as u8, c[2], c[3])).collect()
+        plan.chunks_exact(PLAN_STRIDE)
+            .map(|c| (c[0] as u8, c[1] as u8, c[2], c[3]))
+            .collect()
     }
 
     #[test]
@@ -760,7 +881,7 @@ mod tests {
         let mut entries = plan_entries(&plan);
         entries.sort_by_key(|&(_, d, _, _)| d);
         assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0], (PLAN_TYPE_INVALID, PLAN_DIR_UP,   1, 1));
+        assert_eq!(entries[0], (PLAN_TYPE_INVALID, PLAN_DIR_UP, 1, 1));
         assert_eq!(entries[1], (PLAN_TYPE_INVALID, PLAN_DIR_LEFT, 1, 1));
     }
 
@@ -790,7 +911,10 @@ mod tests {
     #[test]
     fn natural_color_round_transparent_in_hole() {
         // 9×9 r=3: centre (4, 4) has rfe=4 ≥ rounds=3 → transparent.
-        assert_eq!(natural_color_round(v(9, 9), v(0, 0), 3, v(4, 4)), COLOR_TRANSPARENT);
+        assert_eq!(
+            natural_color_round(v(9, 9), v(0, 0), 3, v(4, 4)),
+            COLOR_TRANSPARENT
+        );
     }
 
     #[test]
@@ -837,9 +961,15 @@ mod tests {
     #[test]
     fn outward_cells_round_non_corner_returns_one() {
         // (1, 4) in 9×9: closer-to-x edge → outward LEFT.
-        assert_eq!(outward_cells_round(v(9, 9), v(0, 0), v(1, 4)), vec![v(0, 4)]);
+        assert_eq!(
+            outward_cells_round(v(9, 9), v(0, 0), v(1, 4)),
+            vec![v(0, 4)]
+        );
         // (4, 1): closer-to-y edge (top) → outward UP.
-        assert_eq!(outward_cells_round(v(9, 9), v(0, 0), v(4, 1)), vec![v(4, 0)]);
+        assert_eq!(
+            outward_cells_round(v(9, 9), v(0, 0), v(4, 1)),
+            vec![v(4, 0)]
+        );
     }
 
     #[test]
@@ -869,14 +999,20 @@ mod tests {
     #[test]
     fn inward_cell_round_non_corner_steps_toward_centre() {
         // (1, 4) → step +x (centre right of vx=1, vW=9) → inner is (2, 4).
-        assert_eq!(inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(1, 4)), Some(v(2, 4)));
+        assert_eq!(
+            inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(1, 4)),
+            Some(v(2, 4))
+        );
     }
 
     #[test]
     fn inward_cell_round_gutter_resolves_to_boundary() {
         // Gutter cell (-1, 4): the ! marker drawn there belongs to boundary
         // cell (0, 4). inward_cell_round returns (0, 4).
-        assert_eq!(inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(-1, 4)), Some(v(0, 4)));
+        assert_eq!(
+            inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(-1, 4)),
+            Some(v(0, 4))
+        );
     }
 
     #[test]
