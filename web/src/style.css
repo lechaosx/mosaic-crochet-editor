@@ -370,6 +370,19 @@ input[type="checkbox"] { accent-color: var(--accent); }
   border-top: 1px solid var(--bg-3, rgba(255, 255, 255, 0.08));
 }
 
+.transform-usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--bg-3, rgba(255, 255, 255, 0.08));
+}
+
+.popover-help {
+  color: var(--fg-2);
+  font-size: var(--font-sm);
+}
+
 .popover-footer {
   display: flex;
   gap: var(--space-2);

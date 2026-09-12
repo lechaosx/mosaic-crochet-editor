@@ -62,12 +62,12 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Fresh sessions have no axes. The **Symmetry and repeat** popover and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
 - Each axis is independently enabled or deleted from the **Symmetry and repeat** popover. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
 - Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
-- Symmetry and repeat apply to pencil, fill, eraser, overlay, and invert. — **your decision**
+- **Apply while drawing** independently controls whether the configured symmetry and repeat recipe applies to future pencil, fill, eraser, overlay, and invert operations. It defaults on, persists as session state, and is not part of undo history. — **your decision**
 - A single repeat grid has tile width and height plus horizontal and vertical copy counts per side. Copies extend in both directions, their Cartesian product includes the source position, and symmetry completes before the grid tiles the motif. — **your decision**
 - Repeat state survives refresh and undo but is not stored in `.mcw`; file load and canvas resize retain it. — **your decision**
 - Repeat grids are limited to 4,096 configured positions. An operation aborts atomically when it would exceed 1,048,576 transformed claims. — **your decision**
 - Dotted tile guides preview while the popover is open and remain visible while repeat is enabled. — **your decision**
-- **Replicate selection** (`T`) stamps a floating selection through all active symmetry and repeat transforms without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours claiming one destination reject the whole action. — **your decision**
+- **Stamp transformed copies** (`T`) applies the configured symmetry and repeat recipe to a floating selection regardless of the live-drawing toggle, without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours claiming one destination reject the whole action. — **your decision**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
 - **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
 - **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
@@ -113,7 +113,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Persistence
 
-- Editor session state, including axes, repeat settings, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (repeat lifetime)
+- Editor session state, including axes, repeat settings, live-transform mode, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (transform lifetime)
 
 ## Save / Load / Export
 

@@ -46,6 +46,7 @@ export interface UICallbacks {
     onDeleteAxis:      (id: string) => void;
     onRepeatInput:     () => void;
     onRepeatCommit:    () => void;
+    onLiveTransformsChange: (enabled: boolean) => void;
     onTransformPopoverToggle: (open: boolean) => void;
     onReplicateSelection: () => void;
     onHighlightChange:        () => void;
@@ -72,7 +73,8 @@ export interface UIHandle {
     readRepeatGrid:     () => RepeatGrid;
     setRepeatGrid:      (repeat: RepeatGrid) => void;
     setRepeatError:     (message: string | null) => void;
-    setCanReplicateSelection: (enabled: boolean) => void;
+    setLiveTransforms:  (enabled: boolean) => void;
+    setTransformAvailability: (hasSelection: boolean, hasTransforms: boolean) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
@@ -168,10 +170,22 @@ export function mountUI(cb: UICallbacks): UIHandle {
         el(id).addEventListener("click", () => cb.onAddAxis(key))
     );
     const replicateSelection = el<HTMLButtonElement>("replicate-selection");
+    const replicateSelectionHint = el("replicate-selection-hint");
     replicateSelection.addEventListener("click", cb.onReplicateSelection);
 
-    function setCanReplicateSelection(enabled: boolean) {
-        replicateSelection.disabled = !enabled;
+    function setTransformAvailability(hasSelection: boolean, hasTransforms: boolean) {
+        replicateSelection.disabled = !hasSelection || !hasTransforms;
+        replicateSelectionHint.hidden = hasSelection && hasTransforms;
+        replicateSelectionHint.textContent = !hasTransforms
+            ? "Configure a symmetry axis or repeat grid."
+            : "Select cells to stamp transformed copies.";
+    }
+
+    const liveTransforms = el<HTMLInputElement>("live-transforms");
+    liveTransforms.addEventListener("input", () => cb.onLiveTransformsChange(liveTransforms.checked));
+
+    function setLiveTransforms(enabled: boolean) {
+        liveTransforms.checked = enabled;
     }
 
     const repeatEnabled = el<HTMLInputElement>("repeat-enabled");
@@ -462,7 +476,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     return {
         setTool, setMaskMove, setPrimary, setColors, setAxes,
-        readRepeatGrid, setRepeatGrid, setRepeatError, setCanReplicateSelection,
+        readRepeatGrid, setRepeatGrid, setRepeatError,
+        setLiveTransforms, setTransformAvailability,
         setHistory, setEditError,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,

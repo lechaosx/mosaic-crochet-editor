@@ -37,6 +37,7 @@ function defaultSession(): SessionState {
         primaryColor:  1,
         axes:           [],
         repeat:         defaultRepeatGrid(),
+        liveTransforms: true,
         hlOpacity:        100,
         invalidIntensity: 65,
         float:           null,
@@ -149,9 +150,7 @@ store.setPersistFn(s => saveToLocalStorage(s));
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => updateStatus(s.plan, null, null));
-store.addObserver(s => ui.setCanReplicateSelection(
-    Boolean(s.state.float && hasActiveTransforms()),
-));
+store.addObserver(s => ui.setTransformAvailability(Boolean(s.state.float), hasConfiguredTransforms()));
 
 // ── Paint ────────────────────────────────────────────────────────────────────
 // Paint operates on the *visible* canvas (pixels + float stamped). When a
@@ -182,7 +181,9 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
     // of the click, but the click cell itself still has to be in the float.
     if (inCanvas && shifted && shifted[y * W + x] === 0) return;
 
-    const transforms = transformsToFlat(s.axes, s.repeat);
+    const transforms = s.liveTransforms
+        ? transformsToFlat(s.axes, s.repeat)
+        : new Float64Array(0);
     const before  = visible;
     let next = paintOps[tool as PaintTool]({
         visible, pattern, x, y,
@@ -228,10 +229,10 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
     ui.setAxes(store.state.axes);
-    ui.setCanReplicateSelection(Boolean(store.state.float && hasActiveTransforms()));
+    ui.setTransformAvailability(Boolean(store.state.float), hasConfiguredTransforms());
 }
 
-function hasActiveTransforms() {
+function hasConfiguredTransforms() {
     const r = store.state.repeat;
     return store.state.axes.some(a => a.active)
         || (r.enabled && (r.copiesX > 0 || r.copiesY > 0));
@@ -266,6 +267,10 @@ function onRepeatCommit() {
     const error = repeatGridError(ui.readRepeatGrid());
     if (error) return;
     store.commit(() => {}, { recompute: false, render: false, history: true });
+}
+
+function onLiveTransformsChange(enabled: boolean) {
+    store.commit(s => { s.liveTransforms = enabled; }, { recompute: false, render: false });
 }
 
 function onTransformPopoverToggle(open: boolean) {
@@ -493,6 +498,7 @@ const ui: UIHandle = mountUI({
     onDeleteAxis: deleteAxisById,
     onRepeatInput,
     onRepeatCommit,
+    onLiveTransformsChange,
     onTransformPopoverToggle,
     onReplicateSelection,
     onHighlightChange:         onHlOpacityInput,
@@ -977,6 +983,7 @@ ui.setTool(store.state.activeTool);
 ui.setPrimary(store.state.primaryColor);
 ui.setColors(store.state.colorA, store.state.colorB);
 ui.setRepeatGrid(store.state.repeat);
+ui.setLiveTransforms(store.state.liveTransforms);
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
 

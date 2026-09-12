@@ -57,7 +57,7 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
-test("Replicate selection stamps symmetric copies and keeps the source selected", async ({ page }) => {
+test("Stamp transformed copies applies symmetry and keeps the source selected", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
@@ -125,6 +125,39 @@ test("repeat grid copies live paint in both directions", async ({ page }) => {
     expect(await pixelRGB(page, untouched.cx, untouched.cy)).not.toEqual([0, 0, 0]);
 });
 
+test("configured transforms can stamp a selection while live drawing is off", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").click();
+    await page.locator("#add-sym-v").click();
+    await page.locator("#repeat-tile-width").fill("2");
+    await page.locator("#repeat-copies-x").fill("1");
+    await page.locator("#repeat-copies-y").fill("0");
+    await page.locator("label:has(#repeat-enabled)").click();
+    await expect(page.locator("#live-transforms")).toBeChecked();
+    await page.locator("label:has(#live-transforms)").click();
+    await page.locator("#btn-sym-toggle").click();
+
+    await clickCell(page, 0, 1);
+    const untouchedCopy = await cellCoord(page, 8, 1);
+    expect(await pixelRGB(page, untouchedCopy.cx, untouchedCopy.cy)).not.toEqual([0, 0, 0]);
+
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);
+    await page.locator("#btn-sym-toggle").click();
+    const stamp = page.locator("#replicate-selection");
+    await expect(stamp).toHaveText("Stamp transformed copies");
+    await expect(stamp).toBeEnabled();
+    await stamp.click();
+
+    for (const x of [2, 6, 8]) {
+        const point = await cellCoord(page, x, 1);
+        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
+    }
+    await page.keyboard.press("ArrowRight");
+    const movedSource = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
+});
+
 test("repeat settings reject a grid above the position ceiling", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
@@ -135,7 +168,7 @@ test("repeat settings reject a grid above the position ceiling", async ({ page }
     await expect(page.locator("#repeat-error")).toBeVisible();
 });
 
-test("Replicate selection stamps repeat copies and keeps the source selected", async ({ page }) => {
+test("Stamp transformed copies applies repeat and keeps the source selected", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 4, 1);
     await page.keyboard.press("s");

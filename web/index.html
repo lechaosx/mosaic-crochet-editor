@@ -95,8 +95,8 @@
     </div>
     <div id="sym-list" class="sym-list" aria-label="Axes"></div>
     <div class="repeat-grid">
-      <label class="toggle popover-row" title="Repeat paint and selection stamps at bounded tile offsets.">
-        <span class="popover-label">Repeat grid</span>
+      <label class="toggle popover-row" title="Include bounded tile offsets in the configured transformation.">
+        <span class="popover-label">Include repeat</span>
         <input type="checkbox" id="repeat-enabled">
         <span class="toggle-track"></span>
       </label>
@@ -118,8 +118,16 @@
       </div>
       <div id="repeat-error" class="warning" role="alert" hidden></div>
     </div>
-    <div class="popover-row">
-      <button class="btn" id="replicate-selection" title="Replicate selection through active transforms (T)" disabled>Replicate selection</button>
+    <div class="transform-usage">
+      <label class="toggle popover-row" title="Apply the configured transformation to future paint operations.">
+        <span class="popover-label">Apply while drawing</span>
+        <input type="checkbox" id="live-transforms" checked>
+        <span class="toggle-track"></span>
+      </label>
+      <div class="popover-row">
+        <button class="btn" id="replicate-selection" title="Stamp transformed copies from the current selection (T)" disabled>Stamp transformed copies</button>
+      </div>
+      <div id="replicate-selection-hint" class="popover-help" aria-live="polite">Select cells and configure a transformation.</div>
     </div>
   </div>
 

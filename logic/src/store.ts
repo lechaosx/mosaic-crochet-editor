@@ -22,6 +22,7 @@ export interface SessionState {
     primaryColor:  1 | 2;
     axes:          Axis[];               // user-added symmetry axes
     repeat:        RepeatGrid;
+    liveTransforms: boolean;
     hlOpacity:        number;            // 0..100, matches the input range
     invalidIntensity: number;            // 0..100, drives ! marker saturation
     // The active lifted-selection layer (on or near canvas). When present,

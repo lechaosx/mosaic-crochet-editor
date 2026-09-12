@@ -68,7 +68,7 @@ Eight tools, in the toolbar's tools group:
 - **Magic wand** — click a cell to lift its connected same-colour region as a float. Same Shift / Ctrl / no-modifier semantics as the rect tool.
 - **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive across tool changes and saving until you deselect (`Ctrl+Shift+A`), replace the selection, resize the pattern, or load another file. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's content is baked into the canvas at the start, the drag carries the same marquee shape, and on release the canvas content at the new position is re-lifted as the new float (the original content stays where it was). The **Mask** toggle beside Move enables the same behavior without a keyboard modifier; it stays enabled until you turn it off or select another tool. **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
 
-All five drawing tools respect the active symmetry and repeat transforms. The eraser restores each transformed pixel to *its own* natural colour, not the click point's.
+With **Apply while drawing** enabled, all five drawing tools respect the configured symmetry and repeat transforms. Turn it off to edit only the source cell while keeping the same transformation ready for selection stamping. The eraser restores each transformed pixel to *its own* natural colour, not the click point's.
 
 When a selection is active, painting tools clip to its visible marquee: changes inside the float go to the float's pixels; clicks outside the marquee do nothing. The boundary appears as marching ants in a palette-aware accent colour. Holes (transparent cells) behave as outside the selection — never lifted, never affected by paint through the float.
 
@@ -87,11 +87,11 @@ Active mirror axes are drawn as dashed guides; central rotation is shown as a do
 
 Active axes compose automatically: for example, vertical and horizontal mirrors together produce the corresponding four-cell orbit without adding a separate central-axis entry.
 
-Enable **Repeat grid** to copy drawing operations by a fixed tile width and height. Horizontal and vertical copy counts are per side: `1` horizontal and `1` vertical produces a 3×3 set of positions including the source. When symmetry and repeat are both active, symmetry creates the complete motif first and the repeat grid tiles that motif. Dotted tile guides remain visible while repetition is enabled and preview while the popover is open.
+Enable **Include repeat** to add fixed tile offsets to the transformation. Horizontal and vertical copy counts are per side: `1` horizontal and `1` vertical produces a 3×3 set of positions including the source. When symmetry and repeat are both configured, symmetry creates the complete motif first and the repeat grid tiles that motif. Dotted tile guides remain visible while repeat is included and preview while the popover is open.
 
 The repeat grid accepts at most 4,096 positions. Operations also abort instead of leaving partial output if their transformed target claims exceed 1,048,576.
 
-With a floating selection active, choose **Replicate selection** or press **T** to stamp copies through every active symmetry and repeat transform. The source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict and leaves the canvas unchanged.
+**Apply while drawing** affects future pencil, fill, eraser, overlay, and invert operations only. **Stamp transformed copies** applies the same configured transformation to content that already exists in the floating selection, even when live drawing is off. Choose it or press **T**; the source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict and leaves the canvas unchanged.
 
 ### Colours
 
@@ -117,7 +117,7 @@ The **⚙** button on the right of the toolbar opens a Settings popover:
 - **Load** opens a file picker and restores pattern geometry, pixels, and colours. Symmetry and repeat transforms are session state and remain unchanged.
 - **Export** opens a modal where the pattern is converted to text line-by-line. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
-Tool, colour, symmetry axes, repeat grid, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
+Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
 
 ### Keyboard shortcuts
 
@@ -126,7 +126,7 @@ Tool, colour, symmetry axes, repeat grid, rotation, settings, the active float, 
 | Pencil / Fill / Eraser / Overlay / Invert / Select / Wand / Move | **P** / **F** / **E** / **O** / **I** / **S** / **W** / **M** |
 | Add Vertical / Horizontal / Central axis | **V** / **H** / **C** |
 | Add Diagonal ╲ / Anti-diagonal ╱ axis | **D** / **A** |
-| Replicate selection through active transforms | **T** |
+| Stamp transformed copies from the selection | **T** |
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
 | Select primary / secondary swatch | **1** / **2** |
 | Select all paintable cells / Deselect / Clear selection | **Ctrl+A** / **Ctrl+Shift+A** / **Esc** |

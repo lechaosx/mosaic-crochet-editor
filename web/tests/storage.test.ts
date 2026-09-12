@@ -75,6 +75,20 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         });
     });
 
+    test("live-transform mode round-trips and defaults on for older sessions", () => {
+        const session = rowSession(3, 3, { liveTransforms: false });
+        saveToLocalStorage(session);
+
+        const loaded = loadFromLocalStorage();
+        expect(loaded!.liveTransforms).toBe(false);
+
+        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v4")!);
+        delete raw.liveTransforms;
+        localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
+        const migrated = loadFromLocalStorage();
+        expect(migrated!.liveTransforms).toBe(true);
+    });
+
     test("missing state → null", () => {
         localStorage.setItem("mosaic-pattern-v4", JSON.stringify({ version: 4, pixels: "" }));
         expect(loadFromLocalStorage()).toBeNull();

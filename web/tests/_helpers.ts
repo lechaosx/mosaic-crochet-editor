@@ -18,6 +18,7 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         primaryColor: 1,
         axes: defaultAxes(W, H),
         repeat: defaultRepeatGrid(),
+        liveTransforms: true,
         hlOpacity: 100,
         invalidIntensity: 65,
         float: null,

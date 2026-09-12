@@ -19,6 +19,7 @@ interface LocalSaveV4 {
     primaryColor:     number;
     axes:             Axis[];
     repeat?:          RepeatGrid;
+    liveTransforms?:  boolean;
     hlOpacity:        number;
     invalidIntensity: number;
     float:            PackedFloat | null;
@@ -38,6 +39,7 @@ export function saveToLocalStorage(s: Readonly<SessionState>) {
         primaryColor:     s.primaryColor,
         axes:             s.axes,
         repeat:           s.repeat,
+        liveTransforms:   s.liveTransforms,
         hlOpacity:        s.hlOpacity,
         invalidIntensity: s.invalidIntensity,
         float:            s.float ? packFloat(s.float) : null,
@@ -66,6 +68,7 @@ export function loadFromLocalStorage(): SessionState | null {
             primaryColor:     data.primaryColor as 1 | 2,
             axes:             data.axes ?? defaultAxes(data.state.canvasWidth, data.state.canvasHeight),
             repeat,
+            liveTransforms:   data.liveTransforms ?? true,
             hlOpacity:        data.hlOpacity,
             invalidIntensity: data.invalidIntensity,
             float:            data.float ? unpackFloat(data.float) : null,
