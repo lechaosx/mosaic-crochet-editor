@@ -1,3 +1,7 @@
+// wasm-bindgen exposes function arguments directly to TypeScript; keep the
+// boundary flat instead of adding Rust-only wrapper types.
+#![allow(clippy::too_many_arguments)]
+
 use glam::IVec2;
 use mosaic_crochet_core::{common, export, tools};
 use ndarray::Array2;
@@ -65,6 +69,9 @@ impl ExportSession {
         self.total
     }
 
+    // JavaScript consumes this exported method incrementally; Rust Iterator
+    // trait methods are not exported through wasm-bindgen.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<String> {
         if self.index >= self.total {
             return None;

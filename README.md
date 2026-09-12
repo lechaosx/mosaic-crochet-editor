@@ -174,6 +174,8 @@ Builds the generated WASM package and production web bundle, then runs all three
 - **TS unit + properties** (`bun run test:logic` for pure logic, `bun run test:web` for IO layer, Vitest) — store / selection / paint / clipboard / symmetry / storage / pattern + `fast-check`-generated property assertions for pack/unpack round-trips, lift-anchor identity, wand BFS invariants, history undo/redo balance; plus history and localStorage persistence.
 - **E2E** (`bun run test:e2e`, Playwright, desktop Chromium) — full UX flows: tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry mirroring, Edit popover.
 
+CI also rejects Rust formatting drift and Clippy warnings with `cargo fmt --all -- --check` and `cargo clippy --workspace -- -D warnings`.
+
 Run a subset:
 
 ```sh

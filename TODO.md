@@ -58,7 +58,3 @@ The September 2026 Stryker baseline covers 1,167 mutants across `logic/src/`: **
 - [ ] Raise each mutated module to at least 80% without tests that pin private structure.
 
 Run `bun run test:mutation`; the HTML report is written to `logic/reports/mutation/mutation.html`.
-
-### Formatting baseline
-
-- [ ] Normalize the existing Rust formatting in a standalone mechanical change. Keep it separate from behavioral work so later diffs remain reviewable.

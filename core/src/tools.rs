@@ -5,6 +5,10 @@
 //! per-orbit-cell. The orbit walker is also exported through wasm so the
 //! TS-side Invert tool can reuse it for per-stroke deduping.
 
+// Tool parameters mirror the flat wasm-bindgen boundary; Rust-only wrapper
+// types would add conversions without representing shared domain concepts.
+#![allow(clippy::too_many_arguments)]
+
 use crate::common::{
     COLOR_TRANSPARENT, inward_cell_round, inward_cell_row, is_always_invalid_round,
     is_always_invalid_row, natural_color_round, natural_color_row, opposite_color,
@@ -607,12 +611,10 @@ pub fn wand_select(
     existing: &[u8],
 ) -> Vec<u8> {
     let n = (width * height) as usize;
-    let mut result: Vec<u8> = if mode == 0 {
-        vec![0u8; n] // replace: start empty
-    } else if existing.is_empty() {
-        vec![0u8; n] // add / remove with no existing → empty start
+    let mut result: Vec<u8> = if mode == 0 || existing.is_empty() {
+        vec![0u8; n]
     } else {
-        existing.to_vec() // add / remove: copy existing
+        existing.to_vec()
     };
 
     // Hole or out-of-bounds click: nothing to flood — return the start state.
