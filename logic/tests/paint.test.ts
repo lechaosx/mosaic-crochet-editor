@@ -169,4 +169,16 @@ describe("paintOps", () => {
         }));
         expect(out[0]).toBe(0);
     });
+
+    test("invert returns a new buffer and skips cells outside the selection", () => {
+        const visible = filledPixels(3, 3, 1);
+        const shifted = new Uint8Array(9);
+        const visited = new Set<number>();
+        const out = paintOps.invert(ctx("invert", {
+            visible, x: 1, y: 1, invertVisited: visited, shifted,
+        }));
+        expect(out).not.toBe(visible);
+        expect(out).toEqual(visible);
+        expect(visited).toEqual(new Set());
+    });
 });

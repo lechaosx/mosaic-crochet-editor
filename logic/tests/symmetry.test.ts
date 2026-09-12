@@ -77,11 +77,9 @@ describe("toggleAxisActive", () => {
 
 describe("axesToFlat", () => {
     test("inactive axes → empty array", () => {
-        const off = toggleAxisActive(addAxis([], "V", 9, 9), addAxis([], "V", 9, 9)[0].id);
-        // (We toggled the wrong axis id above — the original is still active.)
-        expect(axesToFlat(off).length).toBe(3);
-        // Simpler check: empty axes list → empty Float64Array.
-        expect(axesToFlat([]).length).toBe(0);
+        const axes = addAxis([], "V", 9, 9);
+        const off = toggleAxisActive(axes, axes[0].id);
+        expect(Array.from(axesToFlat(off))).toEqual([]);
     });
 
     test("V active → 3 doubles: kind=0, a=(W-1)/2, b=0", () => {
@@ -109,6 +107,21 @@ describe("axesToFlat", () => {
     test("all five active → 15 doubles", () => {
         expect(axesToFlat(axesWith(9, 9, "V", "H", "C", "D1", "D2")).length).toBe(15);
     });
+
+    test("preserves each active axis's kind and position in input order", () => {
+        const axes: Axis[] = [
+            { kind: "H", id: "h", active: true, y: 1.5 },
+            { kind: "V", id: "v", active: true, x: 2.5 },
+            { kind: "D1", id: "d1", active: true, c: -2 },
+            { kind: "D2", id: "d2", active: true, c: 7 },
+        ];
+        expect(Array.from(axesToFlat(axes))).toEqual([
+            1, 1.5, 0,
+            0, 2.5, 0,
+            3, -2, 0,
+            4, 7, 0,
+        ]);
+    });
 });
 
 describe("distanceToAxis", () => {
@@ -127,6 +140,14 @@ describe("distanceToAxis", () => {
     test("D1 at c=0 → distance to (3, 3) is 0 (point on y=x)", () => {
         const d1: Axis = { kind: "D1", id: "x", active: true, c: 0 };
         expect(distanceToAxis(d1, 3, 3)).toBe(0);
+    });
+    test("D1 distance accounts for its offset and diagonal scale", () => {
+        const d1: Axis = { kind: "D1", id: "x", active: true, c: 2 };
+        expect(distanceToAxis(d1, 5, 1)).toBeCloseTo(Math.SQRT2);
+    });
+    test("D2 distance accounts for both coordinates, its offset, and diagonal scale", () => {
+        const d2: Axis = { kind: "D2", id: "x", active: true, c: 4 };
+        expect(distanceToAxis(d2, 8, 2)).toBeCloseTo(5 / Math.SQRT2);
     });
     test("C at (4,4) → distance to (4.5, 4.5) is 0 (centre point)", () => {
         const c: Axis = { kind: "C", id: "x", active: true, x: 4, y: 4 };
@@ -155,6 +176,20 @@ describe("pickAxesAt", () => {
         const axes = axesWith(9, 9, "V");
         expect(pickAxesAt(axes, 0.5, 0.5, 0.4)).toEqual([]);
     });
+    test("ignores inactive axes and excludes a guide exactly at the tolerance", () => {
+        const inactive: Axis = { kind: "V", id: "inactive", active: false, x: 0 };
+        const active: Axis = { kind: "V", id: "active", active: true, x: 0 };
+        expect(pickAxesAt([inactive], 0.5, 2, 1)).toEqual([]);
+        expect(pickAxesAt([active], 1.5, 2, 1)).toEqual([]);
+    });
+    test("chooses the nearest parallel guide and keeps the first on an exact tie", () => {
+        const far: Axis = { kind: "V", id: "far", active: true, x: 2 };
+        const near: Axis = { kind: "V", id: "near", active: true, x: 4 };
+        expect(pickAxesAt([far, near], 4.25, 2, 2).map(a => a.id)).toEqual(["near"]);
+
+        const tie: Axis = { kind: "V", id: "tie", active: true, x: 4 };
+        expect(pickAxesAt([near, tie], 4.5, 2, 1).map(a => a.id)).toEqual(["near"]);
+    });
 });
 
 describe("setAxisPosition", () => {
@@ -178,6 +213,27 @@ describe("setAxisPosition", () => {
         const updated = setAxisPosition(axes, id, { x: 2, y: 3 });
         const c = updated[0];
         expect(c.kind === "C" && c.x === 2 && c.y === 3).toBe(true);
+    });
+    test("updates H and D2 positions", () => {
+        const h: Axis = { kind: "H", id: "h", active: true, y: 1 };
+        const d2: Axis = { kind: "D2", id: "d2", active: true, c: 2 };
+        expect(setAxisPosition([h], "h", { y: 3 })).toEqual([
+            { kind: "H", id: "h", active: true, y: 3 },
+        ]);
+        expect(setAxisPosition([d2], "d2", { c: 6 })).toEqual([
+            { kind: "D2", id: "d2", active: true, c: 6 },
+        ]);
+    });
+    test("leaves non-matching axes and omitted coordinates unchanged", () => {
+        const first: Axis = { kind: "V", id: "first", active: true, x: 1 };
+        const second: Axis = { kind: "V", id: "second", active: true, x: 4 };
+        const centre: Axis = { kind: "C", id: "centre", active: true, x: 2, y: 3 };
+
+        const moved = setAxisPosition([first, second], "first", { x: 2 });
+        expect(moved).toEqual([{ ...first, x: 2 }, second]);
+        expect(setAxisPosition([first], "first", {})).toEqual([first]);
+        expect(setAxisPosition([centre], "centre", { x: 5 })).toEqual([{ ...centre, x: 5 }]);
+        expect(setAxisPosition([centre], "centre", { y: 6 })).toEqual([{ ...centre, y: 6 }]);
     });
 });
 
@@ -218,6 +274,34 @@ describe("axisOffCanvas", () => {
     test("D1 at c = W − 1 (only the corner cell on axis) is dead", () => {
         const d1: Axis = { kind: "D1", id: "x", active: true, c: 8 };
         expect(axisOffCanvas(d1, 9, 9)).toBe(true);
+    });
+    test("H delete boundary excludes both edge cells but keeps adjacent half-cells", () => {
+        const h = (y: number): Axis => ({ kind: "H", id: "h", active: true, y });
+        expect(axisOffCanvas(h(0), 9, 7)).toBe(true);
+        expect(axisOffCanvas(h(0.5), 9, 7)).toBe(false);
+        expect(axisOffCanvas(h(5.5), 9, 7)).toBe(false);
+        expect(axisOffCanvas(h(6), 9, 7)).toBe(true);
+    });
+    test("C delete boundary checks both coordinates independently", () => {
+        const c = (x: number, y: number): Axis => ({ kind: "C", id: "c", active: true, x, y });
+        expect(axisOffCanvas(c(4, 3), 9, 7)).toBe(false);
+        expect(axisOffCanvas(c(0, 3), 9, 7)).toBe(true);
+        expect(axisOffCanvas(c(4, 0), 9, 7)).toBe(true);
+        expect(axisOffCanvas(c(8, 3), 9, 7)).toBe(true);
+        expect(axisOffCanvas(c(4, 6), 9, 7)).toBe(true);
+    });
+    test("D1 and D2 delete boundaries retain guides with a two-cell orbit", () => {
+        const d1 = (c: number): Axis => ({ kind: "D1", id: "d1", active: true, c });
+        expect(axisOffCanvas(d1(-6), 9, 7)).toBe(true);
+        expect(axisOffCanvas(d1(-5.5), 9, 7)).toBe(false);
+        expect(axisOffCanvas(d1(7.5), 9, 7)).toBe(false);
+        expect(axisOffCanvas(d1(8), 9, 7)).toBe(true);
+
+        const d2 = (c: number): Axis => ({ kind: "D2", id: "d2", active: true, c });
+        expect(axisOffCanvas(d2(0), 9, 7)).toBe(true);
+        expect(axisOffCanvas(d2(0.5), 9, 7)).toBe(false);
+        expect(axisOffCanvas(d2(13.5), 9, 7)).toBe(false);
+        expect(axisOffCanvas(d2(14), 9, 7)).toBe(true);
     });
 });
 

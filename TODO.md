@@ -48,13 +48,3 @@ Current implementation status and remaining work. Shipped product decisions live
 
 - [ ] Define supported maximum canvas dimensions.
 - [ ] Add an orbit-iteration safety cap before exposing substantially larger canvases. The current orbit is bounded by the number of canvas cells, but multiple interacting axes can traverse the whole canvas.
-
-### Test tightening
-
-The September 2026 Stryker baseline covers 1,167 mutants across `logic/src/`: **73.95% total mutation score** and **77.26% among covered mutants**. The current lowest modules are `symmetry.ts` at 69.51% and `selection.ts` at 70.70%.
-
-- [ ] Add observable boundary tests for uncovered symmetry-axis kinds and delete zones.
-- [ ] Add selection coordinate-boundary regressions when changing selection behavior.
-- [ ] Raise each mutated module to at least 80% without tests that pin private structure.
-
-Run `bun run test:mutation`; the HTML report is written to `logic/reports/mutation/mutation.html`.

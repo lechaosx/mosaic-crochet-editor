@@ -3,7 +3,7 @@
 // remove-no-float / remove-with-float), plus the rect / wand / select-all
 // / deselect / anchor wrappers.
 
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import {
     liftCells, cutCells, rectMask, shiftedFloatMask, anchorIntoCanvas,
     applySelectionMod, commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
@@ -65,6 +65,20 @@ describe("matchedCutMask", () => {
         const f = makeFloat([{ x: 0, y: 0, v: 2 }, { x: 1, y: 0, v: 2 }]);
         expect(matchedCutMask(f, pixels, pattern)).toBeNull();
     });
+    test("maps a sparse multi-row float to exact canvas coordinates", () => {
+        const pattern = rowPattern(6, 5);
+        const pixels = filledPixels(6, 5, 1);
+        pixels[1 * 6 + 4] = 2;
+        pixels[2 * 6 + 3] = 2;
+        const f = {
+            x: 2, y: 1, w: 3, h: 2,
+            pixels: new Uint8Array([1, 0, 2, 0, 2, 1]),
+        };
+        const mask = matchedCutMask(f, pixels, pattern);
+        const expected = new Uint8Array(30);
+        for (const i of [8, 10, 15, 16]) expected[i] = 1;
+        expect(mask).toEqual(expected);
+    });
 });
 
 describe("clipFloatToCanvas", () => {
@@ -82,6 +96,31 @@ describe("clipFloatToCanvas", () => {
     test("entirely OOB → returns null", () => {
         const f = { x: 10, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 1]) };
         expect(clipFloatToCanvas(f, 4, 4)).toBeNull();
+    });
+    test("clips a sparse float across two edges with exact coordinates and contents", () => {
+        const f = {
+            x: -1, y: -1, w: 4, h: 4,
+            pixels: new Uint8Array([
+                1, 2, 0, 1,
+                0, 1, 2, 0,
+                2, 0, 1, 2,
+                1, 2, 1, 0,
+            ]),
+        };
+        expect(clipFloatToCanvas(f, 3, 3)).toEqual({
+            x: 0, y: 0, w: 3, h: 3,
+            pixels: new Uint8Array([
+                1, 2, 0,
+                0, 1, 2,
+                2, 1, 0,
+            ]),
+        });
+    });
+    test("retains the only in-bounds cell at canvas coordinate zero", () => {
+        const f = { x: -1, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 2]) };
+        expect(clipFloatToCanvas(f, 3, 3)).toEqual({
+            x: 0, y: 0, w: 1, h: 1, pixels: new Uint8Array([2]),
+        });
     });
 });
 
@@ -122,6 +161,23 @@ describe("liftCells", () => {
         const r = liftCells(pixels, pattern, maskOf(3, 3, [[0, 0]]));
         expect(r.float!.x).toBe(0);
         expect(r.float!.y).toBe(0);
+    });
+
+    test("builds an exact sparse bounding box across multiple rows and columns", () => {
+        const pattern = rowPattern(5, 4);
+        const pixels = filledPixels(5, 4, 1);
+        pixels[1 * 5 + 1] = 2;
+        pixels[2 * 5 + 2] = 2;
+        const mask = maskOf(5, 4, [[1, 1], [3, 1], [2, 2], [1, 3]]);
+        const result = liftCells(pixels, pattern, mask);
+        expect(result.float).toEqual({
+            x: 1, y: 1, w: 3, h: 3,
+            pixels: new Uint8Array([
+                2, 0, 1,
+                0, 2, 0,
+                1, 0, 0,
+            ]),
+        });
     });
 });
 
@@ -223,6 +279,45 @@ describe("rectMask", () => {
         expect(m[1]).toBe(0);   // hole skipped
         expect(m[2]).toBe(1);
     });
+
+    test("normalizes reversed corners into an exact inclusive rectangle", () => {
+        expect(rectMask(filledPixels(4, 3, 1), 4, 3, 3, 2, 1, 1)).toEqual(
+            new Uint8Array([
+                0, 0, 0, 0,
+                0, 1, 1, 1,
+                0, 1, 1, 1,
+            ]),
+        );
+    });
+
+    test("returns an empty mask beyond each canvas edge", () => {
+        const pixels = filledPixels(4, 3, 1);
+        const rectangles = [
+            [-3, 1, -1, 1],
+            [4, 1, 7, 1],
+            [1, -3, 2, -1],
+            [1, 3, 2, 6],
+        ] as const;
+        for (const [x1, y1, x2, y2] of rectangles) {
+            expect(rectMask(pixels, 4, 3, x1, y1, x2, y2)).toEqual(new Uint8Array(12));
+        }
+    });
+
+    test("clips independently at each canvas edge", () => {
+        const pixels = filledPixels(4, 3, 1);
+        expect(rectMask(pixels, 4, 3, -2, 1, 1, 1)).toEqual(
+            new Uint8Array([0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0]),
+        );
+        expect(rectMask(pixels, 4, 3, 1, -2, 1, 0)).toEqual(
+            new Uint8Array([0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+        );
+        expect(rectMask(pixels, 4, 3, 2, 1, 7, 1)).toEqual(
+            new Uint8Array([0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0]),
+        );
+        expect(rectMask(pixels, 4, 3, 2, 2, 2, 6)).toEqual(
+            new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]),
+        );
+    });
 });
 
 describe("shiftedFloatMask", () => {
@@ -279,6 +374,21 @@ describe("shiftedFloatMask", () => {
         });
         expect([...shiftedFloatMask(sDown)].every(v => v === 0)).toBe(true);
     });
+
+    test("maps a sparse non-square float to its exact canvas mask", () => {
+        const s = rowSession(5, 4, {
+            float: {
+                x: 1, y: 1, w: 3, h: 2,
+                pixels: new Uint8Array([1, 0, 2, 0, 2, 1]),
+            },
+        });
+        expect(shiftedFloatMask(s)).toEqual(new Uint8Array([
+            0, 0, 0, 0, 0,
+            0, 1, 0, 1, 0,
+            0, 0, 1, 1, 0,
+            0, 0, 0, 0, 0,
+        ]));
+    });
 });
 
 describe("anchorIntoCanvas", () => {
@@ -325,9 +435,12 @@ function holeSession(opts: Partial<import("../src/store").SessionState> = {}) {
 describe("applySelectionMod / replace", () => {
     test("with no float: lifts the region", () => {
         const s = storeOf(3, 3);
+        const history = vi.fn();
+        s.setHistoryFn(history);
         applySelectionMod(s, maskOf(3, 3, [[0, 0]]), "replace");
         expect(s.state.float).not.toBeNull();
         expect(inFloat(s.state.float!, 0, 0)).toBe(true);
+        expect(history).toHaveBeenCalledOnce();
     });
 
     test("region cells over canvas holes are excluded from the lift", () => {
@@ -368,8 +481,11 @@ describe("applySelectionMod / replace", () => {
 describe("applySelectionMod / add", () => {
     test("no float + add: same as replace (lifts the region)", () => {
         const s = storeOf(3, 3);
+        const history = vi.fn();
+        s.setHistoryFn(history);
         applySelectionMod(s, maskOf(3, 3, [[1, 1]]), "add");
         expect(inFloat(s.state.float!, 1, 1)).toBe(true);
+        expect(history).toHaveBeenCalledOnce();
     });
 
     test("add path: hole-cell filter prevents holes from joining the lift (no float)", () => {
@@ -421,6 +537,8 @@ describe("applySelectionMod / add", () => {
             pixels: filledPixels(3, 3, 1),
             float: makeFloat([{ x: 0, y: 0, v: 2 }]),
         });
+        const history = vi.fn();
+        s.setHistoryFn(history);
         applySelectionMod(s, maskOf(3, 3, [[2, 2]]), "add");
         expect(inFloat(s.state.float!, 0, 0)).toBe(true);
         expect(inFloat(s.state.float!, 2, 2)).toBe(true);
@@ -429,6 +547,27 @@ describe("applySelectionMod / add", () => {
         // Newly-added cell's lifted pixel value.
         // Kills `newLifted[sy / W + sx]` and `s.pixels[cy / W + cx]` mutations.
         expect(floatAt(s.state.float!, 2, 2)).toBe(1);
+        expect(history).toHaveBeenCalledOnce();
+    });
+
+    test("preserves exact sparse coordinates when expanding in every direction", () => {
+        const s = storeOf(5, 4, {
+            pixels: filledPixels(5, 4, 2),
+            float: {
+                x: 1, y: 1, w: 2, h: 2,
+                pixels: new Uint8Array([2, 0, 1, 2]),
+            },
+        });
+        applySelectionMod(s, maskOf(5, 4, [[0, 0], [4, 3]]), "add");
+        expect(s.state.float).toEqual({
+            x: 0, y: 0, w: 5, h: 4,
+            pixels: new Uint8Array([
+                2, 0, 0, 0, 0,
+                0, 2, 0, 0, 0,
+                0, 1, 2, 0, 0,
+                0, 0, 0, 0, 2,
+            ]),
+        });
     });
 
     test("with displaced float: add of a cell outside the float canvas range drops silently", () => {
@@ -512,12 +651,35 @@ describe("applySelectionMod / remove", () => {
             pixels: filledPixels(3, 3, 1),
             float: makeFloat([{ x: 0, y: 0, v: 2 }, { x: 1, y: 0, v: 2 }]),
         });
+        const history = vi.fn();
+        s.setHistoryFn(history);
         applySelectionMod(s, maskOf(3, 3, [[0, 0]]), "remove");
         // Cell (0,0) stamped back: canvas now has the float's value there.
         expect(s.state.pixels[0]).toBe(2);
         // (0,0) no longer in float, (1,0) still is.
         expect(inFloat(s.state.float!, 0, 0)).toBe(false);
         expect(inFloat(s.state.float!, 1, 0)).toBe(true);
+        expect(history).toHaveBeenCalledOnce();
+    });
+
+    test("removes exact sparse cells from a multi-row float", () => {
+        const s = storeOf(5, 4, {
+            pixels: filledPixels(5, 4, 1),
+            float: {
+                x: 1, y: 1, w: 3, h: 2,
+                pixels: new Uint8Array([2, 1, 0, 1, 2, 1]),
+            },
+        });
+        applySelectionMod(s, maskOf(5, 4, [[0, 0], [1, 1], [3, 1], [2, 2]]), "remove");
+
+        const expectedCanvas = filledPixels(5, 4, 1);
+        expectedCanvas[1 * 5 + 1] = 2;
+        expectedCanvas[2 * 5 + 2] = 2;
+        expect(s.state.pixels).toEqual(expectedCanvas);
+        expect(s.state.float).toEqual({
+            x: 1, y: 1, w: 3, h: 2,
+            pixels: new Uint8Array([0, 1, 0, 1, 0, 1]),
+        });
     });
 
     test("with displaced float: only overlapping cells get stamped back", () => {
@@ -649,9 +811,12 @@ describe("deselect / anchorFloat", () => {
             pixels: filledPixels(3, 3, 1),
             float: makeFloat([{ x: 1, y: 1, v: 2 }]),
         });
+        const history = vi.fn();
+        s.setHistoryFn(history);
         anchorFloat(s);
         expect(s.state.pixels[1 * 3 + 1]).toBe(2);   // stamped at (1,1)
         expect(s.state.float).toBeNull();
+        expect(history).toHaveBeenCalledOnce();
     });
 });
 
@@ -661,6 +826,8 @@ describe("deleteFloat", () => {
             pixels: filledPixels(3, 3, 1),
             float: makeFloat([{ x: 0, y: 0, v: 2 }]),
         });
+        const history = vi.fn();
+        s.setHistoryFn(history);
         deleteFloat(s);
         // Float still exists (selection kept active)
         expect(s.state.float).not.toBeNull();
@@ -671,6 +838,22 @@ describe("deleteFloat", () => {
         // Float position unchanged
         expect(s.state.float!.x).toBe(0);
         expect(s.state.float!.y).toBe(0);
+        expect(history).toHaveBeenCalledOnce();
+    });
+
+    test("re-lifts the exact baseline values for a sparse multi-row float", () => {
+        const s = storeOf(5, 4, {
+            pixels: filledPixels(5, 4, 2),
+            float: {
+                x: 1, y: 1, w: 3, h: 2,
+                pixels: new Uint8Array([2, 0, 2, 0, 2, 2]),
+            },
+        });
+        deleteFloat(s);
+        expect(s.state.float).toEqual({
+            x: 1, y: 1, w: 3, h: 2,
+            pixels: new Uint8Array([1, 0, 1, 0, 2, 2]),
+        });
     });
 
     test("mismatch: canvas content differs from float — no cut, re-lift from unchanged canvas", () => {

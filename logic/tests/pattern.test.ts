@@ -82,7 +82,8 @@ describe("applyEditSettings (dev asserts)", () => {
     });
 
     test("unknown mode throws", () => {
-        expect(() => applyEditSettings({ mode: "weird" as any, wipe: false })).toThrow();
+        expect(() => applyEditSettings({ mode: "weird" as any, wipe: false }))
+            .toThrow(/applyEditSettings: unknown mode/);
     });
 });
 
@@ -101,5 +102,37 @@ describe("applyEditSettings (mode preservation)", () => {
             expect(pixels.length).toBe(pattern.canvasWidth * pattern.canvasHeight);
         }
         expect([...pixels].some(v => v === 0)).toBe(true);
+        const fresh = applyEditSettings(
+            { mode: "round", innerWidth: 2, innerHeight: 2, rounds: 3, subMode: "full", wipe: true },
+            source,
+        );
+        expect(pixels).toEqual(fresh.pixels);
+    });
+
+    test("round→row mode switch starts from a fresh row pattern", () => {
+        const round = applyEditSettings({
+            mode: "round", innerWidth: 2, innerHeight: 2, rounds: 2, subMode: "full", wipe: true,
+        });
+        const sourcePixels = round.pixels.slice();
+        for (let i = 0; i < sourcePixels.length; i++) {
+            if (sourcePixels[i] !== 0) sourcePixels[i] = 2;
+        }
+        const settings: EditSettings = { mode: "row", width: 5, height: 4, wipe: false };
+        const resized = applyEditSettings(settings, { pattern: round.pattern, pixels: sourcePixels });
+        const fresh = applyEditSettings({ ...settings, wipe: true });
+        expect(resized.pixels).toEqual(fresh.pixels);
+    });
+
+    test("round→round resize preserves edited cells", () => {
+        const settings: EditSettings = {
+            mode: "round", innerWidth: 2, innerHeight: 2, rounds: 2, subMode: "full", wipe: false,
+        };
+        const source = applyEditSettings({ ...settings, wipe: true });
+        const edited = source.pixels.slice();
+        const index = edited.findIndex(v => v !== 0);
+        edited[index] = edited[index] === 1 ? 2 : 1;
+
+        const resized = applyEditSettings(settings, { pattern: source.pattern, pixels: edited });
+        expect(resized.pixels[index]).toBe(edited[index]);
     });
 });
