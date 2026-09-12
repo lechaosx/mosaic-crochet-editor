@@ -1,4 +1,4 @@
-import { Tool, SymKey, PatternState, Axis } from "@mosaic/logic/types";
+import { Tool, SymKey, PatternState, Axis, RepeatGrid } from "@mosaic/logic/types";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 
 // ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────
@@ -44,6 +44,9 @@ export interface UICallbacks {
     onAddAxis:         (k: SymKey) => void;
     onToggleAxis:      (id: string) => void;
     onDeleteAxis:      (id: string) => void;
+    onRepeatInput:     () => void;
+    onRepeatCommit:    () => void;
+    onTransformPopoverToggle: (open: boolean) => void;
     onReplicateSelection: () => void;
     onHighlightChange:        () => void;
     onInvalidIntensityChange: () => void;
@@ -66,6 +69,9 @@ export interface UIHandle {
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
     setAxes:            (axes: ReadonlyArray<Axis>) => void;
+    readRepeatGrid:     () => RepeatGrid;
+    setRepeatGrid:      (repeat: RepeatGrid) => void;
+    setRepeatError:     (message: string | null) => void;
     setCanReplicateSelection: (enabled: boolean) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setEditError:       (message: string | null) => void;
@@ -154,6 +160,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         positionPopover(symPopover, symToggle, "right");
         symPopover.showPopover();
     });
+    symPopover.addEventListener("toggle", e => {
+        cb.onTransformPopoverToggle((e as ToggleEvent).newState === "open");
+    });
 
     SYM_ADD_BUTTONS.forEach(({ id, key }) =>
         el(id).addEventListener("click", () => cb.onAddAxis(key))
@@ -163,6 +172,42 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     function setCanReplicateSelection(enabled: boolean) {
         replicateSelection.disabled = !enabled;
+    }
+
+    const repeatEnabled = el<HTMLInputElement>("repeat-enabled");
+    const repeatTileWidth = el<HTMLInputElement>("repeat-tile-width");
+    const repeatTileHeight = el<HTMLInputElement>("repeat-tile-height");
+    const repeatCopiesX = el<HTMLInputElement>("repeat-copies-x");
+    const repeatCopiesY = el<HTMLInputElement>("repeat-copies-y");
+    const repeatError = el("repeat-error");
+    const repeatInputs = [repeatEnabled, repeatTileWidth, repeatTileHeight, repeatCopiesX, repeatCopiesY];
+    repeatInputs.forEach(input => {
+        input.addEventListener("input", cb.onRepeatInput);
+        input.addEventListener("change", cb.onRepeatCommit);
+    });
+
+    function readRepeatGrid(): RepeatGrid {
+        return {
+            enabled: repeatEnabled.checked,
+            tileWidth: repeatTileWidth.valueAsNumber,
+            tileHeight: repeatTileHeight.valueAsNumber,
+            copiesX: repeatCopiesX.valueAsNumber,
+            copiesY: repeatCopiesY.valueAsNumber,
+        };
+    }
+
+    function setRepeatGrid(repeat: RepeatGrid) {
+        repeatEnabled.checked = repeat.enabled;
+        repeatTileWidth.value = String(repeat.tileWidth);
+        repeatTileHeight.value = String(repeat.tileHeight);
+        repeatCopiesX.value = String(repeat.copiesX);
+        repeatCopiesY.value = String(repeat.copiesY);
+        setRepeatError(null);
+    }
+
+    function setRepeatError(message: string | null) {
+        repeatError.textContent = message ?? "";
+        repeatError.hidden = message === null;
     }
 
     function formatPosition(a: Axis): string {
@@ -416,7 +461,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setMaskMove, setPrimary, setColors, setAxes, setCanReplicateSelection,
+        setTool, setMaskMove, setPrimary, setColors, setAxes,
+        readRepeatGrid, setRepeatGrid, setRepeatError, setCanReplicateSelection,
         setHistory, setEditError,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,

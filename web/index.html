@@ -40,7 +40,7 @@
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand">✨</button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move">✥</button>
         <button class="btn" id="move-mask" title="Move the selection mask without moving its content" aria-label="Mask move" aria-pressed="false">Mask</button>
-        <button class="btn btn--icon" id="btn-sym-toggle" popovertarget="sym-popover" title="Symmetry — manage mirror / rotation axes" aria-haspopup="dialog" aria-expanded="false" aria-label="Symmetry">⊕</button>
+        <button class="btn btn--icon" id="btn-sym-toggle" popovertarget="sym-popover" title="Symmetry and repeat transforms" aria-haspopup="dialog" aria-expanded="false" aria-label="Symmetry and repeat">⊕</button>
       </div>
 
       <div class="tb-group g-colors" aria-label="Colours">
@@ -94,8 +94,32 @@
       </div>
     </div>
     <div id="sym-list" class="sym-list" aria-label="Axes"></div>
+    <div class="repeat-grid">
+      <label class="toggle popover-row" title="Repeat paint and selection stamps at bounded tile offsets.">
+        <span class="popover-label">Repeat grid</span>
+        <input type="checkbox" id="repeat-enabled">
+        <span class="toggle-track"></span>
+      </label>
+      <div class="field-row">
+        <label for="repeat-tile-width">Tile width</label>
+        <input type="number" id="repeat-tile-width" value="1" min="1" max="1048576">
+      </div>
+      <div class="field-row">
+        <label for="repeat-tile-height">Tile height</label>
+        <input type="number" id="repeat-tile-height" value="1" min="1" max="1048576">
+      </div>
+      <div class="field-row">
+        <label for="repeat-copies-x">Horizontal copies / side</label>
+        <input type="number" id="repeat-copies-x" value="1" min="0">
+      </div>
+      <div class="field-row">
+        <label for="repeat-copies-y">Vertical copies / side</label>
+        <input type="number" id="repeat-copies-y" value="1" min="0">
+      </div>
+      <div id="repeat-error" class="warning" role="alert" hidden></div>
+    </div>
     <div class="popover-row">
-      <button class="btn" id="replicate-selection" title="Replicate selection through active axes (T)" disabled>Replicate selection</button>
+      <button class="btn" id="replicate-selection" title="Replicate selection through active transforms (T)" disabled>Replicate selection</button>
     </div>
   </div>
 

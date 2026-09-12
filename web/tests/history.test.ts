@@ -47,6 +47,42 @@ describe("historySave / historyReset", () => {
         expect(canUndo()).toBe(true);
     });
 
+    test("repeat settings are part of history and survive undo", () => {
+        const s = rowSession(3, 3);
+        historyReset(s);
+        historySave({
+            ...s,
+            repeat: { enabled: true, tileWidth: 3, tileHeight: 2, copiesX: 2, copiesY: 1 },
+        });
+
+        expect(canUndo()).toBe(true);
+        expect(historyUndo()!.repeat).toEqual(s.repeat);
+        expect(historyRedo()!.repeat).toEqual({
+            enabled: true,
+            tileWidth: 3,
+            tileHeight: 2,
+            copiesX: 2,
+            copiesY: 1,
+        });
+    });
+
+    test("invalid repeat settings in persisted history restore disabled defaults", () => {
+        historyReset(rowSession(3, 3));
+        const raw = JSON.parse(localStorage.getItem("mosaic-history-v4")!);
+        raw.snapshots[0].repeat = {
+            enabled: true, tileWidth: 0, tileHeight: 1, copiesX: 1, copiesY: 1,
+        };
+        localStorage.setItem("mosaic-history-v4", JSON.stringify(raw));
+
+        expect(historyPeek()!.repeat).toEqual({
+            enabled: false,
+            tileWidth: 1,
+            tileHeight: 1,
+            copiesX: 1,
+            copiesY: 1,
+        });
+    });
+
     test("axis position survives undo: add V, drag to x=0, undo restores canonical", () => {
         const s = rowSession(3, 3);
         historyReset(s);

@@ -32,7 +32,7 @@ pub enum PlanDir {
 
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
-pub enum SymmetryApplicationStatus {
+pub enum TransformApplicationStatus {
     Unchanged = 0,
     Applied = 1,
     Conflict = 2,
@@ -40,14 +40,14 @@ pub enum SymmetryApplicationStatus {
 }
 
 #[wasm_bindgen]
-pub struct SymmetryApplication {
-    status: SymmetryApplicationStatus,
+pub struct TransformApplication {
+    status: TransformApplicationStatus,
     pixels: Vec<u8>,
 }
 
 #[wasm_bindgen]
-impl SymmetryApplication {
-    pub fn status(&self) -> SymmetryApplicationStatus {
+impl TransformApplication {
+    pub fn status(&self) -> TransformApplicationStatus {
         self.status
     }
 
@@ -574,19 +574,19 @@ pub fn cut_to_natural_round(
 }
 
 #[wasm_bindgen]
-pub fn symmetric_orbit_indices(
+pub fn transformed_target_indices(
     canvas_width: i32,
     canvas_height: i32,
     x: i32,
     y: i32,
-    axes: Option<Vec<f64>>,
+    transforms: Option<Vec<f64>>,
 ) -> Vec<u32> {
-    tools::symmetric_orbit(
+    tools::transformed_targets(
         x,
         y,
         canvas_width,
         canvas_height,
-        axes.as_deref().unwrap_or(&[]),
+        transforms.as_deref().unwrap_or(&[]),
     )
     .into_iter()
     .map(|(sx, sy)| (sy * canvas_width + sx) as u32)
@@ -594,27 +594,27 @@ pub fn symmetric_orbit_indices(
 }
 
 #[wasm_bindgen]
-pub fn apply_symmetry_to_selection(
+pub fn apply_transforms_to_selection(
     pixels: &[u8],
     canvas_width: i32,
     canvas_height: i32,
     sources: &[u8],
-    axes: Option<Vec<f64>>,
-) -> SymmetryApplication {
-    let applied = tools::apply_symmetry_to_selection(
+    transforms: Option<Vec<f64>>,
+) -> TransformApplication {
+    let applied = tools::apply_transforms_to_selection(
         pixels,
         canvas_width,
         canvas_height,
         sources,
-        axes.as_deref().unwrap_or(&[]),
+        transforms.as_deref().unwrap_or(&[]),
     );
     let status = match applied.status {
-        tools::SymmetryApplicationStatus::Unchanged => SymmetryApplicationStatus::Unchanged,
-        tools::SymmetryApplicationStatus::Applied => SymmetryApplicationStatus::Applied,
-        tools::SymmetryApplicationStatus::Conflict => SymmetryApplicationStatus::Conflict,
-        tools::SymmetryApplicationStatus::OrbitLimit => SymmetryApplicationStatus::OrbitLimit,
+        tools::TransformApplicationStatus::Unchanged => TransformApplicationStatus::Unchanged,
+        tools::TransformApplicationStatus::Applied => TransformApplicationStatus::Applied,
+        tools::TransformApplicationStatus::Conflict => TransformApplicationStatus::Conflict,
+        tools::TransformApplicationStatus::OrbitLimit => TransformApplicationStatus::OrbitLimit,
     };
-    SymmetryApplication {
+    TransformApplication {
         status,
         pixels: applied.pixels,
     }

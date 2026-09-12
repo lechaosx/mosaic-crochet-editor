@@ -8,7 +8,7 @@ import {
     paint_natural_row, paint_natural_round,
     paint_overlay_row, paint_overlay_round,
     clear_overlay_row, clear_overlay_round,
-    symmetric_orbit_indices,
+    transformed_target_indices,
 } from "@mosaic/wasm";
 import { PatternState } from "./types";
 
@@ -22,52 +22,52 @@ export interface PaintCtx {
     color:          1 | 2;
     primary:        1 | 2;
     invertVisited:  Set<number> | null;
-    symAxes:        Float64Array;       // flat triplets from `axesToFlat`
+    transforms:     Float64Array;
     shifted:        Uint8Array | null;
 }
 
 type PaintOp = (c: PaintCtx) => Uint8Array;
 
 export const paintOps: Record<PaintTool, PaintOp> = {
-    pencil: ({ visible, pattern: p, x, y, color, symAxes, shifted }) =>
-        paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, symAxes, shifted),
+    pencil: ({ visible, pattern: p, x, y, color, transforms, shifted }) =>
+        paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, transforms, shifted),
 
-    fill: ({ visible, pattern: p, x, y, color, symAxes, shifted }) =>
-        flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, symAxes, shifted),
+    fill: ({ visible, pattern: p, x, y, color, transforms, shifted }) =>
+        flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, transforms, shifted),
 
     // Left click = primary = restore baseline; right click = secondary =
     // paint the *opposite* baseline (deliberately wrong placement).
-    eraser: ({ visible, pattern: p, x, y, color, primary, symAxes, shifted }) => {
+    eraser: ({ visible, pattern: p, x, y, color, primary, transforms, shifted }) => {
         const invert = color !== primary;
         return p.mode === "row"
-            ? paint_natural_row(visible, p.canvasWidth, p.canvasHeight, x, y, symAxes, invert, shifted)
+            ? paint_natural_row(visible, p.canvasWidth, p.canvasHeight, x, y, transforms, invert, shifted)
             : paint_natural_round(
                 visible, p.canvasWidth, p.canvasHeight,
                 p.virtualWidth, p.virtualHeight,
                 p.offsetX, p.offsetY, p.rounds,
-                x, y, symAxes, invert, shifted,
+                x, y, transforms, invert, shifted,
             );
     },
 
     // Left click = paint a ✕ at the click cell (writes its *inward
     // neighbour*); right click = clear it.
-    overlay: ({ visible, pattern: p, x, y, color, primary, symAxes }) => {
+    overlay: ({ visible, pattern: p, x, y, color, primary, transforms }) => {
         const clear = color !== primary;
         if (p.mode === "row") {
             return clear
-                ? clear_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, symAxes)
-                : paint_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, symAxes);
+                ? clear_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, transforms)
+                : paint_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, transforms);
         }
         return clear
-            ? clear_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, symAxes)
-            : paint_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, symAxes);
+            ? clear_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, transforms)
+            : paint_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, transforms);
     },
 
     // Flip pixels between primary and secondary on each *first* visit; a
     // single stroke never inverts the same cell twice.
-    invert: ({ visible, pattern: p, x, y, invertVisited, symAxes, shifted }) => {
+    invert: ({ visible, pattern: p, x, y, invertVisited, transforms, shifted }) => {
         const out = visible.slice();
-        const indices = symmetric_orbit_indices(p.canvasWidth, p.canvasHeight, x, y, symAxes);
+        const indices = transformed_target_indices(p.canvasWidth, p.canvasHeight, x, y, transforms);
         for (const idx of indices) {
             if (invertVisited!.has(idx)) continue;
             if (shifted && shifted[idx] === 0) continue;

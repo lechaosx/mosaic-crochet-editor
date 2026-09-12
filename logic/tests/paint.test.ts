@@ -8,6 +8,7 @@ import { paintOps, PaintCtx, PaintTool } from "../src/paint";
 import { initialize_row_pattern, initialize_round_pattern } from "@mosaic/wasm";
 import type { PatternState } from "../src/types";
 import { filledPixels, rowPattern } from "./_helpers";
+import { transformsToFlat } from "../src/repeat";
 
 function ctx(tool: PaintTool, opts: Partial<PaintCtx> = {}): PaintCtx {
     const W = 3, H = 3;
@@ -17,7 +18,7 @@ function ctx(tool: PaintTool, opts: Partial<PaintCtx> = {}): PaintCtx {
         x: 1, y: 1,
         color: 1, primary: 1,
         invertVisited: tool === "invert" ? new Set() : null,
-        symAxes: new Float64Array(0),
+        transforms: new Float64Array(0),
         shifted: null,
         ...opts,
     };
@@ -30,6 +31,36 @@ describe("paintOps", () => {
             x: 1, y: 1, color: 2,
         }));
         expect(out[1 * 3 + 1]).toBe(2);
+    });
+
+    test("pencil paints repeat targets on both sides of the click", () => {
+        const out = paintOps.pencil(ctx("pencil", {
+            visible: filledPixels(7, 1, 1),
+            pattern: rowPattern(7, 1),
+            x: 3, y: 0, color: 2,
+            transforms: transformsToFlat([], {
+                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
+            }),
+        }));
+
+        expect(out).toEqual(new Uint8Array([1, 2, 1, 2, 1, 2, 1]));
+    });
+
+    test("pencil clips repeat targets to the active selection", () => {
+        const shifted = new Uint8Array(7);
+        shifted[3] = 1;
+        shifted[5] = 1;
+        const out = paintOps.pencil(ctx("pencil", {
+            visible: filledPixels(7, 1, 1),
+            pattern: rowPattern(7, 1),
+            x: 3, y: 0, color: 2,
+            transforms: transformsToFlat([], {
+                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
+            }),
+            shifted,
+        }));
+
+        expect(out).toEqual(new Uint8Array([1, 1, 1, 2, 1, 2, 1]));
     });
 
     test("fill flood-fills a connected same-colour region (no selection)", () => {
@@ -93,6 +124,22 @@ describe("paintOps", () => {
         expect(visited.has(1 * 3 + 1)).toBe(true);
     });
 
+    test("invert applies repeat targets and tracks each target as visited", () => {
+        const visited = new Set<number>();
+        const out = paintOps.invert(ctx("invert", {
+            visible: filledPixels(7, 1, 1),
+            pattern: rowPattern(7, 1),
+            x: 3, y: 0,
+            invertVisited: visited,
+            transforms: transformsToFlat([], {
+                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
+            }),
+        }));
+
+        expect(out).toEqual(new Uint8Array([1, 2, 1, 2, 1, 2, 1]));
+        expect(visited).toEqual(new Set([1, 3, 5]));
+    });
+
     test("eraser round mode restores round-mode natural baseline", () => {
         const W = 8, H = 8, rounds = 2;
         const pattern: PatternState = {
@@ -107,7 +154,7 @@ describe("paintOps", () => {
         const visible = natural.slice();
         for (let i = 0; i < visible.length; i++) if (visible[i] !== 0) visible[i] = 2;
         const x = testIdx % W, y = Math.floor(testIdx / W);
-        const out = paintOps.eraser({ visible, pattern, x, y, color: 1, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
+        const out = paintOps.eraser({ visible, pattern, x, y, color: 1, primary: 1, invertVisited: null, transforms: new Float64Array(0), shifted: null });
         // Round mode restores the round natural color, not the row natural.
         expect(out[testIdx]).toBe(natural[testIdx]);
         expect(out[testIdx]).not.toBe(rowNat[testIdx]);
@@ -133,12 +180,12 @@ describe("paintOps", () => {
         for (let i = 0; i < natural.length && paintX < 0; i++) {
             if (natural[i] === 0) continue;
             const cx = i % W, cy = Math.floor(i / W);
-            const painted = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: cx, y: cy, color: 1, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
+            const painted = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: cx, y: cy, color: 1, primary: 1, invertVisited: null, transforms: new Float64Array(0), shifted: null });
             if (!painted.every((v, j) => v === natural[j])) { paintX = cx; paintY = cy; }
         }
         if (paintX < 0) return;   // no valid cell in this pattern (shouldn't happen for 8×8/2 rounds)
-        const withMarker = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: paintX, y: paintY, color: 1, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
-        const cleared    = paintOps.overlay({ visible: withMarker,      pattern: roundPat, x: paintX, y: paintY, color: 2, primary: 1, invertVisited: null, symAxes: new Float64Array(0), shifted: null });
+        const withMarker = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: paintX, y: paintY, color: 1, primary: 1, invertVisited: null, transforms: new Float64Array(0), shifted: null });
+        const cleared    = paintOps.overlay({ visible: withMarker,      pattern: roundPat, x: paintX, y: paintY, color: 2, primary: 1, invertVisited: null, transforms: new Float64Array(0), shifted: null });
         expect(Array.from(withMarker)).not.toEqual(Array.from(natural));
         expect(Array.from(cleared)).toEqual(Array.from(natural));
     });

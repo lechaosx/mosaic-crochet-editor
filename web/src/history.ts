@@ -3,10 +3,11 @@
 // On QuotaExceededError we drop the oldest snapshot(s) and retry until the new
 // one fits — the freshly-added snapshot at the tail is always preserved.
 
-import { PatternState, Float, Axis } from "@mosaic/logic/types";
+import { PatternState, Float, Axis, RepeatGrid } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { defaultAxes } from "@mosaic/logic/symmetry";
+import { defaultRepeatGrid, repeatGridError } from "@mosaic/logic/repeat";
 
 const LS_KEY = "mosaic-history-v4";
 const MAX    = 64;
@@ -16,6 +17,7 @@ interface Snapshot {
     pixels:  string;             // 1-bit-packed, base64
     float:   PackedFloat | null; // bbox-compact float (x/y/w/h + raw pixels)
     axes?:   Axis[];             // Phase-4 axis positions; optional for pre-upgrade blobs
+    repeat?: RepeatGrid;
     colorA:  string;
     colorB:  string;
 }
@@ -55,6 +57,7 @@ function snapshotFrom(s: Readonly<SessionState>): Snapshot {
         pixels: packPixels(s.pixels),
         float:  s.float ? packFloat(s.float) : null,
         axes:   s.axes,
+        repeat: s.repeat,
         colorA: s.colorA,
         colorB: s.colorB,
     };
@@ -67,6 +70,7 @@ export function historySave(s: Readonly<SessionState>) {
     if (head && head.pixels === snap.pixels
             && JSON.stringify(head.float) === JSON.stringify(snap.float)
             && JSON.stringify(head.axes) === JSON.stringify(snap.axes)
+            && JSON.stringify(head.repeat) === JSON.stringify(snap.repeat)
             && head.colorA === snap.colorA && head.colorB === snap.colorB
             && JSON.stringify(head.state) === JSON.stringify(snap.state)) {
         return;
@@ -95,12 +99,14 @@ export interface Restored {
     pixels:  Uint8Array;
     float:   Float | null;
     axes:    Axis[];
+    repeat:  RepeatGrid;
     colorA:  string;
     colorB:  string;
 }
 
 function restoredAt(h: HistoryBlob): Restored {
     const s = h.snapshots[h.index];
+    const repeat = s.repeat ?? defaultRepeatGrid();
     return {
         pattern: s.state,
         pixels:  unpackPixels(s.pixels, s.state),
@@ -108,6 +114,7 @@ function restoredAt(h: HistoryBlob): Restored {
         // Pre-upgrade snapshots have no axes; current fresh sessions also
         // default to an empty list.
         axes:    s.axes ?? defaultAxes(s.state.canvasWidth, s.state.canvasHeight),
+        repeat:  repeatGridError(repeat) ? defaultRepeatGrid() : repeat,
         colorA:  s.colorA,
         colorB:  s.colorB,
     };

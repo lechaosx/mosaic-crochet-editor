@@ -16,6 +16,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
             activeTool: "fill",
             primaryColor: 2,
             axes: addAxis(addAxis([], "V", 3, 3), "H", 3, 3),
+            repeat: { enabled: true, tileWidth: 3, tileHeight: 2, copiesX: 2, copiesY: 1 },
             hlOpacity: 42,
             invalidIntensity: 17,
             labelsVisible: false,
@@ -33,6 +34,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.axes).toHaveLength(2);
         expect(loaded!.axes.find(a => a.kind === "V")!.active).toBe(true);
         expect(loaded!.axes.find(a => a.kind === "H")!.active).toBe(true);
+        expect(loaded!.repeat).toEqual(s.repeat);
         expect(loaded!.hlOpacity).toBe(42);
         expect(loaded!.invalidIntensity).toBe(17);
         expect(loaded!.labelsVisible).toBe(false);
@@ -56,6 +58,21 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         raw.version = 999;
         localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
         expect(loadFromLocalStorage()).toBeNull();
+    });
+
+    test("saved sessions without repeat settings receive disabled defaults", () => {
+        saveToLocalStorage(rowSession(3, 3));
+        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v4")!);
+        delete raw.repeat;
+        localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
+
+        expect(loadFromLocalStorage()!.repeat).toEqual({
+            enabled: false,
+            tileWidth: 1,
+            tileHeight: 1,
+            copiesX: 1,
+            copiesY: 1,
+        });
     });
 
     test("missing state → null", () => {

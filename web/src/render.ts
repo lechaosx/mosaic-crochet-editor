@@ -1,4 +1,4 @@
-import { PatternState, RowState, RoundState, Axis, SymKey } from "@mosaic/logic/types";
+import { PatternState, RowState, RoundState, Axis, SymKey, RepeatGrid } from "@mosaic/logic/types";
 import { PlanType, PlanDir } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
 
@@ -103,6 +103,7 @@ export interface RendererState {
     // intersection drag picks up to one per kind). Renderer draws those
     // guides at reduced alpha so the user can see "release = gone."
     axesInDeleteZone: Set<string>;
+    previewRepeatGuides: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
 }
@@ -125,6 +126,7 @@ export function makeRendererState(): RendererState {
         dragRect:               null,
         selectionDashOffset:    0,
         axesInDeleteZone:       new Set<string>(),
+        previewRepeatGuides:    false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
     };
@@ -347,7 +349,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
 }
 
 function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
-    const { pattern, pixels, float, axes, hlOpacity, labelsVisible } = store.state;
+    const { pattern, pixels, float, axes, repeat, hlOpacity, labelsVisible } = store.state;
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { canvas, view, dpr } = vp;
 
@@ -390,6 +392,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     ctx.stroke();
 
     renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, store.plan, m, hlOpacity / 100);
+    renderRepeatGuides(ctx, view, dpr, pattern, repeat, rs.contrastingColor, rs.previewRepeatGuides);
     renderSymmetryGuides(ctx, view, dpr, pattern, axes, rs.contrastingColor, rs.axesInDeleteZone);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
@@ -687,6 +690,33 @@ function renderTopIndicator(
     ctx.lineTo(cx,        tipY);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+}
+
+function renderRepeatGuides(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: PatternState, repeat: RepeatGrid, color: string, preview: boolean,
+) {
+    if (!repeat.enabled && !preview) return;
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    const lw = 2 / (view.zoom * dpr);
+    const dash = 3 / (view.zoom * dpr);
+
+    ctx.save();
+    ctx.globalAlpha = repeat.enabled ? 0.65 : 0.3;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.setLineDash([dash, dash]);
+    ctx.beginPath();
+    for (let x = repeat.tileWidth; x < W; x += repeat.tileWidth) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H);
+    }
+    for (let y = repeat.tileHeight; y < H; y += repeat.tileHeight) {
+        ctx.moveTo(0, y);
+        ctx.lineTo(W, y);
+    }
     ctx.stroke();
     ctx.restore();
 }

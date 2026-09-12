@@ -21,12 +21,12 @@ describe("symmetry-aware paint inside selection", () => {
         // canvas, (0, 1) mirrors to (4, 1).
         const shifted = new Uint8Array(W * H);
         shifted[1 * W + 0] = 1;
-        const symAxes = axesToFlat(addAxis([], "V", W, H));
+        const transforms = axesToFlat(addAxis([], "V", W, H));
         const out = paintOps.pencil({
             visible, pattern, x: 0, y: 1,
             color: 2, primary: 1,
             invertVisited: null,
-            symAxes, shifted,
+            transforms, shifted,
         });
         // Rust clips to selection: only (0, 1) painted, mirrored (4, 1) skipped.
         expect(out[1 * W + 0]).toBe(2);
@@ -45,10 +45,10 @@ describe("symmetry-aware paint inside selection", () => {
         // No function in `symmetry.ts` or `selection.ts` should expand
         // `mask` based on active axes. The visible marquee is exactly
         // these cells.
-        const symAxes = axesToFlat(addAxis(addAxis([], "V", W, H), "H", W, H));
+        const transforms = axesToFlat(addAxis(addAxis([], "V", W, H), "H", W, H));
         // We just assert that axesToFlat returns a Float64Array;
         // the selection bitmask is unaffected.
-        expect(symAxes).toBeInstanceOf(Float64Array);
+        expect(transforms).toBeInstanceOf(Float64Array);
         expect(mask[1 * W + 4]).toBe(0);
     });
 });
@@ -119,5 +119,35 @@ describe("replicateSelection", () => {
 
         expect(store.state.pixels).toBe(pixels);
         expect(history).not.toHaveBeenCalled();
+    });
+
+    test("stamps a selection through a repeat grid without active symmetry", () => {
+        const source = makeFloat([{ x: 3, y: 0, v: 2 }]);
+        const store = new Store(rowSession(7, 1, {
+            pixels: filledPixels(7, 1, 1),
+            float: source,
+            repeat: { enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0 },
+        }));
+
+        expect(replicateSelection(store)).toBe("applied");
+        expect(store.state.pixels).toEqual(new Uint8Array([1, 2, 1, 1, 1, 2, 1]));
+        expect(store.state.float).toBe(source);
+    });
+
+    test("rejects different source colours whose repeat targets overlap", () => {
+        const pixels = filledPixels(7, 1, 1);
+        const source = makeFloat([
+            { x: 1, y: 0, v: 1 },
+            { x: 3, y: 0, v: 2 },
+        ]);
+        const store = new Store(rowSession(7, 1, {
+            pixels,
+            float: source,
+            repeat: { enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0 },
+        }));
+
+        expect(replicateSelection(store)).toBe("conflict");
+        expect(store.state.pixels).toBe(pixels);
+        expect(store.state.float).toBe(source);
     });
 });

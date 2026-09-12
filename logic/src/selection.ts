@@ -3,10 +3,10 @@
 
 import { wand_select,
          cut_to_natural_row, cut_to_natural_round,
-         apply_symmetry_to_selection, SymmetryApplicationStatus } from "@mosaic/wasm";
+         apply_transforms_to_selection, TransformApplicationStatus } from "@mosaic/wasm";
 import { PatternState, Float } from "./types";
 import { Store, SessionState, visiblePixels, outOfBounds } from "./store";
-import { axesToFlat } from "./symmetry";
+import { transformsToFlat } from "./repeat";
 import { devAssert, assertNever } from "./dev";
 
 export type SelectMode = "replace" | "add" | "remove";
@@ -153,8 +153,8 @@ export function replicateSelection(store: Store): ReplicateSelectionResult {
     const s = store.state;
     if (!s.float) return "unchanged";
 
-    const axes = axesToFlat(s.axes);
-    if (axes.length === 0) return "unchanged";
+    const transforms = transformsToFlat(s.axes, s.repeat);
+    if (transforms.length === 0) return "unchanged";
 
     const { canvasWidth: W, canvasHeight: H } = s.pattern;
     const sources = new Uint8Array(W * H);
@@ -171,18 +171,18 @@ export function replicateSelection(store: Store): ReplicateSelectionResult {
         }
     }
 
-    const applied = apply_symmetry_to_selection(s.pixels, W, H, sources, axes);
+    const applied = apply_transforms_to_selection(s.pixels, W, H, sources, transforms);
     try {
         const status = applied.status();
         switch (status) {
-            case SymmetryApplicationStatus.Applied:
+            case TransformApplicationStatus.Applied:
                 store.commit(state => { state.pixels = applied.pixels(); }, { history: true });
                 return "applied";
-            case SymmetryApplicationStatus.Unchanged:
+            case TransformApplicationStatus.Unchanged:
                 return "unchanged";
-            case SymmetryApplicationStatus.Conflict:
+            case TransformApplicationStatus.Conflict:
                 return "conflict";
-            case SymmetryApplicationStatus.OrbitLimit:
+            case TransformApplicationStatus.OrbitLimit:
                 return "orbit-limit";
             default:
                 return assertNever(status as never, "replicateSelection: unknown status");

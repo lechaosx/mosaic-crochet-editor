@@ -1,9 +1,9 @@
 //! Drawing tools.
 //!
-//! Each tool walks the *symmetric orbit* of the click point under the active
-//! axes (`symmetric_orbit`, BFS over per-axis reflections) and writes
-//! per-orbit-cell. The orbit walker is also exported through wasm so the
-//! TS-side Invert tool can reuse it for per-stroke deduping.
+//! Each tool expands the click through active symmetry axes, then offsets the
+//! complete motif across the bounded repeat grid. The target generator is also
+//! exported through wasm so the TS-side Invert tool can reuse it for per-stroke
+//! deduping.
 
 // Tool parameters mirror the flat wasm-bindgen boundary; Rust-only wrapper
 // types would add conversions without representing shared domain concepts.
@@ -16,36 +16,60 @@ use crate::common::{
 use glam::IVec2;
 use std::collections::{HashSet, VecDeque};
 
-// Axis wire format: `axes` is a flat `&[f64]` of triplets
-// `(kind, a, b)`. Kind codes match the TS-side encoding:
+// Transform wire format: a flat `&[f64]` of `(kind, a, b)` triplets.
+// Kind codes match the TS-side encoding:
 //   0 = V  — vertical mirror at x = a
 //   1 = H  — horizontal mirror at y = a
 //   2 = C  — 180° rotation about (a, b)
 //   3 = D1 — diagonal x − y = a
 //   4 = D2 — anti-diagonal x + y = a
+//   5 = repeat X — tile width a, copies per side b
+//   6 = repeat Y — tile height a, copies per side b
 // Positions can be half-integer — V/H/C use `2*a`, which stays integer.
 // D1/D2 require integer `a` so reflections remain on the cell grid.
 
-const AXIS_STRIDE: usize = 3;
+const TRANSFORM_STRIDE: usize = 3;
 const KIND_V: i32 = 0;
 const KIND_H: i32 = 1;
 const KIND_C: i32 = 2;
 const KIND_D1: i32 = 3;
 const KIND_D2: i32 = 4;
+const KIND_REPEAT_X: i32 = 5;
+const KIND_REPEAT_Y: i32 = 6;
 
 pub const MAX_SYMMETRY_ORBIT_CELLS: usize = 1_048_576;
+pub const MAX_REPEAT_POSITIONS: usize = 4_096;
+pub const MAX_TRANSFORM_CLAIMS: usize = 1_048_576;
 
 // Keep cap tests cheap while exercising the same production branch.
 #[cfg(test)]
 const EFFECTIVE_ORBIT_LIMIT: usize = 4;
 #[cfg(not(test))]
 const EFFECTIVE_ORBIT_LIMIT: usize = MAX_SYMMETRY_ORBIT_CELLS;
+#[cfg(test)]
+const EFFECTIVE_TRANSFORM_CLAIM_LIMIT: usize = 8;
+#[cfg(not(test))]
+const EFFECTIVE_TRANSFORM_CLAIM_LIMIT: usize = MAX_TRANSFORM_CLAIMS;
 
-pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) -> Vec<(i32, i32)> {
+fn has_active_repeat(transforms: &[f64]) -> bool {
+    transforms
+        .chunks_exact(TRANSFORM_STRIDE)
+        .any(|chunk| matches!(chunk[0] as i32, KIND_REPEAT_X | KIND_REPEAT_Y) && chunk[2] > 0.0)
+}
+
+pub fn transformed_targets(
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    records: &[f64],
+) -> Vec<(i32, i32)> {
     type Transform = Box<dyn Fn(i32, i32) -> (i32, i32)>;
     let mut transforms: Vec<Transform> = Vec::new();
+    let mut repeat_x = (1_i64, 0_i64);
+    let mut repeat_y = (1_i64, 0_i64);
 
-    for chunk in axes.chunks_exact(AXIS_STRIDE) {
+    for chunk in records.chunks_exact(TRANSFORM_STRIDE) {
         let kind = chunk[0] as i32;
         let a = chunk[1];
         let b = chunk[2];
@@ -71,8 +95,26 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) ->
                 let c = a as i32;
                 transforms.push(Box::new(move |px, py| (c - py, c - px)));
             }
+            k if k == KIND_REPEAT_X => repeat_x = (a as i64, b as i64),
+            k if k == KIND_REPEAT_Y => repeat_y = (a as i64, b as i64),
             _ => {}
         }
+    }
+
+    if repeat_x.0 <= 0 || repeat_y.0 <= 0 || repeat_x.1 < 0 || repeat_y.1 < 0 {
+        return Vec::new();
+    }
+    let Some(repeat_width) = repeat_x.1.checked_mul(2).and_then(|v| v.checked_add(1)) else {
+        return Vec::new();
+    };
+    let Some(repeat_height) = repeat_y.1.checked_mul(2).and_then(|v| v.checked_add(1)) else {
+        return Vec::new();
+    };
+    let Some(repeat_positions) = repeat_width.checked_mul(repeat_height) else {
+        return Vec::new();
+    };
+    if repeat_positions > MAX_REPEAT_POSITIONS as i64 {
+        return Vec::new();
     }
 
     let mut visited: HashSet<(i32, i32)> = HashSet::new();
@@ -95,83 +137,110 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) ->
         }
     }
 
-    visited.into_iter().collect()
+    if repeat_positions == 1 {
+        return visited.into_iter().collect();
+    }
+
+    let mut repeated = HashSet::new();
+    for &(sx, sy) in &visited {
+        for iy in -repeat_y.1..=repeat_y.1 {
+            for ix in -repeat_x.1..=repeat_x.1 {
+                let tx = sx as i64 + ix * repeat_x.0;
+                let ty = sy as i64 + iy * repeat_y.0;
+                if tx < 0 || tx >= width as i64 || ty < 0 || ty >= height as i64 {
+                    continue;
+                }
+                repeated.insert((tx as i32, ty as i32));
+                if repeated.len() > MAX_TRANSFORM_CLAIMS {
+                    return Vec::new();
+                }
+            }
+        }
+    }
+    repeated.into_iter().collect()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SymmetryApplicationStatus {
+pub enum TransformApplicationStatus {
     Unchanged,
     Applied,
     Conflict,
     OrbitLimit,
 }
 
-pub struct SymmetryApplication {
-    pub status: SymmetryApplicationStatus,
+pub struct TransformApplication {
+    pub status: TransformApplicationStatus,
     pub pixels: Vec<u8>,
 }
 
-pub fn apply_symmetry_to_selection(
+pub fn apply_transforms_to_selection(
     pixels: &[u8],
     width: i32,
     height: i32,
     sources: &[u8],
-    axes: &[f64],
-) -> SymmetryApplication {
+    transforms: &[f64],
+) -> TransformApplication {
     let mut result = pixels.to_vec();
-    let mut processed = vec![false; pixels.len()];
+    let mut claims = vec![COLOR_TRANSPARENT; pixels.len()];
+    let mut claim_count = 0_usize;
+    let claim_limit = if has_active_repeat(transforms) {
+        EFFECTIVE_TRANSFORM_CLAIM_LIMIT
+    } else {
+        usize::MAX
+    };
     let mut changed = false;
 
     for source_idx in 0..sources.len() {
-        if sources[source_idx] == COLOR_TRANSPARENT
-            || pixels[source_idx] == COLOR_TRANSPARENT
-            || processed[source_idx]
-        {
+        if sources[source_idx] == COLOR_TRANSPARENT || pixels[source_idx] == COLOR_TRANSPARENT {
             continue;
         }
 
         let x = source_idx as i32 % width;
         let y = source_idx as i32 / width;
-        let orbit = symmetric_orbit(x, y, width, height, axes);
+        let orbit = transformed_targets(x, y, width, height, transforms);
         if orbit.is_empty() {
-            return SymmetryApplication {
-                status: SymmetryApplicationStatus::OrbitLimit,
+            return TransformApplication {
+                status: TransformApplicationStatus::OrbitLimit,
                 pixels: pixels.to_vec(),
             };
         }
 
-        let mut color = COLOR_TRANSPARENT;
         for &(ox, oy) in &orbit {
             let idx = (oy * width + ox) as usize;
-            processed[idx] = true;
-            if pixels[idx] == COLOR_TRANSPARENT || sources[idx] == COLOR_TRANSPARENT {
+            claim_count += 1;
+            if claim_count > claim_limit {
+                return TransformApplication {
+                    status: TransformApplicationStatus::OrbitLimit,
+                    pixels: pixels.to_vec(),
+                };
+            }
+            if pixels[idx] == COLOR_TRANSPARENT {
                 continue;
             }
-            if color == COLOR_TRANSPARENT {
-                color = sources[idx];
-            } else if color != sources[idx] {
-                return SymmetryApplication {
-                    status: SymmetryApplicationStatus::Conflict,
+            if claims[idx] == COLOR_TRANSPARENT {
+                claims[idx] = sources[source_idx];
+            } else if claims[idx] != sources[source_idx] {
+                return TransformApplication {
+                    status: TransformApplicationStatus::Conflict,
                     pixels: pixels.to_vec(),
                 };
             }
         }
-
-        for (ox, oy) in orbit {
-            let idx = (oy * width + ox) as usize;
-            if pixels[idx] == COLOR_TRANSPARENT || sources[idx] != COLOR_TRANSPARENT {
-                continue;
-            }
-            changed |= result[idx] != color;
-            result[idx] = color;
-        }
     }
 
-    SymmetryApplication {
+    for idx in 0..claims.len() {
+        if claims[idx] == COLOR_TRANSPARENT || sources[idx] != COLOR_TRANSPARENT {
+            continue;
+        }
+        changed |= result[idx] != claims[idx];
+        result[idx] = claims[idx];
+    }
+
+    TransformApplication {
         status: if changed {
-            SymmetryApplicationStatus::Applied
+            TransformApplicationStatus::Applied
         } else {
-            SymmetryApplicationStatus::Unchanged
+            TransformApplicationStatus::Unchanged
         },
         pixels: result,
     }
@@ -188,7 +257,7 @@ pub fn paint_pixel(
     selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
-    let orbit = symmetric_orbit(x, y, width, height, axes);
+    let orbit = transformed_targets(x, y, width, height, axes);
     if orbit.is_empty() {
         return result;
     }
@@ -207,27 +276,27 @@ pub fn paint_pixel(
 
 // Overlay tools. Two semantic actions; TS picks which one to call.
 //
-// `paint_overlay_*` — make a ✕ visually appear at the clicked cell. Each cell
-//   in the click's symmetric orbit has its inward neighbour painted with the
-//   *opposite* of its natural colour; the highlight pass then renders a
-//   valid-overlay marker at the original click cell. Skips holes, corners
+// `paint_overlay_*` — make a ✕ visually appear at the clicked cell. The inward
+//   neighbour of each transformed target is painted with the *opposite* of its
+//   natural colour; the highlight pass then renders a valid-overlay marker at
+//   each target. Skips holes, corners
 //   (no single inward axis), and innermost-ring cells (no inward neighbour)
 //   — `inward_cell_*` returns None in those cases. No-op on gutter clicks
 //   (there's no cell there to paint at).
 //
 // `clear_overlay_*` — remove a marker that's already there.
-//   • In-canvas: restore inward neighbours of the orbit back to natural.
+//   • In-canvas: restore inward neighbours of the targets back to natural.
 //   • Gutter: the boundary cell whose ! renders in the gutter is the inward
-//     neighbour of the gutter cell; restore its full symmetric orbit. This
-//     is how the user clears boundary-row/ring ! markers they can see
+//     neighbour of the gutter cell; restore its full transformed target set.
+//     This is how the user clears boundary-row/ring ! markers they can see
 //     hovering outside the pattern.
 
-// Paint each non-hole cell in the click's symmetric orbit to its natural
+// Paint each non-hole transformed target to its natural
 // baseline (the alternating row / round colour at that cell's position).
 // `invert = true` paints the *opposite* of natural instead — used by the
 // eraser tool's secondary action to deliberately wrong out cells. Each
-// orbit cell uses its OWN natural colour, not the click point's, so
-// mirrored writes don't smear the click row across the whole orbit.
+// target uses its own natural colour, not the click point's, so transformed
+// writes do not smear the click row across the full target set.
 
 pub fn paint_natural_row(
     pixels: &[u8],
@@ -240,7 +309,7 @@ pub fn paint_natural_row(
     selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
-    let orbit = symmetric_orbit(x, y, width, height, axes);
+    let orbit = transformed_targets(x, y, width, height, axes);
     if orbit.is_empty() {
         return result;
     }
@@ -276,7 +345,7 @@ pub fn paint_natural_round(
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset = IVec2::new(offset_x, offset_y);
     let mut result = pixels.to_vec();
-    let orbit = symmetric_orbit(x, y, canvas_width, canvas_height, axes);
+    let orbit = transformed_targets(x, y, canvas_width, canvas_height, axes);
     if orbit.is_empty() {
         return result;
     }
@@ -307,7 +376,7 @@ pub fn paint_overlay_row(
         return pixels.to_vec();
     }
     let mut result = pixels.to_vec();
-    let orbit = symmetric_orbit(x, y, width, height, axes);
+    let orbit = transformed_targets(x, y, width, height, axes);
     if orbit.is_empty() {
         return result;
     }
@@ -337,7 +406,7 @@ pub fn clear_overlay_row(
     let mut result = pixels.to_vec();
 
     if in_canvas {
-        let orbit = symmetric_orbit(x, y, width, height, axes);
+        let orbit = transformed_targets(x, y, width, height, axes);
         if orbit.is_empty() {
             return pixels.to_vec();
         }
@@ -355,7 +424,7 @@ pub fn clear_overlay_row(
         let Some(inner) = inward_cell_row(canvas_size, IVec2::new(x, y)) else {
             return result;
         };
-        let orbit = symmetric_orbit(inner.x, inner.y, width, height, axes);
+        let orbit = transformed_targets(inner.x, inner.y, width, height, axes);
         if orbit.is_empty() {
             return pixels.to_vec();
         }
@@ -390,7 +459,7 @@ pub fn paint_overlay_round(
         return pixels.to_vec();
     }
     let mut result = pixels.to_vec();
-    let orbit = symmetric_orbit(x, y, canvas_width, canvas_height, axes);
+    let orbit = transformed_targets(x, y, canvas_width, canvas_height, axes);
     if orbit.is_empty() {
         return result;
     }
@@ -428,7 +497,7 @@ pub fn clear_overlay_round(
     let mut result = pixels.to_vec();
 
     if in_canvas {
-        let orbit = symmetric_orbit(x, y, canvas_width, canvas_height, axes);
+        let orbit = transformed_targets(x, y, canvas_width, canvas_height, axes);
         if orbit.is_empty() {
             return pixels.to_vec();
         }
@@ -449,7 +518,7 @@ pub fn clear_overlay_round(
         else {
             return result;
         };
-        let orbit = symmetric_orbit(inner.x, inner.y, canvas_width, canvas_height, axes);
+        let orbit = transformed_targets(inner.x, inner.y, canvas_width, canvas_height, axes);
         if orbit.is_empty() {
             return pixels.to_vec();
         }
@@ -662,8 +731,8 @@ pub fn transfer_preserved_round(
 // non-empty the walker treats unselected cells as boundaries: BFS never
 // crosses out of the selection, so a same-colour path running through
 // unselected cells doesn't leak the fill into another selection island.
-// The symmetric-orbit fill at the end is unaffected; TS-side clip-after
-// handles mirror cells that land outside the selection.
+// The transformed fill at the end is unaffected; TS-side clip-after handles
+// target cells that land outside the selection.
 pub fn flood_fill(
     pixels: &[u8],
     width: i32,
@@ -706,9 +775,19 @@ pub fn flood_fill(
         queue.push_back((x, y - 1));
     }
 
+    let mut claim_count = 0_usize;
+    let claim_limit = if has_active_repeat(axes) {
+        EFFECTIVE_TRANSFORM_CLAIM_LIMIT
+    } else {
+        usize::MAX
+    };
     for (x, y) in filled {
-        let orbit = symmetric_orbit(x, y, width, height, axes);
+        let orbit = transformed_targets(x, y, width, height, axes);
         if orbit.is_empty() {
+            return pixels.to_vec();
+        }
+        claim_count += orbit.len();
+        if claim_count > claim_limit {
             return pixels.to_vec();
         }
         for (sx, sy) in orbit {
@@ -869,14 +948,14 @@ mod tests {
         g
     }
 
-    // ── symmetric_orbit ─────────────────────────────────────────────────────
+    // ── transformed_targets ─────────────────────────────────────────────────────
 
     #[test]
     fn orbit_v_at_canonical_position_mirrors_left_right() {
         // V axis at x=4 on a 9-wide canvas mirrors 0↔8.
         let axes = [0.0_f64, 4.0, 0.0];
         let orbit: std::collections::HashSet<_> =
-            symmetric_orbit(0, 3, 9, 9, &axes).into_iter().collect();
+            transformed_targets(0, 3, 9, 9, &axes).into_iter().collect();
         assert!(orbit.contains(&(0, 3)));
         assert!(orbit.contains(&(8, 3)));
         assert_eq!(orbit.len(), 2);
@@ -887,7 +966,7 @@ mod tests {
         // V axis at x=2 on a 9-wide canvas mirrors 0↔4 (and out-of-bounds dropped for x>4).
         let axes = [0.0_f64, 2.0, 0.0];
         let orbit: std::collections::HashSet<_> =
-            symmetric_orbit(0, 3, 9, 9, &axes).into_iter().collect();
+            transformed_targets(0, 3, 9, 9, &axes).into_iter().collect();
         assert!(orbit.contains(&(0, 3)));
         assert!(orbit.contains(&(4, 3)));
         assert_eq!(orbit.len(), 2);
@@ -898,7 +977,7 @@ mod tests {
         // H axis at y=3.5 (between cells on 8-tall canvas) mirrors 0↔7.
         let axes = [1.0_f64, 3.5, 0.0];
         let orbit: std::collections::HashSet<_> =
-            symmetric_orbit(2, 0, 8, 8, &axes).into_iter().collect();
+            transformed_targets(2, 0, 8, 8, &axes).into_iter().collect();
         assert!(orbit.contains(&(2, 0)));
         assert!(orbit.contains(&(2, 7)));
         assert_eq!(orbit.len(), 2);
@@ -909,7 +988,7 @@ mod tests {
         // C axis at (4, 4) on 9×9 rotates (1, 2) to (7, 6).
         let axes = [2.0_f64, 4.0, 4.0];
         let orbit: std::collections::HashSet<_> =
-            symmetric_orbit(1, 2, 9, 9, &axes).into_iter().collect();
+            transformed_targets(1, 2, 9, 9, &axes).into_iter().collect();
         assert!(orbit.contains(&(1, 2)));
         assert!(orbit.contains(&(7, 6)));
         assert_eq!(orbit.len(), 2);
@@ -921,7 +1000,7 @@ mod tests {
         // axis once to the starting cell.
         let axes = [0.0_f64, 4.0, 0.0, 1.0_f64, 4.0, 0.0];
         let orbit: std::collections::HashSet<_> =
-            symmetric_orbit(1, 2, 9, 9, &axes).into_iter().collect();
+            transformed_targets(1, 2, 9, 9, &axes).into_iter().collect();
         assert!(orbit.contains(&(1, 2)));
         assert!(orbit.contains(&(7, 2)));
         assert!(orbit.contains(&(1, 6)));
@@ -930,10 +1009,49 @@ mod tests {
     }
 
     #[test]
+    fn repeat_grid_targets_both_directions_and_cartesian_combinations() {
+        let transforms = [5.0_f64, 2.0, 1.0, 6.0, 3.0, 1.0];
+        let orbit = transformed_targets(4, 4, 9, 9, &transforms);
+
+        assert_eq!(orbit.len(), 9);
+        for expected in [
+            (2, 1),
+            (4, 1),
+            (6, 1),
+            (2, 4),
+            (4, 4),
+            (6, 4),
+            (2, 7),
+            (4, 7),
+            (6, 7),
+        ] {
+            assert!(orbit.contains(&expected));
+        }
+    }
+
+    #[test]
+    fn repeat_grid_tiles_the_complete_symmetry_motif() {
+        let transforms = [0.0_f64, 2.0, 0.0, 5.0, 6.0, 1.0, 6.0, 1.0, 0.0];
+        let orbit = transformed_targets(0, 0, 13, 1, &transforms);
+
+        assert_eq!(orbit.len(), 4);
+        for expected in [(0, 0), (4, 0), (6, 0), (10, 0)] {
+            assert!(orbit.contains(&expected));
+        }
+    }
+
+    #[test]
+    fn repeat_grid_rejects_more_than_the_position_ceiling() {
+        let transforms = [5.0_f64, 1.0, 32.0, 6.0, 1.0, 32.0];
+
+        assert!(transformed_targets(50, 50, 101, 101, &transforms).is_empty());
+    }
+
+    #[test]
     fn orbit_aborts_instead_of_returning_a_partial_result_at_the_safety_limit() {
         assert_eq!(MAX_SYMMETRY_ORBIT_CELLS, 1_048_576);
         let axes = [0.0_f64, 10.0, 0.0, 0.0_f64, 11.0, 0.0];
-        assert!(symmetric_orbit(10, 0, 25, 1, &axes).is_empty());
+        assert!(transformed_targets(10, 0, 25, 1, &axes).is_empty());
 
         let pixels = vec![COLOR_A; 25];
         assert_eq!(
@@ -952,9 +1070,9 @@ mod tests {
         let sources = [COLOR_B, 0, 0, 0, 0];
         let axes = [0.0_f64, 2.0, 0.0];
 
-        let applied = apply_symmetry_to_selection(&pixels, 5, 1, &sources, &axes);
+        let applied = apply_transforms_to_selection(&pixels, 5, 1, &sources, &axes);
 
-        assert_eq!(applied.status, SymmetryApplicationStatus::Applied);
+        assert_eq!(applied.status, TransformApplicationStatus::Applied);
         assert_eq!(
             applied.pixels,
             vec![COLOR_A, COLOR_A, COLOR_A, COLOR_A, COLOR_B]
@@ -967,9 +1085,9 @@ mod tests {
         let sources = [COLOR_B, 0, 0, 0, COLOR_B];
         let axes = [0.0_f64, 2.0, 0.0];
 
-        let applied = apply_symmetry_to_selection(&pixels, 5, 1, &sources, &axes);
+        let applied = apply_transforms_to_selection(&pixels, 5, 1, &sources, &axes);
 
-        assert_eq!(applied.status, SymmetryApplicationStatus::Unchanged);
+        assert_eq!(applied.status, TransformApplicationStatus::Unchanged);
         assert_eq!(applied.pixels, pixels);
     }
 
@@ -979,9 +1097,9 @@ mod tests {
         let sources = [COLOR_A, COLOR_B, 0, 0, 0, 0, 0, 0, COLOR_A, COLOR_B];
         let axes = [0.0_f64, 4.5, 0.0];
 
-        let applied = apply_symmetry_to_selection(&pixels, 10, 1, &sources, &axes);
+        let applied = apply_transforms_to_selection(&pixels, 10, 1, &sources, &axes);
 
-        assert_eq!(applied.status, SymmetryApplicationStatus::Conflict);
+        assert_eq!(applied.status, TransformApplicationStatus::Conflict);
         assert_eq!(applied.pixels, pixels);
     }
 
@@ -991,9 +1109,9 @@ mod tests {
         let sources = [COLOR_B, COLOR_B, 0, 0];
         let axes = [0.0_f64, 0.5, 0.0];
 
-        let applied = apply_symmetry_to_selection(&pixels, 4, 1, &sources, &axes);
+        let applied = apply_transforms_to_selection(&pixels, 4, 1, &sources, &axes);
 
-        assert_eq!(applied.status, SymmetryApplicationStatus::Unchanged);
+        assert_eq!(applied.status, TransformApplicationStatus::Unchanged);
         assert_eq!(applied.pixels, pixels);
     }
 
@@ -1004,9 +1122,21 @@ mod tests {
         sources[10] = COLOR_B;
         let axes = [0.0_f64, 10.0, 0.0, 0.0_f64, 11.0, 0.0];
 
-        let applied = apply_symmetry_to_selection(&pixels, 25, 1, &sources, &axes);
+        let applied = apply_transforms_to_selection(&pixels, 25, 1, &sources, &axes);
 
-        assert_eq!(applied.status, SymmetryApplicationStatus::OrbitLimit);
+        assert_eq!(applied.status, TransformApplicationStatus::OrbitLimit);
+        assert_eq!(applied.pixels, pixels);
+    }
+
+    #[test]
+    fn apply_repeat_aborts_atomically_at_the_action_claim_limit() {
+        let pixels = vec![COLOR_A; 5];
+        let sources = vec![COLOR_B; 5];
+        let transforms = [5.0_f64, 1.0, 1.0, 6.0, 1.0, 0.0];
+
+        let applied = apply_transforms_to_selection(&pixels, 5, 1, &sources, &transforms);
+
+        assert_eq!(applied.status, TransformApplicationStatus::OrbitLimit);
         assert_eq!(applied.pixels, pixels);
     }
 
@@ -1564,6 +1694,16 @@ mod tests {
         assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1));
         assert_eq!(out[2 * 4 + 1], natural_color_row(4, 2));
         assert_eq!(out[3 * 4 + 0], opposite_color(natural_color_row(4, 3)));
+    }
+
+    #[test]
+    fn flood_fill_repeat_aborts_atomically_at_the_action_claim_limit() {
+        let pixels = vec![COLOR_A; 5];
+        let transforms = [5.0_f64, 1.0, 1.0, 6.0, 1.0, 0.0];
+
+        let out = flood_fill(&pixels, 5, 1, 2, 0, COLOR_B, &transforms, &[]);
+
+        assert_eq!(out, pixels);
     }
 
     #[test]

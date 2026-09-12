@@ -1,8 +1,9 @@
-import { PatternState, Tool, Axis } from "@mosaic/logic/types";
+import { PatternState, Tool, Axis, RepeatGrid } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { defaultAxes } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
+import { assertRepeatGrid, defaultRepeatGrid } from "@mosaic/logic/repeat";
 
 const LS_KEY       = "mosaic-pattern-v4";
 const FILE_VERSION = 2;
@@ -17,6 +18,7 @@ interface LocalSaveV4 {
     activeTool:       string;
     primaryColor:     number;
     axes:             Axis[];
+    repeat?:          RepeatGrid;
     hlOpacity:        number;
     invalidIntensity: number;
     float:            PackedFloat | null;
@@ -35,6 +37,7 @@ export function saveToLocalStorage(s: Readonly<SessionState>) {
         activeTool:       s.activeTool,
         primaryColor:     s.primaryColor,
         axes:             s.axes,
+        repeat:           s.repeat,
         hlOpacity:        s.hlOpacity,
         invalidIntensity: s.invalidIntensity,
         float:            s.float ? packFloat(s.float) : null,
@@ -52,6 +55,8 @@ export function loadFromLocalStorage(): SessionState | null {
         const data = JSON.parse(saved) as LocalSaveV4;
         if (!data || data.version !== LS_VERSION || !data.state) return null;
         assertPatternDimensions(data.state);
+        const repeat = data.repeat ?? defaultRepeatGrid();
+        assertRepeatGrid(repeat);
         return {
             pattern:          data.state,
             pixels:           unpackPixels(data.pixels, data.state),
@@ -60,6 +65,7 @@ export function loadFromLocalStorage(): SessionState | null {
             activeTool:       data.activeTool as Tool,
             primaryColor:     data.primaryColor as 1 | 2,
             axes:             data.axes ?? defaultAxes(data.state.canvasWidth, data.state.canvasHeight),
+            repeat,
             hlOpacity:        data.hlOpacity,
             invalidIntensity: data.invalidIntensity,
             float:            data.float ? unpackFloat(data.float) : null,

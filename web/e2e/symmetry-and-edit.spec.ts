@@ -98,7 +98,85 @@ test("T replicates the selection and reports conflicting source colours", async 
     });
     await page.keyboard.press("t");
 
-    await expect(dialogMessage).resolves.toMatch(/different colours.*symmetry orbit/i);
+    await expect(dialogMessage).resolves.toMatch(/different colours.*transformed destination/i);
+});
+
+test("repeat grid copies live paint in both directions", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").click();
+    await page.locator("#repeat-tile-width").fill("2");
+    await page.locator("#repeat-tile-height").fill("1");
+    await page.locator("#repeat-copies-x").fill("1");
+    await page.locator("#repeat-copies-y").fill("0");
+    await page.locator("label:has(#repeat-enabled)").click();
+    await expect(page.locator("#repeat-enabled")).toBeChecked();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-pattern-v4")!).repeat))
+        .toEqual({ enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0 });
+    await page.locator("#btn-sym-toggle").click();
+
+    await clickCell(page, 4, 1);
+
+    const repeated = await Promise.all([2, 4, 6].map(async x => {
+        const point = await cellCoord(page, x, 1);
+        return pixelRGB(page, point.cx, point.cy);
+    }));
+    expect(repeated).toEqual([[0, 0, 0], [0, 0, 0], [0, 0, 0]]);
+    const untouched = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, untouched.cx, untouched.cy)).not.toEqual([0, 0, 0]);
+});
+
+test("repeat settings reject a grid above the position ceiling", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").click();
+    await page.locator("#repeat-copies-x").fill("32");
+    await page.locator("#repeat-copies-y").fill("32");
+
+    await expect(page.locator("#repeat-error")).toContainText("4,096");
+    await expect(page.locator("#repeat-error")).toBeVisible();
+});
+
+test("Replicate selection stamps repeat copies and keeps the source selected", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 4, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 4, 1);
+
+    await page.locator("#btn-sym-toggle").click();
+    await page.locator("#repeat-tile-width").fill("2");
+    await page.locator("#repeat-copies-x").fill("1");
+    await page.locator("#repeat-copies-y").fill("0");
+    await page.locator("label:has(#repeat-enabled)").click();
+    const replicate = page.locator("#replicate-selection");
+    await expect(replicate).toBeEnabled();
+    await replicate.click();
+
+    for (const x of [2, 6]) {
+        const point = await cellCoord(page, x, 1);
+        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
+    }
+    await page.keyboard.press("ArrowRight");
+    const oldSource = await cellCoord(page, 4, 1);
+    const movedSource = await cellCoord(page, 5, 1);
+    expect(await pixelRGB(page, oldSource.cx, oldSource.cy)).not.toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
+});
+
+test("repeat grid tiles the complete symmetry motif", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").click();
+    await page.locator("#add-sym-v").click();
+    await page.locator("#repeat-tile-width").fill("2");
+    await page.locator("#repeat-copies-x").fill("1");
+    await page.locator("#repeat-copies-y").fill("0");
+    await page.locator("label:has(#repeat-enabled)").click();
+    await page.locator("#btn-sym-toggle").click();
+
+    await clickCell(page, 0, 1);
+
+    for (const x of [0, 2, 6, 8]) {
+        const point = await cellCoord(page, x, 1);
+        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
+    }
 });
 
 test("dragging an axis far off the canvas deletes it", async ({ page }) => {

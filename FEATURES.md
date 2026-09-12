@@ -23,11 +23,11 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Tools: Pencil, Fill, Eraser, Overlay, Invert, Select, Magic Wand, Move. — **your decision**
 - **Eraser** (left = restore natural; right = paint *opposite* of natural, the exact inverse). — **your decision**
-- **Overlay** tool: click *where you want a ✕*; the inward neighbour is painted with the overlay colour so the highlight pass renders a ✕ at the clicked cell. Right-click clears the ✕ by restoring that neighbour's natural colour. Symmetry mirrors the ✕ position (each orbit cell of the click gets its own ✕ with the correct per-cell colour). No-op on round-mode corners (no overlay stitch geometry exists there). — **your decision**
+- **Overlay** tool: click *where you want a ✕*; the inward neighbour is painted with the overlay colour so the highlight pass renders a ✕ at the clicked cell. Right-click clears the ✕ by restoring that neighbour's natural colour. Active transforms replicate the ✕ position with the correct per-cell colour. No-op on round-mode corners (no overlay stitch geometry exists there). — **your decision**
 - Painting is blocked on inner-hole (transparent) pixels. — **Agent's choice**
 - Strokes that change nothing leave no history entry and don't dirty the pattern. — **Agent's choice**
-- Eraser restores each pixel to its own natural alternating colour, not the click point's. Works under symmetry. — **your decision** (behaviour); **Agent's choice** (per-orbit-cell fix)
-- Invert toggles 1 ↔ 2 with symmetry; within one stroke an orbit cell can't be inverted twice. — **your decision**
+- Eraser restores each pixel to its own natural alternating colour, not the click point's. Works under active transforms. — **your decision** (behaviour); **Agent's choice** (per-target fix)
+- Invert toggles 1 ↔ 2 through active transforms; within one stroke a target cell can't be inverted twice. — **your decision**
 - Left click paints primary, right click paints secondary on desktop. — **Agent's choice**
 
 ## Selection
@@ -57,13 +57,17 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
   - Holding any arrow key produces one undo entry for the entire held sequence.
   — **your decision**
 
-## Symmetry
+## Symmetry and repeat
 
-- Fresh sessions have no axes. The Symmetry popover and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
-- Each axis is independently enabled or deleted from the Symmetry popover. Active transforms compose in the orbit walker without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
+- Fresh sessions have no axes. The **Symmetry and repeat** popover and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
+- Each axis is independently enabled or deleted from the **Symmetry and repeat** popover. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
 - Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
-- Symmetry applies to pencil, fill, eraser, overlay, and invert. — **Agent's choice**
-- **Replicate selection** (`T`) stamps a floating selection through all active symmetry axes without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours in one orbit reject the whole action. — **Agent's choice**
+- Symmetry and repeat apply to pencil, fill, eraser, overlay, and invert. — **your decision**
+- A single repeat grid has tile width and height plus horizontal and vertical copy counts per side. Copies extend in both directions, their Cartesian product includes the source position, and symmetry completes before the grid tiles the motif. — **your decision**
+- Repeat state survives refresh and undo but is not stored in `.mcw`; file load and canvas resize retain it. — **your decision**
+- Repeat grids are limited to 4,096 configured positions. An operation aborts atomically when it would exceed 1,048,576 transformed claims. — **your decision**
+- Dotted tile guides preview while the popover is open and remain visible while repeat is enabled. — **your decision**
+- **Replicate selection** (`T`) stamps a floating selection through all active symmetry and repeat transforms without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours claiming one destination reject the whole action. — **your decision**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
 - **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
 - **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
@@ -104,17 +108,17 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v4`). On refresh the saved stack is restored as-is. — **your decision**
 - Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
 - Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
-- Symmetry axis state is part of undo: adding, enabling, disabling, deleting, or moving axes pushes a snapshot. Undo restores the list and every axis position. — **your decision**
+- Symmetry-axis and repeat-grid state are part of undo. Undo restores the axis list, every axis position, and the repeat settings. — **your decision**
 - Redundant snapshots (same packed pixels + same state + same colours as the head) are skipped. — **Agent's choice**
 
 ## Persistence
 
-- Editor session state, including axes and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice**
+- Editor session state, including axes, repeat settings, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (repeat lifetime)
 
 ## Save / Load / Export
 
 - File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
-- `.mcw` stores pattern geometry, pixels, and colours; symmetry axes and floats remain session-only. Loading keeps the current axes and drops the active float. — **your decision** (float boundary); **Agent's choice** (axis boundary)
+- `.mcw` stores pattern geometry, pixels, and colours; symmetry axes, repeat settings, and floats remain session-only. Loading keeps the current transforms and drops the active float. — **your decision** (float and repeat boundaries); **Agent's choice** (axis boundary)
 - Export emits pattern text line-by-line with a live progress counter; closing the modal cancels generation. — **your decision** (line-by-line, cancellation); **Agent's choice** (progress counter)
 - Alternate-direction toggle below the modal header re-generates immediately on change. — **your decision**
 - Warning banner shown when the pattern has invalid placements; export is not blocked. — **Agent's choice**
@@ -129,12 +133,12 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Single pointer-event path for mouse, pen, and touch. — **Agent's choice**
 - Swatches: tap to select; double-click (desktop) or long-press (any pointer) to edit the colour. Right-click on desktop also paints with the secondary colour without re-selecting. — **your decision** (click + double-click + long-press); **Agent's choice** (unified pointer long-press)
-- Every button has a hover label. Keyboard shortcuts cover all tools, add each symmetry-axis kind, rotate, select colours, edit the selection, and undo/redo. — **your decision** (hover labels + shortcuts); **Agent's choice** (specific bindings)
+- Every button has a hover label. Keyboard shortcuts cover all tools, add each symmetry-axis kind, apply active transforms to a selection, rotate, select colours, edit the selection, and undo/redo. — **your decision** (hover labels + shortcuts); **Agent's choice** (specific bindings)
 
 ## Toolbar
 
-- Five groups in fixed visual order on a wide screen: file/history, highlights/rotation, paint tools, transform/symmetry, colours. — **your decision**
-- On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; paint tools + transform/symmetry + colours on row 2), each row distributed with `space-between`. — **your decision**
+- Five groups in fixed visual order on a wide screen: file/history, highlights/rotation, paint tools, transforms, colours. — **your decision**
+- On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; paint tools + transforms + colours on row 2), each row distributed with `space-between`. — **your decision**
 - When even the two-row layout would overflow, button height and font size shrink to fit. The two breakpoints come from runtime measurements of each group's intrinsic width — they kick in exactly when content stops fitting, never sooner. — **your decision** (auto-shrink); **Agent's choice** (measure-driven)
 
 ## Pattern popover

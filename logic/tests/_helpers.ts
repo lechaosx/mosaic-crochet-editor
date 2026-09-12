@@ -2,6 +2,7 @@ import { initialize_row_pattern } from "@mosaic/wasm";
 import type { PatternState, Float } from "../src/types";
 import type { SessionState } from "../src/store";
 import { defaultAxes } from "../src/symmetry";
+import { defaultRepeatGrid } from "../src/repeat";
 
 export function rowPattern(W: number, H: number): PatternState {
     return { mode: "row", canvasWidth: W, canvasHeight: H };
@@ -16,6 +17,7 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         activeTool: "pencil",
         primaryColor: 1,
         axes: defaultAxes(W, H),
+        repeat: defaultRepeatGrid(),
         hlOpacity: 100,
         invalidIntensity: 65,
         float: null,

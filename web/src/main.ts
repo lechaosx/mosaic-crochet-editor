@@ -7,10 +7,10 @@ import { applyEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized, historyPeek,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
-import { axesToFlat,
-         addAxis, removeAxis, toggleAxisActive,
+import { addAxis, removeAxis, toggleAxisActive,
          pickAxesAt, setAxisPosition, snapHalf, snapInt,
          axisOffCanvas } from "@mosaic/logic/symmetry";
+import { defaultRepeatGrid, repeatGridError, transformsToFlat } from "@mosaic/logic/repeat";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
@@ -36,6 +36,7 @@ function defaultSession(): SessionState {
         activeTool:    "pencil",
         primaryColor:  1,
         axes:           [],
+        repeat:         defaultRepeatGrid(),
         hlOpacity:        100,
         invalidIntensity: 65,
         float:           null,
@@ -149,7 +150,7 @@ store.setPersistFn(s => saveToLocalStorage(s));
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => updateStatus(s.plan, null, null));
 store.addObserver(s => ui.setCanReplicateSelection(
-    Boolean(s.state.float && s.state.axes.some(a => a.active)),
+    Boolean(s.state.float && hasActiveTransforms()),
 ));
 
 // ── Paint ────────────────────────────────────────────────────────────────────
@@ -181,13 +182,13 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
     // of the click, but the click cell itself still has to be in the float.
     if (inCanvas && shifted && shifted[y * W + x] === 0) return;
 
-    const symAxes = axesToFlat(s.axes);
+    const transforms = transformsToFlat(s.axes, s.repeat);
     const before  = visible;
     let next = paintOps[tool as PaintTool]({
         visible, pattern, x, y,
         color: g.color, primary: s.primaryColor,
         invertVisited: g.invertVisited,
-        symAxes, shifted,
+        transforms, shifted,
     });
 
     if (s.lockInvalid) next = lockAlwaysInvalid(pattern, before, next);
@@ -227,7 +228,13 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
     ui.setAxes(store.state.axes);
-    ui.setCanReplicateSelection(Boolean(store.state.float && store.state.axes.some(a => a.active)));
+    ui.setCanReplicateSelection(Boolean(store.state.float && hasActiveTransforms()));
+}
+
+function hasActiveTransforms() {
+    const r = store.state.repeat;
+    return store.state.axes.some(a => a.active)
+        || (r.enabled && (r.copiesX > 0 || r.copiesY > 0));
 }
 // Shortcuts and popover buttons append an active, canonically positioned
 // axis. Axis ids keep multiple entries of the same kind independent.
@@ -247,12 +254,31 @@ function toggleAxisById(id: string) {
     refreshSymmetryUi();
 }
 
+function onRepeatInput() {
+    const repeat = ui.readRepeatGrid();
+    const error = repeatGridError(repeat);
+    ui.setRepeatError(error);
+    if (error) return;
+    store.commit(s => { s.repeat = repeat; }, { recompute: false, persist: false });
+}
+
+function onRepeatCommit() {
+    const error = repeatGridError(ui.readRepeatGrid());
+    if (error) return;
+    store.commit(() => {}, { recompute: false, render: false, history: true });
+}
+
+function onTransformPopoverToggle(open: boolean) {
+    rs.previewRepeatGuides = open;
+    render(viewport, ctx, rs, store);
+}
+
 function onReplicateSelection() {
     const result = replicateSelection(store);
     if (result === "conflict") {
-        window.alert("Cannot replicate selection: different colours occupy the same symmetry orbit.");
+        window.alert("Cannot replicate selection: different colours claim the same transformed destination.");
     } else if (result === "orbit-limit") {
-        window.alert("Cannot replicate selection: the symmetry orbit exceeds the safety limit.");
+        window.alert("Cannot replicate selection: the transformed target set exceeds the safety limit.");
     }
 }
 
@@ -360,12 +386,13 @@ function applyRestored(r: Restored) {
     if (dimsChanged) fitToView(viewport.canvas, viewport.view, r.pattern, store.state.rotation);
     store.replace(
         { ...store.state, pattern: r.pattern, pixels: r.pixels, float: r.float,
-          axes: r.axes, colorA: r.colorA, colorB: r.colorB },
+          axes: r.axes, repeat: r.repeat, colorA: r.colorA, colorB: r.colorB },
         { persist: true },
     );
     (document.getElementById("color-a") as HTMLInputElement).value = r.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = r.colorB;
     ui.setColors(r.colorA, r.colorB);
+    ui.setRepeatGrid(r.repeat);
     ui.syncEditInputs(r.pattern);
     refreshSymmetryUi();
 }
@@ -464,6 +491,9 @@ const ui: UIHandle = mountUI({
     onAddAxis:    addAxisOfKind,
     onToggleAxis: toggleAxisById,
     onDeleteAxis: deleteAxisById,
+    onRepeatInput,
+    onRepeatCommit,
+    onTransformPopoverToggle,
     onReplicateSelection,
     onHighlightChange:         onHlOpacityInput,
     onInvalidIntensityChange:  onInvalidIntensityInput,
@@ -946,6 +976,7 @@ syncDomInputs(store.state);
 ui.setTool(store.state.activeTool);
 ui.setPrimary(store.state.primaryColor);
 ui.setColors(store.state.colorA, store.state.colorB);
+ui.setRepeatGrid(store.state.repeat);
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
 

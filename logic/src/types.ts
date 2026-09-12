@@ -16,6 +16,14 @@ export interface AxisD2 { kind: "D2"; id: string; active: boolean; c: number }
 export interface AxisC  { kind: "C";  id: string; active: boolean; x: number; y: number }
 export type Axis = AxisV | AxisH | AxisD1 | AxisD2 | AxisC;
 
+export interface RepeatGrid {
+    enabled:    boolean;
+    tileWidth:  number;
+    tileHeight: number;
+    copiesX:    number;
+    copiesY:    number;
+}
+
 // A "float" is a lifted selection layer positioned at absolute canvas-cell
 // coordinates (x, y). `pixels` is a w×h row-major array: 0 = absent (not in
 // float), 1 = color A, 2 = color B. There is no separate mask —
