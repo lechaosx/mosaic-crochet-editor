@@ -164,12 +164,6 @@ input  { font: inherit; color: inherit; }
   color: var(--fg-0);
 }
 
-.btn--implied {
-  background: var(--bg-2);
-  border-color: var(--bg-3);
-  color: var(--fg-2);
-}
-
 .btn--danger {
   background: rgba(160, 32, 32, 0.55);
   border-color: rgba(200, 60, 60, 0.6);

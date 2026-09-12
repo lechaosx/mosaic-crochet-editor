@@ -2,20 +2,13 @@ export type Tool   = "pencil" | "fill" | "eraser" | "invert" | "overlay" | "sele
 export type SymKey = "V" | "H" | "C" | "D1" | "D2";
 
 // Axes carry kind-specific position fields. Each axis is independently
-// togglable (`active`) and identifiable (`id`) so future UI rows can render
-// per-axis toggles + delete buttons.
+// togglable (`active`) and identifiable (`id`) for the symmetry list.
 //
 //   V  — vertical mirror line at x = (axis.x)
 //   H  — horizontal mirror line at y = (axis.y)
 //   D1 — diagonal x − y = c (slope +1 in pattern coords)
 //   D2 — anti-diagonal x + y = c
 //   C  — 180° rotation about the point (axis.x, axis.y)
-//
-// In Slice A of Phase 4 every axis lives at its canonical (canvas-centred)
-// position; the position fields are stored but the Rust BFS still uses the
-// hard-coded `width-1-x` / etc. reflections via a u8 bitmask compiled from
-// `kind` + `active`. Slice B (placement UI) is what will actually consume
-// the position fields and pass them down.
 export interface AxisV  { kind: "V";  id: string; active: boolean; x: number }
 export interface AxisH  { kind: "H";  id: string; active: boolean; y: number }
 export interface AxisD1 { kind: "D1"; id: string; active: boolean; c: number }

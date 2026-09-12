@@ -5,9 +5,8 @@
 
 import { describe, test, expect } from "vitest";
 import {
-    diagonalsAvailable, axesToFlat,
-    defaultAxes, activeKinds, closureKinds,
-    pickAxisAt, pickAxesAt, distanceToAxis, setAxisPosition, snapHalf, snapInt,
+    axesToFlat, defaultAxes,
+    pickAxesAt, distanceToAxis, setAxisPosition, snapHalf, snapInt,
     addAxis, removeAxis, toggleAxisActive, axisOffCanvas,
 } from "../src/symmetry";
 import type { Axis } from "../src/types";
@@ -20,7 +19,7 @@ function axesWith(W: number, H: number, ...kinds: SymKey[]): Axis[] {
 }
 
 describe("defaultAxes", () => {
-    test("fresh session has zero axes (Slice C)", () => {
+    test("fresh session has zero axes", () => {
         expect(defaultAxes(9, 9)).toEqual([]);
     });
 });
@@ -112,44 +111,6 @@ describe("axesToFlat", () => {
     });
 });
 
-describe("diagonalsAvailable", () => {
-    test.each([
-        [9, 9, true],
-        [9, 7, true],
-        [9, 8, false],
-        [10, 7, false],
-        [10, 10, true],
-    ])("(W=%i, H=%i) → %s", (w, h, expected) => {
-        expect(diagonalsAvailable(w, h)).toBe(expected);
-    });
-});
-
-describe("activeKinds", () => {
-    test("returns Set of kinds whose axis.active is true", () => {
-        const kinds = activeKinds(axesWith(9, 9, "V", "D1"));
-        expect(kinds.has("V")).toBe(true);
-        expect(kinds.has("D1")).toBe(true);
-        expect(kinds.has("H")).toBe(false);
-    });
-});
-
-describe("closureKinds (UI-only)", () => {
-    test("V + H imply C (so UI dim-renders C)", () => {
-        expect(closureKinds(axesWith(9, 9, "V", "H"), 9, 9).has("C")).toBe(true);
-    });
-
-    test("diagonals disabled: V + D1 does NOT propagate to D2", () => {
-        expect(closureKinds(axesWith(9, 8, "V", "D1"), 9, 8).has("D2")).toBe(false);
-    });
-
-    test("transitive: V + D1 (diagonals on) → all five", () => {
-        const closure = closureKinds(axesWith(9, 9, "V", "D1"), 9, 9);
-        for (const k of ["V", "H", "C", "D1", "D2"] as SymKey[]) {
-            expect(closure.has(k)).toBe(true);
-        }
-    });
-});
-
 describe("distanceToAxis", () => {
     test("V at x=4 → distance to (4.5, 3) is 0 (on the line)", () => {
         const v: Axis = { kind: "V", id: "x", active: true, x: 4 };
@@ -170,21 +131,6 @@ describe("distanceToAxis", () => {
     test("C at (4,4) → distance to (4.5, 4.5) is 0 (centre point)", () => {
         const c: Axis = { kind: "C", id: "x", active: true, x: 4, y: 4 };
         expect(distanceToAxis(c, 4.5, 4.5)).toBe(0);
-    });
-});
-
-describe("pickAxisAt", () => {
-    test("clicks on V guide line return the V axis", () => {
-        const hit = pickAxisAt(axesWith(9, 9, "V"), 4.6, 3, 0.4);
-        expect(hit?.kind).toBe("V");
-    });
-    test("clicks far from any guide return null", () => {
-        expect(pickAxisAt(axesWith(9, 9, "V"), 0.5, 0.5, 0.4)).toBeNull();
-    });
-    test("inactive axes are not pickable", () => {
-        const v = addAxis([], "V", 9, 9);
-        const off = toggleAxisActive(v, v[0].id);
-        expect(pickAxisAt(off, 4.5, 4.5, 0.4)).toBeNull();
     });
 });
 

@@ -3,9 +3,7 @@ import { describe, test } from "vitest";
 import fc from "fast-check";
 
 import {
-    packPixels, unpackPixels,
-    packSelection, unpackSelection,
-    packFloat, unpackFloat,
+    packPixels, unpackPixels, packFloat, unpackFloat,
 } from "../src/storage";
 import { liftCells, anchorIntoCanvas, applySelectionMod } from "../src/selection";
 import { Store, visiblePixels } from "../src/store";
@@ -45,17 +43,6 @@ describe("pack/unpack round-trips", () => {
             for (let i = 0; i < pixels.length; i++) {
                 if (out[i] !== pixels[i]) return false;
             }
-            return true;
-        }));
-    });
-
-    test("packSelection/unpackSelection: bitmask preserved", () => {
-        const arb = fc.integer({ min: 1, max: 200 })
-            .chain(n => fc.array(fc.constantFrom<0 | 1>(0, 1), { minLength: n, maxLength: n })
-                .map(arr => Uint8Array.from(arr)));
-        fc.assert(fc.property(arb, (bits) => {
-            const out = unpackSelection(packSelection(bits), bits.length);
-            for (let i = 0; i < bits.length; i++) if (out[i] !== bits[i]) return false;
             return true;
         }));
     });

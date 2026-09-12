@@ -10,7 +10,7 @@ Companion to the [Aseprite plugin](https://github.com/lechaosx/aseprite-mosaic-c
 
 <table>
 <tr>
-<td><img src="doc/screenshot.png" alt="Web editor with a round pattern and overlay highlights"></td>
+<td><img src="doc/screenshot.png" alt="Web editor with a row pattern and the symmetry-axis popover open"></td>
 <td><img src="doc/photo.jpg" alt="Finished crocheted square"></td>
 </tr>
 </table>
@@ -64,7 +64,7 @@ Eight tools, in the toolbar's tools group:
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
 - **Select** — drag a rectangle to **lift** those cells into a floating selection: their values move into the float, the canvas below them resets to the natural alternating colour. **Shift+drag** adds to the selection; **Ctrl+drag** removes (re-anchors the rest); no-modifier replaces. A single click lifts one cell.
 - **Magic wand** — click a cell to lift its connected same-colour region as a float. Same Shift / Ctrl / no-modifier semantics as the rect tool.
-- **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive until you deselect (`Ctrl+Shift+A`), switch out via the Edit popover, save, or do something else that anchors it. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's content is baked into the canvas at the start, the drag carries the same marquee shape, and on release the canvas content at the new position is re-lifted as the new float (the original content stays where it was). **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
+- **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive across tool changes and saving until you deselect (`Ctrl+Shift+A`), replace the selection, resize the pattern, or load another file. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's content is baked into the canvas at the start, the drag carries the same marquee shape, and on release the canvas content at the new position is re-lifted as the new float (the original content stays where it was). **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
 
 All five drawing tools respect the active symmetries. The eraser restores each mirrored pixel to *its own* natural colour, not the click point's.
 
@@ -79,9 +79,11 @@ A ✕ marks valid overlay-stitch positions; a ! marks invalid placements. Both a
 
 ### Symmetry
 
-Five axes — **↔ Vertical**, **↕ Horizontal**, **⊕ Central**, **╲ Diagonal**, **╱ Anti-diagonal** — toggled from the symmetry group. Active axes are drawn as dashed lines on the canvas.
+New patterns start without symmetry. Open **Symmetry** and add any of five axis kinds: **↔ Vertical**, **↕ Horizontal**, **⊕ Central**, **╲ Diagonal**, or **╱ Anti-diagonal**. Each axis has its own enable/disable and delete controls, and you can add multiple axes of the same kind.
 
-Two axes that imply a third turn the third on automatically (closure inference). Directly toggled axes display brightly; closure-implied ones are dimmed. Diagonals are unavailable when `(W − H)` is odd.
+Active mirror axes are drawn as dashed guides; central rotation is shown as a dot. With the **Move** tool, drag a guide to reposition it. Vertical, horizontal, and central axes snap to half-cells; diagonals snap to whole cells. Dragging an axis beyond its useful canvas range deletes it. Diagonal axes work on rectangular canvases of any parity.
+
+Active axes compose automatically: for example, vertical and horizontal mirrors together produce the corresponding four-cell orbit without adding a separate central-axis entry.
 
 ### Colours
 
@@ -104,18 +106,18 @@ The **⚙** button on the right of the toolbar opens a Settings popover:
 ### Saving
 
 - **Save** downloads the pattern as a `.mcw` file (JSON). Modern browsers (Chrome/Edge) open a save dialog; Firefox downloads immediately.
-- **Load** opens a file picker and restores the entire pattern, including colours and symmetry.
+- **Load** opens a file picker and restores pattern geometry, pixels, and colours. Symmetry axes are session state and remain unchanged.
 - **Export** opens a modal where the pattern is converted to text line-by-line. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
-Tool, colour, symmetry, rotation, the active float (selection + lifted pixels), and the committed canvas auto-save to `localStorage` and restore on refresh. The float isn't written to `.mcw` files (it's transient editing state, not pattern data) — Save and Export bake the float into the file/export and leave the live selection alone.
+Tool, colour, symmetry axes, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
 
 ### Keyboard shortcuts
 
 | Action | Key |
 |---|---|
 | Pencil / Fill / Eraser / Overlay / Invert / Select / Wand / Move | **P** / **F** / **E** / **O** / **I** / **S** / **W** / **M** |
-| Vertical / Horizontal / Central symmetry | **V** / **H** / **C** |
-| Diagonal ╲ / Anti-diagonal ╱ | **D** / **A** |
+| Add Vertical / Horizontal / Central axis | **V** / **H** / **C** |
+| Add Diagonal ╲ / Anti-diagonal ╱ axis | **D** / **A** |
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
 | Select primary / secondary swatch | **1** / **2** |
 | Select all paintable cells / Deselect / Clear selection | **Ctrl+A** / **Ctrl+Shift+A** / **Esc** |
@@ -166,21 +168,21 @@ Starts the Rust watcher and the Vite dev server in parallel. Open [http://localh
 bun run test
 ```
 
-Chains all three layers:
+Builds the generated WASM package and production web bundle, then runs all three test layers:
 
 - **Rust** (`cargo test`) — geometry, walk generators, pattern compression.
 - **TS unit + properties** (`bun run test:logic` for pure logic, `bun run test:web` for IO layer, Vitest) — store / selection / paint / clipboard / symmetry / storage / pattern + `fast-check`-generated property assertions for pack/unpack round-trips, lift-anchor identity, wand BFS invariants, history undo/redo balance; plus history and localStorage persistence.
-- **E2E** (`bun run --cwd web test:e2e`, Playwright) — full UX flows: tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry mirroring, Edit popover.
+- **E2E** (`bun run test:e2e`, Playwright, desktop Chromium) — full UX flows: tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry mirroring, Edit popover.
 
 Run a subset:
 
 ```sh
 bun run test:logic                    # Vitest — pure logic (logic/tests/)
-bun run --cwd web test                # Vitest — IO layer (web/tests/)
+bun run test:web                      # Vitest — IO layer (web/tests/)
 bun run --cwd web test:watch          # Vitest interactive
 bun run --cwd web test:coverage       # Istanbul HTML report at web/coverage/index.html
-bun run test:mutation                 # Stryker mutation sweep on logic (~20s; report at logic/reports/mutation/mutation.html)
-bun run --cwd web test:e2e            # Playwright only
+bun run test:mutation                 # Stryker mutation sweep on logic (report at logic/reports/mutation/mutation.html)
+bun run test:e2e                      # Production build + Playwright
 ```
 
 > On NixOS, the dev shell provides `playwright-driver.browsers` and sets `PLAYWRIGHT_BROWSERS_PATH` for you. The `@playwright/test` npm version is pinned to match nixpkgs's bundled chromium.

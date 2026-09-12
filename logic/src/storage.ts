@@ -28,22 +28,6 @@ export function packPixels(pixels: Uint8Array): string {
     return u8ToB64(out);
 }
 
-export function packSelection(sel: Uint8Array): string {
-    const out = new Uint8Array(Math.ceil(sel.length / 8));
-    for (let i = 0; i < sel.length; i++) {
-        if (sel[i]) out[i >> 3] |= 1 << (i & 7);
-    }
-    return u8ToB64(out);
-}
-export function unpackSelection(s: string, length: number): Uint8Array {
-    const packed = b64ToU8(s);
-    const out = new Uint8Array(length);
-    for (let i = 0; i < length; i++) {
-        out[i] = (packed[i >> 3] >> (i & 7)) & 1;
-    }
-    return out;
-}
-
 // Start from a fresh natural-colour pattern (which already encodes hole
 // positions as 0) and overwrite non-hole cells with the saved A/B bit.
 export function unpackPixels(s: string, state: PatternState): Uint8Array {

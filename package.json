@@ -7,11 +7,11 @@
     "dev:web": "bun run --cwd web dev",
     "dev": "bun run dev:rust & bun run dev:web",
     "test:rust": "cargo test",
-    "test:logic":    "bun run --cwd logic test",
-    "test:mutation": "bun run --cwd logic test:mutation",
-    "test:web":   "bun run --cwd web test",
-    "test:e2e":   "bun run --cwd web test:e2e",
-    "test":       "bun run test:rust && bun run test:logic && bun run test:web && bun run test:e2e"
+    "test:logic":    "bun run build:wasm && bun run --cwd logic test",
+    "test:mutation": "bun run build:wasm && bun run --cwd logic test:mutation",
+    "test:web":      "bun run build:wasm && bun run --cwd web test",
+    "test:e2e":      "bun run build && bun run --cwd web test:e2e",
+    "test":          "bun run build && bun run test:rust && bun run --cwd logic test && bun run --cwd web test && bun run --cwd web test:e2e"
   },
   "workspaces": ["wasm", "logic", "web"]
 }

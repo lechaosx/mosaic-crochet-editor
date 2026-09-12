@@ -1,7 +1,6 @@
 import { describe, test, expect } from "vitest";
 import {
-    packPixels, unpackPixels, packSelection, unpackSelection,
-    packFloat, unpackFloat,
+    packPixels, unpackPixels, packFloat, unpackFloat,
 } from "../src/storage";
 import { filledPixels } from "./_helpers";
 
@@ -57,21 +56,6 @@ describe("packPixels / unpackPixels", () => {
         const roundOut = unpackPixels(empty, roundPat);
         expect([...rowOut].filter(v => v === 0).length).toBe(0);
         expect([...roundOut].filter(v => v === 0).length).toBeGreaterThan(0);
-    });
-});
-
-describe("packSelection / unpackSelection", () => {
-    test("round-trip preserves the mask bits", () => {
-        const bits = new Uint8Array([1, 0, 1, 1, 0, 0, 1, 0, 0]);
-        const out = unpackSelection(packSelection(bits), bits.length);
-        for (let i = 0; i < bits.length; i++) expect(out[i]).toBe(bits[i]);
-    });
-
-    test("packed byte count is ceil(N/8)", () => {
-        for (const n of [1, 8, 9, 16, 17]) {
-            const out = atob(packSelection(new Uint8Array(n)));
-            expect(out.length).toBe(Math.ceil(n / 8));
-        }
     });
 });
 

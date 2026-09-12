@@ -63,9 +63,7 @@ type MoveMode = "move" | "duplicate" | "mask-only";
 
 // One discriminated-union active per gesture, set at `onPaintStart`,
 // updated on `onPaintAt`, consumed (committed or reverted) on
-// `onPaintEnd` / `onPaintCancel`, then cleared. Replaces the half-dozen
-// `selectDrag` / `wandDrag` / `moveDrag` / `preStroke` / `preFloat` /
-// `pendingMoveMode` module vars — one variable, one cleared state.
+// `onPaintEnd` / `onPaintCancel`, then cleared.
 //   paint  — pencil / fill / eraser / overlay / invert. `prePixels` /
 //            `preFloat` snapshot pre-stroke state for cancel revert and
 //            history dedupe; `invertVisited` only non-null for invert.
@@ -226,9 +224,8 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 function refreshSymmetryUi() {
     ui.setAxes(store.state.axes);
 }
-// Slice C: keyboard shortcuts and toolbar "+" buttons add a new axis to
-// the list (active, canonical position). Multiple of same kind coexist;
-// the user manages active/delete via the Symmetry popover.
+// Shortcuts and popover buttons append an active, canonically positioned
+// axis. Axis ids keep multiple entries of the same kind independent.
 function addAxisOfKind(k: SymKey) {
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
     store.commit(s => { s.axes = addAxis(s.axes, k, W, H); }, { recompute: false, history: true });

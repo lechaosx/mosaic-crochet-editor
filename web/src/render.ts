@@ -418,11 +418,6 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
 }
 
-// Outline of a selection: walk all selected cells, emit a line segment for
-// each side that borders an unselected cell (or canvas edge). Drawn in the
-// existing `contrastingColor` — already a palette-distinct contrast pick — so
-// it's visible against either palette. Static dashes; animating the offset
-// in the rAF loop is a Phase 1 follow-up.
 // Trace the selection's boundary as one or more closed polylines (one per
 // connected component, plus one per hole). Each loop is CCW around the
 // selected region — top edge goes right, right edge goes down, bottom edge

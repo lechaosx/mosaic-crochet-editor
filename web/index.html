@@ -38,7 +38,7 @@
       <div class="tb-group g-transform" aria-label="Transform">
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select">▭</button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand">✨</button>
-        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection to shift its pixels. Alt+drag with any tool does the same." aria-label="Move">✥</button>
+        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move">✥</button>
         <button class="btn btn--icon" id="btn-sym-toggle" popovertarget="sym-popover" title="Symmetry — manage mirror / rotation axes" aria-haspopup="dialog" aria-expanded="false" aria-label="Symmetry">⊕</button>
       </div>
 
@@ -133,7 +133,7 @@
       </div>
     </div>
 
-    <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on (disabled) for mode switches and inner-dimension changes.">
+    <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on for row/round mode switches.">
       <input type="checkbox" id="edit-wipe">
       <span class="toggle-track"></span>
       Wipe

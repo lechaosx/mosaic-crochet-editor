@@ -105,8 +105,8 @@ function restoredAt(h: HistoryBlob): Restored {
         pattern: s.state,
         pixels:  unpackPixels(s.pixels, s.state),
         float:   s.float ? unpackFloat(s.float) : null,
-        // Pre-upgrade snapshots have no axes; fall back to fresh canonical
-        // presets. Going forward, every commit includes them.
+        // Pre-upgrade snapshots have no axes; current fresh sessions also
+        // default to an empty list.
         axes:    s.axes ?? defaultAxes(s.state.canvasWidth, s.state.canvasHeight),
         colorA:  s.colorA,
         colorB:  s.colorB,

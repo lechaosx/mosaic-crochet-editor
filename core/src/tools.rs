@@ -9,15 +9,15 @@ use std::collections::{HashSet, VecDeque};
 use glam::IVec2;
 use crate::common::{COLOR_TRANSPARENT, natural_color_row, natural_color_round, opposite_color, inward_cell_row, inward_cell_round, is_always_invalid_row, is_always_invalid_round};
 
-// Axis wire format (Phase 4 Slice B): `axes` is a flat `&[f64]` of triplets
+// Axis wire format: `axes` is a flat `&[f64]` of triplets
 // `(kind, a, b)`. Kind codes match the TS-side encoding:
 //   0 = V  — vertical mirror at x = a
 //   1 = H  — horizontal mirror at y = a
 //   2 = C  — 180° rotation about (a, b)
 //   3 = D1 — diagonal x − y = a
 //   4 = D2 — anti-diagonal x + y = a
-// Positions can be half-integer (snap-to-grid) — V/H/C use `2*a` which stays
-// integer; D1/D2's `a` is integer (the diagonals-disabled gate ensures it).
+// Positions can be half-integer — V/H/C use `2*a`, which stays integer.
+// D1/D2 require integer `a` so reflections remain on the cell grid.
 
 const AXIS_STRIDE: usize = 3;
 const KIND_V:  i32 = 0;
@@ -543,7 +543,7 @@ mod tests {
         g
     }
 
-    // ── symmetric_orbit (Phase 4 axes) ──────────────────────────────────────
+    // ── symmetric_orbit ─────────────────────────────────────────────────────
 
     #[test]
     fn orbit_v_at_canonical_position_mirrors_left_right() {
@@ -591,8 +591,8 @@ mod tests {
 
     #[test]
     fn orbit_v_plus_h_composes_to_c_equivalent_orbit() {
-        // V + H mask in the old encoding produced a 4-cell orbit via closure.
-        // With per-axis positions and no closure, BFS still finds all 4.
+        // The BFS must close over composed transforms, not just apply each
+        // axis once to the starting cell.
         let axes = [0.0_f64, 4.0, 0.0,   1.0_f64, 4.0, 0.0];
         let orbit: std::collections::HashSet<_> =
             symmetric_orbit(1, 2, 9, 9, &axes).into_iter().collect();

@@ -1,10 +1,7 @@
-// Symmetry: every axis is a first-class entry in `SessionState.axes`. The
-// 5 canonical presets (V/H/C/D1/D2) are seeded by `defaultAxes`. The Rust
+// Symmetry axes are first-class entries in `SessionState.axes`. The Rust
 // orbit walker takes a flat `Float64Array` (3 doubles per active axis:
-// `kind`, `a`, `b`); `axesToFlat` compiles the active set down. Closure
-// semantics are now implicit — composition of two reflections emerges
-// naturally from the BFS, so we don't pre-compute "implied" axes; the
-// closure helper remains as a UI-only affordance.
+// `kind`, `a`, `b`); `axesToFlat` compiles the active set down. Composition
+// of multiple reflections emerges from the BFS without implied axis records.
 
 import { Axis, SymKey } from "./types";
 
@@ -14,15 +11,6 @@ export type { Axis, SymKey };
 const KIND_CODE: Record<SymKey, number> = {
     V: 0, H: 1, C: 2, D1: 3, D2: 4,
 };
-
-// Whether the canonical D1 c = (W-H)/2 is integer. Phase 4 Slice C made
-// diagonals user-placed, so any integer `c` is a valid axis regardless of
-// (W-H) parity — this only matters for the "+D1 at canonical centre" button
-// (it rounds to the nearest integer when W-H is odd). Kept for backwards
-// compatibility with callers that want the parity check.
-export function diagonalsAvailable(canvasWidth: number, canvasHeight: number): boolean {
-    return (canvasWidth - canvasHeight) % 2 === 0;
-}
 
 // Compile active axes to the flat `Float64Array` the Rust BFS takes. Each
 // active axis contributes 3 doubles: `(kind, a, b)`. `a` is the primary
@@ -46,54 +34,7 @@ export function axesToFlat(axes: ReadonlyArray<Axis>): Float64Array {
     return out;
 }
 
-// Sugar: which kinds are currently active? Used by the UI to drive the
-// 5 toggle buttons (each tied to a preset axis kind).
-export function activeKinds(axes: ReadonlyArray<Axis>): Set<SymKey> {
-    const out = new Set<SymKey>();
-    for (const a of axes) if (a.active) out.add(a.kind);
-    return out;
-}
-
-// UI-only helper: which kinds appear in the orbit *transitively* given the
-// directly-active set? V + H implies C; D1 + D2 implies C; etc. The BFS
-// doesn't need this (composition emerges from the active-axis transforms),
-// but the symmetry-panel buttons still want to dim-render "you're getting
-// this for free" so the user can see derived axes. Slice A keeps this on
-// canonical-position presets only; Slice B will need to reconsider for
-// user-placed axes (where composition can land at arbitrary positions and
-// the dim-button concept may not survive).
-export function closureKinds(axes: ReadonlyArray<Axis>, canvasWidth: number, canvasHeight: number): Set<SymKey> {
-    const active = activeKinds(axes);
-    let V = active.has("V"), H = active.has("H"), C = active.has("C"),
-        D1 = active.has("D1"), D2 = active.has("D2");
-    const diagonals = diagonalsAvailable(canvasWidth, canvasHeight);
-    let changed = true;
-    while (changed) {
-        const before = [V, H, C, D1, D2].join();
-        if (V && H)    C  = true;
-        if (V && C)    H  = true;
-        if (H && C)    V  = true;
-        if (D1 && D2)  C  = true;
-        if (D1 && C)   D2 = true;
-        if (D2 && C)   D1 = true;
-        if (diagonals) {
-            if (V && D1) D2 = true;
-            if (V && D2) D1 = true;
-            if (H && D1) D2 = true;
-            if (H && D2) D1 = true;
-        }
-        changed = [V, H, C, D1, D2].join() !== before;
-    }
-    return new Set(
-        (Object.entries({ V, H, C, D1, D2 }) as [SymKey, boolean][])
-            .filter(([, v]) => v).map(([k]) => k)
-    );
-}
-
 // ── Canonical-position factory ───────────────────────────────────────────────
-// Slice C: default session has zero axes. The user adds what they want
-// via the toolbar Symmetry popover; each placement seeds a fresh axis at
-// the canonical (canvas-centred) position and the user drags it from there.
 
 function newAxisId(): string {
     return `axis-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -113,8 +54,8 @@ function canonicalAxis(kind: SymKey, W: number, H: number): Axis {
     }
 }
 
-// Default for a fresh session — empty. (Slice A seeded the 5 presets; Slice C
-// dropped that in favour of the "add to list" model.)
+// Fresh sessions have no symmetry; migration callers also use this when an
+// older saved value has no axis list.
 export function defaultAxes(_canvasWidth: number, _canvasHeight: number): Axis[] {
     return [];
 }
@@ -169,22 +110,6 @@ export function axisOffCanvas(a: Axis, W: number, H: number): boolean {
     }
 }
 
-// Pick the closest active axis whose guide is within `tolerance` cell-units
-// of the click. Returns null when no axis is in range. Used by the Move-tool
-// gesture to start an axis-drag instead of float-pickup.
-export function pickAxisAt(
-    axes: ReadonlyArray<Axis>, px: number, py: number, tolerance: number,
-): Axis | null {
-    let best: Axis | null = null;
-    let bestDist = tolerance;
-    for (const a of axes) {
-        if (!a.active) continue;
-        const d = distanceToAxis(a, px, py);
-        if (d < bestDist) { bestDist = d; best = a; }
-    }
-    return best;
-}
-
 // Pick at most ONE active axis per kind whose guide is within `tolerance`
 // of the click. Multi-axis drag: clicking at an intersection grabs one of
 // each kind. Two parallel V axes at the same x → only the closer one is
@@ -234,4 +159,3 @@ export function setAxisPosition(
         }
     });
 }
-

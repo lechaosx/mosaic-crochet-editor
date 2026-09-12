@@ -159,9 +159,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const KIND_GLYPH: Record<SymKey, string> = { V: "↔", H: "↕", C: "⊕", D1: "╲", D2: "╱" };
 
     function setAxes(axes: ReadonlyArray<Axis>) {
-        // Rebuild the list. The list size is bounded (5 presets + a handful
-        // user-added) so re-rendering on every commit is cheap and avoids
-        // diffing complexity.
+        // Axis lists stay small in normal editor use, so rebuilding avoids
+        // stateful DOM diffing without affecting interaction latency.
         symList.replaceChildren(...axes.map(a => {
             const row = document.createElement("div");
             row.className = "sym-list-row" + (a.active ? "" : " is-inactive");

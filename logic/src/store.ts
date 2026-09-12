@@ -20,7 +20,7 @@ export interface SessionState {
     colorB:        string;               // hex
     activeTool:    Tool;
     primaryColor:  1 | 2;
-    axes:          Axis[];               // every symmetry axis (5 presets + future user-placed)
+    axes:          Axis[];               // user-added symmetry axes
     hlOpacity:        number;            // 0..100, matches the input range
     invalidIntensity: number;            // 0..100, drives ! marker saturation
     // The active lifted-selection layer (on or near canvas). When present,

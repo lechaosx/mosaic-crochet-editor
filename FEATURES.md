@@ -8,9 +8,9 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - **Float** — a "lifted" layer sitting above the canvas. Selecting always lifts: the canvas at the selected cells is reset to natural baseline and the original pixel values move into the float. Stored as a compact bounding box (`x`, `y`, `w`, `h`) with absolute canvas-cell coordinates; `pixels[i] !== 0` determines membership (no separate mask array).
 - **Lift** — the verb. The cells leave the canvas and enter the float; canvas cuts to baseline.
-- **Anchor / commit** — stamping the float back into the canvas at its current position and clearing the float. Triggered by deselect, save / export bake, canvas resize, or modify-select.
+- **Anchor / commit** — stamping the float back into the canvas at its current position and clearing the float. Triggered by deselect and operations that replace the live selection; canvas resize bakes the visible result before dropping the float.
 - **Marquee** — the marching-ants outline traced around the float's non-zero pixel boundary. Same thing as the visible "selection box."
-- **Stamp** — copying float pixels into canvas. Used both for "anchor" and for Move-tool drag's release write.
+- **Stamp** — copying float pixels into canvas. Anchoring clears the float afterward; duplicate and mask-only operations can stamp while keeping it active.
 
 ---
 
@@ -58,14 +58,13 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Symmetry
 
-- Five axes: vertical, horizontal, central, diagonal, anti-diagonal. — **your decision**
-- Closure inference (UI hint only): enabling two axes that imply a third dim-renders the implied button so the user sees "you're getting this for free". The BFS itself doesn't need closure — composition emerges from the active-axis transforms — but the dim-button affordance survives because it's the clearer mental model. — **your decision** (keep the implied affordance after the Phase 4 Slice A refactor)
-- Diagonals disabled when `(W − H)` is odd. — **your decision** (condition); **Agent's choice** (the integer-arithmetic algorithm that needs it)
-- Symmetry applies to pencil, fill, eraser, and invert. — **Agent's choice**
+- Fresh sessions have no axes. The Symmetry popover and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
+- Each axis is independently enabled or deleted from the Symmetry popover. Active transforms compose in the orbit walker without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
+- Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
+- Symmetry applies to pencil, fill, eraser, overlay, and invert. — **Agent's choice**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
-- **Drag a guide to move the mirror.** With the Move tool, clicking near an active axis guide grabs it; drag repositions the axis snapped to half-cells (V/H/C) or whole cells (D1/D2). Released positions persist. Painting and selection still work normally — the hit affordance is narrow (~0.4 cell-units), so a stray click in an unrelated cell doesn't catch the guide. — **Agent's choice** (Phase 4 Slice B)
-- **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Two parallel V axes sitting on top of each other → only the closer one is picked, so dragging separates them. — **your decision** (Phase 4 Slice C follow-up)
-- **Diagonal axes work on any canvas size.** The constraint that D1/D2 needed (W − H) even was about the canonical-centre placement only. Slice C lets you place D1/D2 at any integer `c`, so 9×8 canvases (or any rectangle) support diagonals just fine. — **your decision** (Phase 4 Slice C follow-up)
+- **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
+- **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
 
 ## Highlights
 
@@ -100,40 +99,40 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## History
 
 - Up to 64 history states per session. — **Agent's choice**
-- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v3`). On refresh the saved stack is restored as-is. — **your decision**
+- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v4`). On refresh the saved stack is restored as-is. — **your decision**
 - Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
 - Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
-- Symmetry axis state is part of undo: toggling V/H/C/D1/D2 pushes a snapshot, and so does releasing an axis-drag. Undo restores both the active set and each axis's position. — **your decision** (Phase 4 Slice B follow-up: once axes carry non-trivial positions, undo has to track them)
+- Symmetry axis state is part of undo: adding, enabling, disabling, deleting, or moving axes pushes a snapshot. Undo restores the list and every axis position. — **your decision**
 - Redundant snapshots (same packed pixels + same state + same colours as the head) are skipped. — **Agent's choice**
 
 ## Persistence
 
-- Tool, colour, symmetry, rotation, and pixel state auto-save to `localStorage` and restore on refresh. — **Agent's choice**
+- Editor session state, including axes and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice**
 
 ## Save / Load / Export
 
 - File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
-- Save / Load / New each prompt to discard or cancel if the pattern is dirty. — **your decision**
+- `.mcw` stores pattern geometry, pixels, and colours; symmetry axes and floats remain session-only. Loading keeps the current axes and drops the active float. — **your decision** (float boundary); **Agent's choice** (axis boundary)
 - Export emits pattern text line-by-line with a live progress counter; closing the modal cancels generation. — **your decision** (line-by-line, cancellation); **Agent's choice** (progress counter)
 - Alternate-direction toggle below the modal header re-generates immediately on change. — **your decision**
 - Warning banner shown when the pattern has invalid placements; export is not blocked. — **Agent's choice**
 
 ### Export limitations
 
-- Round joins are not emitted; add manually.
-- Foundation method is not indicated.
-- Zero inner hole emits `(ch × 4)` for the innermost round — replace with 4 sc into a magic ring.
+- Round joins are not emitted. — **Agent's choice**
+- Foundation method is not indicated. — **Agent's choice**
+- A zero inner hole emits `(ch × 4)` for the innermost round. — **Agent's choice**
 
 ## Input model
 
 - Single pointer-event path for mouse, pen, and touch. — **Agent's choice**
 - Swatches: tap to select; double-click (desktop) or long-press (any pointer) to edit the colour. Right-click on desktop also paints with the secondary colour without re-selecting. — **your decision** (click + double-click + long-press); **Agent's choice** (unified pointer long-press)
-- Every button has a hover label. Keyboard shortcuts: P/F/E/I (tools), V/H/C/D/A (symmetry), R / Shift+R (rotation), 1/2 (swatches), Ctrl+Z / Ctrl+Y (undo/redo). — **your decision** (hover labels + shortcuts); **Agent's choice** (specific bindings)
+- Every button has a hover label. Keyboard shortcuts cover all tools, add each symmetry-axis kind, rotate, select colours, edit the selection, and undo/redo. — **your decision** (hover labels + shortcuts); **Agent's choice** (specific bindings)
 
 ## Toolbar
 
-- Five groups in fixed visual order on a wide screen: file/history, tools, symmetry, colours, highlights/rotation. — **your decision**
-- On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; tools + symmetry + colours on row 2), each row distributed with `space-between`. — **your decision**
+- Five groups in fixed visual order on a wide screen: file/history, highlights/rotation, paint tools, transform/symmetry, colours. — **your decision**
+- On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; paint tools + transform/symmetry + colours on row 2), each row distributed with `space-between`. — **your decision**
 - When even the two-row layout would overflow, button height and font size shrink to fit. The two breakpoints come from runtime measurements of each group's intrinsic width — they kick in exactly when content stops fitting, never sooner. — **your decision** (auto-shrink); **Agent's choice** (measure-driven)
 
 ## Pattern popover
@@ -145,10 +144,8 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
   - **Rounds count change** — composes with the inner-dim rule above by giving every cell an inward shift of Δrounds (so old ring 1 stays ring 1; the new outermost ring wraps around with natural colour). — **your decision**
   - **Mode switch** (row↔round) is inherently a wipe. — **your decision**
 - Live preview always derives from the pre-edit snapshot, so destructive scrubbing is reversible without committing: reduce rounds to 1 and back to 20 brings the original pattern back. — **your decision**
-- **Keep painted** toggle: on by default, the user can flip it off to force a wipe even when preservation is possible. Disabled automatically only for mode switches (row ↔ round, which can't preserve content). Inner-W/H and rounds changes preserve painted pixels via the per-mode anchoring rules above. — **your decision**
 - Closing the popover (Esc, click outside, or clicking the canvas) commits the current preview to history. Undo (Ctrl+Z) is the universal revert — no Cancel/Apply buttons, no lossy confirmation modal. — **your decision**
-- Live preview always re-derives from the head, so destructive scrubbing (rounds 20 → 1 → 20, full → quarter → full) brings the original pattern back without losing data, even while the popover is open. — **your decision**
-- **Wipe** toggle: user preference (default off = preserve painted). Disabled with a visibly greyed appearance only for mode switches (row ↔ round); the disabled state forces wipe but doesn't alter the checked value, so when the user backs out their preference takes over again. — **your decision**
+- **Wipe** defaults off so compatible edits preserve painted pixels. Mode switches force it on and disabled; switching back before closing restores the user's preference. — **your decision**
 - Numeric inputs typed below the field's minimum are normalised on blur. — **your decision**
 
 ## Load
