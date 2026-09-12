@@ -164,6 +164,40 @@ input  { font: inherit; color: inherit; }
   color: var(--fg-0);
 }
 
+#btn-sym-toggle { position: relative; }
+#btn-sym-toggle[data-transform-state="live"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--fg-0);
+}
+#btn-sym-toggle[data-transform-state="live"]::after,
+#btn-sym-toggle[data-transform-state="paused"]::after {
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.15rem;
+  display: grid;
+  place-items: center;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  content: "";
+}
+#btn-sym-toggle[data-transform-state="paused"] {
+  background: var(--bg-4);
+  border-color: var(--fg-2);
+  color: var(--fg-0);
+}
+#btn-sym-toggle[data-transform-state="paused"]::after {
+  width: 0.75rem;
+  height: 0.75rem;
+  background: var(--bg-0);
+  color: var(--fg-1);
+  content: "Ⅱ";
+  font-size: 0.45rem;
+  line-height: 1;
+}
+
 .btn--danger {
   background: rgba(160, 32, 32, 0.55);
   border-color: rgba(200, 60, 60, 0.6);

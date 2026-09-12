@@ -73,8 +73,7 @@ export interface UIHandle {
     readRepeatGrid:     () => RepeatGrid;
     setRepeatGrid:      (repeat: RepeatGrid) => void;
     setRepeatError:     (message: string | null) => void;
-    setLiveTransforms:  (enabled: boolean) => void;
-    setTransformAvailability: (hasSelection: boolean, hasTransforms: boolean) => void;
+    setTransformState:  (hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
@@ -172,20 +171,26 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const replicateSelection = el<HTMLButtonElement>("replicate-selection");
     const replicateSelectionHint = el("replicate-selection-hint");
     replicateSelection.addEventListener("click", cb.onReplicateSelection);
+    const liveTransforms = el<HTMLInputElement>("live-transforms");
+    liveTransforms.addEventListener("input", () => cb.onLiveTransformsChange(liveTransforms.checked));
 
-    function setTransformAvailability(hasSelection: boolean, hasTransforms: boolean) {
+    function setTransformState(hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) {
         replicateSelection.disabled = !hasSelection || !hasTransforms;
         replicateSelectionHint.hidden = hasSelection && hasTransforms;
         replicateSelectionHint.textContent = !hasTransforms
             ? "Configure a symmetry axis or repeat grid."
             : "Select cells to stamp transformed copies.";
-    }
+        liveTransforms.checked = liveEnabled;
 
-    const liveTransforms = el<HTMLInputElement>("live-transforms");
-    liveTransforms.addEventListener("input", () => cb.onLiveTransformsChange(liveTransforms.checked));
-
-    function setLiveTransforms(enabled: boolean) {
-        liveTransforms.checked = enabled;
+        const state = !hasTransforms ? "none" : liveEnabled ? "live" : "paused";
+        const label = state === "none"
+            ? "Symmetry and repeat: no transforms configured"
+            : state === "live"
+                ? "Symmetry and repeat: applying while drawing"
+                : "Symmetry and repeat: drawing application paused";
+        symToggle.dataset.transformState = state;
+        symToggle.title = label;
+        symToggle.setAttribute("aria-label", label);
     }
 
     const repeatEnabled = el<HTMLInputElement>("repeat-enabled");
@@ -477,7 +482,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     return {
         setTool, setMaskMove, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
-        setLiveTransforms, setTransformAvailability,
+        setTransformState,
         setHistory, setEditError,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,

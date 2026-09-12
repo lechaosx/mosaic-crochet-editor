@@ -57,6 +57,19 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
+test("transform toolbar shows whether configured transforms apply while drawing", async ({ page }) => {
+    await bootApp(page);
+    const transforms = page.locator("#btn-sym-toggle");
+    await expect(transforms).toHaveAttribute("aria-label", "Symmetry and repeat: no transforms configured");
+
+    await transforms.click();
+    await page.locator("#add-sym-v").click();
+    await expect(transforms).toHaveAttribute("aria-label", "Symmetry and repeat: applying while drawing");
+
+    await page.locator("label:has(#live-transforms)").click();
+    await expect(transforms).toHaveAttribute("aria-label", "Symmetry and repeat: drawing application paused");
+});
+
 test("Stamp transformed copies applies symmetry and keeps the source selected", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");

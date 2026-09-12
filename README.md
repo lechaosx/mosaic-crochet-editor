@@ -93,6 +93,8 @@ The repeat grid accepts at most 4,096 positions. Operations also abort instead o
 
 **Apply while drawing** affects future pencil, fill, eraser, overlay, and invert operations only. **Stamp transformed copies** applies the same configured transformation to content that already exists in the floating selection, even when live drawing is off. Choose it or press **T**; the source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict and leaves the canvas unchanged.
 
+The transform toolbar button has no badge when no recipe is configured, an accent dot while configured transforms apply during drawing, and a pause badge when the recipe remains configured but live application is off.
+
 ### Colours
 
 Two swatches: primary (left) and secondary (right). Click to select; double-click or long-press to edit the colour. The active swatch has a glowing outline.
