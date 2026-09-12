@@ -95,7 +95,7 @@ test("Stamp transformed copies applies symmetry and keeps the source selected", 
     expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
 });
 
-test("T replicates the selection and reports conflicting source colours", async ({ page }) => {
+test("T reports stamp conflicts inline and recipe changes clear the error", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
@@ -103,15 +103,21 @@ test("T replicates the selection and reports conflicting source colours", async 
     await dragCells(page, 0, 1, 8, 1);
     await page.keyboard.press("v");
 
-    const dialogMessage = new Promise<string>(resolve => {
-        page.once("dialog", async dialog => {
-            resolve(dialog.message());
-            await dialog.dismiss();
-        });
+    let dialogSeen = false;
+    page.on("dialog", async dialog => {
+        dialogSeen = true;
+        await dialog.dismiss();
     });
     await page.keyboard.press("t");
 
-    await expect(dialogMessage).resolves.toMatch(/different colours.*transformed destination/i);
+    await expect(page.locator("#sym-popover")).toBeVisible();
+    const error = page.locator("#transform-error");
+    await expect(error).toContainText(/different colours.*transformed destination/i);
+    await expect(error).toBeVisible();
+    expect(dialogSeen).toBe(false);
+
+    await page.locator(".sym-list-row button[title='Disable axis']").click();
+    await expect(error).toBeHidden();
 });
 
 test("repeat grid copies live paint in both directions", async ({ page }) => {

@@ -74,6 +74,7 @@ export interface UIHandle {
     setRepeatGrid:      (repeat: RepeatGrid) => void;
     setRepeatError:     (message: string | null) => void;
     setTransformState:  (hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) => void;
+    setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
@@ -170,6 +171,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     );
     const replicateSelection = el<HTMLButtonElement>("replicate-selection");
     const replicateSelectionHint = el("replicate-selection-hint");
+    const transformError = el("transform-error");
     replicateSelection.addEventListener("click", cb.onReplicateSelection);
     const liveTransforms = el<HTMLInputElement>("live-transforms");
     liveTransforms.addEventListener("input", () => cb.onLiveTransformsChange(liveTransforms.checked));
@@ -191,6 +193,15 @@ export function mountUI(cb: UICallbacks): UIHandle {
         symToggle.dataset.transformState = state;
         symToggle.title = label;
         symToggle.setAttribute("aria-label", label);
+    }
+
+    function setTransformError(message: string | null) {
+        transformError.textContent = message ?? "";
+        transformError.hidden = message === null;
+        if (message !== null && !symPopover.matches(":popover-open")) {
+            positionPopover(symPopover, symToggle, "right");
+            symPopover.showPopover();
+        }
     }
 
     const repeatEnabled = el<HTMLInputElement>("repeat-enabled");
@@ -482,7 +493,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     return {
         setTool, setMaskMove, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
-        setTransformState,
+        setTransformState, setTransformError,
         setHistory, setEditError,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,

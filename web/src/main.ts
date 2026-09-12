@@ -150,9 +150,12 @@ store.setPersistFn(s => saveToLocalStorage(s));
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => updateStatus(s.plan, null, null));
-store.addObserver(s => ui.setTransformState(
-    Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveTransforms,
-));
+store.addObserver(s => {
+    ui.setTransformState(
+        Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveTransforms,
+    );
+    ui.setTransformError(null);
+});
 
 // ── Paint ────────────────────────────────────────────────────────────────────
 // Paint operates on the *visible* canvas (pixels + float stamped). When a
@@ -285,9 +288,11 @@ function onTransformPopoverToggle(open: boolean) {
 function onReplicateSelection() {
     const result = replicateSelection(store);
     if (result === "conflict") {
-        window.alert("Cannot replicate selection: different colours claim the same transformed destination.");
+        ui.setTransformError("Stamp failed: different colours claim the same transformed destination.");
     } else if (result === "orbit-limit") {
-        window.alert("Cannot replicate selection: the transformed target set exceeds the safety limit.");
+        ui.setTransformError("Stamp failed: the transformed target set exceeds the safety limit.");
+    } else {
+        ui.setTransformError(null);
     }
 }
 
