@@ -51,14 +51,15 @@ const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
+let maskMoveActive = false;
 
-// Move-tool drag mode, captured at paintdown from the modifiers:
+// Move-tool drag mode, chosen at paintdown from the UI mode and modifiers:
 //   "move"      → no modifier; drag repositions the float, release records.
 //   "duplicate" → Ctrl; pre-stamps the float into canvas at paintdown so the
 //                 duplicate is visible during drag, release records the new pos.
-//   "mask-only" → Alt (dominates Ctrl); stamps at paintdown, drag carries the
-//                 marquee shape (pixels mirror canvas at the new position),
-//                 release re-lifts the canvas content at the final position.
+//   "mask-only" → Mask toggle or Alt (dominates Ctrl); stamps at paintdown,
+//                 drag carries the marquee shape (pixels mirror canvas at the
+//                 new position), release re-lifts the canvas content there.
 type MoveMode = "move" | "duplicate" | "mask-only";
 
 // One discriminated-union active per gesture, set at `onPaintStart`,
@@ -248,6 +249,15 @@ function toggleAxisById(id: string) {
 function setTool(t: Tool) {
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
+    if (t !== "move" && maskMoveActive) {
+        maskMoveActive = false;
+        ui.setMaskMove(false);
+    }
+}
+function toggleMaskMove() {
+    if (!maskMoveActive) setTool("move");
+    maskMoveActive = !maskMoveActive;
+    ui.setMaskMove(maskMoveActive);
 }
 function setPrimary(slot: 1 | 2) {
     store.commit(s => { s.primaryColor = slot; }, { recompute: false, render: false });
@@ -419,6 +429,7 @@ async function onExport() {
 // ── Mount UI + gestures ─────────────────────────────────────────────────────
 const ui: UIHandle = mountUI({
     onTool: setTool,
+    onMaskMove: toggleMaskMove,
     onPrimaryColor: setPrimary,
     onColorChange:  onColorInput,
     onColorCommit,
@@ -450,7 +461,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     onPaintStart: (color, mods) => {
         const tool = store.state.activeTool;
         if (tool === "move") {
-            const mode: MoveMode = mods.alt ? "mask-only" : mods.ctrl ? "duplicate" : "move";
+            const mode: MoveMode = maskMoveActive || mods.alt ? "mask-only" : mods.ctrl ? "duplicate" : "move";
             let prePixels: Uint8Array | null = null;
             const preFloat = store.state.float;
             if (mode === "mask-only" && preFloat) {

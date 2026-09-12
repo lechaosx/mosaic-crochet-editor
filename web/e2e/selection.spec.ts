@@ -253,6 +253,29 @@ test("Alt+drag moves the marquee without the float content (mask-only)", async (
     expect(await pixelRGB(page, dst.cx, dst.cy)).not.toEqual([0, 0, 0]);
 });
 
+test("Mask move toggle enables modifier-free mask-only drag and resets on tool change", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 1, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);
+
+    const maskMove = page.getByRole("button", { name: "Mask move" });
+    await maskMove.click();
+    await expect(maskMove).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveClass(/btn--active/);
+
+    await dragCells(page, 1, 1, 3, 1);
+    await page.keyboard.press("Escape");
+    const src = await cellCoord(page, 1, 1);
+    const dst = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, src.cx, src.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, dst.cx, dst.cy)).not.toEqual([0, 0, 0]);
+
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await expect(maskMove).toHaveAttribute("aria-pressed", "false");
+});
+
 test("Shift+drag on Move is regular move (Shift has no special Move meaning)", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");

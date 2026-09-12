@@ -37,6 +37,7 @@ const SYM_ADD_BUTTONS: { id: string; key: SymKey; glyph: string }[] = [
 // ─── Public surface ───────────────────────────────────────────────────────────
 export interface UICallbacks {
     onTool:            (t: Tool) => void;
+    onMaskMove:        () => void;
     onPrimaryColor:    (slot: 1 | 2) => void;
     onColorChange:     () => void;
     onColorCommit:     () => void;
@@ -60,6 +61,7 @@ export interface UICallbacks {
 
 export interface UIHandle {
     setTool:            (t: Tool) => void;
+    setMaskMove:        (active: boolean) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
     setAxes:            (axes: ReadonlyArray<Axis>) => void;
@@ -98,10 +100,17 @@ export function mountUI(cb: UICallbacks): UIHandle {
     (Object.keys(toolButtons) as Tool[]).forEach(t =>
         toolButtons[t].addEventListener("click", () => cb.onTool(t))
     );
+    const maskMove = el<HTMLButtonElement>("move-mask");
+    maskMove.addEventListener("click", cb.onMaskMove);
+
     function setTool(t: Tool) {
         (Object.keys(toolButtons) as Tool[]).forEach(k =>
             toolButtons[k].classList.toggle("btn--active", k === t)
         );
+    }
+    function setMaskMove(active: boolean) {
+        maskMove.classList.toggle("btn--active", active);
+        maskMove.setAttribute("aria-pressed", String(active));
     }
 
     /* ── Colour swatches ──────────────────────────────────────────────── */
@@ -391,7 +400,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setPrimary, setColors, setAxes,
+        setTool, setMaskMove, setPrimary, setColors, setAxes,
         setHistory,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,

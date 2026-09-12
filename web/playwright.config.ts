@@ -11,7 +11,18 @@ export default defineConfig({
         baseURL: "http://localhost:4173",
         trace:   "on-first-retry",
     },
-    projects: [{ name: "chromium", use: devices["Desktop Chrome"] }],
+    projects: [
+        {
+            name:       "chromium",
+            testIgnore: "**/touch.spec.ts",
+            use:        devices["Desktop Chrome"],
+        },
+        {
+            name:      "mobile-chromium",
+            testMatch: "**/touch.spec.ts",
+            use:       devices["Pixel 7"],
+        },
+    ],
     webServer: {
         command: "bun run preview -- --port 4173",
         url:     "http://localhost:4173",

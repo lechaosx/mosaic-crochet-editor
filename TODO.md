@@ -39,11 +39,6 @@ Current implementation status and remaining work. Shipped product decisions live
 
 ## Cross-cutting backlog
 
-### Touch interaction
-
-- [ ] Choose a discoverable modifier-free equivalent of mask-only move for touch.
-- [ ] Add a mobile-browser Playwright project for the supported touch flows. Current E2E coverage is desktop Chromium only.
-
 ### Symmetry bounds
 
 - [ ] Define supported maximum canvas dimensions.

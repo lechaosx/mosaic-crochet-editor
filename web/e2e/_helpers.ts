@@ -63,6 +63,46 @@ export async function dragCells(page: Page, sx: number, sy: number, ex: number, 
     for (const m of [...mods].reverse()) await page.keyboard.up(m);
 }
 
+export async function touchDragCells(page: Page, sx: number, sy: number, ex: number, ey: number) {
+    const a = await cellCoord(page, sx, sy);
+    const b = await cellCoord(page, ex, ey);
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: a.cx, y: a.cy, id: 0 }],
+    });
+    for (let i = 1; i <= 10; i++) {
+        await session.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{
+                x: a.cx + (b.cx - a.cx) * i / 10,
+                y: a.cy + (b.cy - a.cy) * i / 10,
+                id: 0,
+            }],
+        });
+    }
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await session.detach();
+}
+
+export async function touchPanZoom(
+    page: Page,
+    start: [{ cx: number; cy: number }, { cx: number; cy: number }],
+    end: [{ cx: number; cy: number }, { cx: number; cy: number }],
+) {
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: start.map((p, id) => ({ x: p.cx, y: p.cy, id })),
+    });
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: end.map((p, id) => ({ x: p.cx, y: p.cy, id })),
+    });
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await session.detach();
+}
+
 export async function bootApp(page: Page) {
     await page.goto("/");
     await page.waitForFunction(() => !!window.__test_matrix__);
