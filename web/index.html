@@ -94,6 +94,9 @@
       </div>
     </div>
     <div id="sym-list" class="sym-list" aria-label="Axes"></div>
+    <div class="popover-row">
+      <button class="btn" id="replicate-selection" title="Replicate selection through active axes (T)" disabled>Replicate selection</button>
+    </div>
   </div>
 
   <!-- ── Pattern (Edit) popover ──────────────────────────────────────── -->
@@ -106,11 +109,11 @@
     <div id="edit-row-controls" class="field-group">
       <div class="field-row">
         <label for="edit-width">Width</label>
-        <input type="number" id="edit-width" value="16" min="2">
+        <input type="number" id="edit-width" value="16" min="2" max="1048576">
       </div>
       <div class="field-row">
         <label for="edit-height">Height</label>
-        <input type="number" id="edit-height" value="16" min="2">
+        <input type="number" id="edit-height" value="16" min="2" max="1048576">
       </div>
     </div>
 
@@ -122,17 +125,19 @@
       </div>
       <div class="field-row">
         <label for="edit-inner-width">Inner W</label>
-        <input type="number" id="edit-inner-width" value="3" min="0">
+        <input type="number" id="edit-inner-width" value="3" min="0" max="1048576">
       </div>
       <div class="field-row">
         <label for="edit-inner-height">Inner H</label>
-        <input type="number" id="edit-inner-height" value="3" min="0">
+        <input type="number" id="edit-inner-height" value="3" min="0" max="1048576">
       </div>
       <div class="field-row">
         <label for="edit-rounds">Rounds</label>
-        <input type="number" id="edit-rounds" value="5" min="1">
+        <input type="number" id="edit-rounds" value="5" min="1" max="1048576">
       </div>
     </div>
+
+    <div id="edit-error" class="warning" role="alert" hidden></div>
 
     <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on for row/round mode switches.">
       <input type="checkbox" id="edit-wipe">

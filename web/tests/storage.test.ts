@@ -69,6 +69,18 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(localStorage.getItem("mosaic-pattern-v4")).toBeNull();
     });
 
+    test("oversized saved dimensions are rejected before pixel allocation", () => {
+        const valid = rowSession(3, 3);
+        saveToLocalStorage(valid);
+        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v4")!);
+        raw.state.canvasWidth = 1_048_577;
+        raw.state.canvasHeight = 1;
+        localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
+
+        expect(loadFromLocalStorage()).toBeNull();
+        expect(localStorage.getItem("mosaic-pattern-v4")).toBeNull();
+    });
+
     test("non-square canvas with float round-trips correctly", () => {
         const f = makeFloat([{ x: 3, y: 1, v: 2 }]);
         const s = rowSession(4, 2, { pixels: filledPixels(4, 2, 1), float: f });

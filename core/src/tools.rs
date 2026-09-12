@@ -33,6 +33,14 @@ const KIND_C: i32 = 2;
 const KIND_D1: i32 = 3;
 const KIND_D2: i32 = 4;
 
+pub const MAX_SYMMETRY_ORBIT_CELLS: usize = 1_048_576;
+
+// Keep cap tests cheap while exercising the same production branch.
+#[cfg(test)]
+const EFFECTIVE_ORBIT_LIMIT: usize = 4;
+#[cfg(not(test))]
+const EFFECTIVE_ORBIT_LIMIT: usize = MAX_SYMMETRY_ORBIT_CELLS;
+
 pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) -> Vec<(i32, i32)> {
     type Transform = Box<dyn Fn(i32, i32) -> (i32, i32)>;
     let mut transforms: Vec<Transform> = Vec::new();
@@ -78,6 +86,9 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) ->
             if nx < 0 || nx >= width || ny < 0 || ny >= height {
                 continue;
             }
+            if !visited.contains(&(nx, ny)) && visited.len() >= EFFECTIVE_ORBIT_LIMIT {
+                return Vec::new();
+            }
             if visited.insert((nx, ny)) {
                 queue.push_back((nx, ny));
             }
@@ -85,6 +96,85 @@ pub fn symmetric_orbit(x: i32, y: i32, width: i32, height: i32, axes: &[f64]) ->
     }
 
     visited.into_iter().collect()
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SymmetryApplicationStatus {
+    Unchanged,
+    Applied,
+    Conflict,
+    OrbitLimit,
+}
+
+pub struct SymmetryApplication {
+    pub status: SymmetryApplicationStatus,
+    pub pixels: Vec<u8>,
+}
+
+pub fn apply_symmetry_to_selection(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    sources: &[u8],
+    axes: &[f64],
+) -> SymmetryApplication {
+    let mut result = pixels.to_vec();
+    let mut processed = vec![false; pixels.len()];
+    let mut changed = false;
+
+    for source_idx in 0..sources.len() {
+        if sources[source_idx] == COLOR_TRANSPARENT
+            || pixels[source_idx] == COLOR_TRANSPARENT
+            || processed[source_idx]
+        {
+            continue;
+        }
+
+        let x = source_idx as i32 % width;
+        let y = source_idx as i32 / width;
+        let orbit = symmetric_orbit(x, y, width, height, axes);
+        if orbit.is_empty() {
+            return SymmetryApplication {
+                status: SymmetryApplicationStatus::OrbitLimit,
+                pixels: pixels.to_vec(),
+            };
+        }
+
+        let mut color = COLOR_TRANSPARENT;
+        for &(ox, oy) in &orbit {
+            let idx = (oy * width + ox) as usize;
+            processed[idx] = true;
+            if pixels[idx] == COLOR_TRANSPARENT || sources[idx] == COLOR_TRANSPARENT {
+                continue;
+            }
+            if color == COLOR_TRANSPARENT {
+                color = sources[idx];
+            } else if color != sources[idx] {
+                return SymmetryApplication {
+                    status: SymmetryApplicationStatus::Conflict,
+                    pixels: pixels.to_vec(),
+                };
+            }
+        }
+
+        for (ox, oy) in orbit {
+            let idx = (oy * width + ox) as usize;
+            if pixels[idx] == COLOR_TRANSPARENT || sources[idx] != COLOR_TRANSPARENT {
+                continue;
+            }
+            changed |= result[idx] != color;
+            result[idx] = color;
+        }
+    }
+
+    SymmetryApplication {
+        status: if changed {
+            SymmetryApplicationStatus::Applied
+        } else {
+            SymmetryApplicationStatus::Unchanged
+        },
+        pixels: result,
+    }
 }
 
 pub fn paint_pixel(
@@ -98,7 +188,11 @@ pub fn paint_pixel(
     selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
+    let orbit = symmetric_orbit(x, y, width, height, axes);
+    if orbit.is_empty() {
+        return result;
+    }
+    for (sx, sy) in orbit {
         let idx = (sy * width + sx) as usize;
         if result[idx] == 0 {
             continue;
@@ -146,7 +240,11 @@ pub fn paint_natural_row(
     selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
+    let orbit = symmetric_orbit(x, y, width, height, axes);
+    if orbit.is_empty() {
+        return result;
+    }
+    for (sx, sy) in orbit {
         let idx = (sy * width + sx) as usize;
         if result[idx] == COLOR_TRANSPARENT {
             continue;
@@ -178,7 +276,11 @@ pub fn paint_natural_round(
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset = IVec2::new(offset_x, offset_y);
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
+    let orbit = symmetric_orbit(x, y, canvas_width, canvas_height, axes);
+    if orbit.is_empty() {
+        return result;
+    }
+    for (sx, sy) in orbit {
         let idx = (sy * canvas_width + sx) as usize;
         if result[idx] == COLOR_TRANSPARENT {
             continue;
@@ -205,7 +307,11 @@ pub fn paint_overlay_row(
         return pixels.to_vec();
     }
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
+    let orbit = symmetric_orbit(x, y, width, height, axes);
+    if orbit.is_empty() {
+        return result;
+    }
+    for (sx, sy) in orbit {
         let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else {
             continue;
         };
@@ -231,7 +337,11 @@ pub fn clear_overlay_row(
     let mut result = pixels.to_vec();
 
     if in_canvas {
-        for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
+        let orbit = symmetric_orbit(x, y, width, height, axes);
+        if orbit.is_empty() {
+            return pixels.to_vec();
+        }
+        for (sx, sy) in orbit {
             let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else {
                 continue;
             };
@@ -245,7 +355,11 @@ pub fn clear_overlay_row(
         let Some(inner) = inward_cell_row(canvas_size, IVec2::new(x, y)) else {
             return result;
         };
-        for (sx, sy) in symmetric_orbit(inner.x, inner.y, width, height, axes) {
+        let orbit = symmetric_orbit(inner.x, inner.y, width, height, axes);
+        if orbit.is_empty() {
+            return pixels.to_vec();
+        }
+        for (sx, sy) in orbit {
             let idx = (sy * width + sx) as usize;
             if result[idx] == COLOR_TRANSPARENT {
                 continue;
@@ -276,7 +390,11 @@ pub fn paint_overlay_round(
         return pixels.to_vec();
     }
     let mut result = pixels.to_vec();
-    for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
+    let orbit = symmetric_orbit(x, y, canvas_width, canvas_height, axes);
+    if orbit.is_empty() {
+        return result;
+    }
+    for (sx, sy) in orbit {
         let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy))
         else {
             continue;
@@ -310,7 +428,11 @@ pub fn clear_overlay_round(
     let mut result = pixels.to_vec();
 
     if in_canvas {
-        for (sx, sy) in symmetric_orbit(x, y, canvas_width, canvas_height, axes) {
+        let orbit = symmetric_orbit(x, y, canvas_width, canvas_height, axes);
+        if orbit.is_empty() {
+            return pixels.to_vec();
+        }
+        for (sx, sy) in orbit {
             let Some(inner) =
                 inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy))
             else {
@@ -327,7 +449,11 @@ pub fn clear_overlay_round(
         else {
             return result;
         };
-        for (sx, sy) in symmetric_orbit(inner.x, inner.y, canvas_width, canvas_height, axes) {
+        let orbit = symmetric_orbit(inner.x, inner.y, canvas_width, canvas_height, axes);
+        if orbit.is_empty() {
+            return pixels.to_vec();
+        }
+        for (sx, sy) in orbit {
             let idx = (sy * canvas_width + sx) as usize;
             if result[idx] == COLOR_TRANSPARENT {
                 continue;
@@ -581,7 +707,11 @@ pub fn flood_fill(
     }
 
     for (x, y) in filled {
-        for (sx, sy) in symmetric_orbit(x, y, width, height, axes) {
+        let orbit = symmetric_orbit(x, y, width, height, axes);
+        if orbit.is_empty() {
+            return pixels.to_vec();
+        }
+        for (sx, sy) in orbit {
             let idx = (sy * width + sx) as usize;
             if result[idx] != 0 {
                 result[idx] = fill_color;
@@ -799,7 +929,86 @@ mod tests {
         assert_eq!(orbit.len(), 4);
     }
 
+    #[test]
+    fn orbit_aborts_instead_of_returning_a_partial_result_at_the_safety_limit() {
+        assert_eq!(MAX_SYMMETRY_ORBIT_CELLS, 1_048_576);
+        let axes = [0.0_f64, 10.0, 0.0, 0.0_f64, 11.0, 0.0];
+        assert!(symmetric_orbit(10, 0, 25, 1, &axes).is_empty());
+
+        let pixels = vec![COLOR_A; 25];
+        assert_eq!(
+            paint_pixel(&pixels, 25, 1, 10, 0, COLOR_B, &axes, &[]),
+            pixels,
+        );
+    }
+
     // ── paint_natural_row ────────────────────────────────────────────────────
+
+    // ── apply symmetry to selection ──
+
+    #[test]
+    fn apply_symmetry_stamps_mirrored_cells_without_baking_the_source() {
+        let pixels = vec![COLOR_A; 5];
+        let sources = [COLOR_B, 0, 0, 0, 0];
+        let axes = [0.0_f64, 2.0, 0.0];
+
+        let applied = apply_symmetry_to_selection(&pixels, 5, 1, &sources, &axes);
+
+        assert_eq!(applied.status, SymmetryApplicationStatus::Applied);
+        assert_eq!(
+            applied.pixels,
+            vec![COLOR_A, COLOR_A, COLOR_A, COLOR_A, COLOR_B]
+        );
+    }
+
+    #[test]
+    fn apply_symmetry_accepts_matching_sources_in_one_orbit() {
+        let pixels = vec![COLOR_A; 5];
+        let sources = [COLOR_B, 0, 0, 0, COLOR_B];
+        let axes = [0.0_f64, 2.0, 0.0];
+
+        let applied = apply_symmetry_to_selection(&pixels, 5, 1, &sources, &axes);
+
+        assert_eq!(applied.status, SymmetryApplicationStatus::Unchanged);
+        assert_eq!(applied.pixels, pixels);
+    }
+
+    #[test]
+    fn apply_symmetry_rejects_conflicting_source_colours_atomically() {
+        let pixels = vec![COLOR_A; 10];
+        let sources = [COLOR_A, COLOR_B, 0, 0, 0, 0, 0, 0, COLOR_A, COLOR_B];
+        let axes = [0.0_f64, 4.5, 0.0];
+
+        let applied = apply_symmetry_to_selection(&pixels, 10, 1, &sources, &axes);
+
+        assert_eq!(applied.status, SymmetryApplicationStatus::Conflict);
+        assert_eq!(applied.pixels, pixels);
+    }
+
+    #[test]
+    fn apply_symmetry_ignores_hole_sources_and_destinations() {
+        let pixels = vec![COLOR_A, COLOR_TRANSPARENT, COLOR_A, COLOR_A];
+        let sources = [COLOR_B, COLOR_B, 0, 0];
+        let axes = [0.0_f64, 0.5, 0.0];
+
+        let applied = apply_symmetry_to_selection(&pixels, 4, 1, &sources, &axes);
+
+        assert_eq!(applied.status, SymmetryApplicationStatus::Unchanged);
+        assert_eq!(applied.pixels, pixels);
+    }
+
+    #[test]
+    fn apply_symmetry_aborts_at_the_orbit_safety_limit() {
+        let pixels = vec![COLOR_A; 25];
+        let mut sources = vec![0; 25];
+        sources[10] = COLOR_B;
+        let axes = [0.0_f64, 10.0, 0.0, 0.0_f64, 11.0, 0.0];
+
+        let applied = apply_symmetry_to_selection(&pixels, 25, 1, &sources, &axes);
+
+        assert_eq!(applied.status, SymmetryApplicationStatus::OrbitLimit);
+        assert_eq!(applied.pixels, pixels);
+    }
 
     #[test]
     fn paint_natural_row_restores_wrong_cell() {

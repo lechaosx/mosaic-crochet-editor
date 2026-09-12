@@ -44,6 +44,7 @@ export interface UICallbacks {
     onAddAxis:         (k: SymKey) => void;
     onToggleAxis:      (id: string) => void;
     onDeleteAxis:      (id: string) => void;
+    onReplicateSelection: () => void;
     onHighlightChange:        () => void;
     onInvalidIntensityChange: () => void;
     onLabelsVisibleChange:    () => void;
@@ -65,7 +66,9 @@ export interface UIHandle {
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
     setAxes:            (axes: ReadonlyArray<Axis>) => void;
+    setCanReplicateSelection: (enabled: boolean) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
+    setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
     closeEdit:          () => void;
     openExport:         () => ExportDialog;
@@ -155,6 +158,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
     SYM_ADD_BUTTONS.forEach(({ id, key }) =>
         el(id).addEventListener("click", () => cb.onAddAxis(key))
     );
+    const replicateSelection = el<HTMLButtonElement>("replicate-selection");
+    replicateSelection.addEventListener("click", cb.onReplicateSelection);
+
+    function setCanReplicateSelection(enabled: boolean) {
+        replicateSelection.disabled = !enabled;
+    }
 
     function formatPosition(a: Axis): string {
         switch (a.kind) {
@@ -236,6 +245,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
     /* ── Pattern (Edit) popover ──────────────────────────────────────── */
     const editWidget = el("edit-pattern-widget");
     const btnEdit    = el<HTMLButtonElement>("btn-edit");
+    const editError  = el("edit-error");
+
+    function setEditError(message: string | null) {
+        editError.textContent = message ?? "";
+        editError.hidden = message === null;
+    }
 
     btnEdit.addEventListener("click", e => {
         e.preventDefault();
@@ -317,6 +332,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     function syncEditInputs(s: PatternState) {
         editOpenState = s;
+        setEditError(null);
         setRadio("edit-mode", s.mode);
         el("edit-row-controls")  .hidden = s.mode !== "row";
         el("edit-round-controls").hidden = s.mode !== "round";
@@ -400,8 +416,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setMaskMove, setPrimary, setColors, setAxes,
-        setHistory,
+        setTool, setMaskMove, setPrimary, setColors, setAxes, setCanReplicateSelection,
+        setHistory, setEditError,
         syncEditInputs, closeEdit: () => editWidget.hidePopover(),
         openExport,
     };

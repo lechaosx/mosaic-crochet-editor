@@ -3,10 +3,12 @@
 // Locks the current design — if we ever change selection to mirror, this
 // test fails loudly.
 
-import { describe, test, expect } from "vitest";
+import { describe, test, expect, vi } from "vitest";
 import { paintOps } from "../src/paint";
 import { axesToFlat, addAxis } from "../src/symmetry";
-import { filledPixels, rowPattern } from "./_helpers";
+import { Store } from "../src/store";
+import { replicateSelection } from "../src/selection";
+import { filledPixels, makeFloat, rowPattern, rowSession } from "./_helpers";
 
 describe("symmetry-aware paint inside selection", () => {
     test("with Vertical symmetry, painting (0, 1) clipped to a mask that doesn't include the mirrored cell only paints (0, 1)", () => {
@@ -48,5 +50,74 @@ describe("symmetry-aware paint inside selection", () => {
         // the selection bitmask is unaffected.
         expect(symAxes).toBeInstanceOf(Float64Array);
         expect(mask[1 * W + 4]).toBe(0);
+    });
+});
+
+describe("replicateSelection", () => {
+    const vertical = [{ kind: "V" as const, id: "v", active: true, x: 2 }];
+
+    test("stamps mirrored pixels into the canvas and keeps the source float", () => {
+        const source = makeFloat([{ x: 0, y: 0, v: 2 }]);
+        const store = new Store(rowSession(5, 1, {
+            pixels: filledPixels(5, 1, 1),
+            float: source,
+            axes: vertical,
+        }));
+        const history = vi.fn();
+        store.setHistoryFn(history);
+
+        expect(replicateSelection(store)).toBe("applied");
+
+        expect(store.state.pixels).toEqual(new Uint8Array([1, 1, 1, 1, 2]));
+        expect(store.state.float).toBe(source);
+        expect(history).toHaveBeenCalledOnce();
+    });
+
+    test("rejects a mixed-colour orbit without changing state or history", () => {
+        const pixels = filledPixels(5, 1, 1);
+        const source = makeFloat([
+            { x: 0, y: 0, v: 1 },
+            { x: 4, y: 0, v: 2 },
+        ]);
+        const store = new Store(rowSession(5, 1, { pixels, float: source, axes: vertical }));
+        const history = vi.fn();
+        store.setHistoryFn(history);
+
+        expect(replicateSelection(store)).toBe("conflict");
+
+        expect(store.state.pixels).toBe(pixels);
+        expect(store.state.float).toBe(source);
+        expect(history).not.toHaveBeenCalled();
+    });
+
+    test("ignores off-canvas source cells instead of reflecting them back in", () => {
+        const pixels = filledPixels(4, 1, 1);
+        const source = makeFloat([{ x: -1, y: 0, v: 2 }]);
+        const store = new Store(rowSession(4, 1, {
+            pixels,
+            float: source,
+            axes: [{ kind: "V", id: "v", active: true, x: 1 }],
+        }));
+        const history = vi.fn();
+        store.setHistoryFn(history);
+
+        expect(replicateSelection(store)).toBe("unchanged");
+
+        expect(store.state.pixels).toBe(pixels);
+        expect(store.state.float).toBe(source);
+        expect(history).not.toHaveBeenCalled();
+    });
+
+    test("does not create history when there are no active axes", () => {
+        const pixels = filledPixels(5, 1, 1);
+        const source = makeFloat([{ x: 0, y: 0, v: 2 }]);
+        const store = new Store(rowSession(5, 1, { pixels, float: source }));
+        const history = vi.fn();
+        store.setHistoryFn(history);
+
+        expect(replicateSelection(store)).toBe("unchanged");
+
+        expect(store.state.pixels).toBe(pixels);
+        expect(history).not.toHaveBeenCalled();
     });
 });

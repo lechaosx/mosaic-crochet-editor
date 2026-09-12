@@ -2,9 +2,11 @@
 // ops wrap them with `store.commit`.
 
 import { wand_select,
-         cut_to_natural_row, cut_to_natural_round } from "@mosaic/wasm";
+         cut_to_natural_row, cut_to_natural_round,
+         apply_symmetry_to_selection, SymmetryApplicationStatus } from "@mosaic/wasm";
 import { PatternState, Float } from "./types";
 import { Store, SessionState, visiblePixels, outOfBounds } from "./store";
+import { axesToFlat } from "./symmetry";
 import { devAssert, assertNever } from "./dev";
 
 export type SelectMode = "replace" | "add" | "remove";
@@ -143,6 +145,51 @@ export function shiftedFloatMask(s: SessionState): Uint8Array {
 // Bake the float into the canvas; return pixels with float stamped + float=null.
 export function anchorIntoCanvas(s: SessionState): { pixels: Uint8Array; float: null } {
     return { pixels: visiblePixels(s), float: null };
+}
+
+export type ReplicateSelectionResult = "unchanged" | "applied" | "conflict" | "orbit-limit";
+
+export function replicateSelection(store: Store): ReplicateSelectionResult {
+    const s = store.state;
+    if (!s.float) return "unchanged";
+
+    const axes = axesToFlat(s.axes);
+    if (axes.length === 0) return "unchanged";
+
+    const { canvasWidth: W, canvasHeight: H } = s.pattern;
+    const sources = new Uint8Array(W * H);
+    const f = s.float;
+    for (let ly = 0; ly < f.h; ly++) {
+        for (let lx = 0; lx < f.w; lx++) {
+            const value = f.pixels[ly * f.w + lx];
+            if (value === 0) continue;
+            const x = f.x + lx, y = f.y + ly;
+            if (outOfBounds(x, y, W, H)) continue;
+            const idx = y * W + x;
+            if (s.pixels[idx] === 0) continue;
+            sources[idx] = value;
+        }
+    }
+
+    const applied = apply_symmetry_to_selection(s.pixels, W, H, sources, axes);
+    try {
+        const status = applied.status();
+        switch (status) {
+            case SymmetryApplicationStatus.Applied:
+                store.commit(state => { state.pixels = applied.pixels(); }, { history: true });
+                return "applied";
+            case SymmetryApplicationStatus.Unchanged:
+                return "unchanged";
+            case SymmetryApplicationStatus.Conflict:
+                return "conflict";
+            case SymmetryApplicationStatus.OrbitLimit:
+                return "orbit-limit";
+            default:
+                return assertNever(status as never, "replicateSelection: unknown status");
+        }
+    } finally {
+        applied.free();
+    }
 }
 
 // ── Store-mutating selection ops ─────────────────────────────────────────────

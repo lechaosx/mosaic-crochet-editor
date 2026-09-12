@@ -53,6 +53,8 @@ Click **Pattern** to open the dimensions popover. Two modes:
 
 Settings update the canvas live and the **Wipe** toggle controls whether existing pixels are preserved across the change. Light-dismissing the popover commits your changes; **Ctrl+Z** reverts.
 
+Canvas dimensions may contain up to 16,777,216 cells total, with either axis up to 1,048,576 cells for unusually long, narrow patterns. The Pattern popover reports an inline error without replacing the current canvas when those safety bounds are exceeded; invalid `.mcw` dimensions are rejected during load.
+
 ### Drawing
 
 Eight tools, in the toolbar's tools group:
@@ -84,6 +86,8 @@ New patterns start without symmetry. Open **Symmetry** and add any of five axis 
 Active mirror axes are drawn as dashed guides; central rotation is shown as a dot. With the **Move** tool, drag a guide to reposition it. Vertical, horizontal, and central axes snap to half-cells; diagonals snap to whole cells. Dragging an axis beyond its useful canvas range deletes it. Diagonal axes work on rectangular canvases of any parity.
 
 Active axes compose automatically: for example, vertical and horizontal mirrors together produce the corresponding four-cell orbit without adding a separate central-axis entry.
+
+With a floating selection active, choose **Replicate selection** in the Symmetry popover or press **T** to stamp copies through every active axis. The source selection stays active and the entire stamp is one undo step. Off-canvas source cells and inner-hole destinations are skipped. If differently coloured selected cells belong to the same symmetry orbit, the action reports the conflict and leaves the canvas unchanged.
 
 ### Colours
 

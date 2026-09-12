@@ -30,6 +30,32 @@ pub enum PlanDir {
     Right = 3,
 }
 
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum SymmetryApplicationStatus {
+    Unchanged = 0,
+    Applied = 1,
+    Conflict = 2,
+    OrbitLimit = 3,
+}
+
+#[wasm_bindgen]
+pub struct SymmetryApplication {
+    status: SymmetryApplicationStatus,
+    pixels: Vec<u8>,
+}
+
+#[wasm_bindgen]
+impl SymmetryApplication {
+    pub fn status(&self) -> SymmetryApplicationStatus {
+        self.status
+    }
+
+    pub fn pixels(&self) -> Vec<u8> {
+        self.pixels.clone()
+    }
+}
+
 // Compile-time guarantee that the wasm-exposed enum discriminants stay in
 // lockstep with the core constants used to build the plan.
 const _: () = {
@@ -565,4 +591,31 @@ pub fn symmetric_orbit_indices(
     .into_iter()
     .map(|(sx, sy)| (sy * canvas_width + sx) as u32)
     .collect()
+}
+
+#[wasm_bindgen]
+pub fn apply_symmetry_to_selection(
+    pixels: &[u8],
+    canvas_width: i32,
+    canvas_height: i32,
+    sources: &[u8],
+    axes: Option<Vec<f64>>,
+) -> SymmetryApplication {
+    let applied = tools::apply_symmetry_to_selection(
+        pixels,
+        canvas_width,
+        canvas_height,
+        sources,
+        axes.as_deref().unwrap_or(&[]),
+    );
+    let status = match applied.status {
+        tools::SymmetryApplicationStatus::Unchanged => SymmetryApplicationStatus::Unchanged,
+        tools::SymmetryApplicationStatus::Applied => SymmetryApplicationStatus::Applied,
+        tools::SymmetryApplicationStatus::Conflict => SymmetryApplicationStatus::Conflict,
+        tools::SymmetryApplicationStatus::OrbitLimit => SymmetryApplicationStatus::OrbitLimit,
+    };
+    SymmetryApplication {
+        status,
+        pixels: applied.pixels,
+    }
 }

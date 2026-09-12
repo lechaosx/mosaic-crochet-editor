@@ -1,6 +1,6 @@
 // Pure pattern helper tests — no DOM needed (parameters passed directly).
 import { describe, test, expect } from "vitest";
-import { applyEditSettings, EditSettings } from "../src/pattern";
+import { applyEditSettings, EditSettings, patternDimensionError } from "../src/pattern";
 
 const rowBase: EditSettings = { mode: "row", width: 4, height: 3, wipe: false };
 
@@ -32,6 +32,18 @@ describe("applyEditSettings (row mode)", () => {
         };
         const { pixels } = applyEditSettings({ ...rowBase, wipe: true }, source);
         expect(pixels[0]).toBe(1);
+    });
+
+    test("rejects dimensions beyond the per-axis safety ceiling before allocation", () => {
+        expect(() => applyEditSettings({
+            mode: "row", width: 1_048_577, height: 1, wipe: true,
+        })).toThrow(/1,048,576/);
+    });
+
+    test("rejects a canvas above the total cell ceiling before allocation", () => {
+        expect(() => applyEditSettings({
+            mode: "row", width: 4_097, height: 4_097, wipe: true,
+        })).toThrow(/16,777,216/);
     });
 });
 
@@ -84,6 +96,46 @@ describe("applyEditSettings (dev asserts)", () => {
     test("unknown mode throws", () => {
         expect(() => applyEditSettings({ mode: "weird" as any, wipe: false }))
             .toThrow(/applyEditSettings: unknown mode/);
+    });
+});
+
+describe("patternDimensionError", () => {
+    test("accepts the square and narrow forms of the total-cell boundary", () => {
+        expect(patternDimensionError({
+            mode: "row", canvasWidth: 4_096, canvasHeight: 4_096,
+        })).toBeNull();
+        expect(patternDimensionError({
+            mode: "row", canvasWidth: 1_048_576, canvasHeight: 16,
+        })).toBeNull();
+    });
+
+    test("rejects non-integer dimensions", () => {
+        expect(patternDimensionError({
+            mode: "row", canvasWidth: 2.5, canvasHeight: 2,
+        })).toMatch(/whole positive numbers/);
+    });
+
+    test("validates round geometry without allocating its canvas", () => {
+        expect(patternDimensionError({
+            mode: "round",
+            canvasWidth: 4_096,
+            canvasHeight: 4_096,
+            virtualWidth: 8_192,
+            virtualHeight: 8_192,
+            offsetX: 0,
+            offsetY: 4_096,
+            rounds: 4_096,
+        })).toBeNull();
+        expect(patternDimensionError({
+            mode: "round",
+            canvasWidth: 8,
+            canvasHeight: 8,
+            virtualWidth: 10,
+            virtualHeight: 10,
+            offsetX: 0,
+            offsetY: 5,
+            rounds: 2,
+        })).toMatch(/geometry/);
     });
 });
 

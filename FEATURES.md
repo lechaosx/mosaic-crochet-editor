@@ -63,6 +63,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Each axis is independently enabled or deleted from the Symmetry popover. Active transforms compose in the orbit walker without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
 - Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
 - Symmetry applies to pencil, fill, eraser, overlay, and invert. — **Agent's choice**
+- **Replicate selection** (`T`) stamps a floating selection through all active symmetry axes without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours in one orbit reject the whole action. — **Agent's choice**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
 - **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
 - **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
@@ -148,6 +149,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Closing the popover (Esc, click outside, or clicking the canvas) commits the current preview to history. Undo (Ctrl+Z) is the universal revert — no Cancel/Apply buttons, no lossy confirmation modal. — **your decision**
 - **Wipe** defaults off so compatible edits preserve painted pixels. Mode switches force it on and disabled; switching back before closing restores the user's preference. — **your decision**
 - Numeric inputs typed below the field's minimum are normalised on blur. — **your decision**
+- Canvas dimensions are limited to 16,777,216 cells total and 1,048,576 cells per axis. Invalid Pattern edits leave the current preview intact and show an inline error; invalid saved dimensions are rejected before pixel allocation. — **joint**
 
 ## Load
 

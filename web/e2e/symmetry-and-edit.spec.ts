@@ -1,6 +1,6 @@
 // Symmetry toggles + Edit popover resize.
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, dragCells, cellCoord, pixelRGB } from "./_helpers";
 
 test("vertical symmetry mirrors paint horizontally", async ({ page }) => {
     await bootApp(page);
@@ -57,6 +57,50 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
+test("Replicate selection stamps symmetric copies and keeps the source selected", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);
+
+    await page.locator("#btn-sym-toggle").click();
+    const replicate = page.locator("#replicate-selection");
+    await expect(replicate).toBeDisabled();
+    await page.locator("#add-sym-v").click();
+    await expect(replicate).toBeEnabled();
+    await replicate.click();
+
+    const mirrored = await cellCoord(page, 8, 1);
+    expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
+
+    await page.keyboard.press("ArrowRight");
+    const oldSource = await cellCoord(page, 0, 1);
+    const movedSource = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, oldSource.cx, oldSource.cy)).not.toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
+});
+
+test("T replicates the selection and reports conflicting source colours", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    await page.keyboard.press("s");
+    await dragCells(page, 0, 1, 8, 1);
+    await page.keyboard.press("v");
+
+    const dialogMessage = new Promise<string>(resolve => {
+        page.once("dialog", async dialog => {
+            resolve(dialog.message());
+            await dialog.dismiss();
+        });
+    });
+    await page.keyboard.press("t");
+
+    await expect(dialogMessage).resolves.toMatch(/different colours.*symmetry orbit/i);
+});
+
 test("dragging an axis far off the canvas deletes it", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("v");        // adds V at canonical centre
@@ -88,4 +132,40 @@ test("Edit popover changes the canvas dimensions", async ({ page }) => {
     // now valid where (4, 4) of 9×9 was already. We just smoke that the
     // app didn't blow up.
     await expect(page.locator("#canvas")).toBeVisible();
+});
+
+test("Edit popover rejects a canvas above the safety ceiling", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-edit").click();
+    await page.locator("#edit-width").fill("4097");
+    await page.locator("#edit-height").fill("4097");
+
+    await expect(page.locator("#edit-error")).toContainText("16,777,216");
+    await expect(page.locator("#edit-error")).toBeVisible();
+});
+
+test("Load reports invalid pattern dimensions", async ({ page }) => {
+    await bootApp(page);
+    const dialogMessage = new Promise<string>(resolve => {
+        page.once("dialog", async dialog => {
+            resolve(dialog.message());
+            await dialog.dismiss();
+        });
+    });
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.locator("#btn-load").click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+        name: "invalid.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({
+            version: 2,
+            state: { mode: "row", canvasWidth: 2.5, canvasHeight: 2 },
+            pixels: "AA==",
+            colorA: "#000000",
+            colorB: "#ffffff",
+        })),
+    });
+
+    await expect(dialogMessage).resolves.toMatch(/whole positive numbers/);
 });

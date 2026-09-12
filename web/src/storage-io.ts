@@ -2,6 +2,7 @@ import { PatternState, Tool, Axis } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { defaultAxes } from "@mosaic/logic/symmetry";
+import { assertPatternDimensions } from "@mosaic/logic/pattern";
 
 const LS_KEY       = "mosaic-pattern-v4";
 const FILE_VERSION = 2;
@@ -50,6 +51,7 @@ export function loadFromLocalStorage(): SessionState | null {
     try {
         const data = JSON.parse(saved) as LocalSaveV4;
         if (!data || data.version !== LS_VERSION || !data.state) return null;
+        assertPatternDimensions(data.state);
         return {
             pattern:          data.state,
             pixels:           unpackPixels(data.pixels, data.state),
@@ -127,7 +129,7 @@ export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
 }
 
 export function loadFromFile(): Promise<LoadedFile | null> {
-    return new Promise(resolve => {
+    return new Promise((resolve, reject) => {
         const input = Object.assign(document.createElement("input"), { type: "file", accept: ".mcw,application/json" });
         input.addEventListener("change", () => {
             const file = input.files?.[0];
@@ -137,6 +139,7 @@ export function loadFromFile(): Promise<LoadedFile | null> {
                 try {
                     const data = JSON.parse(reader.result as string) as SaveFileV2 | SaveFileV1;
                     if (!data || (data.version !== 2 && data.version !== 1)) { resolve(null); return; }
+                    assertPatternDimensions(data.state);
                     const pixels = data.version === 2
                         ? unpackPixels(data.pixels, data.state)
                         : unpackPixelsV1(data.pixels);
@@ -146,7 +149,9 @@ export function loadFromFile(): Promise<LoadedFile | null> {
                         colorA:  data.colorA,
                         colorB:  data.colorB,
                     });
-                } catch { resolve(null); }
+                } catch (error) {
+                    reject(error instanceof Error ? error : new Error("Invalid pattern file."));
+                }
             };
             reader.readAsText(file);
         });

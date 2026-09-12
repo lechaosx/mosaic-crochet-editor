@@ -11,12 +11,12 @@ import { axesToFlat,
          addAxis, removeAxis, toggleAxisActive,
          pickAxesAt, setAxisPosition, snapHalf, snapInt,
          axisOffCanvas } from "@mosaic/logic/symmetry";
-import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "./storage-io";
+import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle } from "./ui";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
-         deleteFloat, clipFloatToCanvas } from "@mosaic/logic/selection";
+         deleteFloat, clipFloatToCanvas, replicateSelection } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 
@@ -148,6 +148,9 @@ store.setPersistFn(s => saveToLocalStorage(s));
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => updateStatus(s.plan, null, null));
+store.addObserver(s => ui.setCanReplicateSelection(
+    Boolean(s.state.float && s.state.axes.some(a => a.active)),
+));
 
 // ── Paint ────────────────────────────────────────────────────────────────────
 // Paint operates on the *visible* canvas (pixels + float stamped). When a
@@ -224,6 +227,7 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
     ui.setAxes(store.state.axes);
+    ui.setCanReplicateSelection(Boolean(store.state.float && store.state.axes.some(a => a.active)));
 }
 // Shortcuts and popover buttons append an active, canonically positioned
 // axis. Axis ids keep multiple entries of the same kind independent.
@@ -241,6 +245,15 @@ function deleteAxisById(id: string) {
 function toggleAxisById(id: string) {
     store.commit(s => { s.axes = toggleAxisActive(s.axes, id); }, { history: true });
     refreshSymmetryUi();
+}
+
+function onReplicateSelection() {
+    const result = replicateSelection(store);
+    if (result === "conflict") {
+        window.alert("Cannot replicate selection: different colours occupy the same symmetry orbit.");
+    } else if (result === "orbit-limit") {
+        window.alert("Cannot replicate selection: the symmetry orbit exceeds the safety limit.");
+    }
 }
 
 // ── Tool / colour / settings handlers ────────────────────────────────────────
@@ -317,7 +330,15 @@ function onEditChange() {
                 pixels:  visiblePixels({ ...store.state, pattern: head.pattern, pixels: head.pixels, float: head.float }) }
             : { pattern: head.pattern, pixels: head.pixels })
         : undefined;
-    const { pattern, pixels } = applyEditSettings(source);
+    let edited: { pattern: PatternState; pixels: Uint8Array };
+    try {
+        edited = applyEditSettings(source);
+    } catch (error) {
+        ui.setEditError(error instanceof Error ? error.message : "Invalid pattern dimensions.");
+        return;
+    }
+    ui.setEditError(null);
+    const { pattern, pixels } = edited;
     fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
     store.commit(s => {
         s.pattern  = pattern;
@@ -362,7 +383,14 @@ async function onSave() {
     await saveToFile(snapshot);
 }
 async function onLoad() {
-    const loaded = await loadFromFile(); if (!loaded) return;
+    let loaded: LoadedFile | null;
+    try {
+        loaded = await loadFromFile();
+    } catch (error) {
+        window.alert(error instanceof Error ? error.message : "Invalid pattern file.");
+        return;
+    }
+    if (!loaded) return;
     fitToView(viewport.canvas, viewport.view, loaded.pattern, store.state.rotation);
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
@@ -436,6 +464,7 @@ const ui: UIHandle = mountUI({
     onAddAxis:    addAxisOfKind,
     onToggleAxis: toggleAxisById,
     onDeleteAxis: deleteAxisById,
+    onReplicateSelection,
     onHighlightChange:         onHlOpacityInput,
     onInvalidIntensityChange:  onInvalidIntensityInput,
     onLabelsVisibleChange:     onLabelsToggle,
@@ -853,6 +882,7 @@ document.addEventListener("keydown", e => {
     else if (k === "c") addAxisOfKind("C");
     else if (k === "d") addAxisOfKind("D1");
     else if (k === "a") addAxisOfKind("D2");
+    else if (k === "t") { e.preventDefault(); onReplicateSelection(); }
     else if (k === "r") rotate(e.shiftKey ? -45 : 45);
     else if (k === "1") setPrimary(1);
     else if (k === "2") setPrimary(2);
