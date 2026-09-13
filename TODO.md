@@ -140,9 +140,10 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - Use the finished chart, current-row/round focus, current yarn, Done, Back, and exact local resume against a frozen structured plan.
   - Validate during real crochet sessions before adding run/stitch tracking or chart-derived WIP rendering.
   - Prototype conclusion: row/round boundaries provide a usable low-click baseline; richer compression-tree stepping and WIP rendering remain deferred until crochet-session feedback justifies them.
-- [ ] Prototype one deterministic composed-output preset in pure chart geometry.
+- [x] Prototype one deterministic composed-output preset in pure chart geometry.
   - Start with As authored plus one applicable Mirror-to-full or Rotate-to-full case.
   - Validate shared corners, yarn phase, paths, and source mapping before adding project state or Source/Output workspaces.
+  - Prototype conclusion: distortion-free Rotate-quarter-to-full is coherent for square centre-out quarters; matching midpoint claims may be shared, differing claims are seam conflicts, and other geometries remain unavailable pending explicit presets.
 
 ### Explicit deferrals and architectural guardrails
 
