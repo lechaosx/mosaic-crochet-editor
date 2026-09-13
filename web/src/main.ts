@@ -683,7 +683,7 @@ async function onInstructions() {
         if (!cancelled && myRun === runId) {
             const fingerprint = fingerprintInstructionPlan(units);
             dlg.setLivePlan(units, loadLiveProgress(fingerprint, units.length), completedUnits => {
-                saveLiveProgress(fingerprint, completedUnits);
+                return saveLiveProgress(fingerprint, completedUnits);
             });
         }
         dlg.endProgress();

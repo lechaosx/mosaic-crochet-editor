@@ -91,3 +91,27 @@ test("Live is unavailable while instruction blockers remain", async ({ page }) =
     await expect(page.getByRole("tab", { name: "Live" })).toBeDisabled();
     await expect(page.getByText("Resolve chart issues to use Live.")).toBeVisible();
 });
+
+test("Live reports when its progress cannot be saved locally", async ({ page }) => {
+    await page.addInitScript(() => {
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === "mosaic-live-progress") {
+                throw new DOMException("full", "QuotaExceededError");
+            }
+            return setItem.call(this, key, value);
+        };
+    });
+    await bootApp(page);
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Live" }).click();
+    await page.getByRole("button", { name: "Done with Row 1" }).click();
+
+    await expect(page.getByRole("alert"))
+        .toHaveText("Progress could not be saved locally. Keep this tab open to retain your place.");
+    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Live" }).click();
+    await expect(page.getByRole("heading", { name: "Row 1" })).toBeVisible();
+});

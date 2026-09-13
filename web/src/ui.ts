@@ -119,7 +119,7 @@ export interface InstructionsView {
     clearText:   () => void;
     clearUnits:  () => void;
     setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
-                  onProgress: (completedUnits: number) => void) => void;
+                  onProgress: (completedUnits: number) => boolean) => void;
     setBlockers: (issues: InstructionIssue[]) => void;
     alternate:   () => boolean;
     setBusy:     (busy: boolean) => void;
@@ -684,6 +684,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const alternateChk   = el<HTMLInputElement>("alternate");
     const liveUnavailable = el("instructions-live-unavailable");
     const liveProgress   = el("instructions-live-progress");
+    const liveSaveWarning = el("instructions-live-save-warning");
     const liveUnit       = el("instructions-live-unit");
     const liveYarn       = el("instructions-live-yarn");
     const liveText       = el("instructions-live-text");
@@ -745,7 +746,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         let activeFocus: HTMLButtonElement | null = null;
         let liveUnits: readonly InstructionOverviewUnit[] = [];
         let liveCompleted = 0;
-        let liveProgressChanged = (_completedUnits: number) => {};
+        let liveProgressChanged = (_completedUnits: number) => true;
         let isBusy = true;
         let hasBlockers = false;
         const inspectorWasHidden = inspectorHost.hidden;
@@ -806,13 +807,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
         liveBack.onclick = () => {
             if (liveCompleted === 0) return;
             liveCompleted--;
-            liveProgressChanged(liveCompleted);
+            liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
             renderLive();
         };
         liveDone.onclick = () => {
             if (liveCompleted >= liveUnits.length) return;
             liveCompleted++;
-            liveProgressChanged(liveCompleted);
+            liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
             renderLive();
         };
 
@@ -878,6 +879,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 liveUnits = units;
                 liveCompleted = Math.min(Math.max(0, completedUnits), units.length);
                 liveProgressChanged = onProgress;
+                liveSaveWarning.hidden = true;
                 refreshLiveAvailability();
                 if (liveTab.getAttribute("aria-selected") === "true") renderLive();
             },
