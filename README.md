@@ -51,7 +51,7 @@ Click **Pattern** to open the dimensions popover. Two modes:
   - **Half** — bottom half only.
   - **Quarter** — bottom-left quarter only.
 
-Settings update the canvas live and the **Wipe** toggle controls whether existing pixels are preserved across the change. Light-dismissing the popover commits your changes; **Ctrl+Z** reverts.
+Settings update the canvas live and the **Wipe** toggle controls whether existing pixels are preserved across the change. Choose **Apply** to commit the preview as one Undo step, or **Cancel** / **Escape** to restore the state from when Pattern opened. Invalid input keeps the last valid preview and disables Apply. Clicking elsewhere does not dismiss Pattern or edit the canvas; canvas zoom remains available while you decide.
 
 Canvas dimensions may contain up to 16,777,216 cells total, with either axis up to 1,048,576 cells for unusually long, narrow patterns. The Pattern popover reports an inline error without replacing the current canvas when those safety bounds are exceeded; invalid `.mcw` dimensions are rejected during load.
 

@@ -173,7 +173,7 @@
   </div>
 
   <!-- ── Pattern (Edit) popover ──────────────────────────────────────── -->
-  <div id="edit-pattern-widget" popover>
+  <div id="edit-pattern-widget" popover="manual" role="dialog" aria-label="Pattern">
     <div class="segmented">
       <label><input type="radio" name="edit-mode" value="row" checked> Row</label>
       <label><input type="radio" name="edit-mode" value="round"> Round</label>
@@ -217,6 +217,10 @@
       <span class="toggle-track"></span>
       Wipe
     </label>
+    <div class="pattern-actions">
+      <button class="btn" id="edit-cancel" type="button">Cancel</button>
+      <button class="btn" id="edit-apply" type="button">Apply</button>
+    </div>
   </div>
 
   <!-- ── Export dialog ──────────────────────────────────────────────── -->

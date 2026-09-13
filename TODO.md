@@ -91,7 +91,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - Document ownership separately for authored document, editor workspace, local recovery, editor undo, display preferences, and future Live progress.
 - [x] Add versioned migration boundaries for browser recovery and editor undo before adding new fields.
   - Avoid embedding large retained transform-source masks in every history snapshot.
-- [ ] Implement explicit Pattern Apply/Cancel as a narrow vertical slice.
+- [x] Implement explicit Pattern Apply/Cancel as a narrow vertical slice.
   - Add failing E2E coverage for outside interaction, Escape/Cancel restoration, invalid-field last-valid preview, and one history entry on Apply.
   - Defer resize handles, new preservation anchors, diagrams, output links, and Live/transform reconciliation.
 - [ ] Build the first adaptive shell with a document bar, existing tools, canvas, compact status, and one open/closed inspector host.

@@ -116,8 +116,8 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 ### UI layer
 - `ui.ts` exposes `mountUI(callbacks): UIHandle`. Callbacks fire from DOM events; setters on the handle push state back into the DOM. No reactive framework. — **Agent's choice**
 - Styled radios and checkboxes use a visually-hidden focusable input rather than `display: none`; their label or track renders the focus indicator. Tool and yarn setters update `aria-pressed` with the visual active class. — **Agent's choice**
-- Export uses a native `<dialog>`; Pattern, **Symmetry and repeat**, Settings, and More use the native HTML `popover` attribute. — **Agent's choice**
-- **Edit popover commits before any outside input**: capture-phase `pointerdown` / `keydown` listeners on `document` explicitly `hidePopover()` the Edit popover when input lands outside it, so its `onEditClose` history push runs synchronously *before* the outside button or shortcut handler. Without this the click/keydown ordering is browser-dependent and `Undo` (etc.) could see the pre-commit head and silently drop the live preview. — **your decision**
+- Export uses a native `<dialog>`; Pattern uses a manual native popover, while **Symmetry and repeat**, Settings, and More use light-dismiss popovers. — **Agent's choice**
+- Pattern editing is an explicit transaction. `main.ts` owns a deep-enough baseline of pattern, pixels, and float; every preview derives from that baseline and skips persistence. Apply writes one history/recovery boundary, while Cancel or Escape replaces the preview with the baseline. Capture listeners block unrelated outside commands, canvas authoring callbacks no-op during the transaction, and canvas wheel navigation remains active. — **Agent's choice**
 - Swatches use a unified `bindLongPress` helper for click-to-select / long-press-to-edit on any pointer type, plus `dblclick` for desktop double-click. — **Agent's choice**
 - Persistent canvas context derives directly from the current `Store` and highlight plan. Rejected-action feedback is transient per-gesture UI state, coalesced before it reaches the context strip, and is not persisted. — **Agent's choice**
 

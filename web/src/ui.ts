@@ -66,7 +66,8 @@ export interface UICallbacks {
     onRotate:          (delta: number) => void;
     onEditOpen:        () => void;
     onEditChange:      () => void;
-    onEditClose:       () => void;
+    onEditApply:       () => void;
+    onEditCancel:      () => void;
     onSave:            () => void;
     onLoad:            () => void;
     onExport:          () => void;
@@ -422,19 +423,66 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const editWidget = el("edit-pattern-widget");
     const btnEdit    = el<HTMLButtonElement>("btn-edit");
     const editError  = el("edit-error");
+    const editApply  = el<HTMLButtonElement>("edit-apply");
+    const editCancel = el<HTMLButtonElement>("edit-cancel");
+    const canvas     = el("canvas");
 
     function setEditError(message: string | null) {
         editError.textContent = message ?? "";
         editError.hidden = message === null;
+        editApply.disabled = message !== null;
+    }
+
+    function closeEdit() {
+        editWidget.hidePopover();
+        btnEdit.setAttribute("aria-expanded", "false");
     }
 
     btnEdit.addEventListener("click", e => {
         e.preventDefault();
-        if (editWidget.matches(":popover-open")) { editWidget.hidePopover(); return; }
+        if (editWidget.matches(":popover-open")) return;
         positionPopover(editWidget, btnEdit, "left");
         editWidget.showPopover();
+        btnEdit.setAttribute("aria-expanded", "true");
         cb.onEditOpen();
+        editWidget.querySelector<HTMLElement>("input:not([disabled]), button:not([disabled])")?.focus();
     });
+
+    editApply.addEventListener("click", () => {
+        cb.onEditApply();
+        closeEdit();
+    });
+    editCancel.addEventListener("click", () => {
+        cb.onEditCancel();
+        closeEdit();
+    });
+
+    editWidget.addEventListener("keydown", e => {
+        if (e.key === "Escape") {
+            e.preventDefault();
+            cb.onEditCancel();
+            closeEdit();
+        }
+        e.stopPropagation();
+    });
+
+    const blockOutsideEdit = (e: Event) => {
+        if (!editWidget.matches(":popover-open") || editWidget.contains(e.target as Node)) return;
+        if (e.target === canvas) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+    };
+    document.addEventListener("pointerdown", blockOutsideEdit, true);
+    document.addEventListener("click", blockOutsideEdit, true);
+    document.addEventListener("keydown", e => {
+        if (!editWidget.matches(":popover-open") || editWidget.contains(e.target as Node)) return;
+        if (e.key === "Escape") {
+            cb.onEditCancel();
+            closeEdit();
+        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+    }, true);
 
     let editOpenState: PatternState | null = null;
 
@@ -498,12 +546,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     });
     el<HTMLInputElement>("edit-wipe").addEventListener("change", () => {
         if (editWidget.matches(":popover-open")) cb.onEditChange();
-    });
-
-    // Light-dismiss (Esc, outside click) is the commit path — onEditClose
-    // pushes the current preview onto history. Undo (Ctrl+Z) is the revert.
-    editWidget.addEventListener("toggle", e => {
-        if ((e as ToggleEvent).newState === "closed") cb.onEditClose();
     });
 
     function syncEditInputs(s: PatternState) {
@@ -596,7 +638,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
         setHistory, setEditError,
-        syncEditInputs, closeEdit: () => editWidget.hidePopover(),
+        syncEditInputs, closeEdit,
         openExport,
     };
 }

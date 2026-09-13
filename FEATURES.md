@@ -171,14 +171,14 @@ These decisions constrain the future redesign; they do not imply that every layo
 
 ## Pattern popover
 
-- Single **Pattern** toolbar button — handles both "create from scratch" and "edit in place" via the same popover (no separate New button). Mode toggle (row/round), dimensions, submode all editable; light-dismiss on outside click and Esc. — **your decision**
+- Single **Pattern** toolbar button handles both "create from scratch" and "edit in place" via the same popover (no separate New button). Mode, dimensions, and submode remain editable with a live canvas preview. — **your decision**
 - Live preview as inputs change. Painted cells are preserved across resizing / submode toggles where they map:
   - **Row mode** — bottom-left anchored: the foundation stays put vertically; column 0 stays put horizontally. Adding rows grows upward, adding columns grows to the right; shrinking truncates from the same far edges. — **your decision**
   - **Round mode** — bottom-left anchored, partitioned into 4 corner blocks (`rounds × rounds` each, one per canvas corner) and 4 straight strips between them. Each region transfers independently: corner blocks anchor to their canvas corner; horizontal strips (top/bottom) anchor to top/bottom vertically and are left-anchored within the strip; vertical strips (left/right) anchor to left/right horizontally and are bottom-anchored within the strip (so detail near the foundation stays put when inner height changes). No collisions; shrinking inner dims drops cells from the side opposite the strip's anchor. — **your decision**
   - **Rounds count change** — composes with the inner-dim rule above by giving every cell an inward shift of Δrounds (so old ring 1 stays ring 1; the new outermost ring wraps around with natural colour). — **your decision**
   - **Mode switch** (row↔round) is inherently a wipe. — **your decision**
-- Live preview always derives from the pre-edit snapshot, so destructive scrubbing is reversible without committing: reduce rounds to 1 and back to 20 brings the original pattern back. — **your decision**
-- Closing the popover (Esc, click outside, or clicking the canvas) commits the current preview to history. Undo (Ctrl+Z) is the universal revert — no Cancel/Apply buttons, no lossy confirmation modal. — **your decision**
+- Live preview always derives from the state captured when Pattern opens, so destructive scrubbing is reversible without committing: reduce rounds to 1 and back to 20 brings the original pattern back. — **your decision** (reversible preview); **Agent's choice** (transaction baseline)
+- **Apply** commits the current valid preview as one Undo step. **Cancel** and **Escape** restore the opening state without history; invalid input retains the last valid preview and disables Apply. Outside authoring and command input is blocked without dismissing the transaction, while canvas zoom remains available. — **Agent's choice**
 - **Wipe** defaults off so compatible edits preserve painted pixels. Mode switches force it on and disabled; switching back before closing restores the user's preference. — **your decision**
 - Numeric inputs typed below the field's minimum are normalised on blur. — **your decision**
 - Canvas dimensions are limited to 16,777,216 cells total and 1,048,576 cells per axis. Invalid Pattern edits leave the current preview intact and show an inline error; invalid saved dimensions are rejected before pixel allocation. — **joint**

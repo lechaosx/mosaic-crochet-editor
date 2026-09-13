@@ -6,7 +6,7 @@ import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, screenToPattern, screenToPatternFrac, updateStatus } from "./render";
 import { applyEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
-import { historySave, historyReset, historyEnsureInitialized, historyPeek,
+import { historySave, historyReset, historyEnsureInitialized,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
 import { addAxis, removeAxis, toggleAxisActive,
          pickAxesAt, setAxisPosition, snapHalf, snapInt,
@@ -413,21 +413,29 @@ function onDeselect() {
 }
 
 // ── Pattern (Edit) popover ──────────────────────────────────────────────────
+let editBaseline: { pattern: PatternState; pixels: Uint8Array; float: Float | null } | null = null;
+
 function onEditOpen() {
+    editBaseline = {
+        pattern: store.state.pattern,
+        pixels: store.state.pixels.slice(),
+        float: store.state.float ? { ...store.state.float, pixels: store.state.float.pixels.slice() } : null,
+    };
     ui.syncEditInputs(store.state.pattern);
 }
 function onEditChange() {
-    // Re-derive the preview from the head (= pre-edit state) each tick so
+    // Re-derive the preview from the transaction baseline each tick so
     // reducing then restoring a value (e.g. rounds 1 → 20) brings the
-    // original cells back. If the head carried a float, bake it into the
+    // original cells back. If the baseline carried a float, bake it into the
     // source pixels — otherwise the resize would silently drop the
     // float's content along with the geometry-invalid mask.
-    const head: Restored | null = historyPeek();
-    const source: { pattern: PatternState; pixels: Uint8Array } | undefined = head
-        ? (head.float
-            ? { pattern: head.pattern,
-                pixels:  visiblePixels({ ...store.state, pattern: head.pattern, pixels: head.pixels, float: head.float }) }
-            : { pattern: head.pattern, pixels: head.pixels })
+    const baseline = editBaseline;
+    const source: { pattern: PatternState; pixels: Uint8Array } | undefined = baseline
+        ? (baseline.float
+            ? { pattern: baseline.pattern,
+                pixels: visiblePixels({ ...store.state, pattern: baseline.pattern,
+                    pixels: baseline.pixels, float: baseline.float }) }
+            : { pattern: baseline.pattern, pixels: baseline.pixels })
         : undefined;
     let edited: { pattern: PatternState; pixels: Uint8Array };
     try {
@@ -445,11 +453,26 @@ function onEditChange() {
         // Float coords no longer match the new geometry; the content (if any)
         // was baked into the source pixels above before the resize.
         s.float    = null;
-    });
+    }, { persist: false });
     refreshSymmetryUi();
 }
-function onEditClose() {
+function onEditApply() {
+    if (!editBaseline) return;
+    editBaseline = null;
     store.commit(() => {}, { recompute: false, render: false, history: true });
+}
+function onEditCancel() {
+    if (!editBaseline) return;
+    const baseline = editBaseline;
+    editBaseline = null;
+    fitToView(viewport.canvas, viewport.view, baseline.pattern, store.state.rotation);
+    store.replace({
+        ...store.state,
+        pattern: baseline.pattern,
+        pixels: baseline.pixels,
+        float: baseline.float,
+    }, { persist: true });
+    refreshSymmetryUi();
 }
 
 // ── Undo / redo ──────────────────────────────────────────────────────────────
@@ -582,7 +605,7 @@ const ui: UIHandle = mountUI({
     onUndo: undo,
     onRedo: redo,
     onRotate: rotate,
-    onEditOpen, onEditChange, onEditClose,
+    onEditOpen, onEditChange, onEditApply, onEditCancel,
     onSave, onLoad, onExport,
 });
 
@@ -598,6 +621,10 @@ const clientToPattern = (cx: number, cy: number) => {
 mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
+        if (editBaseline) {
+            gesture = null;
+            return;
+        }
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
         const tool = store.state.activeTool;
@@ -1027,30 +1054,6 @@ window.addEventListener("blur", () => {
     ctrlArrowStamped = false;
     maskArrowState   = null;
 });
-
-// Force the Edit popover to commit its live preview (via its `toggle`
-// → `onEditClose` chain) before any *outside* user input runs. The popover
-// already light-dismisses on outside click, but doing it in capture phase
-// guarantees `onEditClose`'s history push lands BEFORE the button or
-// keyboard handler that the user actually invoked — otherwise that handler
-// (e.g. Undo) runs against the pre-commit head and the edit silently dies.
-{
-    type Popover = HTMLElement & { hidePopover: () => void };
-    const editPopover = document.getElementById("edit-pattern-widget") as Popover | null;
-    if (editPopover) {
-        const dismissIfOpen = () => {
-            if (editPopover.matches(":popover-open")) editPopover.hidePopover();
-        };
-        document.addEventListener("pointerdown", e => {
-            if (!editPopover.contains(e.target as Node)) dismissIfOpen();
-        }, true);
-        document.addEventListener("keydown", e => {
-            const t = e.target as HTMLElement | null;
-            const inInput = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA");
-            if (!inInput) dismissIfOpen();
-        }, true);
-    }
-}
 
 // ── Initial DOM-input sync + first render ────────────────────────────────────
 function syncDomInputs(s: Readonly<SessionState>) {
