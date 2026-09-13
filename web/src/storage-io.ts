@@ -1,12 +1,12 @@
 import { PatternState, Tool, Axis, RepeatGrid } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
+import { decodeMcw, encodeMcw, McwDocument } from "@mosaic/logic/mcw";
 import { defaultAxes } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
 import { assertRepeatGrid, defaultRepeatGrid } from "@mosaic/logic/repeat";
 
 const LS_KEY       = "mosaic-pattern-v4";
-const FILE_VERSION = 2;
 const LS_VERSION   = 4;
 
 interface LocalSaveV4 {
@@ -81,37 +81,10 @@ export function loadFromLocalStorage(): SessionState | null {
 
 // ── File save / load ──────────────────────────────────────────────────────────
 
-interface SaveFileV2 {
-    version: 2;
-    state:   PatternState;
-    pixels:  string;
-    colorA:  string;
-    colorB:  string;
-}
-interface SaveFileV1 {
-    version: 1;
-    state:   PatternState;
-    pixels:  number[];
-    colorA:  string;
-    colorB:  string;
-}
-function unpackPixelsV1(old: number[]): Uint8Array {
-    return new Uint8Array(old);
-}
-
-export interface LoadedFile {
-    pattern: PatternState;
-    pixels:  Uint8Array;
-    colorA:  string;
-    colorB:  string;
-}
+export type LoadedFile = McwDocument;
 
 export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
-    const file: SaveFileV2 = {
-        version: FILE_VERSION, state: s.pattern, pixels: packPixels(s.pixels),
-        colorA: s.colorA, colorB: s.colorB,
-    };
-    const json = JSON.stringify(file);
+    const json = encodeMcw(s);
 
     if ("showSaveFilePicker" in window) {
         try {
@@ -146,18 +119,7 @@ export function loadFromFile(): Promise<LoadedFile | null> {
             const reader = new FileReader();
             reader.onload = () => {
                 try {
-                    const data = JSON.parse(reader.result as string) as SaveFileV2 | SaveFileV1;
-                    if (!data || (data.version !== 2 && data.version !== 1)) { resolve(null); return; }
-                    assertPatternDimensions(data.state);
-                    const pixels = data.version === 2
-                        ? unpackPixels(data.pixels, data.state)
-                        : unpackPixelsV1(data.pixels);
-                    resolve({
-                        pattern: data.state,
-                        pixels,
-                        colorA:  data.colorA,
-                        colorB:  data.colorB,
-                    });
+                    resolve(decodeMcw(reader.result as string));
                 } catch (error) {
                     reject(error instanceof Error ? error : new Error("Invalid pattern file."));
                 }

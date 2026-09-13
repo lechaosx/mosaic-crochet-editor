@@ -86,7 +86,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 
 ### Stage 2 — Stable transactions, state ownership, and adaptive shell
 
-- [ ] Extract pure `.mcw` encode/decode and add compatibility fixtures before extending the schema.
+- [x] Extract pure `.mcw` encode/decode and add compatibility fixtures before extending the schema.
   - Cover v1/v2 round trips, malformed/future data, and failure without replacement of the active session.
   - Document ownership separately for authored document, editor workspace, local recovery, editor undo, display preferences, and future Live progress.
 - [ ] Add versioned migration boundaries for browser recovery and editor undo before adding new fields.

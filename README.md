@@ -119,7 +119,7 @@ The **⚙** button on the right of the toolbar opens a Settings popover:
 ### Saving
 
 - **Save** downloads the pattern as a `.mcw` file (JSON). Modern browsers (Chrome/Edge) open a save dialog; Firefox downloads immediately.
-- **Load** opens a file picker and restores pattern geometry, pixels, and colours. Symmetry and repeat transforms are session state and remain unchanged.
+- **Load** opens a file picker and restores pattern geometry, pixels, and colours. Symmetry and repeat transforms are session state and remain unchanged. Invalid files and files from a newer unsupported `.mcw` version are reported without replacing the current pattern.
 - **Export** opens a modal where the pattern is converted to text line-by-line. Each `oc` belongs to the worked row or round containing its visible ✕, while the covered supporting pixel remains an internal chart detail. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
 Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. Drawing remains live on the canvas while dragging and updates recovery storage when the stroke is released. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.

@@ -299,3 +299,28 @@ test("Load reports invalid pattern dimensions", async ({ page }) => {
 
     await expect(dialogMessage).resolves.toMatch(/whole positive numbers/);
 });
+
+test("Load rejects a future file without replacing the active session", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    const before = await page.evaluate(() => localStorage.getItem("mosaic-pattern-v4"));
+
+    const dialogMessage = new Promise<string>(resolve => {
+        page.once("dialog", async dialog => {
+            resolve(dialog.message());
+            await dialog.dismiss();
+        });
+    });
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.locator("#btn-load").click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+        name: "future.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({ version: 3 })),
+    });
+
+    await expect(dialogMessage).resolves.toBe("This pattern uses unsupported .mcw version 3.");
+    expect(await page.evaluate(() => localStorage.getItem("mosaic-pattern-v4"))).toBe(before);
+});

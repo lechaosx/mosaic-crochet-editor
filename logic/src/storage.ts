@@ -39,6 +39,9 @@ export function unpackPixels(s: string, state: PatternState): Uint8Array {
               state.offsetX, state.offsetY, state.rounds,
           );
     const packed = b64ToU8(s);
+    if (packed.length !== Math.ceil(out.length / 8)) {
+        throw new RangeError("Packed pixel data has the wrong length.");
+    }
     for (let i = 0; i < out.length; i++) {
         if (out[i] !== 0) {
             out[i] = ((packed[i >> 3] >> (i & 7)) & 1) ? 2 : 1;

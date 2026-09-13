@@ -185,3 +185,4 @@ These decisions constrain the future redesign; they do not imply that every layo
 ## Load
 
 - File picker → loads the picked `.mcw` → pushes a snapshot. Reverting is via undo (Ctrl+Z), which now restores the prior state, pixels *and* colours together. No separate revert bar. — **your decision**
+- Invalid, truncated, and unsupported future `.mcw` files are rejected before session replacement; a future version is identified explicitly. — **Agent's choice**

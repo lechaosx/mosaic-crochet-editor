@@ -65,7 +65,8 @@ Pure TypeScript — no DOM, `lib: ["ESNext"]` enforced. All modules are free fun
 | `symmetry.ts` | Axis list operations, Rust-boundary encoding, guide picking, snapping, and delete-zone geometry | free functions |
 | `repeat.ts` | Repeat-grid defaults, validation, and combined transform encoding | free functions |
 | `pattern.ts` | `applyEditSettings(settings: EditSettings, source?)` — pure; DOM-reading adapter lives in `web/src/pattern.ts` | free functions |
-| `storage.ts` | `packPixels` / `unpackPixels` / `packFloat` / `unpackFloat` — serialisation only | free functions |
+| `storage.ts` | Packed pixel/float byte encodings | free functions |
+| `mcw.ts` | Pure, versioned `.mcw` encode/decode and validation | free functions |
 | `types.ts` | `PatternState`, `Float`, `RepeatGrid`, `Tool`, `SymKey`, `Axis` (discriminated union: V / H / D1 / D2 / C) | types |
 | `dev.ts` | `devAssert` / `assertNever` — dead-code-eliminated in production | free functions |
 
@@ -79,7 +80,7 @@ Vite + TypeScript I/O shell. Imports `@mosaic/logic` and `@mosaic/wasm`.
 | `gesture.ts` | Pointer-event state machine. `mountGestures(r, callbacks)` takes renderer state explicitly. | free function |
 | `ui.ts` | Toolbar wiring (tools, swatches, transforms, popovers, dialogs) + responsive toolbar layout | `mountUI` returns `UIHandle` |
 | `history.ts` | Undo/redo snapshot stack, localStorage-backed (`mosaic-history-v4`); takes/returns `SessionState` slices | free functions |
-| `storage-io.ts` | `saveToLocalStorage` / `loadFromLocalStorage` / `saveToFile` / `loadFromFile` — browser I/O only | free functions |
+| `storage-io.ts` | Browser recovery storage plus file-picker/download I/O; delegates `.mcw` content to `@mosaic/logic/mcw` | free functions |
 | `pattern.ts` | DOM adapter: reads Edit popover inputs, calls `@mosaic/logic/pattern.applyEditSettings` | free function |
 | `dom.ts` | Small DOM helpers (`el`, `radioValue`, `readClampedInt`) | free functions |
 
@@ -132,9 +133,21 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 ### Pixel encoding
 - In memory: 3 values — 0 = inner hole (transparent sentinel), 1 = COLOR_A, 2 = COLOR_B. The sentinel doubles as the universal "skip this cell" guard (`!= 0`) across every tool. — **your decision**
 - On disk: 1 bit per cell (A=0, B=1). Save converts at the boundary; load rebuilds the 3-value array using geometry to fill the transparent sentinel. Hole bits in storage are arbitrary. — **your decision**
-- `.mcw` file format is v2 (packed bits + base64). v1 (legacy `number[]` encoding) is still loadable. Session `localStorage` includes float, symmetry-axis, repeat-grid, and live-transform state; history uses a separate v4 key and excludes the live execution mode. — **your decision** (file/session and live/history boundaries); **Agent's choice** (v4 migration)
+- `.mcw` file format is v2 (packed bits + base64). Pure encode/decode lives in `@mosaic/logic/mcw`; the web layer only reads and writes text. Fixture tests preserve v1 legacy `number[]` loading and v2 output, and decoding validates version, shape, dimensions, and payload length before allocation or session replacement. — **your decision** (v1/v2 compatibility); **Agent's choice** (codec boundary and validation)
 
 ### Data flow & state
+- State ownership is defined by meaning rather than by its current storage container:
+
+  | Owner | State | Persistence and history boundary |
+  |---|---|---|
+  | Authored document | Pattern geometry, pixels, and yarn definitions; future output/traversal settings that change generated instructions | `.mcw`; project Undo/Redo when edited |
+  | Editor workspace | Active tool/yarn, selection float, transform-tool recipe and live-application mode, current inspector/context | Browser recovery as appropriate; never `.mcw` merely to recreate the editing setup |
+  | Local recovery | The last recoverable authored document plus workspace state needed to resume editing | Versioned browser storage; independent of whether a project file is current |
+  | Editor Undo/Redo | Reversible authored edits plus reversible workspace-tool edits such as selection and transform configuration | Separate versioned browser stack; excludes view-only state and future crochet progress |
+  | Display preferences | View rotation and visibility today; future theme, yarn differentiation, handedness, focus layout, and text wrapping | Browser-local; excluded from `.mcw` and project history |
+  | Future Live progress | Confirmed crochet progress and progress-only Back boundaries | Browser-local recovery and a separate progress history; excluded from `.mcw` and project Undo/Redo |
+
+  Current recovery v4 stores these browser-local categories together; the ownership boundary governs future migrations and file-schema additions. — **your decision**
 - Single mutable owner: `Store` (class, in `store.ts`) owns `SessionState`. Direct mutation of `store.state` is blocked at the type level (`Readonly<SessionState>`); all writes go through `store.commit(mutate, opts?)`. — **your decision**
 - `commit` runs the chain: recompute highlight plan → push history (if `history`) → render (via registered renderer) → persist (via registered persister) → run observers. Defaults: recompute on, render on, history off, persist on. — **joint**
 - Paint preview commits set `persist: false`; the release commit writes both the single undo snapshot and the final recovery state. — **Agent's choice**

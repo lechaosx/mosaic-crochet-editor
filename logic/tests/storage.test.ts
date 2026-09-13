@@ -1,8 +1,68 @@
 import { describe, test, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import {
     packPixels, unpackPixels, packFloat, unpackFloat,
 } from "../src/storage";
+import { decodeMcw, encodeMcw } from "../src/mcw";
 import { filledPixels } from "./_helpers";
+
+function mcwFixture(name: string): string {
+    return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
+}
+
+describe(".mcw codec", () => {
+    test("loads a v1 fixture and upgrades it through a v2 round-trip", () => {
+        const legacy = decodeMcw(mcwFixture("pattern-v1.mcw"));
+        expect(legacy.pattern).toEqual({ mode: "row", canvasWidth: 2, canvasHeight: 2 });
+        expect(Array.from(legacy.pixels)).toEqual([1, 2, 2, 1]);
+        expect(legacy.colorA).toBe("#112233");
+        expect(legacy.colorB).toBe("#ddeeff");
+
+        const upgraded = decodeMcw(encodeMcw(legacy));
+        expect(upgraded).toEqual(legacy);
+    });
+
+    test("loads a v2 fixture and preserves it through a v2 round-trip", () => {
+        const current = decodeMcw(mcwFixture("pattern-v2.mcw"));
+        expect(Array.from(current.pixels)).toEqual([1, 2, 1, 2]);
+
+        const encoded = JSON.parse(encodeMcw(current));
+        expect(encoded).toEqual({
+            version: 2,
+            state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
+            pixels: "Cg==",
+            colorA: "#010203",
+            colorB: "#fafbfc",
+        });
+        expect(decodeMcw(JSON.stringify(encoded))).toEqual(current);
+    });
+
+    test.each([
+        ["malformed JSON", "{"],
+        ["missing fields", JSON.stringify({ version: 2 })],
+        ["invalid v1 pixels", JSON.stringify({
+            version: 1,
+            state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
+            pixels: [1, 2, 3, 1],
+            colorA: "#000000",
+            colorB: "#ffffff",
+        })],
+        ["short v2 pixels", JSON.stringify({
+            version: 2,
+            state: { mode: "row", canvasWidth: 9, canvasHeight: 1 },
+            pixels: "AA==",
+            colorA: "#000000",
+            colorB: "#ffffff",
+        })],
+    ])("rejects %s", (_name, source) => {
+        expect(() => decodeMcw(source)).toThrow("Invalid pattern file.");
+    });
+
+    test("identifies a future file version", () => {
+        expect(() => decodeMcw(JSON.stringify({ version: 3 })))
+            .toThrow("This pattern uses unsupported .mcw version 3.");
+    });
+});
 
 describe("packPixels / unpackPixels", () => {
     test("round-trip preserves A/B values on non-hole cells", () => {
