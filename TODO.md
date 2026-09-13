@@ -130,11 +130,12 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - Test whether two persistent strategies are understood or whether explicit tool names/groups are sufficient.
   - Do not add strategy state, persistence, or strategy-sensitive transforms until behavior is unambiguous and validated.
   - Prototype conclusion: retain both workflows as explicit Colour, Overlay, and Arrange tool groups; defer global strategy state.
-- [ ] Prototype transform improvements against real sparse motifs without changing saved transform semantics.
+- [x] Prototype transform improvements against real sparse motifs without changing saved transform semantics.
   - [x] First add exact selection previews and direct repeat-distance manipulation to the current axes/repeat model.
   - [x] Test mask packing, directional counts, spacing, stagger offsets, combined-grid collisions, and inverse source mapping in a pure evaluator.
-  - [ ] Add quarter-turn repeat and alternate mirrored addressing to the pure evaluator.
-  - Preserve multiple Central axes; require a lossless migration before replacing them.
+  - [x] Add exact quarter-turn repeat and signed-parity alternate mirrored addressing to the pure evaluator.
+  - Existing multiple Central axes remain untouched; replacing them still requires a lossless migration.
+  - Prototype conclusion: the source-mapped Source → Around centre → Grid model is coherent; runtime integration remains incremental and must preserve current saved semantics.
 - [ ] Prototype Live as row/round-level progress only.
   - Use the finished chart, current-row/round focus, current yarn, Done, Back, and exact local resume against a frozen structured plan.
   - Validate during real crochet sessions before adding run/stitch tracking or chart-derived WIP rendering.
