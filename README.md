@@ -93,6 +93,8 @@ Active axes compose automatically: for example, vertical and horizontal mirrors 
 
 Enable **Include repeat** to add fixed tile offsets to the transformation. Horizontal and vertical copy counts are per side: `1` horizontal and `1` vertical produces a 3×3 set of positions including the source. When symmetry and repeat are both configured, symmetry creates the complete motif first and the repeat grid tiles that motif. Dotted tile guides remain visible while repeat is included and preview while the inspector is open.
 
+With a floating selection and the inspector open, ghost cells preview exactly where the current mirror-and-repeat recipe will stamp the selected cells. Sparse selections remain sparse. The horizontal and vertical distance lines end in draggable circular handles whenever that direction has copies; drag a handle to adjust the corresponding tile dimension, or enter the exact whole-cell value in the inspector. Each drag is one undoable edit.
+
 The repeat grid accepts at most 4,096 positions. Operations also abort instead of leaving partial output if their transformed target claims exceed 1,048,576.
 
 **Apply while drawing** affects future pencil, fill, eraser, overlay, and invert operations only. **Stamp transformed copies** applies the same configured transformation to content that already exists in the floating selection, even when live drawing is off. Choose it or press **T**; the source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict in the transform inspector and leaves the canvas unchanged.

@@ -1,12 +1,14 @@
-import { PatternState, RowState, RoundState, Axis, SymKey, RepeatGrid } from "@mosaic/logic/types";
-import { PlanType, PlanDir } from "@mosaic/wasm";
+import { PatternState, RowState, RoundState, Axis, SymKey, RepeatGrid, Float } from "@mosaic/logic/types";
+import { PlanType, PlanDir, transformed_target_indices } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
+import { transformsToFlat } from "@mosaic/logic/repeat";
 
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;
 const ROT_DURATION = 250;
 const FADE_RATE    = 1 / 0.18;   // per second
 const FAVICON_SIZE = 32;
+const MAX_TRANSFORM_PREVIEW_CLAIMS = 1_048_576;
 const LABEL_FONT   = `ui-monospace, "SF Mono", Menlo, monospace`;
 // Marching-ants scroll speed in **screen pixels** per second. Converted to
 // pattern units per frame using current zoom/dpr so the perceived speed is
@@ -420,6 +422,9 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 
     renderFocusPath(ctx, view, dpr, rs.focusPath);
     renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, store.plan, m, hlOpacity / 100);
+    if (rs.previewRepeatGuides) {
+        renderSelectionTransformPreview(ctx, view, dpr, pattern, pixels, float, axes, repeat, rs.colors, rs.contrastingColor);
+    }
     renderRepeatGuides(ctx, view, dpr, pattern, repeat, rs.contrastingColor, rs.previewRepeatGuides);
     renderSymmetryGuides(ctx, view, dpr, pattern, axes, rs.contrastingColor, rs.axesInDeleteZone);
     // During a drag, the preview wins even when empty (drag started outside
@@ -775,6 +780,101 @@ function renderRepeatGuides(
         ctx.lineTo(W, y);
     }
     ctx.stroke();
+
+    if (preview && repeat.enabled) {
+        const radius = Math.max(0.16, 7 / (view.zoom * dpr));
+        ctx.globalAlpha = 0.9;
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        if (repeat.copiesX > 0) {
+            ctx.moveTo(0.5, 0.5);
+            ctx.lineTo(repeat.tileWidth + 0.5, 0.5);
+            ctx.moveTo(repeat.tileWidth + 0.5 + radius, 0.5);
+            ctx.arc(repeat.tileWidth + 0.5, 0.5, radius, 0, Math.PI * 2);
+        }
+        if (repeat.copiesY > 0) {
+            ctx.moveTo(0.5, 0.5);
+            ctx.lineTo(0.5, repeat.tileHeight + 0.5);
+            ctx.moveTo(0.5 + radius, repeat.tileHeight + 0.5);
+            ctx.arc(0.5, repeat.tileHeight + 0.5, radius, 0, Math.PI * 2);
+        }
+        ctx.stroke();
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+export type RepeatHandleAxis = "x" | "y";
+
+export function pickRepeatHandle(
+    repeat: RepeatGrid, x: number, y: number, tolerance: number,
+): RepeatHandleAxis | null {
+    if (!repeat.enabled) return null;
+    if (repeat.copiesX > 0 && Math.hypot(x - repeat.tileWidth - 0.5, y - 0.5) <= tolerance) return "x";
+    if (repeat.copiesY > 0 && Math.hypot(x - 0.5, y - repeat.tileHeight - 0.5) <= tolerance) return "y";
+    return null;
+}
+
+function renderSelectionTransformPreview(
+    ctx: CanvasRenderingContext2D,
+    view: ViewState,
+    dpr: number,
+    pattern: PatternState,
+    pixels: Uint8Array,
+    float: Float | null,
+    axes: ReadonlyArray<Axis>,
+    repeat: RepeatGrid,
+    colors: (string | null)[],
+    outline: string,
+) {
+    if (!float) return;
+    const transforms = transformsToFlat(axes, repeat);
+    if (transforms.length === 0) return;
+
+    const W = pattern.canvasWidth;
+    const H = pattern.canvasHeight;
+    const sources = new Map<number, number>();
+    for (let ly = 0; ly < float.h; ly++) {
+        for (let lx = 0; lx < float.w; lx++) {
+            const value = float.pixels[ly * float.w + lx];
+            const x = float.x + lx;
+            const y = float.y + ly;
+            if (value !== 0 && x >= 0 && x < W && y >= 0 && y < H) sources.set(y * W + x, value);
+        }
+    }
+
+    const claims = new Map<number, number>();
+    let claimCount = 0;
+    preview:
+    for (const [source, value] of sources) {
+        const x = source % W;
+        const y = Math.floor(source / W);
+        for (const target of transformed_target_indices(W, H, x, y, transforms)) {
+            claimCount++;
+            if (claimCount > MAX_TRANSFORM_PREVIEW_CLAIMS) {
+                claims.clear();
+                break preview;
+            }
+            if (sources.has(target) || pixels[target] === 0) continue;
+            const previous = claims.get(target);
+            claims.set(target, previous === undefined || previous === value ? value : 3);
+        }
+    }
+
+    const inset = 2 / (view.zoom * dpr);
+    ctx.save();
+    ctx.lineWidth = 2 / (view.zoom * dpr);
+    for (const [i, claim] of claims) {
+        const x = i % W;
+        const y = Math.floor(i / W);
+        ctx.globalAlpha = claim === 3 ? 0.72 : 0.5;
+        ctx.fillStyle = claim === 3 ? outline : colors[claim] ?? outline;
+        ctx.fillRect(x + inset, y + inset, 1 - inset * 2, 1 - inset * 2);
+        ctx.globalAlpha = 0.95;
+        ctx.strokeStyle = outline;
+        ctx.strokeRect(x + inset, y + inset, 1 - inset * 2, 1 - inset * 2);
+    }
     ctx.restore();
 }
 

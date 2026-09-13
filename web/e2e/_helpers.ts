@@ -10,6 +10,12 @@ declare global {
 
 // CSS-px coord of cell (x, y)'s centre on the rendered canvas.
 export async function cellCoord(page: Page, x: number, y: number): Promise<{ cx: number; cy: number }> {
+    await page.waitForFunction(() => {
+        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        const dpr = window.devicePixelRatio || 1;
+        return canvas.width === Math.max(1, Math.round(canvas.clientWidth * dpr))
+            && canvas.height === Math.max(1, Math.round(canvas.clientHeight * dpr));
+    });
     return page.evaluate(({ x, y }) => {
         const canvas = document.getElementById("canvas") as HTMLCanvasElement;
         const rect = canvas.getBoundingClientRect();

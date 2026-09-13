@@ -213,6 +213,64 @@ test("Stamp transformed copies applies repeat and keeps the source selected", as
     expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
 });
 
+test("repeat previews the selected source before stamping", async ({ page }) => {
+    await bootApp(page);
+    const initialTarget = await cellCoord(page, 2, 1);
+    const natural = await pixelRGB(page, initialTarget.cx, initialTarget.cy);
+    await clickCell(page, 4, 1, { button: natural[0] < 128 ? "right" : "left" });
+    await clickCell(page, 6, 1, { button: natural[0] < 128 ? "right" : "left" });
+    await page.keyboard.press("s");
+    await clickCell(page, 4, 1);
+    await clickCell(page, 6, 1, { modifiers: ["Shift"] });
+
+    await page.locator("#btn-sym-toggle").click();
+    await page.locator("#repeat-tile-width").fill("2");
+    await page.locator("#repeat-copies-x").fill("1");
+    await page.locator("#repeat-copies-y").fill("0");
+    const target = await cellCoord(page, 2, 1);
+    const gap = await cellCoord(page, 3, 1);
+    const targetBefore = await pixelRGB(page, target.cx, target.cy);
+    const gapBefore = await pixelRGB(page, gap.cx, gap.cy);
+    await page.locator("label:has(#repeat-enabled)").click();
+
+    const previewTarget = await cellCoord(page, 2, 1);
+    const previewGap = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, previewTarget.cx, previewTarget.cy)).not.toEqual(targetBefore);
+    expect(await pixelRGB(page, previewGap.cx, previewGap.cy)).toEqual(gapBefore);
+});
+
+test("repeat distance handles update exact fields as one undoable edit each", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").click();
+    await page.locator("#repeat-tile-width").fill("2");
+    await page.locator("#repeat-tile-height").fill("2");
+    await page.locator("#repeat-copies-x").fill("1");
+    await page.locator("#repeat-copies-y").fill("1");
+    await page.locator("label:has(#repeat-enabled)").click();
+
+    const start = await cellCoord(page, 2, 0);
+    const end = await cellCoord(page, 3, 0);
+    await page.mouse.move(start.cx, start.cy);
+    await page.mouse.down();
+    await page.mouse.move(end.cx, end.cy, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.locator("#repeat-tile-width")).toHaveValue("3");
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.locator("#repeat-tile-width")).toHaveValue("2");
+
+    const verticalStart = await cellCoord(page, 0, 2);
+    const verticalEnd = await cellCoord(page, 0, 3);
+    await page.mouse.move(verticalStart.cx, verticalStart.cy);
+    await page.mouse.down();
+    await page.mouse.move(verticalEnd.cx, verticalEnd.cy, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.locator("#repeat-tile-height")).toHaveValue("3");
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.locator("#repeat-tile-height")).toHaveValue("2");
+});
+
 test("repeat grid tiles the complete symmetry motif", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();

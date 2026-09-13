@@ -131,7 +131,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - Do not add strategy state, persistence, or strategy-sensitive transforms until behavior is unambiguous and validated.
   - Prototype conclusion: retain both workflows as explicit Colour, Overlay, and Arrange tool groups; defer global strategy state.
 - [ ] Prototype transform improvements against real sparse motifs without changing saved transform semantics.
-  - First add exact previews and direct manipulation to the current axes/repeat model.
+  - [x] First add exact selection previews and direct repeat-distance manipulation to the current axes/repeat model.
   - Separately test mask packing, directional counts, quarter-turn repeat, stagger, mirrored addressing, collision rules, and inverse editing in a pure evaluator.
   - Preserve multiple Central axes; require a lossless migration before replacing them.
 - [ ] Prototype Live as row/round-level progress only.

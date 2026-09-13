@@ -4,7 +4,8 @@ import { PlanType, lock_invalid_row, lock_invalid_round,
          InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
-         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateStatus } from "./render";
+         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateStatus,
+         pickRepeatHandle, RepeatHandleAxis } from "./render";
 import { applyEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized,
@@ -21,6 +22,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          deleteFloat, clipFloatToCanvas, replicateSelection } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
+import { MAX_CANVAS_DIMENSION } from "@mosaic/logic/pattern";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -117,6 +119,10 @@ type Gesture =
         picks: { id: string; kind: SymKey }[];
         // Snapshot the axes list so cancel can revert without recomputing.
         preAxes: Axis[];
+      }
+    | { kind: "repeat-drag";
+        axis: RepeatHandleAxis;
+        preRepeat: typeof store.state.repeat;
       };
 // Click within this many cell-units of an active axis guide starts an
 // axis-drag instead of float-move. ~0.4 keeps the affordance close to the
@@ -788,6 +794,38 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     },
     onPaintAt:    (cx, cy) => {
         if (!gesture) return;
+        if (gesture.kind !== "repeat-drag" && rs.previewRepeatGuides) {
+            const frac = screenToPatternFrac(
+                viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+                store.state.pattern, cx, cy,
+            );
+            const handle = pickRepeatHandle(
+                store.state.repeat, frac.x, frac.y,
+                Math.max(0.4, 22 / viewport.view.zoom),
+            );
+            if (handle) {
+                gesture = { kind: "repeat-drag", axis: handle, preRepeat: { ...store.state.repeat } };
+                return;
+            }
+        }
+        if (gesture.kind === "repeat-drag") {
+            const frac = screenToPatternFrac(
+                viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+                store.state.pattern, cx, cy,
+            );
+            const distance = Math.max(1, Math.min(
+                MAX_CANVAS_DIMENSION,
+                Math.round((gesture.axis === "x" ? frac.x : frac.y) - 0.5),
+            ));
+            if (gesture.axis === "x" && distance !== store.state.repeat.tileWidth) {
+                store.commit(s => { s.repeat = { ...s.repeat, tileWidth: distance }; }, { recompute: false, persist: false });
+                ui.setRepeatGrid(store.state.repeat);
+            } else if (gesture.axis === "y" && distance !== store.state.repeat.tileHeight) {
+                store.commit(s => { s.repeat = { ...s.repeat, tileHeight: distance }; }, { recompute: false, persist: false });
+                ui.setRepeatGrid(store.state.repeat);
+            }
+            return;
+        }
         if (gesture.kind === "move") {
             const p = screenToPattern(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
@@ -921,6 +959,12 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     },
     onPaintEnd:   () => {
         if (!gesture) return;
+        if (gesture.kind === "repeat-drag") {
+            const changed = JSON.stringify(gesture.preRepeat) !== JSON.stringify(store.state.repeat);
+            if (changed) store.commit(() => {}, { recompute: false, render: false, history: true });
+            gesture = null;
+            return;
+        }
         if (gesture.kind === "move") {
             if (!gesture.drag) { gesture = null; return; }
             if (gesture.mode === "mask-only" && store.state.float) {
@@ -997,6 +1041,13 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
         if (!gesture) return;
+        if (gesture.kind === "repeat-drag") {
+            const { preRepeat } = gesture;
+            gesture = null;
+            store.commit(s => { s.repeat = preRepeat; }, { recompute: false });
+            ui.setRepeatGrid(store.state.repeat);
+            return;
+        }
         if (gesture.kind === "move") {
             const { prePixels, preFloat } = gesture;
             gesture = null;
