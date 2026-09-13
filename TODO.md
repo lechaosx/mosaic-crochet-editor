@@ -111,7 +111,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 - [x] Product gate: define the supported [chart dialect and terminology](doc/chart-dialect.md) with representative row and centre-out fixtures.
   - Apply the agreed Rows/Centre-out terminology and retain the foundation, row/round identity, corner-pixel, yarn-phase, authored-extent, explicit-traversal, and derivability-based validation contracts.
   - Preserve current traversal first, then add the agreed explicit controls only after the structured path exists. Do not implement output composition before this gate passes.
-- [ ] Expose a typed, flat chart work sequence from Rust while preserving current text byte-for-byte.
+- [x] Expose a typed, flat chart work sequence from Rust while preserving current text byte-for-byte.
   - Include stable row/round identity, worked coordinate, supporting/parent coordinate, yarn, and `sc`/`oc`/`ch` kind.
   - Verify flattened coordinate and stitch parity with corrected exporter fixtures.
 - [ ] Expose compression structure as a renderer-independent result.
