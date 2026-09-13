@@ -115,3 +115,28 @@ test("Live reports when its progress cannot be saved locally", async ({ page }) 
     await page.getByRole("tab", { name: "Live" }).click();
     await expect(page.getByRole("heading", { name: "Row 1" })).toBeVisible();
 });
+
+test("Live completes and reopens a Centre-out round as one boundary", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.getByLabel("Rounds").fill("1");
+    await page.getByRole("button", { name: "Apply" }).click();
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Live" }).click();
+    const live = page.getByRole("tabpanel", { name: "Live" });
+    await expect(page.getByRole("heading", { name: "Round 1" })).toBeVisible();
+    await expect(live.getByText("Yarn A", { exact: true })).toBeVisible();
+    const back = page.getByRole("button", { name: "Back one round" });
+    await expect(back).toBeDisabled();
+
+    await page.getByRole("button", { name: "Done with Round 1" }).click();
+    await expect(page.getByRole("heading", { name: "Pattern complete" })).toBeVisible();
+    await expect(live.getByRole("status")).toContainText("1 of 1 complete");
+    await expect(back).toBeEnabled();
+    await expect(page.getByRole("button", { name: /Done with/ })).toBeHidden();
+
+    await back.click();
+    await expect(page.getByRole("heading", { name: "Round 1" })).toBeVisible();
+});
