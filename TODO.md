@@ -1,8 +1,8 @@
-# TODO — Selection and transforms
+# TODO — Product backlog
 
 Current implementation status and remaining work. Shipped product decisions live in [FEATURES.md](FEATURES.md); technical decisions live in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-## Status
+## Selection and transforms
 
 | Phase | State |
 |---|---|
@@ -12,3 +12,756 @@ Current implementation status and remaining work. Shipped product decisions live
 | 4 — Custom symmetry axes | Shipped |
 | 5 — Apply symmetry to selection | Shipped |
 | 6 — Repeat grids | Shipped |
+
+## UX/UI redesign
+
+Status: implementation in progress. Follow only the authoritative sequence below. The longer brainstorming inventory is retained so later work does not accidentally preclude useful ideas, but it is not an implementation specification.
+
+Review artifact: [independent plan audit](doc/ux-plan-audit.md).
+
+### Governing product boundary
+
+- The editor models chart information while the user supplies their crochet technique.
+- Generated Instructions are a chart-derived work sequence and chart companion, not a complete standalone crochet pattern.
+- Do not infer or prescribe foundations, turning, cutting, carrying, joining, finishing, or how an overlay is made.
+- Keep `sc` for single crochet, `ch` for chain, and app-specific `oc` for a chart-required overlay operation. Define `oc` in every generated legend without assigning it a stitch recipe.
+- In row patterns, treat the bottom edge as a foundation outside the generated work sequence and number the first worked row above it Row 1. Associate a visible overlay instruction with the row in which the overlay is worked, regardless of which supporting cell stores it internally.
+- In centre-out patterns, treat the innermost visible band as Round 1 and number successive bands outward. Centre setup or foundation is outside the generated work sequence. Associate a visible overlay instruction with the round in which the overlay is worked, regardless of its internal supporting-cell representation.
+- Treat each diagonal centre-out corner pixel as a complete `(sc, ch, sc)` group that cannot itself be an overlay. Neighbouring pixels retain normal Overlay behavior, including when their instructions are grouped beside a corner.
+- Use a fixed yarn phase: the row foundation is Yarn A, Row 1 is Yarn B, and subsequent rows alternate; centre-out Round 1 is Yarn A and subsequent rounds alternate outward. Yarn A/B are logical chart slots whose colours can be edited or swapped. Instructions identify the yarn for each row or round without prescribing transitions or carrying.
+- Treat Full, Half, and Quarter as authored extents only: Full contains the complete centre-out chart, Half its canonical bottom half, and Quarter its canonical bottom-left quarter. They do not imply mirroring, rotation, symmetry, or repetition. `As authored` Instructions cover exactly the stored extent while retaining round identities; any larger result requires a separately selected composition.
+- Do not infer instruction traversal from a global handedness mode. Row traversal explicitly selects a left/right origin and same/alternating direction; centre-out traversal selects a semantic corner or side midpoint, clockwise/counter-clockwise direction, and same/alternating direction. One origin maps across all rounds, with both central cells offered for an even-length side. These settings order chart work only and do not prescribe transitions or change chart appearance.
+- Keep handed placement of Live controls as a local interface preference independent of traversal and `.mcw` chart data.
+- Classify validation by derivability, not convention. A Blocker means the selected output cannot be translated into an unambiguous `sc`/`ch`/`oc` sequence matching the chart; examples include an overlay requiring work outside the output extent, a lossy or ambiguous composition, and an unavailable traversal origin. A Warning identifies a deterministic result worth reviewing, such as difficult-to-distinguish yarn colours. Do not warn merely because valid work is unusual.
+- Keep Instructions Overview available with blockers and link each one to its chart location. Prevent Live from starting, but keep compressed Text available as a clearly labelled draft with every unresolved position marked explicitly rather than silently emitted as `sc`.
+- Keep the product name Mosaic Crochet Editor and call its pattern geometries Rows and Centre-out. Describe the model as an alternating-yarn mosaic chart with derived overlay positions; do not claim complete compatibility with every named inset or overlay technique. Keep Overlay as the tool and `oc` as the app-defined operation whose physical method the user supplies.
+
+### Delivery rules
+
+- Each unchecked checkbox below is one intended commit unless it explicitly says it is a product gate rather than implementation.
+- Every commit leaves the current editor usable and preserves unrelated shipped workflows.
+- Use red → green tests for behavior: Rust for chart geometry/export, Vitest for state and serialization, and Playwright for user interaction.
+- Update README and FEATURES with user-visible behavior and ARCHITECTURE with state, serialization, or module-boundary changes in the same commit.
+- Run the smallest relevant test during development and `bun run test` before completing each stage.
+- Do not introduce persisted state for a prototype. Add durable state only after the corresponding product gate passes.
+
+### Stage 0 — Correctness before redesign
+
+- [x] Pin row, foundation, and visible-overlay export semantics with failing Rust fixtures.
+  - Build minimal patterns containing one visible overlay and assert which rendered chart row/round owns the emitted `oc`.
+  - Assert that the bottom edge is an unnumbered foundation outside the generated sequence and that the next row is visible and exported as Row 1.
+  - Assert that the innermost centre-out band is visible and exported as Round 1, with no generated centre setup or foundation.
+  - Assert that a diagonal centre-out corner pixel emits `(sc, ch, sc)` without restricting Overlay behavior on neighbouring pixels.
+  - Implement only the corrections demonstrated by those fixtures.
+- [x] Make pointer cancellation restore the complete gesture start state.
+  - Add a failing Playwright test for `pointercancel`, including cancellation caused by a second touch starting navigation.
+  - Route cancellation through the existing cancel callback rather than the commit path.
+- [x] Persist continuous canvas edits once at the completed gesture boundary.
+  - Add a failing test proving recovery is not rewritten during pointer movement and is current after release.
+  - Keep live rendering during the stroke and perform one persistence write after commit.
+- [x] Make one Wand sweep one undoable edit.
+  - Add a failing unit/E2E test covering multiple visited regions followed by one Undo.
+  - Remove intermediate history entries without changing selection results.
+- [x] Restore native keyboard semantics for existing toggles and selected controls.
+  - Replace `display: none` input hiding with an accessible visually-hidden treatment and expose active tool/yarn state programmatically.
+  - Verify keyboard activation, focus visibility, accessible name, role, and state before changing the shell.
+
+### Stage 1 — High-value improvements to the existing workspace
+
+- [x] Replace dynamic control shrinking with adaptive minimum targets: 36 × 36 CSS pixels on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact.
+  - Keep all eight shipped tools reachable and move only lower-frequency commands into a simple More surface.
+  - Verify 360 px, phone touch, tablet portrait/landscape, desktop, and increased text size without multiplying the entire E2E suite across every viewport.
+- [x] Add concise, non-duplicated active context.
+  - Surface active tool, active Yarn A/B, coordinates, selection count, current transform live/paused state, and existing invalid-overlay count near their owning controls.
+  - Avoid introducing the future blocker/warning taxonomy until concrete blocking cases exist.
+- [ ] Expose existing selection and clipboard operations to touch without changing their outcomes.
+  - Provide Move, Duplicate, Move selection area, Copy, Cut, Paste, and Deselect with text labels and shortcut hints.
+  - Keep the current Delete behavior labelled conservatively until its unusual conditional semantics are separately redesigned and tested.
+- [ ] Explain existing blocked/no-op canvas actions contextually.
+  - Cover painting outside a selection, protected cells, invalid Overlay targets, and unavailable Move.
+  - Coalesce feedback within one gesture and keep hover-only explanations supplementary.
+- [ ] Rename primary/secondary colours to Yarn A/B and add colour-independent active state plus visible Edit and Swap actions.
+  - Preserve current pixel semantics and file compatibility.
+  - Defer labels, similarity analysis, and persistent accessibility preferences until Instructions consumes them.
+
+### Stage 2 — Stable transactions, state ownership, and adaptive shell
+
+- [ ] Extract pure `.mcw` encode/decode and add compatibility fixtures before extending the schema.
+  - Cover v1/v2 round trips, malformed/future data, and failure without replacement of the active session.
+  - Document ownership separately for authored document, editor workspace, local recovery, editor undo, display preferences, and future Live progress.
+- [ ] Add versioned migration boundaries for browser recovery and editor undo before adding new fields.
+  - Avoid embedding large retained transform-source masks in every history snapshot.
+- [ ] Implement explicit Pattern Apply/Cancel as a narrow vertical slice.
+  - Add failing E2E coverage for outside interaction, Escape/Cancel restoration, invalid-field last-valid preview, and one history entry on Apply.
+  - Defer resize handles, new preservation anchors, diagrams, output links, and Live/transform reconciliation.
+- [ ] Build the first adaptive shell with a document bar, existing tools, canvas, compact status, and one open/closed inspector host.
+  - Separate document actions from authoring tools: use a document bar, tool rail, pinned inspector, and status area on wide layouts; use a compact app bar, bottom or side authoring dock, and inspector sheet when space is constrained.
+  - Recompose the same named and ordered controls rather than creating separate desktop and touch interfaces.
+  - Treat the current three-row phone toolbar as a safe intermediate state, not the final compact composition.
+  - Keep inspector content independent of pinned/drawer placement.
+  - Defer Peek/Half/Full detents, resizable pinning, automatic pan restoration, posture memory, and the full system-Back stack.
+- [ ] Add explicit Fit, zoom, Rotate view left/right, Reset view rotation, and Navigate controls without changing rotation pivot semantics.
+  - Retain existing wheel, pinch, and middle-button navigation.
+  - Add Space-drag only as a tested momentary Navigate override.
+- [ ] Make local-recovery failure visible and distinguish browser recovery from `.mcw` saving.
+  - Defer persistent file-handle freshness, last-download history, and replacement guards until serialization ownership is proven.
+
+### Stage 3 — Structured chart companion
+
+- [ ] Product gate: define the supported chart dialect and terminology with representative row and centre-out fixtures.
+  - Apply the agreed Rows/Centre-out terminology and retain the foundation, row/round identity, corner-pixel, yarn-phase, authored-extent, explicit-traversal, and derivability-based validation contracts.
+  - Preserve current traversal first, then add the agreed explicit controls only after the structured path exists. Do not implement output composition before this gate passes.
+- [ ] Expose a typed, flat chart work sequence from Rust while preserving current text byte-for-byte.
+  - Include stable row/round identity, worked coordinate, supporting/parent coordinate, yarn, and `sc`/`oc`/`ch` kind.
+  - Verify flattened coordinate and stitch parity with corrected exporter fixtures.
+- [ ] Expose compression structure as a renderer-independent result.
+  - Keep arbitrary compression groups separate from domain-semantic rows, rounds, sides, or authored repeats.
+  - Verify the existing text renderer remains byte-for-byte compatible.
+- [ ] Replace the export modal with an Instructions Text peer workspace.
+  - Show the exact Copy/Download text, preserve Design state across switching, and provide a defined notation legend.
+  - Do not add Live, composition, WIP reconstruction, or traversal editing in this commit.
+- [ ] Add a minimal Overview using the finished chart and structured row/round list.
+  - Selecting a line focuses the corresponding path without changing data or introducing progress.
+  - Keep Overview inspectable with blockers; link issues to the chart, prevent Live from starting, and expose Text as a labelled draft with explicit unresolved positions.
+
+### Stage 4 — Product prototypes and decision gates
+
+- [ ] Prototype Colour Design versus Stitch Placement with concrete tasks and tool outcomes.
+  - Test whether two persistent strategies are understood or whether explicit tool names/groups are sufficient.
+  - Do not add strategy state, persistence, or strategy-sensitive transforms until behavior is unambiguous and validated.
+- [ ] Prototype transform improvements against real sparse motifs without changing saved transform semantics.
+  - First add exact previews and direct manipulation to the current axes/repeat model.
+  - Separately test mask packing, directional counts, quarter-turn repeat, stagger, mirrored addressing, collision rules, and inverse editing in a pure evaluator.
+  - Preserve multiple Central axes; require a lossless migration before replacing them.
+- [ ] Prototype Live as row/round-level progress only.
+  - Use the finished chart, current-row/round focus, current yarn, Done, Back, and exact local resume against a frozen structured plan.
+  - Validate during real crochet sessions before adding run/stitch tracking or chart-derived WIP rendering.
+- [ ] Prototype one deterministic composed-output preset in pure chart geometry.
+  - Start with As authored plus one applicable Mirror-to-full or Rotate-to-full case.
+  - Validate shared corners, yarn phase, paths, and source mapping before adding project state or Source/Output workspaces.
+
+### Explicit deferrals and architectural guardrails
+
+- Defer recursive compression tracking, two Live cursors, preview-ahead WIP, edit reconciliation, midway starts, Focus mode, Wake Lock, Crochet again, and Print until the basic Live loop proves useful.
+- Defer physical-WIP reconstruction; retain a finished chart with current-work masking as the default prototype.
+- Defer side-midpoint round starts and alternating-round traversal until the structured path exists; then validate their usability with crocheters before persisting them as project settings.
+- Defer three-detent sheets, resizable inspector persistence, automatic occlusion panning, semantic zoom, overview navigator, and full browser-Back unwinding. Keep inspector content and render layers separable so these remain possible.
+- Defer persistent clipboard, exhaustive Help/coach-mark infrastructure, pen-specific eraser behavior, filename association, and multi-theme visual polish.
+- Do not retain source-less transform recipes across New/Open initially. Do not replace multiple Central axes or change clipping/collision rules without an explicit product decision and property tests.
+- Keep output composition and authoring transforms separate if composition passes its gate; neither should be inferred from Full/Half/Quarter source extent.
+- Use one valid committed transform recipe while invalid edits remain local drafts instead of adding separate requested/effective/suspended live states initially.
+- Do not add a nullable-document architecture for onboarding. Prototype a welcome surface over the existing session and suppress untouched recovery persistence instead.
+
+<details>
+<summary>Brainstorming inventory and superseded drafts (non-authoritative)</summary>
+
+### Brainstorming inventory
+
+The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-workspace-conventions) are firm redesign constraints. The remaining detail below is retained as design input: it may guide prototypes and prevent early architecture from closing useful paths, but it is superseded by the audited staging above wherever scope, ordering, or semantics differ.
+
+- Use one interaction model across screen sizes. Adapt placement and density without changing tool names, ordering, state, or meaning.
+- Use neutral, low-chroma chrome so yarn colours remain the visual focus. Reserve one interface accent independent of Yarn A/B and never reuse yarn colours for generic tool, selection, or validation state.
+- Offer locally stored System, Light, and Dark themes, defaulting new users to System while preserving an existing session's theme during migration.
+- Communicate active, disabled, warning, and selected states with a non-colour channel such as shape, border, icon, text, or texture. Use consistent outline icons, bounded or filled active states, and a visible label for the current tool.
+- Use tabular numerals for dimensions, coordinates, counts, and progress. Keep surface hierarchy shallow: workspace, inspector or sheet, and temporary overlay.
+- Use short spatial transitions only when they explain a relationship, honor reduced-motion preferences, provide strong keyboard focus, and support forced-colour/high-contrast environments.
+- Choose the exact accent hue, typeface, radii, shadows, and motion values in visual mockups so they are evaluated as a coherent system.
+- Use a 10–11 inch tablet in landscape with touch or pen as the reference authoring posture.
+- Keep tablet portrait and phone layouts canvas-first, with contextual controls in drawers or bottom sheets.
+- On phone and portrait tablet, use one non-modal inspector bottom sheet with Peek, Half, and Full detents. Open at Half; tapping visible canvas collapses to Peek without canceling or committing state.
+- Give the canvas an occlusion inset for the sheet so Fit and focus use only visible space. Sheet expansion may pan but never zoom focused content into view; restore the earlier view on collapse when that pan was automatic and the user did not navigate meanwhile.
+- Start sheet resizing only from its handle so content can scroll normally. Always provide an explicit collapse control, reserve dimmed modal backdrops for genuine confirmations, and promote focused software-keyboard fields to Full without losing canvas or transaction state.
+- Keep Pattern Apply/Cancel and critical invalid-state feedback pinned at every usable sheet detent.
+- Expand the same components into a tool rail, pinned inspector, and status bar on wide desktop layouts.
+- Pin the inspector by default on wider landscape tablets, let the user collapse it, and present the same content as a drawer or bottom sheet when space is constrained.
+- Let the pinned inspector resize within guarded limits with a touch-sized handle. Store its width and pin/collapse preference locally, and temporarily recompose it as an overlay drawer rather than shrinking the canvas below a useful width.
+- Preserve the pinned preference for when space returns and retain the active card, expanded section, validation focus, and uncommitted field value across pinned, drawer, and bottom-sheet presentations.
+- Make canvas Fit/focus use the remaining visible viewport. Canvas interaction does not dismiss a pinned inspector but may collapse an overlay drawer; inspector resizing changes viewport space, never document zoom.
+- On tablet posture changes, transfer the current inspector context to the new presentation and restore the prior landscape pinned width/state when it returns.
+- Make system/browser Back unwind interface state before leaving: close confirmation/Help, cancel an uncommitted gesture or Pattern transaction, reduce sheet detents, exit Live Focus, follow a temporary correction return, then move from Instructions to Design.
+- Never map system Back to Live progress Back or project Undo. Avoid browser-history entries for transient cards and sheet detents; allow one meaningful Design/Instructions history level so Forward can restore that workspace switch.
+- Apply the same conceptual hierarchy to Escape while retaining its contextual Navigate exit and deselection behavior. Use the leave-page policy only when navigation will actually leave the app.
+- Choose layout from available space and interaction enhancements from actual input capabilities; do not classify a device as exclusively desktop or touch.
+- Keep essential actions visible and operable without hover, right-click, long-press, modifier keys, or pen hover. Treat those inputs as accelerators.
+- Keep touch targets at least 44 × 44 CSS pixels whenever touch input is available; recompose controls instead of shrinking them.
+- Size the app to the currently visible viewport and device safe-area insets. Keep the shell stable with internal panel scrolling, preserve canvas focal cell and scale when browser chrome changes, and never require a fixed orientation.
+- On device rotation, retain focal cell, selection or active handle, inspector context, and uncommitted transaction state while recomposing. Software-keyboard appearance keeps the focused field and required Apply/Cancel controls visible without resetting the canvas.
+- Limit custom pinch handling to the canvas so page zoom remains available elsewhere, and reflow controls for increased system text size rather than clipping or shrinking labels.
+- Use mouse primary input, pen, or one finger for the active canvas tool. Reserve two-finger gestures for pan and pinch-zoom, and keep canvas rotation on explicit controls to prevent accidental rotation.
+- If a second finger joins an active one-finger edit, cancel that uncommitted touch stroke before transitioning to navigation so it leaves no accidental mark.
+- Ignore touch contacts while a pen stroke is active and never let adding or removing a finger alter that stroke. Provide a visible Navigate control for one-finger panning without replacing the selected authoring tool.
+- Use pen tip for the active tool, barrel input for its defined secondary action, and a detectable eraser end as a temporary Restore natural stroke without changing the selected tool. Label the temporary state at the pointer and context strip.
+- Give pen erasing the same one-entry history and cancellation behavior as other continuous strokes. Keep cell operations independent of pressure and tilt; use pressure only when needed to distinguish contact from hover, and never emulate unavailable eraser hardware through a hidden gesture.
+- Use pen hover for the same exact destination preview as mouse hover.
+- Support middle-button or Space-drag panning and wheel or trackpad zoom as desktop accelerators.
+- Treat Navigate as a latched input override in the canvas-control cluster, not as an authoring tool. Keep the selected tool remembered but visibly paused and show context such as `Navigate · Paint paused`.
+- Exit latched Navigate by activating it again, selecting an authoring tool, or pressing Escape. Holding Space enables the same override only until release; two-finger navigation remains available in every state.
+- Keep `Move` exclusively for selected pattern content and do not reuse Navigate's hand icon or terminology for it.
+- Support both authoring strategies against one pattern: Colour Design edits the appearance of finished squares, while Stitch Placement edits their crochet construction.
+- Make Colour Design the default strategy while keeping Stitch Placement directly accessible as a sibling tool group.
+- Keep both strategy names visible as tool-group headings and give the selected group a strong non-colour-only state. Selecting a strategy-specific tool also selects its group; Arrange tools preserve the last authoring strategy.
+- Let a group heading switch to that strategy and its last-used tool without clearing an active selection. Always state both levels in the context strip, such as `Colour Design · Paint` or `Stitch Placement · Overlay`.
+- Switching strategy never mutates existing pattern data; it changes only how the next edit is interpreted.
+- Keep transform geometry strategy-neutral while interpreting its edits through the active authoring strategy: Colour Design preserves intended finished yarn appearance, while Stitch Placement preserves crochet-construction intent.
+- When transform outcomes differ by strategy, update the preview immediately and label it `Preserve finished colours` or `Preserve stitch placement`.
+- Keep the reference tablet workspace's document bar limited to pattern summary, local-save state, Undo, Redo, Instructions, and More.
+- Provide one adaptive Help sheet from More and the `?` shortcut. Lead with the current tool or inspector stage, then global actions, and list each action once with its touch, pen, mouse, and platform-appropriate keyboard equivalents.
+- Include filterable gesture diagrams for canvas navigation, selection modifiers, Move outcomes, and transform handles. Use visible contextual Help for touch and name-plus-shortcut tooltips for pointer or focus users.
+- Link coach marks and useful disabled-state explanations to the relevant Help section, and allow coach marks to be reset there. Opening Help must resolve an active pointer gesture without changing selection or committed edits.
+- Keep Help focused on current user-facing behavior rather than design rationale or implementation terminology.
+- Keep Colour Design, Stitch Placement, Arrange, Yarn A/B, and Mirror & Repeat directly accessible in the reference tablet's tool dock; reflow the same groups into a desktop rail and a reduced phone dock with More.
+- Show all eight tools directly on desktop and tablet, grouped as Colour Design, Stitch Placement, and Arrange.
+- Show Paint, Overlay, Select, Move, and More in the primary phone dock; More exposes the complete tool collection with the same grouping and order.
+- Keep Fill, Restore, Invert, and Wand reachable through visible controls rather than requiring long-press or nested tool gestures.
+- Keep Move visible but disabled until a selection exists. Keep `Move selection area` contextual to an active selection rather than presenting it as another tool.
+- Keep stable actions with unmet prerequisites visible and focusable in an unavailable state, including Move, invalid Apply, and structurally unavailable composition presets. Activating them or their shortcuts explains the prerequisite locally and in the context strip without performing the action.
+- Omit actions that are contextually meaningless rather than merely unavailable, such as Fit selection with no selection or Finish this group outside a nested group.
+- Use explicit accessible disabled semantics when explanation needs focus, retain readable non-colour state styling, and treat hover tooltips as supplementary to touch/focus feedback.
+- Keep a context strip visible for the active tool, interaction hint, selection summary, transform state, and validation count.
+- On narrow layouts, distribute persistent state to its owning affordance rather than crowding the context strip: active tool in the dock, active yarn in the split selector, transform status on Mirror & Repeat, zoom in canvas controls, validation and selection in the context strip, and recovery/file state in the document bar.
+- Reserve the context strip's main text for coordinates and immediate interaction feedback. Permit two compact lines at phone width but never horizontal scrolling or clipped status; activating any state indicator opens its corresponding controls or card.
+- Split validation into Blockers, where the editor cannot derive the requested trustworthy operation or output, and Warnings, which never prevent Instructions generation. Do not classify unusual work as blocking merely because it is unusual.
+- Show separate persistent counts and open a Validation card ordered by crochet traversal, filterable by severity and Source/Output. Give every issue a plain reason, exact location, consequence, corrective action, and Previous/Next navigation.
+- Link issue activation to its exact canvas cells, aggregating nearby markers at low zoom. Mark transaction-preview issues as provisional and remove them on Cancel.
+- Do not auto-open validation during drawing. Expand it when the user requests the count, invokes a blocked action, or enters Instructions with blockers; focus the first relevant blocker in Overview.
+- Place Fit, zoom, and rotation in a compact canvas control cluster.
+- Keep Zoom out, rendered cell size, Zoom in, and Fit together. Wheel and pinch zoom around their pointer/gesture midpoint; button zoom preserves the viewport's focal cell.
+- Make primary Fit target the current document view and offer only contextually available Fit selection, Fit current row/round, Fit source, and Fit output variants. Respect inspector and sheet occlusion in every case.
+- Display scale as rendered cell size such as `18 px/cell`; activating it permits exact entry and useful presets without resetting rotation. Store pan and zoom locally per workspace.
+- Name orientation actions Rotate view left/right and Reset view rotation, retain 45° increments, and show a persistent upright marker plus angle whenever the view is rotated.
+- Rotate around the viewport's focal cell so inspected content remains in place. Fit preserves rotation; resetting it is a separate explicit action.
+- Rotate grid geometry, traversal, selections, and guides with the canvas while keeping textual labels upright. View rotation is local per workspace and never changes traversal, composition, Instructions, or `.mcw` data.
+- Use explicit composition names such as `Rotate to full` so output transforms cannot be mistaken for view rotation.
+- Derive semantic canvas detail from rendered cell size rather than document zoom percentage, using Overview, Pattern, Work, and Detail scales shared by Design, Output, Overview, and Live.
+- At Overview scale, retain the colour silhouette, pattern boundary, selection, active row/round, focused state, and aggregate issues. Add the grid, readable overlay marks, and transform-instance outlines at Pattern scale; full stitch/accessibility/validation detail at Work scale; and A/B identifiers, coordinates, traversal arrows, and exact mappings at Detail scale.
+- Keep the active stitch, selection, and focused error identifiable at every scale through simplified markers. Collapse dense transform results to instance outlines and counts before their cells become illegible.
+- Let display preferences request information while semantic zoom chooses its legible representation. Fade with threshold hysteresis to prevent flicker; zoom changes rendering only, never selection, focus, progress, or output.
+- Show a simplified overview navigator when the viewport covers only a small fraction of the current pattern or while navigation is active. Include the colour silhouette, viewport rectangle, selection, active row/round, and aggregate issues.
+- Let dragging the navigator viewport pan and tapping it recenter without editing or changing progress. Fade it after use, allow local pinning on wide layouts, and replace the persistent overlay with an `Overview` button on phone.
+- Base navigator visibility on viewport-to-pattern scale rather than document dimensions, place it in an occlusion-aware corner, and retain state independently for Design, Source/Output, and Live views.
+- Show the current pattern type and dimensions in the document bar; activating that summary opens the same Pattern section used in the inspector.
+- Build the inspector from a stable stack of collapsible Current Context, Yarns, Mirror & Repeat, and Pattern cards, with one card expanded at a time.
+- Expand the relevant inspector card when its corresponding tool, yarn, transform indicator, or pattern summary is activated.
+- Replace Current Context with selection actions while a selection exists; keep the active tool visible in the dock and context strip.
+- Make that replacement a Selection card headed by selected-cell count, bounds, and off-pattern status. Keep Move, Duplicate, and Deselect primary; keep Copy, Cut, Paste, Clear selected cells, and Apply transforms directly available as secondary actions.
+- Explain Deselect as `Place content and remove selection`, disable Paste with `Nothing copied yet` when appropriate, and reveal Discard selection only when content is outside the pattern or otherwise at risk of loss.
+- On phone, keep a compact selection summary and Move in the context strip and open the same complete Selection card as a bottom sheet. Show desktop shortcut hints without making any action keyboard- or long-press-only.
+- Preserve existing clipboard and clear semantics during the initial interaction redesign; do not conflate action discoverability with a behavioral rewrite.
+- Keep Paste and Ctrl+V as Paste in place at the copied coordinates. Add explicit `Paste at view` to centre the float on the nearest cell to the visible canvas centre.
+- Paste anchors any existing selection, creates a non-destructive float, activates Move, and reports `Pasted selection · Move content`. If Paste in place lands outside the viewport, pan without zoom to reveal it and report any off-pattern extent in the Selection card.
+- Keep paste previewable until an anchoring action and retain the clipboard's exact mask and copied coordinates; do not add an operating-system clipboard permission flow initially.
+- Persist one app clipboard entry locally across refresh and New/Open, independent of `.mcw` and project Undo. Identify it by cell count and source pattern; Copy replaces the previous entry.
+- If persistent storage fails or the item exceeds a safe quota, keep Copy successful in memory and report that it lasts for this session only. Store only the exact cell mask/content, copied coordinates, and minimal source geometry needed for placement; do not add clipboard history initially.
+- Reuse the same inspector cards in the pinned inspector, constrained-width drawer, and phone bottom sheet.
+- Keep the unified float as the implementation for both selection membership and movable content; present it only as an active selection in the UI.
+- Treat released selection operations as completed, undoable edits rather than as a persistent Apply/Cancel transaction.
+- Deselect anchors the float without changing the visible result. Escape cancels an active gesture, or deselects when no gesture is active.
+- Present mask-only movement as `Move selection area`; reserve Cancel for an operation that is currently in progress.
+- While Move is active with a selection, expose Move content, Duplicate, and Move selection area as textual outcome modes. Reset to Move content after leaving Move; let Ctrl and Alt temporarily override the visible choice for Duplicate and Move selection area.
+- Preview each Move outcome before dragging: natural-state source plus destination for Move content, retained source plus destination for Duplicate, and an unchanged pattern with only the relocated marquee for Move selection area. Label the outcome in the context strip and at the pointer.
+- Keep every released drag as one undoable edit. If a selection is fully outside the pattern, offer an explicit `Discard selection` action instead of using an obscure modifier or further off-canvas dragging as the only destruction path.
+- When Select or Wand is active, show a textual Replace/Add/Subtract segmented control in the context strip. Preserve the choice when switching between those two tools, but reset it to Replace after leaving their group so a stale modifier cannot remain hidden.
+- Keep Add available to create a first selection and disable Subtract when none exists. Let Shift and Ctrl temporarily override the visible operation for Add and Subtract, restoring the latched choice on release.
+- Show `+` or `−` pointer feedback and preview the exact resulting selection membership before committing; do not rely on ambiguous overlapping-shape icons.
+- Treat Pattern editing as an explicit live-preview transaction with a captured starting state and persistent Cancel and Apply changes actions.
+- Keep Pattern editing active when the user interacts outside it. Allow canvas pan, zoom, and rotation for inspection, but require Apply or Cancel before other state-changing actions.
+- Make Escape cancel an active Pattern edit. Apply commits the complete edit as one undo step; Cancel restores the captured starting state.
+- Keep the last valid canvas preview when Pattern fields are invalid and disable Apply until the fields become valid.
+- Summarize preserved, added, and removed stitches before Pattern changes are applied, and explain mode changes that require a blank pattern.
+- When a populated pattern switches between Row and Round geometry, require a blank preview and explain that its stitches cannot be preserved. Use the final action label `Start with a blank row/round pattern` rather than a generic Apply or an ordinary-looking mode toggle.
+- Omit the destructive warning for an untouched natural pattern, but keep the blank preview. Do not add automatic Row/Round conversion initially; Cancel restores and Apply commits one undoable project edit.
+- Reconcile Live progress and revalidate retained mirror/repeat state after the geometry switch rather than silently discarding either workspace state.
+- Show direct, cell-snapped resize handles only while Pattern editing is active and keep them synchronized with exact inspector fields. Display the changing value beside a dragged handle.
+- For row patterns, keep the foundation edge fixed and offer Left, Centre, or Right horizontal preservation anchors, defaulting to existing Left behavior. Exact Width changes obey the selected anchor; dragging the right or left edge selects the opposite fixed edge, while Centre makes width dragging symmetric.
+- When a centred odd-cell resize cannot split evenly, assign the extra change to the right and state the exact left/right result in the preview. Treat the anchor as Pattern-transaction state rather than `.mcw` product data.
+- Expose row Width on both applicable side edges and Height on the top edge, with preservation anchors visibly marked. For round patterns, expose separate handles for Rounds, Centre opening width, and Centre opening height; show only handles meaningful to the selected Full, Half, or Quarter extent and retain their geometry-specific preservation rules.
+- Render preserved cells normally, added cells as a translucent natural-state preview, and cells pending removal with hatching. Releasing a resize handle updates only the transaction preview; Apply or Cancel still resolves the edit once.
+- Rename invalid-cell locking to `Prevent impossible overlay placements` and enable it for fresh sessions while preserving existing saved preferences.
+- Keep `Show stitch guidance` independent from placement prevention: guidance controls ✕ and ! visibility, while prevention controls editing constraints.
+- Preview protected targets before contact and explain blocked paint immediately. Continue allowing corrections to existing invalid cells and provide a visible way to disable prevention for free sketching.
+- Treat Paint, Restore, Invert, and Overlay as continuous reversible strokes: update the canvas while moving, commit one history entry on release, and restore the starting state on pointer cancellation.
+- Treat Fill and Wand as seeded operations. Preview their affected region on mouse/pen hover; on touch-down show the region and count, allow held movement to retarget the seed, and commit once on release.
+- Moving a seeded gesture outside the canvas cancels it; adding a second finger uses the established cancel-then-navigate transition. Show an offset touch seed indicator so the chosen cell remains visible.
+- Include transform expansion, clipping, and blockers in preview summaries and keep counts exact even if a very large spatial preview simplifies. Apply the same preview on keyboard key-down and commit on key-up without another confirmation.
+- Use inline feedback beside fields and controls for configuration errors, contextual pointer plus context-strip feedback for blocked or no-op canvas edits, and global notifications only for events without a visible local anchor.
+- Coalesce repeated blocking during one stroke into one updating explanation. Keep success feedback brief and non-modal, keep unresolved failures visible, and include a corrective action when available; do not notify after every Live Done action.
+- Apply undoable edits immediately without confirmation. Let explicit preview transactions rely on Apply/Cancel, and reserve confirmation for irreversible or progress-destroying actions such as replacing an unrecovered project, resetting Live progress, or Crochet again.
+- Announce status changes to assistive technology at a priority that communicates important failures without repeatedly interrupting routine work.
+- For expensive derived work, keep the last complete preview visible but subdued and labelled `Updating…`; never show a partial result as current or enable commit/generation until exact preview and validation finish.
+- Supersede stale computation when inputs change and keep pan, zoom, inspector navigation, and Cancel responsive. Show real determinate units when known, a quiet indeterminate state otherwise, and a visible Cancel only when work lasts long enough to matter.
+- Preflight known safety limits with the limiting quantity. Cancellation or failure restores the last valid state without discarding configuration; reserve global blocking overlays for work that genuinely cannot coexist with safe interaction.
+- Show a lightweight start surface only when no recoverable local session exists, offering Row pattern, Round pattern, Open pattern file, and Try an example.
+- Do not create or recover a default pattern merely because the app loaded. Treat a session as meaningful after explicit Create, successful Open, starting the example, or modification of migrated work; an intentionally created blank pattern remains meaningful.
+- Treat legacy recovery as meaningful during migration. Keep Row/Round setup provisional with reasonable values until Create and show the start surface only when no meaningful recovery or pending validated creation/open flow exists.
+- Trigger coach marks from the first relevant context rather than a forced sequence. Allow independent dismissal, Dismiss all, and reset from Help; a lightweight empty-canvas prompt disappears on the first edit without blocking interaction.
+- Route Row and Round creation into the normal Pattern card for illustrated mode selection, dimensions, yarns, derived size, and explicit creation.
+- Make the example a small, valid, editable document that demonstrates Colour Design, overlay stitches, symmetry or repeat, and Instructions; label it as an example whose edits save locally.
+- Teach the example with short contextual coach marks rather than a tutorial carousel. Explain the natural alternating-row blank state after creating a blank pattern.
+- Restore returning users directly into their recovered session without showing the start surface.
+- Distinguish browser recovery, editable `.mcw` projects, and generated Instructions as separate concepts.
+- Keep one comprehensive browser-local recovery session initially, including transient workspace state and undo/redo history; label its status `Saved locally`.
+- Track browser recovery and `.mcw` file freshness independently behind one compact document status. Recovery reports `Saved locally`, `Saving…`, or `Local save failed`; file state reports `Not saved to a file`, `Project file up to date`, or `Changes since project file`.
+- Let the document status disclose both meanings and offer the relevant Save project, Save project as, or Retry local save action. Never rely on an asterisk alone or let successful recovery imply that a project file was updated.
+- After browser recovery, say `Recovered from this device` without implying that an earlier file remains connected. Avoid a generic leave-page warning when local recovery is current; if recovery fails, keep a persistent warning and request leave confirmation when the browser permits it.
+- Because initial browser recovery has one session slot, guard New/Open when the current project file is not up to date or unfinished Live progress exists. Summarize authored changes, progress, and relevant transient state that replacement would clear; offer Save project, Replace current pattern, and Cancel.
+- Explain that saving `.mcw` preserves authored work but not Live progress, and keep the guard after saving if progress remains at risk. Skip it only when the file is current and no unfinished progress exists.
+- Validate an opened file before replacement confirmation and keep new-pattern configuration provisional until Create. Invalid or canceled operations leave the complete current recovery untouched.
+- Give patterns editable names and use the normalized name for `.mcw` and instruction filenames.
+- Keep the visible project name independent from its file association. Renaming marks the project file out of date; Save project updates an available associated file, while Save project as suggests a normalized filename and establishes the new association.
+- In download-only environments, report `Last downloaded as …` without implying a persistent connection and let later saves download again. Normalize only suggested filenames, never the visible name.
+- Display an empty name as `Untitled pattern` and use a safe timestamped save name. Load current `.mcw` names from project data, derive a starting name from the filename for legacy files, and disclose both project and file names when they differ.
+- Evolve `.mcw` into a backward-compatible, versioned project format containing the authored crochet product: pattern name, geometry, pixels, yarn definitions, and settings that affect its instructions or intended output.
+- Exclude workspace tools and recovery state from `.mcw`: mirror axes, repeat grids and recipes, live-transform state, active selection, history, active tool, view state, inspector state, and personal display preferences. Anchor the visible selection into the file snapshot without changing the live session.
+- Keep mirror/repeat recipes in the workspace's chronological Undo/Redo history even though they are excluded from `.mcw`. Browser recovery restores both the recipe and its recoverable history.
+- Keep project Undo/Redo and Live progress history strictly separate. Project history covers authored data, selections, yarns, traversal/output settings, and workspace transforms but never changes confirmed physical-work progress; Live Back changes only confirmed progress boundaries.
+- Treat preview-cursor movement as inspection in neither history. Expose descriptive project labels such as `Undo: Move selection`; keep project Undo/Redo available for settings in Instructions Overview but hide it from Live Focus, where progress Back remains.
+- Revalidate Live progress automatically when a project undo or redo restores its matching instruction sequence.
+- On New or Open, retain the current mirror/repeat recipe as paused workspace-tool state, clear its previous-pattern source mask, and turn off live application. Do not import, replace, or activate transforms from `.mcw`.
+- Mark retained spatial stages that do not fit the new pattern as `Needs adjustment` rather than silently moving or deleting them. Adopting a new selection as the source re-runs packing and preview; Reset transforms discards the retained setup explicitly.
+- Make Instructions a derived workspace with Copy, Download text, and later Print rather than presenting it as a document-save action.
+- Derive later Print support from the same structured plan with Pattern booklet, Chart only, and Instructions only layouts. Keep Copy and Download Text as the initial export scope.
+- Use a theme-independent light print presentation with actual yarn colours and a separate `Differentiate yarns in print` choice. Print the complete selected Output, never Live WIP or progress.
+- Let charts fit one page or tile at a readable cell size; tiled pages include overlap guides, coordinates, and page-position diagrams. Avoid splitting one row/round instruction when possible and repeat useful pattern/range/legend/page context.
+- Apply the same output blockers as Live/Text, disclose warnings before print preview without forcing them into the document, and leave paper, printer, duplex, and final orientation choices to the system dialog.
+- Keep the complete compressed instruction dump available as an optional Instructions view.
+- Make Text display the exact plain text used by Copy and Download, one row or round per logical line with hanging indentation when wrapped. Keep it read-only and cleanly selectable.
+- Keep compact `sc`, `oc`, and `ch` tokens in Text and compressed Overview summaries. Expand them in the notation legend and screen-reader names to single crochet, overlay crochet, and chain.
+- In Live, show the expanded active operation with its token when space permits. For `oc`, emphasize the marked destination and chart-derived contribution without instructing how to form the overlay; Help defines it as an overlay at that position using the user's preferred method.
+- Put interactive row/round labels in a separate gutter; using one focuses the corresponding chart path without changing Live progress. Distinguish confirmed-progress highlighting from preview focus.
+- Keep Copy all and Download `.txt` visible with inline completion feedback, and include a compact collapsible legend for stitch abbreviations and compression notation.
+- Wrap Text by default on narrow layouts, offer a local `No wrap` preference, and preserve scroll position when switching among Overview, Live, and Text.
+- Add an optional Live Instructions experience that progresses through the pattern in crochet order, first by row/round and then along the stitch path within it, for users crocheting directly from the app.
+- Make Live Instructions render the chart-derived visible surface at the current instruction cursor, not as a cropped finished chart or a simulation of a particular crochet technique. Future overlay stitches must remain absent until their execution step.
+- Keep the finished pattern available as a reference without letting future stitch contributions leak into the default WIP preview.
+- Reuse the editor's canvas visual language and rendering primitives in Live. Represent progress by deriving the temporally correct pixels, overlay markers, visibility, focus, and path state rather than introducing a separate fabric or stitch-diagram style.
+- In Live, render completed overlay markers with reduced emphasis, strongly emphasize the active instruction, show its pending contribution only as a translucent preview, and keep future overlay markers absent.
+- Navigate Live with compression-tree semantics using crochet-facing actions: Done, Track details, Finish this group, Finish row/round, Mark through here, and Back.
+- Use a compressed instruction as the default completion unit. Allow recursive expansion into repetitions, groups, and atomic stitches only when the user requests finer tracking.
+- Use contextual completion labels and generic instruction breadcrumbs; never assign semantic outer/inner names to arbitrary compression nesting.
+- Keep a persistent Live control shelf with a large primary `Done` action and an adjacent, secondary `Back`. Show `Track details` and `Finish this group` only when meaningful, and separate `Finish row/round` from `Done` to reduce accidental jumps.
+- Let Space or Enter activate `Done` and provide keyboard accelerators for the other progress actions. Never advance progress by tapping or swiping the chart; preserve chart gestures for pan, zoom, and preview inspection.
+- Keep the touch control shelf within thumb reach and let users place it on either side. Store handedness as a local display preference rather than in `.mcw`.
+- Record each completion as a reversible local progress boundary and keep WIP precision honest to the selected tracking depth.
+- Keep confirmed crochet progress separate from the freely movable preview cursor. Normally synchronize them, but let scrubbing inspect any row, round, group, or stitch without changing completed work.
+- While the preview cursor differs from confirmed progress, label that state clearly and offer `Return to progress` and `Mark through here`.
+- When previewing ahead, render confirmed work normally, work between confirmed and preview cursors with an accessible translucent/texture treatment, and later future work as absent. Keep the confirmed marker visible while instruction/path focus follows preview.
+- Label forward inspection `Previewing ahead of progress` with its distance; Mark through here converts that region to confirmed. When previewing backward, render the historical WIP surface and label `Reviewing earlier work · Progress remains at …` without reclassifying hidden later work as incomplete.
+- Navigate at two connected scales: a row/round overview rail and a segmented track for the selected row/round. Size work-track segments by their underlying stitch span while preserving visible compressed-group boundaries.
+- Preserve confirmed progress automatically when a design edit changes only future work.
+- If an edit changes completed work, pause further completion and show `Pattern changed before your place`, the changed cells, and the first affected instruction. Keep preview navigation available.
+- Resolve changed completed work explicitly with `Rewind to first change`, `Keep my place`, or `Reset progress`; recommend rewinding without forcing it because the user may be correcting the chart to match the physical work.
+- Revalidate progress automatically when Undo or another edit restores the previously completed instruction sequence. Apply the same reconciliation to traversal, geometry, and output-composition changes.
+- Organize Instructions as Overview, Live, and Text views sharing one structured crochet plan.
+- Make Overview the preparation and verification view. Put Output, traversal settings, and validation first, followed by a compact name/geometry/authored-to-output dimensions/Yarn A/B summary.
+- Configure traversal against the selected Output immediately after Output settings. Preview row arrows and round start/direction on the Output chart; Design may show a read-only summary but does not own the controls.
+- Store a round origin as a semantic corner or side-midpoint choice rather than a source coordinate. Retain it across Output changes only when supported; otherwise mark Traversal `Needs adjustment` and block generation until the user chooses another valid origin.
+- Once Output and Traversal validate, make Overview, Live, and Text consume exactly the same ordered walk.
+- Pair the finished Output chart with a structured row/round list whose entries show compressed work and stitch count. Selecting an entry highlights its complete chart path without changing progress.
+- Show existing progress as a separate summary rather than replacing Overview's finished chart with WIP. Use `Start Live` or `Resume Live` as the primary action and keep Text as a peer view.
+- Allow Output/traversal configuration in Overview but route pattern, yarn, and stitch editing to Design. Use side-by-side chart/list on landscape and a list-primary, collapsible-chart composition in portrait; preserve independent chart position and selected row/round.
+- Treat Design and Instructions as peer workspaces rather than presenting Instructions in a modal. Switching normally preserves and restores Design viewport, selection, tool, strategy, and inspector state.
+- Keep `Back to Design` visible in Instructions. When Edit source or a validation issue deliberately focuses a Design location, show a temporary `Return to Output` or `Return to issue` action that restores the previous Instructions view, navigator position, focus, pan, and zoom.
+- Regenerate Instructions only after completed Design edits, never midway through a gesture or Pattern-edit transaction. If validation fails, open Overview with spatially linked issues rather than an empty or generic error screen.
+- On constrained layouts, workspace switching replaces the main content instead of stacking Instructions over the canvas.
+- Synchronize chart and instruction focus in Overview and Live. Keep the yarn legend, working direction, and validation status visible; let validation issues return to their exact location in Design.
+- Adapt Instructions by composition: chart and instructions side by side on landscape tablet/desktop, with instructions primary and the chart collapsible on constrained portrait layouts.
+- Offer an optional Live Focus mode that hides editing tools and nonessential project chrome while retaining the WIP chart, current instruction, progress navigator, yarn identity, Done/Back, and a visible exit.
+- Keep Focus mode inside the app rather than entering browser fullscreen automatically. Remember its layout locally, not in `.mcw`.
+- In Focus mode, enable `Keep screen awake` by default with a visible status and toggle. Remember the preference locally and release screen wake whenever Live is left or the page becomes inactive.
+- Store Live crochet progress in browser recovery rather than `.mcw`; keep project traversal settings in `.mcw` because they affect generated output.
+- Persist only confirmed Live progress boundaries, not an incidental preview position. Reopening Live returns the chart and instructions to confirmed progress.
+- If the app closed in Live, reopen in normal Live with `Resume at Row/Round …`; never reactivate Focus mode or screen wake automatically. If the user left Live for Design, restore Design and expose a compact `Resume Live · Row/Round …` action without interrupting editing.
+- Replace Resume with `Review completed pattern` after all work is confirmed complete.
+- Offer `Crochet again` from the completed Live state. Confirm before clearing local progress, then restart the same instruction plan without changing project data.
+- For row patterns, support a Left or Right starting edge and same-direction or alternating-direction row traversal.
+- For round patterns, restrict the start handle to discrete valid start stitches: corner stitches and the midpoint stitch of each side. Also provide clockwise or counter-clockwise traversal and a same-direction or alternating-direction schedule for successive rounds.
+- When a round side has an even stitch count, expose both stitches adjacent to its geometric midpoint as symmetric midpoint-start choices; never place the start between cells.
+- Use one shared semantic start choice across all rounds, such as a particular corner or side midpoint. Map it to the corresponding valid stitch on every round and do not add per-round start overrides initially.
+- Preview the resulting path directly on the canvas. Treat every traversal control as instruction ordering only, without implying joins, turns, or another crochet technique.
+- Treat traversal as chart ordering only. Do not infer whether the crocheter turns, cuts, carries, joins, or otherwise transitions between rows or rounds.
+- Separate the authored extent from the crochet output extent. A Full, Half, or Quarter design may be crocheted as authored or used as the source for a larger composed output.
+- Label Full, Half, and Quarter round choices `Authored extent` and describe them as the editable source boundary. Changing extent uses the Pattern transaction's preserved/added/removed preview.
+- Link from Authored extent to Output with `Want to crochet a full piece from this source? Configure Output instead.` Show a faint composed-output outline in extent diagrams when one is configured.
+- Never change Output automatically after an authored-extent edit. If its selected preset becomes structurally incompatible, mark it `Needs adjustment` and block generation; project Undo restores the prior extent and output relationship.
+- Require the project to state which output Instructions and Live target; never infer physical output solely from the authored Full/Half/Quarter extent.
+- Require one of two output forms: crochet the authored design as-is or build one continuous composed output.
+- Put the required Output choice at the top of Instructions Overview and default new projects explicitly to `As authored`. `Composed output` presents supported presets with small diagrams, resulting dimensions, and validation state.
+- Keep a structurally unavailable preset visible but disabled, with a concise geometry-specific reason. If a selected preset is structurally applicable but its current source content causes seam, overlap, yarn-phase, or overlay-support conflicts, retain the selection and full output preview, mark the conflicts spatially, and disable Live/Text until corrected.
+- Preview output changes immediately and make them undoable without an Apply/Cancel transaction. Store the choice in `.mcw` because it expresses the intended product.
+- Provide a Source/Output visual toggle in Instructions. Keep Source editable and Output read-only; selecting a projected output cell identifies its source cell.
+- Hovering or tapping an output cell highlights its source cell and every sibling projection. Show the exact source mapping and provide `Edit source`, which switches to Design and focuses that cell without permitting direct output painting.
+- If an invalid output cell has multiple contributing sources, identify every contributor and the introducing composition stage rather than selecting one silently.
+- Preserve Output pan, zoom, and focused cell across Edit source and return navigation. Wide layouts may show Source and Output side by side, but editing remains confined to Source.
+- Disable Live and Text generation for an invalid composition and link the explanation to its exact preview location. Keep only a compact output summary in the Pattern inspector, linked back to Instructions Overview.
+- Keep Source editable and Composition Preview derived and read-only; update every projected copy immediately when the source changes.
+- Keep output composition separate from authoring mirror and repeat transforms.
+- Use one mirror-and-repeat setup for two authoring workflows: transform new edits live while drawing, or preview and apply the configured transforms to the active selection.
+- When repeat is configured from a selection, use the selected cells as both the source motif and the packing footprint. Do not treat unselected cells inside its bounding rectangle as occupied.
+- Pass each stage's occupied-cell mask into the next stage. Linear/grid repeat packs the complete result of Source, Mirrors, and Rotational repeat per pixel; bounding rectangles may interlock, but occupied cells from distinct grid instances may not overlap.
+- Keep repeat spacing explicitly editable. Mask-aware packing establishes the zero-spacing placement; users can add horizontal or vertical separation without changing the selection.
+- Support both linear/grid repetition and rotational repetition around a visible, editable axis point in the live-drawing and apply-to-selection workflows.
+- Preserve every source cell exactly in rotational repeat. Permit only grid-compatible centres and quarter-turn transforms; never resample, round, distort, duplicate, or drop cells to approximate another angle.
+- Choose rotational destinations directly instead of entering a generic count and angle. Keep the source at 0° and let users independently include or exclude +90°, 180°, and −90° copies.
+- Show the three rotational destinations as selectable orbit handles on the canvas and as labelled, keyboard-operable toggles in the inspector.
+- Make the rotation centre draggable and exactly editable. With either 90° copy enabled, snap it to cell centres or grid intersections; with only 180° enabled, also permit cell-edge midpoints.
+- Fold the existing Central symmetry transform into the rotational stage as its 180° destination. Retain `C` as the shortcut that enables 180° around the default centre and reuse the central guide dot as the rotation-centre handle.
+- Keep vertical, horizontal, and diagonal reflections in Mirrors and use one rotational centre per recipe initially. Express multi-centre half-turn constructions through the rotational stage followed by packed grid offsets.
+- Compose authoring transforms in a fixed, visible pipeline: Source, Mirrors, Rotational repeat, then Linear/grid repeat. Live drawing and selection application use the same order.
+- Let users enable, edit, or remove each transform stage, but do not make the stages reorderable initially. Applying an intermediate result and transforming its new selection covers uncommon alternative orders.
+- Specify linear/grid distribution with explicit Left, Right, Up, and Down copy counts around the source. Matching opposite counts creates a centred result without a separate distribution mode, while unequal counts support one-way and asymmetric layouts.
+- Put a count handle on each enabled canvas direction and pair it with exact numeric entry in the inspector. Show the resulting grid dimensions and transformed-cell count as immediate feedback.
+- Measure horizontal and vertical repeat spacing in whole cells beyond the mask-aware packed placement. Zero uses the nearest valid packed placement and positive values add separation; negative spacing is not supported.
+- Validate the complete configured grid against its input-stage cell mask rather than checking only bounding rectangles or adjacent instances. Let spacing handles snap by cell while exact inspector fields and canvas labels show both added spacing and effective offset.
+- Define the grid with two cell-snapped directions: Next column is primarily horizontal with an optional vertical offset, and Next row is primarily vertical with an optional horizontal offset.
+- Default both cross-axis offsets to zero. Repack the occupied-cell mask when an offset changes, then add the configured non-negative spacing; use opposite multiples of the same directions for Left/Right and Up/Down copies.
+- Present the cross-axis components as `Column offset` and `Row offset`, with direct canvas handles and exact cell fields, rather than exposing vector terminology. Validate all combined row-and-column placements together.
+- Start an unused Grid stage with zero copies. Require a source and expose four direct Add left, Add right, Add above, and Add below affordances instead of creating an arbitrary default array.
+- Adding the first copy in a direction uses zero-spacing mask packing. Keep a subdued add handle at every zero-count direction; use count-handle dragging and exact inspector steppers for further copies.
+- Reveal column spacing, offset, and orientation only when horizontal copies exist, and the corresponding row controls only when vertical copies exist. Enabling a second axis previews and validates the complete combined grid before committing.
+- Define alternating orientation from signed lattice-index parity so positive and negative instances follow the same predictable sequence. Disabling Grid retains its configuration; Reset returns it to zero counts, zero spacing and offsets, and same orientation.
+- Let grid instances alternate their local orientation per axis, analogous to mirrored texture repetition. Column and row repetition can independently keep the same orientation or mirror every odd-indexed instance.
+- When both grid axes use mirrored repetition, compose their two local reflections predictably so diagonal odd/odd instances receive both reflections.
+- Unify source, mirror guides, rotational copies, grid placement, per-instance orientation, preview, and application in one transform workspace while keeping each transform's spatial meaning explicit.
+- Present the unified workspace as Source, Mirrors, Around centre, and Grid stages in fixed order. Keep one stage expanded at a time and show every collapsed stage's enabled state, concise configuration summary, and validation badge.
+- Keep the workspace header's live-transform state visible and end the stage stack with a result summary and `Apply transforms to selection` when applicable.
+- Commit recipe edits immediately into undoable workspace history rather than wrapping tool configuration in Apply/Cancel. Escape cancels the active drag or numeric edit; selection application remains a separate atomic product action.
+- Tapping a canvas guide focuses and expands its stage. Emphasize only the active stage's handles while keeping the other configured guides visible but subdued.
+- Reuse the same staged inspector beside the canvas on desktop and landscape tablet, in a resizable bottom sheet on portrait tablet, and as a compact-summary sheet expandable to full height on phone.
+- Use one non-colour-dependent canvas grammar for transform editing: solid labelled source outline, translucent yarn-coloured future instances with dotted perimeters, and an L-shaped local-orientation marker on every instance.
+- Distinguish outcomes with texture and symbols: single-direction hatching for replaced cells, crossed hatching plus a warning symbol for conflicts, and hollow dashed ghosts for clipped cells beyond the pattern edge.
+- Give each stage a distinct guide shape: dashed line and perpendicular diamond for Mirrors, crosshair and orbit nodes for Around centre, directional arrows/count badges/dimension lines for Grid, and mask outline/origin marker for Source.
+- Add mirrors through an uncommitted placement preview: choose Vertical, Horizontal, Diagonal, or Anti-diagonal, position its ghost guide, then commit it with one canvas action.
+- With a source, offer diagrammatic snap candidates before, through the centre of, and after the source along the mirror's normal. Without a source, suggest the pattern centre; always permit another exact grid-preserving position.
+- Select a newly placed mirror immediately. Move it with its perpendicular handle or exact inspector field, and keep enable/disable and Delete visible for every guide. Off-canvas drag deletion remains only an accelerator.
+- Make V, H, D, and A enter the same mirror-placement state. Arrow keys adjust the ghost guide, Enter commits one undo step, and Escape cancels without changing history.
+- Enable Around centre through destination-first placement: choose any of +90°, 180°, and −90°, then place a ghost rotation centre that snaps only to positions compatible with those selected transforms.
+- Suggest valid source centre, source corner or edge, and pattern-centre positions without preventing another exact placement. Commit initial placement as one undo step.
+- After placement, let canvas orbit nodes and inspector toggles independently enable each rotational destination. Dragging or numerically editing the centre previews every result and commits as one coalesced undo step.
+- Disabling Around centre retains its configuration; Reset removes it. Make C enter the same placement flow with only 180° selected, and let Escape cancel initial placement or revert an active centre adjustment.
+- Show the exact changing value beside a dragged handle and give every compact visual handle an invisible touch target of at least 44 × 44 CSS pixels.
+- At low zoom, replace per-cell transform warnings with instance outlines and aggregate badges. Activating a warning focuses its first affected cell.
+- Make every committed transform-tool change undoable, including adding, moving, enabling, disabling, resetting, or deleting stages and guides. Coalesce a continuous canvas drag or numeric edit into one history step.
+- Capture the selected-cell mask and its local coordinate frame as recoverable transform-tool state when it becomes the repeat source. Keep the source region visibly identifiable while live transforms are enabled, even after deselection.
+- Maintain exactly one transform source. The current selection replaces it when the user starts configuring transforms or invokes selection application, but ordinary selection changes outside those actions do not silently replace it.
+- Applying transforms adopts the active selection as the continuing source and keeps it selected. Deselecting removes the ordinary selection while retaining a visible source guide so live drawing can continue.
+- Make source replacement undoable and use the same source for live drawing, transform preview, and selection application; do not introduce a separate temporary operation source.
+- Allow live drawing from any generated instance. Inverse-map the edited instance cell to the source, then apply the operation atomically to every corresponding destination.
+- While live transforms are enabled, block edits outside every configured instance and explain that boundary with a direct `Pause live transforms` action. Block ambiguous inverse mappings rather than choosing a source silently.
+- Treat transform instances as stamping assistance, not linked procedural objects. Moving or editing a recipe changes future destinations without rearranging pixels already committed to the pattern.
+- Require complete transformed instances within the pattern's valid-cell shape when applying transforms to a selection by default. If cells cross its outer boundary, centre opening, or omitted Half/Quarter region, show the omitted geometry and disable normal application until the user changes the transform or explicitly enables `Crop to pattern shape`.
+- When selection cropping is enabled, label the action `Apply visible cells` and report omitted cells and affected instances before committing. Distinguish outer-boundary, centre-opening, and authored-extent clipping in the preview.
+- Keep live drawing fluid by skipping off-pattern transform destinations automatically, while its pre-action preview and context feedback disclose how many destinations will be skipped.
+- Allow transformed selection cells to replace existing pattern cells. Distinguish unchanged and replaced destinations in the preview and continue enforcing `Prevent impossible overlay placements` when it is enabled.
+- Deduplicate multiple transform paths from the same source cell to the same destination, including fixed cells on a mirror or rotation centre.
+- Treat different source cells mapping to one destination as an ambiguous collision regardless of their current colours or stitch states. Existing unselected pattern content is a replaceable destination, not a mapping collision.
+- Keep invalid recipe geometry visible, identify the first stage introducing each collision, disable selection application, and suspend rather than turn off requested live transformation.
+- While a requested live recipe is suspended, block drawing and offer `Pause live transforms` instead of silently applying an untransformed edit. Resume automatically when the recipe becomes valid.
+- Transform live tools semantically rather than replaying raw pixel deltas: Paint applies the chosen yarn, Restore uses each destination's natural state, Invert toggles each destination, and Fill derives its source cell set once before transforming it.
+- Apply Overlay according to each destination's native previous-row or previous-round direction rather than geometrically rotating crochet chronology. Preview and validate every derived construction outcome.
+- When applying transforms to a selection, let Colour Design prioritize the selected motif's finished appearance and Stitch Placement prioritize its construction structure. Show both resulting appearance and stitch guidance before committing.
+- For a continuous composition, derive and validate the complete geometry before generating one crochet walk.
+- Represent continuous composition as grid-preserving source instances using translation, quarter-turn rotation, and optional reflection; let presets create the instances without exposing a custom composition editor initially.
+- Initially provide As authored, Mirror to full, and Rotate to full where valid. Defer alternating-mirror and custom arrangements until concrete patterns demonstrate their need.
+- Validate continuous compositions for supported output geometry, agreeing overlaps, yarn phase across seams, hole/boundary geometry, overlay support, and one valid crochet walk. Show conflicts spatially and never choose a winning source silently.
+- Put New pattern, Open pattern, Save project, Save project as, and Help/shortcuts under More. Let supported browsers update a chosen file and describe fallback downloads explicitly.
+- Present colours as Yarn A and Yarn B throughout the UI, with a strong colour-independent marker for the active yarn.
+- Keep a split Yarn A/B selector directly accessible in every layout. Selecting a swatch changes the active yarn immediately; a separate chevron or the Yarns summary opens its inspector card.
+- Keep `1` and `2`, right-click, pen barrel input, double-click, and long-press as accelerators without making any of them the only path to an action.
+- Make primary pointer, pen-tip, and touch input use the visible active yarn or primary tool action. For Paint and Fill, secondary mouse or pen-barrel input temporarily uses the other yarn without changing the active selection.
+- Map secondary Overlay to the visible Remove overlay action and secondary Restore to the existing visible Restore opposite action. Give Invert, Select, Wand, Move, and Navigate no hidden secondary behavior.
+- Update pointer feedback to name the alternate result before commit. Keep every alternate available to touch through visible controls; reserve swatch double-click or long-press for editing that yarn rather than a canvas gesture.
+- Give each yarn a colour and optional label. Store both in `.mcw` and use the labels in the Instructions legend.
+- Preview yarn colour edits live and commit the completed edit as one undo step. Support a native colour picker and exact hex entry.
+- Make `Swap yarns` exchange the complete Yarn A/B definitions without changing pixel or stitch data; keep it immediate and undoable.
+- Keep `Swap yarns` distinct from Invert, which changes selected pattern cells.
+- Preserve chosen yarn colours faithfully and never reject or alter a low-distinction pair. Show a non-blocking Yarns warning when the pair may be difficult to distinguish.
+- Offer a local `Differentiate yarns` accessibility preference. Add stable, lightweight non-colour textures at normal zoom and A/B identifiers at detailed zoom across Design, Overview, Live, yarn selectors, and the Instructions legend.
+- Keep yarn-identification marks distinct from overlay, selection, clipping, replacement, and transform-conflict symbols. Suggest the preference for similar colours without enabling it automatically; never store it in `.mcw` or change exported yarn colours.
+- Make the canvas keyboard-focusable with one strongly outlined logical cell cursor rather than a DOM element per cell. Arrow keys move it for drawing or inspection tools, Space applies the active tool, and the context strip exposes coordinate, yarn, overlay, and validity state.
+- Announce cell details to screen readers after deliberate keyboard movement, not pointer hover. Permit inspection of invalid or non-paintable geometry and use the same contextual explanation when an edit is blocked.
+- With Select active, let Space anchor a rectangle, arrows move its endpoint, and a second Space commit; Escape cancels the pending keyboard selection first. With Move active, retain Arrow and Shift+Arrow selection nudges at one and five cells.
+- Scope selection nudge shortcuts to Move so content cannot shift unexpectedly under another tool. Keep form-field arrows native and apply canvas shortcuts only while canvas focus or an explicit canvas manipulation context is active.
+
+### Exploration notes
+- The transform inspector should retain its recipe in browser workspace recovery, not in `.mcw`, and expose its two uses clearly: `Apply while drawing` and, when a selection exists, `Apply transforms to selection`. Applying to a selection stamps the derived copies as one undo step and leaves the original source selected.
+- For linear/grid repeat, derive the packed default from the actual selected cells. Express adjustments as additional horizontal and vertical spacing, with on-canvas handles and exact cell fields, rather than asking users to calculate a tile width or height.
+- Re-evaluate packing and collisions across all configured instances when the source mask, count, spacing, or offsets change; sparse masks can collide with a non-adjacent copy even when neighbouring copies do not.
+- Use an axis-aligned packed grid by default. Let Column offset produce vertical displacement between columns and Row offset produce horizontal displacement between rows for staggered and diagonal layouts.
+- Treat arbitrary mirror guides and mirrored grid addressing as related but distinct controls: guides reflect around a chosen pattern-space line, while grid addressing reflects alternating instances within their local motif frame.
+- The recommended grid-orientation control has one choice per axis: `Same orientation` or `Alternate mirrored`, accompanied by a small multi-instance preview with a persistent orientation marker that remains legible for visually symmetric motifs.
+- Pair each stage's exact controls with a small spatial diagram: orientation grid for Grid, orbit for Around centre, and guide/source relationship for Mirrors.
+- Keep directional copy counts spatial: canvas handles and arrow-labelled inspector fields must make each count's side visible instead of presenting an abstract copies-per-side value.
+- For rotational repeat, show a draggable centre/axis handle on the canvas, snap it to cell-compatible positions, and preview every derived instance while it moves. Existing central axes may be snap targets but should not be required.
+- Square pattern cells rotate exactly onto the grid only in quarter turns. Rotational repeat uses 90°/180°/270° transforms around compatible centres and disables configurations that would not map each source cell to exactly one destination cell.
+- Use a compact orbit control rather than quantity arithmetic: the source position is always present and the other three quarter-turn positions visibly toggle their corresponding copies.
+- Migrate recoverable Central symmetry tool state into the rotational stage. Convert a single centre directly; preserve compatible multi-centre translations through grid offsets where the conversion is unambiguous.
+- Distinguish the source selection, valid preview instances, overlaps, out-of-bounds cells, and colour conflicts before applying transforms to a selection. The preview must compose the configured mirrors and repeats exactly as live drawing does.
+- Summarize the fixed transform pipeline with both its stages and expansion counts, such as `12 source cells → 24 mirrored → 96 final cells`, so composition is visible rather than implicit.
+- Distinguish the canonical source without making it the only editable instance. Pointer/pen preview identifies the touched instance, its inverse-mapped source cell, and every destination; touch receives the same result feedback once contact begins.
+- Label transform ghosts as future destinations so recipe changes do not imply that previously painted pixels remain procedurally linked.
+- In the Source stage, identify whether the source came from the current selection or a retained guide and provide direct Select source cells, Replace from selection, and Clear source actions without maintaining parallel sources.
+- After New or Open, show the retained recipe's paused state and the action needed to choose a source for the new pattern; do not let the first drawing gesture activate it implicitly.
+- Draw off-pattern portions of selection-transform previews across the relevant shape boundary with a non-colour-only treatment. Reveal `Crop to pattern shape` only when needed instead of making accidental clipping the default.
+- Keep shape clipping separate from crochet-construction validation: a transformed cell may be geometrically inside the authored pattern but still be an impossible Overlay destination.
+- Link every collision marker to its introducing stage and distinguish harmless same-source path deduplication from ambiguous multi-source mapping.
+- Keep the editor and generated Instructions agnostic to the crocheter's specific technique. The user supplies their own foundation, row or round transitions, turning, cutting, carrying, joins, and finishing.
+- Keep technique entirely outside the editor: do not add technique profiles, selectors, or free-form technique notes to `.mcw` or generated Instructions.
+- Keep `sc`, `oc`, and `ch` as fixed chart vocabulary. `sc` denotes single crochet and `ch` denotes chain; `oc` denotes the chart's overlay-crochet operation while leaving the actual method of making that overlay to the user.
+- Treat an `oc` as a required overlay location and temporal/visual contribution, not as a technique-specific stitch recipe.
+- Structure Live around chart-derived information only: a pattern overview, repeated Row/Round work sections, row/round progress boundaries, and pattern completion. Use the compression tree only within each work section.
+- Show yarn identity, output geometry, traversal origin and direction, ordered stitch work, validation, and progress when they can be derived from the pattern; do not present technique choices as missing or unsupported instruction steps.
+- Users should be able to start or resume at any row/round.
+- With no progress, Start Live begins at the first row/round. Selecting a later Overview entry exposes a separate `Start Live here` action that states which earlier rows/rounds will be treated as complete.
+- Limit initial midway starts to row/round boundaries; use preview plus Mark through here for finer placement after Live begins. Record the treated-complete prefix as one reversible progress boundary that Live Back can return to no progress.
+- Once progress exists, row/round selection is ordinary preview navigation and uses mark-through or rewind actions rather than another Start. Midway starts change only local progress and WIP derivation, never project data or `.mcw`.
+
+### Reference acceptance goals from the brainstorming
+
+- Every control is reachable without horizontal overflow at 360 CSS pixels wide.
+- Touch targets remain at least 44 × 44 CSS pixels on touch layouts.
+- The active tool, yarn, selection, transform state, zoom, and validation state are visible without opening a popover.
+- A new user can create a pattern, draw the first stitch, and generate instructions without reading the README.
+- Pointer interactions preview their affected cells before committing where practical.
+- Controls are operable by keyboard and expose correct names, roles, and states to assistive technology.
+- Existing desktop shortcuts and editing capabilities remain available.
+
+### Superseded phase draft 1 — Adaptive workspace and state clarity
+
+- Design the reference tablet-landscape workspace: document bar, canvas, tool dock, collapsible inspector, and persistent context/status strip.
+  - Verify: the canvas remains usable with the inspector open, every primary action is touch-reachable, and no control depends on hover or a hardware keyboard.
+- Recompose the reference workspace for wide desktop, tablet portrait, and phone without duplicating its interaction model.
+  - Wide desktop: vertical tool rail, pinned inspector, and status bar.
+  - Tablet portrait and phone: bottom tool dock, compact context strip, and inspector bottom sheet.
+  - Give wide layouts a guarded resizable inspector that temporarily becomes a drawer before it can crush the canvas, while preserving its local pin and width preference.
+  - Preserve inspector context and uncommitted input through every responsive recomposition.
+  - Give the bottom sheet Peek/Half/Full detents, non-modal canvas interaction, occlusion-aware Fit/focus, reversible automatic panning, handle-only resizing, and keyboard-safe Full presentation.
+  - Implement the interface-unwind stack for system Back without mapping it to Live progress or project history, and keep transient surfaces out of browser history.
+  - Respect dynamic visible viewport and safe areas, preserve focal/context/transaction state through browser chrome and orientation changes, keep software-keyboard actions visible, and reflow under increased text size.
+  - Verify: Playwright covers 360 px, Pixel 7, tablet portrait, tablet landscape, and desktop viewports; every action is reachable and no horizontal overflow exists.
+- Select layout from container width and size interaction targets from input capability; remove dynamic scale-to-fit behavior.
+  - Verify: attaching a mouse or keyboard to a touch-sized viewport does not change the information architecture or reduce touch targets.
+- Implement consistent canvas gesture arbitration across mouse, touch, and pen.
+  - Apply the active tool with mouse primary input, pen, or one finger; use two fingers for pan and pinch-zoom; keep rotation explicit; provide one-finger Navigate.
+  - Cancel an uncommitted touch stroke when a second finger converts it to navigation, and suppress touch contacts without disturbing an active pen stroke.
+  - Map detectable pen eraser input to temporary Restore natural with normal stroke history/cancellation; keep pressure and tilt non-semantic and use pen hover for destination preview.
+  - Put a latched Navigate override with the canvas controls, preserve and visibly pause the selected authoring tool, and make Space a momentary desktop equivalent.
+  - Keep Navigate visually and semantically distinct from moving selected content.
+  - Verify: the transition to two-finger navigation leaves no accidental edit, pen-plus-palm input produces one intact stroke, and every direct handle has at least a 44 × 44 CSS-pixel hit target.
+- Replace emoji and mixed glyphs with a consistent icon set; show text labels in tooltips and for the active tool.
+  - Verify: hover, focus, and touch users can identify every tool without relying on browser `title` behavior.
+- Establish the yarn-independent visual system and local System/Light/Dark themes.
+  - Apply shallow surfaces, tabular data typography, non-colour state cues, reduced-motion behavior, strong focus indicators, and forced-colour support; preserve existing theme choices during migration.
+  - Verify: arbitrary yarn pairs cannot disguise UI state, every state remains understandable without colour, and theme changes affect no project data.
+- Strengthen active states for the current tool, yarn, Move selection area mode, and live/paused transforms.
+  - Verify: each state remains distinguishable in high-contrast and colour-independent checks.
+- Add a persistent status surface for active tool, yarn, selection summary, transform state, zoom, coordinates, and separate blocker/warning counts.
+  - Distribute narrow-layout state to its owning dock, yarn selector, transform button, canvas controls, context strip, or document status instead of compressing one overloaded line.
+  - Verify: state updates immediately after relevant canvas and toolbar interactions, every indicator routes to its controls, and phone layouts need neither clipped text nor horizontal status scrolling.
+- Show contextual selection actions when a float exists: Move content, Duplicate content, Move selection area, Delete content, and Deselect.
+  - Verify: the full selection lifecycle is discoverable without modifier keys while existing shortcuts continue to work.
+- Explain blocked or clipped actions instead of silently ignoring them.
+  - Verify: painting outside a selection, painting a protected cell, and invalid Overlay targets produce concise contextual feedback.
+- Correct control semantics and keyboard behavior.
+  - Add a logical canvas cell cursor with Arrow navigation, Space tool application, keyboard rectangular selection, contextual Move nudging, coordinate/state feedback, and deliberate screen-reader announcements.
+  - Verify: tool selection exposes its selected state; switches and segmented controls are keyboard-focusable; swatches activate with Enter and Space; transient status uses an appropriate live region; canvas authoring does not require a pointer or thousands of focusable cells.
+- Distinguish visible prerequisite-bound actions from contextually irrelevant actions.
+  - Keep the former focusable with local explanations and shortcut parity; omit the latter, and preserve readable non-colour unavailable styling across input modes.
+  - Verify: core capabilities remain discoverable, every unavailable activation explains itself without firing, and irrelevant controls do not add clutter.
+
+### Superseded phase draft 2 — Clearer core workflows
+
+- Make authoring strategy persistent, visible, and independent of Arrange tools.
+  - Use Colour Design and Stitch Placement as selectable tool-group headings; selecting a strategy-specific tool activates its group, while Select, Wand, and Move retain the previous strategy.
+  - Keep active selections across strategy switches, restore each group's last-used tool, and show strategy plus tool in the context strip.
+  - Verify: switching strategy alone changes no pattern data, Arrange never obscures which strategy will govern an application, and strategy-sensitive previews identify the preserved intent before committing.
+- Redesign Pattern editing as an explicit, previewable transaction.
+  - Show resulting dimensions and how many stitches will be preserved or removed.
+  - Rename `Wipe` to `Start with a blank pattern`.
+  - Replace `Inner W` and `Inner H` with `Centre opening width` and `Centre opening height`.
+  - Add diagrams for Full, Half, and Quarter round modes.
+  - Label them Authored extent, link explicitly to Output composition, and show any configured output as a faint contextual outline.
+  - Add synchronized cell-snapped canvas handles for row Width/Height and round Rounds/Centre opening dimensions, with visible anchors, exact drag values, and 44 × 44 CSS-pixel hit targets.
+  - Support Left/Centre/Right horizontal row preservation with a fixed foundation edge and an explicit right-side tie-break for odd centred changes.
+  - Distinguish preserved, added, and pending-removal cells in the canvas preview without relying on colour alone.
+  - Keep the editor active on outside interaction; allow view navigation but block other state changes until Apply or Cancel.
+  - Retain the last valid preview and disable Apply while fields are invalid.
+  - Treat populated Row/Round switching as an explicitly labelled blank-pattern result with no automatic conversion or redundant confirmation; revalidate Live and transform state after Apply.
+  - Verify: Apply commits once, Cancel restores the pre-edit state, and destructive consequences are visible before Apply.
+- Clarify persistence and file actions.
+  - Expose independent browser-recovery and project-file freshness states through one compact document status with clear labels and relevant actions.
+  - Add editable pattern naming and derive project/instruction filenames from it.
+  - Track available file association separately from internal naming and download-only history; migrate legacy names from filenames without changing user-visible names during normalization.
+  - Put New pattern, Open pattern, Save project, Save project as, and Help/shortcuts under More.
+  - Upgrade `.mcw` compatibly to store authored product state while excluding mirror/repeat tools, active selections, transient workspace state, and personal display state.
+  - Replace Export with an Instructions workspace containing Copy and Download text.
+  - Replace browser alerts with appropriately anchored inline, contextual, or global feedback and confirm copy/download completion non-modally.
+  - Add a single-recovery-slot replacement guard for New/Open, validating the incoming project or new configuration before offering Save project, Replace current pattern, and Cancel.
+  - Verify: users can distinguish automatic local recovery, editable pattern files, and generated instructions; a file never appears current only because local recovery succeeded; local-save failure remains visible before leaving.
+- Separate and label project history and Live progress history.
+  - Add descriptive project Undo/Redo labels, exclude confirmed progress and preview inspection from that history, and make Live Back progress-only.
+  - Keep project history available in Overview but out of Focus mode; revalidate progress when project history restores a matching plan.
+  - Verify: project Undo cannot mark crochet incomplete, Live Back cannot alter the pattern, and preview scrubbing creates no history entry.
+- Unify feedback and confirmation behavior across workspaces.
+  - Anchor field errors locally, blocked canvas actions at the pointer and context strip, and unanchored completion/failure events globally; coalesce repeated messages from one gesture.
+  - Confirm only irreversible or progress-destroying actions, relying on Undo or Apply/Cancel elsewhere, and expose corrective actions plus accessible status announcements.
+  - Verify: a blocked stroke cannot create notification spam, routine Live advancement remains quiet, persistent failures cannot disappear unnoticed, and reversible edits never require redundant confirmation.
+- Make yarn controls explicit.
+  - Add a split Yarn A/B selector with a separate inspector affordance and a colour-independent active marker.
+  - Add optional yarn labels, visible Edit and Swap yarns actions, native colour picking, and exact hex entry.
+  - Retain keyboard, right-click, pen barrel, long-press, and double-click accelerators.
+  - Define secondary pointer/barrel input as temporary other-yarn Paint/Fill, Remove overlay, or Restore opposite according to the active tool, without changing active yarn; add no hidden Arrange behavior.
+  - Warn without blocking when yarn colours may be difficult to distinguish and offer a local `Differentiate yarns` texture/identifier layer without changing project colours.
+  - Verify: selecting, editing, and swapping yarns are discoverable on pointer, touch, pen, and keyboard input; quick selection does not open the inspector.
+  - Verify: Yarn A and B remain identifiable without colour across Design and Instructions, while accessibility marks cannot be confused with stitch or transform guidance.
+- Improve instruction preview with visible row/round traversal rather than only an `Alternate direction` switch.
+  - For rows, expose a Left/Right starting edge and a same-direction/alternating-direction schedule.
+  - For rounds, expose a start handle that selects only corner stitches or side-midpoint stitches, plus clockwise/counter-clockwise initial direction and same-direction/alternating-direction successive rounds.
+  - Offer both central stitches when a side has an even stitch count.
+  - Apply one semantic start choice consistently across every round.
+  - Preview the ordered path on the canvas.
+  - Own traversal in Instructions Output space, preserve semantic settings only while compatible with output changes, and expose Needs adjustment rather than silently relocating a round start.
+  - Verify: changing the origin, direction, or schedule updates crochet order, visual direction, WIP progression, and generated text without prescribing a crochet technique.
+- Expose structured crochet-order walks and compression metadata for visual and live instruction views without duplicating exporter logic.
+  - Verify: flattening the structured result produces the same ordered stitches as the existing exporter and rendering it compactly produces the same instruction text.
+- Derive a deterministic WIP visual state from the executed prefix of structured stitch steps, including each stitch's worked position, supporting/covered position, yarn, and visible contribution.
+  - Verify: known row and round sequences omit future overlays, reveal an overlay exactly when its stitch completes, and reconstruct the same WIP state after backward navigation or direct scrubbing.
+
+### Superseded phase draft 3 — Direct manipulation and workspace structure
+
+- Add canvas feedforward for the hovered source cell and every live mirror/repeat destination.
+  - Verify: previews match the exact cells changed by Paint, Restore, Invert, Fill, and Overlay operations.
+- Keep expensive preview, validation, composition, and generation work responsive and trustworthy.
+  - Retain a subdued last-complete preview while updating, supersede stale work, disable commit until exact results finish, expose meaningful progress/cancellation only when warranted, and preflight known limits.
+  - Verify: no partial result appears current, navigation and cancellation remain responsive, stale calculations cannot overwrite newer input, and failure preserves the last valid state and configuration.
+- Implement cancelable continuous strokes and press-to-release seeded Fill/Wand gestures.
+  - Add hover/pen preview, held touch retargeting, an offset seed indicator, exact affected/expanded/skipped summaries, key-down/key-up parity, and rollback on cancellation or navigation transition.
+  - Verify: release commits exactly one history entry, cancellation restores the complete starting state, the preview matches the committed region, and large transforms never report approximate counts.
+- Give Overlay its own outcome preview, including the resulting ✕, the inward cell that changes, and the reason a target is invalid.
+  - Verify: valid, invalid, boundary, and round-corner targets have distinct previews.
+- Build spatial Blocker/Warning validation with separate counts, crochet-order and severity/source filters, exact issue focus, corrective actions, traversal controls, low-zoom aggregation, and provisional preview states.
+  - Verify: warnings never block generation, blockers always describe why trustworthy output is impossible, focused issues round-trip through Design/Instructions, and canceled previews leave no issue behind.
+- Separate `Show stitch guidance` from `Prevent impossible overlay placements`; default prevention on for fresh sessions without overriding existing saved preferences.
+  - Verify: protected targets preview their constraint, blocked edits explain why, existing invalid cells remain correctable, and disabling prevention permits free sketching.
+- Surface modifier modes beside the pointer and in contextual controls: Add, Subtract, Duplicate, and Move selection area.
+  - For Select and Wand, expose Replace/Add/Subtract text controls, retain the choice within their group, reset on leaving it, and make keyboard modifiers temporary overrides.
+  - For Move, expose Move content/Duplicate/Move selection area, reset on leaving Move, and preview the distinct source, destination, and marquee results before dragging.
+  - Provide an explicit Discard selection action when the selection is fully outside the pattern.
+  - Verify: modifier changes update the preview before pointer-down, Subtract cannot become an unexplained no-op without a selection, no hidden latched mode survives its tool group, and selection destruction never depends on an obscure gesture.
+- Build the adaptive Selection card with summary, primary movement actions, clipboard actions, Clear selected cells, Apply transforms, and contextual loss/discard messaging.
+  - Preserve current clipboard and clear behavior while making every action touch-accessible and text-labelled; show shortcuts only as accelerators.
+  - Keep Paste in place as default, add Paste at view, activate Move with explicit context, and reveal rather than lose off-viewport or off-pattern pasted floats.
+  - Persist one app-local clipboard across refresh and projects with an in-memory fallback, provenance summary, and no project-history or `.mcw` coupling.
+  - Verify: the complete action set remains reachable at phone width, disabled Paste explains itself, and Deselect cannot be mistaken for canceling or discarding content.
+- Make symmetry guides selectable and directly editable independently of the Move tool.
+  - Add visible hover/selection handles, position controls, enable/disable, and Delete.
+  - Keep off-canvas drag deletion as an accelerator.
+  - Verify: every guide operation has both direct-manipulation and explicit-control paths.
+- Redesign the shared mirror-and-repeat setup for live drawing and selection application.
+  - Build one adaptive staged inspector containing Source, Mirrors, Around centre, Grid, result summary, live state, and selection-application action; allow only one expanded stage while preserving collapsed summaries and validation.
+  - Implement the shared source/future/replacement/conflict/clipping/orientation visual grammar and reduce it to instance-level indicators at low zoom.
+  - Add preview-first mirror placement with source-relative snap candidates, direct guide manipulation, exact fields, and equivalent pointer, touch, pen, and keyboard operation.
+  - Add destination-first Around centre placement with compatible snap suggestions, direct orbit-node toggles, exact centre editing, and retained disabled state.
+  - Compose Source, Mirrors, Rotational repeat, and Linear/grid repeat in that fixed order and show each stage's expansion count.
+  - Offer mask-packed linear/grid repetition with explicit Left/Right/Up/Down counts, canvas count handles, exact numeric entry, and non-negative horizontal/vertical spacing controls.
+  - Add cell-snapped Column offset and Row offset controls to support staggered grids while retaining an axis-aligned zero-offset default.
+  - Add independent Same orientation / Alternate mirrored behavior for column and row steps, and preview the composed orientation of every instance.
+  - Start Grid with zero copies and add its first mask-packed instance through explicit directional canvas affordances; reveal per-axis controls only after that axis is used.
+  - Permit instance bounding rectangles to interlock while preventing selected cells from overlapping, and validate every configured instance rather than only adjacent copies.
+  - Offer rotational repetition around a draggable, grid-compatible centre using exact quarter turns, with no approximate-angle fallback.
+  - Provide direct +90°, 180°, and −90° destination toggles on the canvas and in the inspector, with snapping rules that admit only exact cell mappings.
+  - Replace the separate Central symmetry axis with the rotational stage's 180° destination while retaining the `C` shortcut and centre-dot affordance.
+  - Keep `Apply while drawing` independent from `Apply transforms to selection`; both use the same configured recipe and destination preview.
+  - Keep the selected motif as the source after application and commit all copies as one undo step.
+  - Include transform-recipe edits in chronological Undo/Redo, coalescing each continuous adjustment into one step while keeping the recipe outside `.mcw`.
+  - Capture a repeat source mask from selection and allow atomic live editing through any inverse-mappable generated instance while the source persists as workspace tool state.
+  - Use one source for every transform workflow: adopt the active selection when configuration or application begins, retain its guide after deselection, and make every replacement undoable.
+  - On New/Open, retain the recipe without its old source, pause live application, and require an explicit new source before source-dependent stages can resume.
+  - Verify: editing corresponding cells through the source, a mirrored grid instance, and a rotated instance produces the same destination set; cells outside the configured instances remain unchanged with actionable feedback.
+  - Require complete selection instances within the valid pattern shape by default, conditionally offer explicit shape cropping, and automatically disclose skipped off-pattern destinations during live drawing.
+  - Deduplicate repeated paths for one source cell, reject destinations claimed by different source cells, and suspend invalid live recipes without losing the user's requested live state.
+  - Execute Paint, Restore, Invert, Fill, and Overlay according to the active authoring strategy and each destination's crochet context rather than copying screen-space effects blindly.
+  - Verify: transformed Fill uses one source region, Restore respects destination-natural colours, and rotated or mirrored Overlay never changes the pattern's previous-layer direction or bypasses construction validation.
+  - Verify: the canvas preview communicates source bounds, editable spacing, direction, centre, every destination, overlap, replacement, clipping, and colour conflicts for both workflows; every accepted rotation maps each source cell to exactly one cell without distortion.
+- Build the wide desktop composition with a document bar, tool rail, canvas, contextual inspector, and status bar.
+  - Verify: frequent actions stay one click away and rare settings no longer compete with drawing tools.
+- Clarify and stabilize canvas view rotation.
+  - Add explicit Rotate view left/right and Reset controls, persistent upright/angle feedback, focal-cell-preserving 45° rotation, and upright labels.
+  - Keep view state local per workspace and distinguish every composition rotation by name.
+  - Verify: rotation and Fit keep the inspected region predictable and can never alter pattern data, crochet order, output composition, or instruction text.
+- Make zoom and Fit focal-point- and occlusion-aware.
+  - Add compact zoom controls with exact rendered-cell-size entry, pointer/gesture-centered continuous zoom, focal-cell-preserving buttons, current-view Fit, and contextual selection/row/source/output Fit variants.
+  - Verify: changing scale preserves the intended focal content, every Fit uses only visible canvas space, and each workspace restores its own pan and zoom without changing project or progress state.
+- Add semantic zoom: simplify grid and markers when zoomed out, reveal coordinates and stitch detail when zoomed in.
+  - Base Overview, Pattern, Work, and Detail scales on rendered cell size and share them across Design and Instructions canvases.
+  - Keep active/focused information identifiable, aggregate dense warnings and transforms before illegibility, and use transition hysteresis.
+  - Verify: each zoom band preserves pattern readability without visual overload and zoom never changes selection, focus, progress, or output.
+- Add the conditional overview navigator for locally zoomed pattern views.
+  - Show a simplified pattern, viewport, selection, active work, and aggregate issues; support pan/recenter, temporary display, optional wide-layout pinning, and a phone Overview action.
+  - Verify: visibility follows viewport coverage, placement avoids active controls, each workspace keeps its own state, and navigator interaction cannot edit data or progress.
+
+### Superseded phase draft 4 — Learnability and crochet workflow
+
+- Add a fresh-session start surface with Row pattern, Round pattern, Open pattern file, and Try an example; bypass it when a local session can be recovered.
+- Distinguish meaningful recovery from mere app initialization and keep first-run Pattern setup provisional until Create.
+  - Preserve intentionally blank and legacy sessions, trigger coach marks contextually with independent/all dismissal, and remove the empty-canvas prompt after the first edit.
+  - Verify: an untouched app load still shows onboarding, intentional blank work resumes, migration cannot hide existing work, and no onboarding surface blocks editing.
+- Route new-pattern choices into the normal Pattern card and explain the alternating-row blank state after creation.
+- Bundle a small, valid, editable example that demonstrates both authoring strategies, symmetry or repeat, and Instructions.
+- Add short, dismissible coach marks for yarn selection, drawing, overlay markers, and instruction generation.
+- Add contextual help the first time advanced selection, symmetry, and repeat controls are opened.
+- Build the adaptive, filterable Help sheet with current-context routing, cross-input action mappings, gesture diagrams, platform shortcut labels, and coach-mark reset.
+  - Verify: every accelerator has a discoverable primary action, touch users do not depend on tooltips, disabled prerequisites are explainable, and Help never silently changes committed work.
+- Add optional Live Instructions with synchronized row/round reveal, within-row stitch-path progress, compression-aware guidance, and locally restored crochet progress.
+- Build Instructions Overview as the preparation and verification view.
+  - Combine Output/traversal/validation and project/yarn summary with a finished chart and compressed row/round list whose focus is synchronized but progress-neutral.
+  - Provide Start/Resume Live and Text navigation, route authored edits to Design, adapt chart/list composition by available space, and preserve independent focus/view state.
+  - Verify: Overview communicates exactly what output will be worked, row focus cannot alter progress, blockers precede starting, and it does not duplicate Live's WIP role or Text's literal export role.
+- Add Done, Track details, Finish this group, Finish row/round, Mark through here, and Back over the generic compression tree.
+  - Verify: a user can complete a compressed instruction in one action, recursively track any nested node, jump to a valid boundary, and reverse every recorded progress boundary without stitch-by-stitch tapping.
+- Add the adaptive Live control shelf with persistent Done and Back, contextual tree-navigation actions, separated row/round completion, keyboard accelerators, and a local left/right-handed placement preference.
+  - Verify: chart gestures never change confirmed progress, every progress action is reachable by touch and keyboard, and moving the shelf does not alter project data.
+- Build a two-scale Live navigator with a row/round overview rail and a stitch-proportional, compression-segmented work track.
+  - Maintain separate confirmed-progress and preview cursors; navigator scrubbing changes only the preview.
+  - Show `Return to progress` and `Mark through here` whenever the cursors differ.
+  - Distinguish confirmed, preview-only, and future contributions when looking ahead; show the historical WIP plus the unchanged progress location when looking back.
+  - Verify: users can inspect past or future work without losing their confirmed place, deliberately move progress to the previewed boundary, and undo that move.
+- Reconcile saved Live progress after pattern or instruction-order changes.
+  - Preserve progress when only future work changes; pause completion and identify the first affected instruction when completed work changes.
+  - Offer `Rewind to first change`, `Keep my place`, and `Reset progress`, with rewind as the recommended action.
+  - Verify: future-only edits retain progress, completed-work edits cannot pass silently, keeping or rewinding produces an honest WIP state, and undoing the edit restores valid progress automatically.
+- Restore Live sessions at the last confirmed boundary rather than the preview cursor.
+  - Reopen an active Live session outside Focus mode with an explicit resume action; otherwise restore the previous workspace and surface Resume Live without interrupting it.
+  - Verify: an abandoned preview cannot replace confirmed progress, Focus and screen wake do not reactivate automatically, and completed work is labelled for review rather than resumption.
+- Add `Crochet again` to the completed Live state, requiring confirmation before local progress is cleared.
+  - Verify: restarting leaves the pattern and instruction plan unchanged and returns Live to its initial confirmed boundary.
+- Make the default Live chart show the chart-derived WIP surface and provide a separate finished-reference view.
+- Render Live through the editor canvas pipeline using progress-derived pattern and overlay state, with the same cells, yarn colours, markers, labels, orientation, pan, and zoom behavior as Design.
+  - Verify: completed overlay markers are subdued, the active instruction and its preview are distinct, and no future overlay marker appears before its progress boundary.
+- Add optional Live Focus mode with reduced chrome, an explicit exit, locally remembered layout, and a visible `Keep screen awake` preference active only while the page is eligible.
+  - Verify: entering Focus retains essential Live controls, leaving it restores the normal workspace, and screen wake is released when Live or the active page is left.
+- Structure Live execution as a pattern overview, Work per row or round, row/round progress boundaries, and pattern completion; limit recursive compression navigation to Work stitches.
+- Keep Live chart-derived and technique-agnostic: omit foundations, transitions, turning, cutting, carrying, joins, and finishing rather than guessing how the user crochets.
+  - Do not add project or row/round fields for technique notes.
+- Allow users to start or resume from any row/round.
+  - Provide first-boundary Start Live and explicit Start Live here from later Overview rows/rounds, with a concrete treated-complete summary and one reversible initial progress boundary.
+  - Verify: initial fine-grained starts are not implied, existing progress uses preview/mark/rewind instead, and starting midway changes only local progress while producing the correct chart-derived WIP prefix.
+- Let Instructions target either the authored Full/Half/Quarter extent or an explicitly configured larger composition derived from it.
+  - Put the required As authored/Composed output choice at the top of Overview, default new projects explicitly to As authored, and summarize it without duplicating controls in the Pattern inspector.
+  - Verify: WIP, Overview, Text, validation, direction, and compression all use the selected output extent without changing the authored source.
+- Implement Design and Instructions as state-preserving peer workspaces.
+  - Preserve ordinary Design context across switching; provide reversible Edit source and validation-issue round trips that restore the exact Instructions context.
+  - Regenerate only at completed edit boundaries and show linked validation issues in Overview when output cannot be generated.
+  - Verify: normal return restores Design unchanged, correction navigation returns to its prior output/issue focus, and constrained layouts never stack competing workspaces.
+- Add Source and read-only Composition Preview views using the same canvas visuals, with visible composition recipes and seam/corner validation.
+  - Highlight source and sibling projections from an output cell, expose its exact mapping and an Edit source action, and preserve both views' spatial state across navigation.
+  - Verify: output cells cannot be painted directly, a mapped source is easy to reach, and ambiguous contributors are all disclosed without a silent winner.
+- Add As authored, Mirror to full, and geometry-dependent Rotate to full presets backed by grid-preserving source instances.
+  - Keep structurally unavailable presets visible but disabled with a reason; keep applicable presets with content conflicts selected and spatially previewed while preventing generation.
+  - Verify: every preset produces deterministic output; unavailable geometry is distinguishable from correctable overlap, yarn-phase, seam, and overlay-support conflicts, which identify their exact locations and prevent Instructions generation.
+- Keep a complete compressed text view available independently of Live Instructions.
+  - Render the exact copy/download text with selectable wrapped lines, a linked row/round gutter, distinct confirmed/preview focus, a notation legend, and locally remembered wrapping and scroll state.
+  - Verify: Copy and Download match the visible text exactly, chart focus never changes progress, and long lines remain usable on narrow and wide layouts.
+- Later, add Print derived from the shared plan with booklet/chart/text layouts, one-page or readable tiled charts, print-specific yarn differentiation, stable page context, and output validation parity.
+  - Verify: Print represents the same complete Output as Overview/Text, never includes Live progress implicitly, preserves readable cells and instruction units, and delegates device-specific printer settings to the system dialog.
+
+</details>
