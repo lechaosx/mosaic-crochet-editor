@@ -31,6 +31,12 @@ pub struct WorkStep {
     pub kind: Stitch,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorkSequence {
+    pub steps: Vec<WorkStep>,
+    pub compression: Vec<SequenceItem>,
+}
+
 fn stitch_from_highlight(highlights: &Array2<u8>, coord: IVec2) -> Stitch {
     if highlights[[coord.y as usize, coord.x as usize]] == common::HIGHLIGHT_VALID_OVERLAY {
         Stitch::Oc
@@ -75,12 +81,29 @@ pub fn export_row_at(
     alternate: bool,
     row_index: usize,
 ) -> String {
-    let flat: Vec<SequenceItem> = row_work_at(highlights, canvas_size, alternate, row_index)
-        .into_iter()
+    let sequence = row_work_sequence_at(highlights, canvas_size, alternate, row_index);
+    format!(
+        "Row {}: {}",
+        row_index + 1,
+        pattern::to_string(&sequence.compression)
+    )
+}
+
+pub fn row_work_sequence_at(
+    highlights: &Array2<u8>,
+    canvas_size: IVec2,
+    alternate: bool,
+    row_index: usize,
+) -> WorkSequence {
+    let steps = row_work_at(highlights, canvas_size, alternate, row_index);
+    let flat: Vec<SequenceItem> = steps
+        .iter()
         .map(|step| SequenceItem::Stitch(step.kind))
         .collect();
-    let compressed = pattern::compress(&flat);
-    format!("Row {}: {}", row_index + 1, pattern::to_string(&compressed))
+    WorkSequence {
+        steps,
+        compression: pattern::compress(&flat),
+    }
 }
 
 pub fn round_work_at(
@@ -150,11 +173,7 @@ pub fn export_round_at(
     alternate: bool,
     round_index: usize,
 ) -> String {
-    let mut groups: Vec<Vec<Stitch>> = Vec::new();
-    let mut current_group: Vec<Stitch> = Vec::new();
-    let mut current_parent: Option<IVec2> = None;
-
-    for step in round_work_at(
+    let sequence = round_work_sequence_at(
         highlights,
         canvas_size,
         virtual_size,
@@ -162,7 +181,37 @@ pub fn export_round_at(
         rounds,
         alternate,
         round_index,
-    ) {
+    );
+    format!(
+        "Round {}: {}",
+        round_index + 1,
+        pattern::to_string(&sequence.compression)
+    )
+}
+
+pub fn round_work_sequence_at(
+    highlights: &Array2<u8>,
+    canvas_size: IVec2,
+    virtual_size: IVec2,
+    offset: IVec2,
+    rounds: i32,
+    alternate: bool,
+    round_index: usize,
+) -> WorkSequence {
+    let steps = round_work_at(
+        highlights,
+        canvas_size,
+        virtual_size,
+        offset,
+        rounds,
+        alternate,
+        round_index,
+    );
+    let mut groups: Vec<Vec<Stitch>> = Vec::new();
+    let mut current_group: Vec<Stitch> = Vec::new();
+    let mut current_parent: Option<IVec2> = None;
+
+    for step in &steps {
         if Some(step.parent_coord) != current_parent {
             if !current_group.is_empty() {
                 groups.push(std::mem::take(&mut current_group));
@@ -188,12 +237,10 @@ pub fn export_round_at(
         })
         .collect();
 
-    let compressed = pattern::compress(&flat);
-    format!(
-        "Round {}: {}",
-        round_index + 1,
-        pattern::to_string(&compressed)
-    )
+    WorkSequence {
+        steps,
+        compression: pattern::compress(&flat),
+    }
 }
 
 #[cfg(test)]
@@ -207,6 +254,20 @@ mod tests {
     /// Natural (unmodified) pixel grid for a round pattern — no highlights set.
     fn no_highlights(w: i32, h: i32) -> Array2<u8> {
         Array2::zeros((h as usize, w as usize))
+    }
+
+    fn expand_kinds(items: &[SequenceItem], out: &mut Vec<Stitch>) {
+        for item in items {
+            match item {
+                SequenceItem::Stitch(kind) => out.push(*kind),
+                SequenceItem::Group(children) => expand_kinds(children, out),
+                SequenceItem::RepeatGroup(repeat) => {
+                    for _ in 0..repeat.count {
+                        expand_kinds(&repeat.items, out);
+                    }
+                }
+            }
+        }
     }
 
     // ── Row export ───────────────────────────────────────────────────────────
@@ -251,6 +312,19 @@ mod tests {
         assert_eq!(row_2[2].parent_coord, v(0, 1));
         assert_eq!(export_row_at(&hl, v(3, 3), false, 1), "Row 2: oc, sc × 2");
         assert_eq!(export_row_at(&hl, v(3, 3), true, 1), "Row 2: sc × 2, oc");
+
+        let structured = row_work_sequence_at(&hl, v(3, 3), false, 1);
+        let mut expanded = Vec::new();
+        expand_kinds(&structured.compression, &mut expanded);
+        assert_eq!(
+            expanded,
+            structured
+                .steps
+                .iter()
+                .map(|step| step.kind)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(pattern::to_string(&structured.compression), "oc, sc × 2");
     }
 
     // ── Round export ─────────────────────────────────────────────────────────
@@ -311,6 +385,22 @@ mod tests {
             export_round_at(&hl, v(7, 7), v(7, 7), v(0, 0), 3, true, 1),
             "Round 2: [sc, (sc, ch, sc)] × 4",
         );
+
+        let structured = round_work_sequence_at(&hl, v(7, 7), v(7, 7), v(0, 0), 3, false, 1);
+        let mut expanded = Vec::new();
+        expand_kinds(&structured.compression, &mut expanded);
+        assert_eq!(
+            expanded,
+            structured
+                .steps
+                .iter()
+                .map(|step| step.kind)
+                .collect::<Vec<_>>()
+        );
+        assert!(matches!(
+            structured.compression.as_slice(),
+            [SequenceItem::RepeatGroup(repeat)] if repeat.count == 4
+        ));
     }
 
     // innerW=1, innerH=1, rounds=2 → virtual 5×5, canvas 5×5, offset (0,0).

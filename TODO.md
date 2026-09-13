@@ -114,7 +114,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 - [x] Expose a typed, flat chart work sequence from Rust while preserving current text byte-for-byte.
   - Include stable row/round identity, worked coordinate, supporting/parent coordinate, yarn, and `sc`/`oc`/`ch` kind.
   - Verify flattened coordinate and stitch parity with corrected exporter fixtures.
-- [ ] Expose compression structure as a renderer-independent result.
+- [x] Expose compression structure as a renderer-independent result.
   - Keep arbitrary compression groups separate from domain-semantic rows, rounds, sides, or authored repeats.
   - Verify the existing text renderer remains byte-for-byte compatible.
 - [ ] Replace the export modal with an Instructions Text peer workspace.
