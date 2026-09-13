@@ -145,11 +145,19 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - Validate shared corners, yarn phase, paths, and source mapping before adding project state or Source/Output workspaces.
   - Prototype conclusion: distortion-free Rotate-quarter-to-full is coherent for square centre-out quarters; matching midpoint claims may be shared, differing claims are seam conflicts, and other geometries remain unavailable pending explicit presets.
 
+### Stage 5 — Explicit traversal product gate
+
+- [x] Prototype semantic row and round traversal in core geometry without changing current Instructions.
+  - Rows support a left/right origin with same or alternating direction.
+  - Centre-out supports four corner groups and each side's midpoint, clockwise/counter-clockwise, with same or alternating direction. Even-length sides expose both adjacent midpoint stitches; odd-length sides expose one.
+  - Keep one semantic origin across rounds, preserve complete corner groups at sequence boundaries, and detect origins outside an authored extent.
+  - Prototype conclusion: the semantic model produces complete, duplicate-free paths and maps consistently across rounds; persist and expose it only after crocheter testing confirms the origin names and direction affordances.
+
 ### Explicit deferrals and architectural guardrails
 
 - Defer recursive compression tracking, two Live cursors, preview-ahead WIP, edit reconciliation, midway starts, Focus mode, Wake Lock, Crochet again, and Print until the basic Live loop proves useful.
 - Defer physical-WIP reconstruction; retain a finished chart with current-work masking as the default prototype.
-- Defer side-midpoint round starts and alternating-round traversal until the structured path exists; then validate their usability with crocheters before persisting them as project settings.
+- Defer persisted side-midpoint round starts and alternating-round traversal until crocheter testing validates the core traversal prototype.
 - Defer three-detent sheets, resizable inspector persistence, automatic occlusion panning, semantic zoom, overview navigator, and full browser-Back unwinding. Keep inspector content and render layers separable so these remain possible.
 - Defer persistent clipboard, exhaustive Help/coach-mark infrastructure, pen-specific eraser behavior, filename association, and multi-theme visual polish.
 - Do not retain source-less transform recipes across New/Open initially. Do not replace multiple Central axes or change clipping/collision rules without an explicit product decision and property tests.
