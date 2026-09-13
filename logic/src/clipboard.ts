@@ -62,3 +62,7 @@ export function pasteClipboard(store: Store): boolean {
 }
 
 export function hasClipboard(): boolean { return clipboard !== null; }
+
+export function clipboardCellCount(): number {
+    return clipboard?.pixels.reduce((count, pixel) => count + Number(pixel !== 0), 0) ?? 0;
+}

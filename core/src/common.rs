@@ -195,6 +195,34 @@ pub fn inward_cell_round(
     inner_in_canvas.then_some(inner)
 }
 
+pub fn overlay_target_available_row(canvas_size: IVec2, coord: IVec2) -> bool {
+    coord.x >= 0
+        && coord.x < canvas_size.x
+        && coord.y >= 0
+        && coord.y < canvas_size.y
+        && inward_cell_row(canvas_size, coord).is_some()
+}
+
+pub fn overlay_target_available_round(
+    canvas_size: IVec2,
+    virtual_size: IVec2,
+    offset: IVec2,
+    rounds: i32,
+    coord: IVec2,
+) -> bool {
+    if coord.x < 0
+        || coord.x >= canvas_size.x
+        || coord.y < 0
+        || coord.y >= canvas_size.y
+        || natural_color_round(virtual_size, offset, rounds, coord) == COLOR_TRANSPARENT
+    {
+        return false;
+    }
+    inward_cell_round(canvas_size, virtual_size, offset, coord).is_some_and(|inner| {
+        natural_color_round(virtual_size, offset, rounds, inner) != COLOR_TRANSPARENT
+    })
+}
+
 // Highlight is stored at the *wrong cell* itself; the renderer is responsible
 // for drawing it one step outward (= the overlay layer). Storing at the wrong
 // cell unifies the logic: there's no special case for top row vs middle vs
@@ -1020,5 +1048,44 @@ mod tests {
         // For a hypothetical click far outside (e.g., (-5, 4)), the inner
         // step lands at (-4, 4), still out of canvas → None.
         assert_eq!(inward_cell_round(v(9, 9), v(9, 9), v(0, 0), v(-5, 4)), None);
+    }
+
+    #[test]
+    fn overlay_target_available_row_requires_an_in_canvas_inward_cell() {
+        assert!(overlay_target_available_row(v(4, 4), v(2, 1)));
+        assert!(!overlay_target_available_row(v(4, 4), v(2, 3)));
+        assert!(!overlay_target_available_row(v(4, 4), v(-1, 1)));
+    }
+
+    #[test]
+    fn overlay_target_available_round_rejects_corners_and_hole_destinations() {
+        assert!(overlay_target_available_round(
+            v(9, 9),
+            v(9, 9),
+            v(0, 0),
+            3,
+            v(1, 4)
+        ));
+        assert!(!overlay_target_available_round(
+            v(9, 9),
+            v(9, 9),
+            v(0, 0),
+            3,
+            v(1, 1)
+        ));
+        assert!(!overlay_target_available_round(
+            v(9, 9),
+            v(9, 9),
+            v(0, 0),
+            3,
+            v(2, 4)
+        ));
+        assert!(!overlay_target_available_round(
+            v(9, 9),
+            v(9, 9),
+            v(0, 0),
+            3,
+            v(4, 4)
+        ));
     }
 }

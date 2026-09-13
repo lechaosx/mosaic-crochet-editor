@@ -138,8 +138,10 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Single pointer-event path for mouse, pen, and touch. — **Agent's choice**
 - Active tool and yarn controls expose pressed state; visually styled radios and switches retain native focus and keyboard behavior. — **Agent's choice**
-- Swatches: tap to select; double-click (desktop) or long-press (any pointer) to edit the colour. Right-click on desktop also paints with the secondary colour without re-selecting. — **your decision** (click + double-click + long-press); **Agent's choice** (unified pointer long-press)
+- Yarn A/B swatches are visibly labelled and expose a check marker plus pressed state for the active logical yarn. Tap, click, Enter, or Space selects; visible Edit follows the active yarn, while double-click or long-press edits a specific yarn directly. Swap exchanges the two colours as one undoable edit without changing pixel values or the active logical yarn. Right-click on the canvas temporarily uses the other yarn. — **your decision** (click + double-click + long-press, A/B semantics); **Agent's choice** (visible labels/actions, keyboard activation, unified pointer long-press)
 - Every button has a hover label. Keyboard shortcuts cover all tools, add each symmetry-axis kind, apply active transforms to a selection, rotate, select colours, edit the selection, and undo/redo. — **your decision** (hover labels + shortcuts); **Agent's choice** (specific bindings)
+- An actionable selection count opens a labelled Selection card on every input type. It exposes Move content, Duplicate content, Move selection area, Copy, Cut, Paste, and Deselect using the existing float semantics; after the selection is removed, a clipboard count keeps Paste discoverable. Move outcomes are temporary UI state and reset to Move content after leaving Move. — **Agent's choice**
+- The context strip reports why a canvas gesture was rejected when painting outside the selection, starting Move without or outside a selection, choosing a geometrically unavailable Overlay target, or editing a protected cell. Repeated rejection within one gesture is coalesced into one polite status announcement. — **Agent's choice**
 
 ## Toolbar
 
@@ -147,7 +149,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; paint tools + transforms + colours on row 2), each row distributed with `space-between`. — **your decision**
 - Toolbar actions use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. When the two-row layout would overflow, the current compact composition keeps all eight authoring tools and both yarns visible while moving Pattern, Load, Save, Export, rotation, and Settings into More. — **Agent's choice**
 - One-row, two-row, and compact breakpoints derive from the groups' measured intrinsic widths rather than device labels. — **Agent's choice**
-- A wrapping canvas context strip shows the active tool and yarn, hovered coordinates, selection size, valid and invalid overlay counts, and live/paused transform state when transforms are configured. — **Agent's choice**
+- A wrapping canvas context strip shows the active tool and yarn, hovered coordinates, an actionable selection or clipboard count, valid and invalid overlay counts, and live/paused transform state when transforms are configured. — **Agent's choice**
 
 ## Adaptive workspace conventions
 

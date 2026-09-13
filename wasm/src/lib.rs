@@ -474,6 +474,11 @@ pub fn paint_overlay_row(
 }
 
 #[wasm_bindgen]
+pub fn overlay_target_available_row(width: i32, height: i32, x: i32, y: i32) -> bool {
+    common::overlay_target_available_row(IVec2::new(width, height), IVec2::new(x, y))
+}
+
+#[wasm_bindgen]
 pub fn clear_overlay_row(
     pixels: &[u8],
     width: i32,
@@ -511,6 +516,27 @@ pub fn paint_overlay_round(
         x,
         y,
         axes.as_deref().unwrap_or(&[]),
+    )
+}
+
+#[wasm_bindgen]
+pub fn overlay_target_available_round(
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    rounds: i32,
+    x: i32,
+    y: i32,
+) -> bool {
+    common::overlay_target_available_round(
+        IVec2::new(canvas_width, canvas_height),
+        IVec2::new(virtual_width, virtual_height),
+        IVec2::new(offset_x, offset_y),
+        rounds,
+        IVec2::new(x, y),
     )
 }
 

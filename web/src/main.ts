@@ -1,4 +1,5 @@
 import { PlanType, lock_invalid_row, lock_invalid_round,
+         overlay_target_available_row, overlay_target_available_round,
          export_start_row, export_start_round } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
@@ -12,12 +13,12 @@ import { addAxis, removeAxis, toggleAxisActive,
          axisOffCanvas } from "@mosaic/logic/symmetry";
 import { defaultRepeatGrid, repeatGridError, transformsToFlat } from "@mosaic/logic/repeat";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
-import { mountUI, UIHandle } from "./ui";
+import { mountUI, UIHandle, SelectionMoveMode } from "./ui";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection } from "@mosaic/logic/selection";
-import { copyFloat, cutFloat, pasteClipboard } from "@mosaic/logic/clipboard";
+import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -53,16 +54,16 @@ const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
-let maskMoveActive = false;
+let selectionMoveMode: SelectionMoveMode = "move";
 
 // Move-tool drag mode, chosen at paintdown from the UI mode and modifiers:
 //   "move"      → no modifier; drag repositions the float, release records.
 //   "duplicate" → Ctrl; pre-stamps the float into canvas at paintdown so the
 //                 duplicate is visible during drag, release records the new pos.
-//   "mask-only" → Mask toggle or Alt (dominates Ctrl); stamps at paintdown,
+//   "mask-only" → latched UI mode or Alt (dominates Ctrl); stamps at paintdown,
 //                 drag carries the marquee shape (pixels mirror canvas at the
 //                 new position), release re-lifts the canvas content there.
-type MoveMode = "move" | "duplicate" | "mask-only";
+type MoveMode = SelectionMoveMode;
 
 // One discriminated-union active per gesture, set at `onPaintStart`,
 // updated on `onPaintAt`, consumed (committed or reverted) on
@@ -116,11 +117,29 @@ type Gesture =
 const AXIS_HIT_TOLERANCE = 0.4;
 
 let gesture: Gesture | null = null;
+let gestureFeedbackShown = false;
 let ctrlArrowStamped = false;                        // bake happens once per Ctrl-down
 let maskArrowState: { preFloat: Float } | null = null; // non-null while Alt+Arrow is active
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
+}
+
+function showGestureFeedback(message: string) {
+    if (gestureFeedbackShown) return;
+    gestureFeedbackShown = true;
+    ui.setCanvasFeedback(message);
+}
+
+function overlayTargetAvailable(pattern: PatternState, x: number, y: number): boolean {
+    return pattern.mode === "row"
+        ? overlay_target_available_row(pattern.canvasWidth, pattern.canvasHeight, x, y)
+        : overlay_target_available_round(
+            pattern.canvasWidth, pattern.canvasHeight,
+            pattern.virtualWidth, pattern.virtualHeight,
+            pattern.offsetX, pattern.offsetY, pattern.rounds,
+            x, y,
+        );
 }
 
 // Sync the renderer's drag-preview state. During a replace-mode select
@@ -155,7 +174,12 @@ store.addObserver(s => {
         Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveTransforms,
     );
     ui.setTransformError(null);
+    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
 });
+
+function selectionCellCount(): number {
+    return store.state.float?.pixels.reduce((count, pixel) => count + Number(pixel !== 0), 0) ?? 0;
+}
 
 // ── Paint ────────────────────────────────────────────────────────────────────
 // Paint operates on the *visible* canvas (pixels + float stamped). When a
@@ -184,7 +208,14 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
     // When a float is active, the click cell must be inside its shifted
     // mask (paint clip). Overlay's painted cell is the inward neighbour
     // of the click, but the click cell itself still has to be in the float.
-    if (inCanvas && shifted && shifted[y * W + x] === 0) return;
+    if (inCanvas && shifted && shifted[y * W + x] === 0) {
+        showGestureFeedback("Outside selection · no cells changed");
+        return;
+    }
+    if (tool === "overlay" && g.color === s.primaryColor && !overlayTargetAvailable(pattern, x, y)) {
+        showGestureFeedback("Overlay unavailable at this cell");
+        return;
+    }
 
     const transforms = s.liveTransforms
         ? transformsToFlat(s.axes, s.repeat)
@@ -197,7 +228,13 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         transforms, shifted,
     });
 
-    if (s.lockInvalid) next = lockAlwaysInvalid(pattern, before, next);
+    if (s.lockInvalid) {
+        const unlocked = next;
+        next = lockAlwaysInvalid(pattern, before, unlocked);
+        if (!arraysEqual(unlocked, next)) {
+            showGestureFeedback("Protected cell skipped · unlock in Settings");
+        }
+    }
 
     // Split paint result back into canvas + float.
     if (s.float) {
@@ -300,17 +337,23 @@ function onReplicateSelection() {
 // Switching tools keeps any active float alive — paint tools clip to its
 // shifted mask, so the selection survives across tool changes.
 function setTool(t: Tool) {
+    ui.setCanvasFeedback(null);
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
-    if (t !== "move" && maskMoveActive) {
-        maskMoveActive = false;
+    if (t !== "move" && selectionMoveMode !== "move") {
+        selectionMoveMode = "move";
         ui.setMaskMove(false);
+        ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
     }
 }
 function toggleMaskMove() {
-    if (!maskMoveActive) setTool("move");
-    maskMoveActive = !maskMoveActive;
-    ui.setMaskMove(maskMoveActive);
+    setSelectionMoveMode(selectionMoveMode === "mask-only" ? "move" : "mask-only");
+}
+function setSelectionMoveMode(mode: SelectionMoveMode) {
+    if (store.state.activeTool !== "move") setTool("move");
+    selectionMoveMode = mode;
+    ui.setMaskMove(mode === "mask-only");
+    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), mode);
 }
 function setPrimary(slot: 1 | 2) {
     store.commit(s => { s.primaryColor = slot; }, { recompute: false, render: false });
@@ -324,6 +367,12 @@ function onColorInput() {
 }
 function onColorCommit() {
     store.commit(() => {}, { recompute: false, render: false, history: true });
+}
+function onSwapYarns() {
+    store.commit(s => {
+        [s.colorA, s.colorB] = [s.colorB, s.colorA];
+    }, { history: true });
+    ui.setColors(store.state.colorA, store.state.colorB);
 }
 function onHlOpacityInput() {
     const v = parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
@@ -345,12 +394,22 @@ function rotate(delta: number) {
     store.commit(s => { s.rotation += delta; }, { recompute: false });
 }
 
-// `Ctrl+V` extra: switch to the Move tool so the user can drag the paste.
+// Paste switches to the Move tool so the user can drag the result.
 // `pasteClipboard` itself only touches state; the tool switch is a UI side
 // effect that lives here in the orchestrator.
 function onPaste() {
+    ui.setCanvasFeedback(null);
     if (store.state.activeTool !== "move") setTool("move");
     pasteClipboard(store);
+}
+function onCopy() {
+    copyFloat(store);
+    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
+}
+function onCut() { cutFloat(store); }
+function onDeselect() {
+    ui.setCanvasFeedback(null);
+    deselect(store);
 }
 
 // ── Pattern (Edit) popover ──────────────────────────────────────────────────
@@ -499,7 +558,13 @@ async function onExport() {
 const ui: UIHandle = mountUI({
     onTool: setTool,
     onMaskMove: toggleMaskMove,
+    onSelectionMoveMode: setSelectionMoveMode,
+    onSelectionCopy: onCopy,
+    onSelectionCut: onCut,
+    onSelectionPaste: onPaste,
+    onSelectionDeselect: onDeselect,
     onPrimaryColor: setPrimary,
+    onSwapYarns,
     onColorChange:  onColorInput,
     onColorCommit,
     onAddAxis:    addAxisOfKind,
@@ -533,9 +598,11 @@ const clientToPattern = (cx: number, cy: number) => {
 mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
+        gestureFeedbackShown = false;
+        ui.setCanvasFeedback(null);
         const tool = store.state.activeTool;
         if (tool === "move") {
-            const mode: MoveMode = maskMoveActive || mods.alt ? "mask-only" : mods.ctrl ? "duplicate" : "move";
+            const mode: MoveMode = mods.alt ? "mask-only" : mods.ctrl ? "duplicate" : selectionMoveMode;
             let prePixels: Uint8Array | null = null;
             const preFloat = store.state.float;
             if (mode === "mask-only" && preFloat) {
@@ -612,10 +679,16 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                     return;
                 }
                 // Otherwise the existing float-move path.
-                if (!f) return;
+                if (!f) {
+                    showGestureFeedback("Select cells before using Move");
+                    return;
+                }
                 const lx = p.x - f.x, ly = p.y - f.y;
                 const insideFloat = lx >= 0 && lx < f.w && ly >= 0 && ly < f.h && f.pixels[ly * f.w + lx] !== 0;
-                if (!insideFloat) return;
+                if (!insideFloat) {
+                    showGestureFeedback("Start Move inside the selection");
+                    return;
+                }
                 gesture.drag = { anchorX: p.x, anchorY: p.y, startDx: f.x, startDy: f.y };
                 return;
             }
@@ -789,6 +862,8 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         gesture = null;
     },
     onPaintCancel: () => {
+        gestureFeedbackShown = false;
+        ui.setCanvasFeedback(null);
         if (!gesture) return;
         if (gesture.kind === "move") {
             const { prePixels, preFloat } = gesture;
@@ -839,7 +914,7 @@ document.addEventListener("keydown", e => {
         else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
         else if (e.key === "a" && !e.shiftKey) { e.preventDefault(); selectAll(store); }
         else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); deselect(store); }
-        else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); copyFloat(store); }
+        else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); onCopy(); }
         else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); cutFloat(store); }
         else if (e.key === "v" && !e.shiftKey) { e.preventDefault(); onPaste(); }
         else if (e.key.startsWith("Arrow") && store.state.float) {
@@ -995,6 +1070,7 @@ ui.setRepeatGrid(store.state.repeat);
 ui.setTransformState(
     Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveTransforms,
 );
+ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
 

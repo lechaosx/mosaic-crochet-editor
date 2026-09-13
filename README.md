@@ -66,16 +66,18 @@ Eight tools, in the toolbar's tools group:
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
 - **Select** — drag a rectangle to **lift** those cells into a floating selection: their values move into the float, the canvas below them resets to the natural alternating colour. **Shift+drag** adds to the selection; **Ctrl+drag** removes (re-anchors the rest); no-modifier replaces. A single click lifts one cell.
 - **Magic wand** — click a cell to lift its connected same-colour region as a float. Same Shift / Ctrl / no-modifier semantics as the rect tool. Dragging can sweep across regions; the entire sweep is one Undo step.
-- **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive across tool changes and saving until you deselect (`Ctrl+Shift+A`), replace the selection, resize the pattern, or load another file. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's content is baked into the canvas at the start, the drag carries the same marquee shape, and on release the canvas content at the new position is re-lifted as the new float (the original content stays where it was). The **Mask** toggle beside Move enables the same behavior without a keyboard modifier; it stays enabled until you turn it off or select another tool. **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
+- **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive across tool changes and saving until you deselect (`Ctrl+Shift+A`), replace the selection, resize the pattern, or load another file. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's content is baked into the canvas at the start, the drag carries the same marquee shape, and on release the canvas content at the new position is re-lifted as the new float (the original content stays where it was). The Selection card exposes **Move content**, **Duplicate content**, and **Move selection area** as modifier-free outcomes; choosing one activates Move and closes the card so the canvas is ready for the drag. Leaving Move resets the outcome to Move content. The **Mask** toggle beside Move is a compact shortcut for Move selection area. **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
 
 With **Apply while drawing** enabled, all five drawing tools respect the configured symmetry and repeat transforms. Turn it off to edit only the source cell while keeping the same transformation ready for selection stamping. The eraser restores each transformed pixel to *its own* natural colour, not the click point's.
 
 When a selection is active, painting tools clip to its visible marquee: changes inside the float go to the float's pixels; clicks outside the marquee do nothing. The boundary appears as marching ants in a palette-aware accent colour. Holes (transparent cells) behave as outside the selection — never lifted, never affected by paint through the float.
 
+Tap or click the selected-cell count in the context strip to open the Selection card. It provides labelled Copy, Cut, Paste, and Deselect actions alongside their keyboard hints. Deselect places the floating content into the pattern before removing the selection. After Cut or Deselect, the same trigger shows the number of copied cells while the in-memory clipboard remains available.
+
 `Ctrl+C` copies the float to the clipboard (non-destructive — canvas and marquee stay unchanged). `Ctrl+X` cuts: clipboard gets the content and the selection drops; canvas cells are cleared to baseline only when every cell's value matches the float (all-or-nothing — if anything differs, the canvas is left alone). `Ctrl+V` pastes from the clipboard back at the original copy location as a non-destructive float — moving it leaves the canvas underneath alone, so paste-then-move is duplicate by default.
 
-**Mouse:** left click paints with the primary colour, right click paints with the secondary.
-**Touch / pen:** single-finger drag paints with the primary colour. Selecting the secondary swatch (tap it, or press **2**) paints with the secondary instead. For mask-only movement, tap **Mask** and drag the selection with one finger.
+**Mouse:** left click paints with the active yarn; right click temporarily paints with the other yarn.
+**Touch / pen:** single-finger drag paints with the active yarn. Select Yarn A or B by tapping its labelled swatch or pressing **1** or **2**. Tap the selected-cell count for selection and clipboard actions or a modifier-free move outcome.
 
 A ✕ marks valid overlay-stitch positions; a ! marks invalid placements. Both are drawn in the *opposite* pixel colour so they stay visible against either palette, and they update as you draw.
 
@@ -95,9 +97,9 @@ The repeat grid accepts at most 4,096 positions. Operations also abort instead o
 
 The transform toolbar button has no badge when no recipe is configured, an accent dot while configured transforms apply during drawing, and a pause badge when the recipe remains configured but live application is off.
 
-### Colours
+### Yarns
 
-Two swatches: primary (left) and secondary (right). Click to select; double-click or long-press to edit the colour. The active swatch has a glowing outline.
+The labelled **Yarn A** and **Yarn B** swatches remain directly available at every toolbar size. A visible check and outline identify the active yarn independently of colour. Click, tap, Enter, or Space selects a yarn. **Edit** opens the native colour picker for the active yarn; double-clicking or long-pressing either swatch edits that yarn directly. **Swap** exchanges the two colours without changing the pattern's A/B cells or which logical yarn is active, and Undo restores the previous colours.
 
 ### Highlights
 
@@ -122,7 +124,9 @@ The **⚙** button on the right of the toolbar opens a Settings popover:
 
 Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. Drawing remains live on the canvas while dragging and updates recovery storage when the stroke is released. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
 
-The context strip at the bottom of the canvas shows the active tool and Yarn A/B, overlay totals, invalid placements, selection size, and whether configured transforms are live or paused. Pattern coordinates appear while the pointer is over the canvas. The strip wraps on compact screens.
+The context strip at the bottom of the canvas shows the active tool and Yarn A/B, overlay totals, invalid placements, selection size, and whether configured transforms are live or paused. Pattern coordinates appear while the pointer is over the canvas. The selection or clipboard count opens its contextual action card. The strip wraps on compact screens.
+
+When a canvas action cannot proceed, the context strip explains the immediate cause: the pointer is outside the selection, Move needs a selection or must start inside it, an Overlay target has no inward supporting cell, or Settings skipped a protected destination. Repeated blocked cells in one drag produce one message; beginning another canvas action clears it.
 
 ### Responsive toolbar
 
@@ -130,7 +134,7 @@ Toolbar actions use a minimum 36 × 36 CSS-pixel target on wide fine-pointer lay
 
 ### Keyboard shortcuts
 
-Toolbar tools and yarn swatches expose their selected state to assistive technology. Pattern choices and switches remain native radio buttons and checkboxes, so they can be focused and operated with the standard arrow and Space keys.
+Toolbar tools and yarn swatches expose their selected state to assistive technology. Yarn swatches respond to Enter and Space. Pattern choices and switches remain native radio buttons and checkboxes, so they can be focused and operated with the standard arrow and Space keys.
 
 | Action | Key |
 |---|---|
@@ -139,7 +143,7 @@ Toolbar tools and yarn swatches expose their selected state to assistive technol
 | Add Diagonal ╲ / Anti-diagonal ╱ axis | **D** / **A** |
 | Stamp transformed copies from the selection | **T** |
 | Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
-| Select primary / secondary swatch | **1** / **2** |
+| Select Yarn A / Yarn B | **1** / **2** |
 | Select all paintable cells / Deselect / Clear selection | **Ctrl+A** / **Ctrl+Shift+A** / **Esc** |
 | Delete selection content (keeps selection active) | **Delete** |
 | Nudge float / Nudge ×5 | **Arrow** / **Shift+Arrow** |

@@ -818,7 +818,6 @@ export function updateStatus(store: Store, x: number | null, y: number | null, h
         if (plan[i] === PlanType.Valid) valid++;
         else                            invalid++;
     }
-    const selection = store.state.float?.pixels.reduce((count, pixel) => count + Number(pixel !== 0), 0) ?? 0;
     const setItem = (id: string, text: string) => {
         const item = document.getElementById(id)!;
         item.textContent = text;
@@ -828,7 +827,6 @@ export function updateStatus(store: Store, x: number | null, y: number | null, h
     setItem("status-tool", TOOL_LABELS[store.state.activeTool]);
     setItem("status-yarn", `Yarn ${store.state.primaryColor === 1 ? "A" : "B"}`);
     setItem("status-coordinates", x !== null && y !== null ? `${x}, ${y}` : "");
-    setItem("status-selection", selection > 0 ? `${selection} selected` : "");
     setItem("status-overlays", `${valid} overlay${valid !== 1 ? "s" : ""}`);
     setItem("status-invalid", invalid > 0 ? `${invalid} invalid` : "");
     setItem("status-transforms", hasTransforms

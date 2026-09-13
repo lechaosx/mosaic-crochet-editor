@@ -44,13 +44,19 @@
         <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" popovertarget="sym-popover" title="Symmetry and repeat: no transforms configured" aria-haspopup="dialog" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured">⊕</button>
       </div>
 
-      <div class="tb-group g-colors" role="group" aria-label="Colours">
-        <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Primary colour (1) — double-click or long-press to edit" aria-label="Primary colour">
+      <div class="tb-group g-colors" role="group" aria-label="Yarns">
+        <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Select Yarn A (1) — double-click or long-press to edit" aria-label="Yarn A" aria-pressed="true">
+          <span class="swatch-label" aria-hidden="true">A</span>
+          <span class="swatch-check" aria-hidden="true">✓</span>
           <input type="color" id="color-a" value="#000000" tabindex="-1">
         </div>
-        <div id="swatch-b" class="swatch" tabindex="0" role="button" title="Secondary colour (2) — double-click or long-press to edit" aria-label="Secondary colour">
+        <div id="swatch-b" class="swatch" tabindex="0" role="button" title="Select Yarn B (2) — double-click or long-press to edit" aria-label="Yarn B" aria-pressed="false">
+          <span class="swatch-label" aria-hidden="true">B</span>
+          <span class="swatch-check" aria-hidden="true">✓</span>
           <input type="color" id="color-b" value="#ffffff" tabindex="-1">
         </div>
+        <button class="btn" id="edit-yarn" type="button" aria-label="Edit Yarn A" title="Edit Yarn A colour">Edit</button>
+        <button class="btn" id="swap-yarns" type="button" aria-label="Swap yarns" title="Swap Yarn A and Yarn B colours">Swap</button>
       </div>
     </div>
   </header>
@@ -65,12 +71,33 @@
       <span id="status-tool"></span>
       <span id="status-yarn"></span>
       <span id="status-coordinates" hidden></span>
-      <span id="status-selection" hidden></span>
+      <span id="status-feedback" class="status-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+      <button id="status-selection" class="status-action" type="button" popovertarget="selection-popover" aria-haspopup="dialog" hidden></button>
       <span id="status-overlays"></span>
       <span id="status-invalid" hidden></span>
       <span id="status-transforms" hidden></span>
     </div>
   </main>
+
+  <div id="selection-popover" popover role="dialog" aria-label="Selection">
+    <div class="selection-card-header">
+      <strong id="selection-card-title">Selection</strong>
+      <span id="selection-card-clipboard"></span>
+    </div>
+    <div id="selection-modes" class="selection-modes" role="group" aria-label="Move outcome">
+      <button class="btn" id="selection-mode-move" type="button" aria-pressed="true">Move content</button>
+      <button class="btn" id="selection-mode-duplicate" type="button" aria-pressed="false">Duplicate content</button>
+      <button class="btn" id="selection-mode-area" type="button" aria-pressed="false">Move selection area</button>
+    </div>
+    <div class="selection-actions">
+      <button class="btn" id="selection-copy" type="button" aria-label="Copy">Copy <kbd>Ctrl+C</kbd></button>
+      <button class="btn" id="selection-cut" type="button" aria-label="Cut">Cut <kbd>Ctrl+X</kbd></button>
+      <button class="btn" id="selection-paste" type="button" aria-label="Paste">Paste <kbd>Ctrl+V</kbd></button>
+      <button class="btn" id="selection-deselect" type="button" aria-label="Deselect">Deselect <kbd>Esc</kbd></button>
+    </div>
+    <div id="selection-deselect-help" class="popover-help">Deselect places the content and removes the selection.</div>
+    <div id="selection-paste-help" class="popover-help">Nothing copied yet.</div>
+  </div>
 
   <!-- ── Settings popover ─────────────────────────────────────────────── -->
   <div id="hl-popover" popover>

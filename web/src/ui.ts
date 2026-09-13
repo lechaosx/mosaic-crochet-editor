@@ -1,6 +1,8 @@
 import { Tool, SymKey, PatternState, Axis, RepeatGrid } from "@mosaic/logic/types";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 
+export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
+
 // ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -38,7 +40,13 @@ const SYM_ADD_BUTTONS: { id: string; key: SymKey; glyph: string }[] = [
 export interface UICallbacks {
     onTool:            (t: Tool) => void;
     onMaskMove:        () => void;
+    onSelectionMoveMode: (mode: SelectionMoveMode) => void;
+    onSelectionCopy:     () => void;
+    onSelectionCut:      () => void;
+    onSelectionPaste:    () => void;
+    onSelectionDeselect: () => void;
     onPrimaryColor:    (slot: 1 | 2) => void;
+    onSwapYarns:       () => void;
     onColorChange:     () => void;
     onColorCommit:     () => void;
     onAddAxis:         (k: SymKey) => void;
@@ -67,6 +75,8 @@ export interface UICallbacks {
 export interface UIHandle {
     setTool:            (t: Tool) => void;
     setMaskMove:        (active: boolean) => void;
+    setSelectionState:  (selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) => void;
+    setCanvasFeedback:  (message: string | null) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
     setAxes:            (axes: ReadonlyArray<Axis>) => void;
@@ -126,16 +136,100 @@ export function mountUI(cb: UICallbacks): UIHandle {
         maskMove.setAttribute("aria-pressed", String(active));
     }
 
+    /* ── Selection card ──────────────────────────────────────────────── */
+    const selectionPopover = el("selection-popover");
+    const selectionTrigger = el<HTMLButtonElement>("status-selection");
+    const selectionTitle = el("selection-card-title");
+    const selectionClipboard = el("selection-card-clipboard");
+    const selectionModes = el("selection-modes");
+    const selectionCopy = el<HTMLButtonElement>("selection-copy");
+    const selectionCut = el<HTMLButtonElement>("selection-cut");
+    const selectionPaste = el<HTMLButtonElement>("selection-paste");
+    const selectionDeselect = el<HTMLButtonElement>("selection-deselect");
+    const selectionDeselectHelp = el("selection-deselect-help");
+    const selectionPasteHelp = el("selection-paste-help");
+    const modeButtons: Record<SelectionMoveMode, HTMLButtonElement> = {
+        move: el("selection-mode-move"),
+        duplicate: el("selection-mode-duplicate"),
+        "mask-only": el("selection-mode-area"),
+    };
+
+    selectionTrigger.addEventListener("click", event => {
+        event.preventDefault();
+        if (selectionPopover.matches(":popover-open")) selectionPopover.hidePopover();
+        else selectionPopover.showPopover();
+    });
+    (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(mode =>
+        modeButtons[mode].addEventListener("click", () => {
+            cb.onSelectionMoveMode(mode);
+            selectionPopover.hidePopover();
+        })
+    );
+    selectionCopy.addEventListener("click", cb.onSelectionCopy);
+    selectionCut.addEventListener("click", cb.onSelectionCut);
+    selectionPaste.addEventListener("click", cb.onSelectionPaste);
+    selectionDeselect.addEventListener("click", cb.onSelectionDeselect);
+
+    function setSelectionState(selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) {
+        const hasSelection = selectedCount > 0;
+        const hasClip = clipboardCount > 0;
+        selectionTrigger.hidden = !hasSelection && !hasClip;
+        if (hasSelection) {
+            selectionTrigger.textContent = `${selectedCount} selected`;
+            selectionTrigger.setAttribute("aria-label", `${selectedCount} selected`);
+            selectionTitle.textContent = `Selection · ${selectedCount} ${selectedCount === 1 ? "cell" : "cells"}`;
+        } else if (hasClip) {
+            selectionTrigger.textContent = `Clipboard · ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`;
+            selectionTrigger.setAttribute("aria-label", `Clipboard, ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`);
+            selectionTitle.textContent = "Clipboard";
+        }
+        selectionClipboard.textContent = hasSelection && hasClip
+            ? `${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"} copied`
+            : "";
+        selectionModes.hidden = !hasSelection;
+        selectionCopy.hidden = !hasSelection;
+        selectionCut.hidden = !hasSelection;
+        selectionDeselect.hidden = !hasSelection;
+        selectionDeselectHelp.hidden = !hasSelection;
+        selectionPaste.disabled = !hasClip;
+        selectionPasteHelp.hidden = hasClip;
+        (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(key => {
+            const active = key === mode;
+            modeButtons[key].classList.toggle("btn--active", active);
+            modeButtons[key].setAttribute("aria-pressed", String(active));
+        });
+        if (!hasSelection && !hasClip && selectionPopover.matches(":popover-open")) {
+            selectionPopover.hidePopover();
+        }
+    }
+
+    function setCanvasFeedback(message: string | null) {
+        const feedback = el("status-feedback");
+        feedback.textContent = message ?? "";
+        feedback.hidden = message === null;
+    }
+
     /* ── Colour swatches ──────────────────────────────────────────────── */
     const swatchA = el("swatch-a");
     const swatchB = el("swatch-b");
     const colorA  = el<HTMLInputElement>("color-a");
     const colorB  = el<HTMLInputElement>("color-b");
+    const editYarn = el<HTMLButtonElement>("edit-yarn");
+    let activeYarn: 1 | 2 = 1;
 
     bindLongPress(swatchA, () => cb.onPrimaryColor(1), () => colorA.click());
     bindLongPress(swatchB, () => cb.onPrimaryColor(2), () => colorB.click());
+    const selectWithKeyboard = (event: KeyboardEvent, slot: 1 | 2) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        cb.onPrimaryColor(slot);
+    };
+    swatchA.addEventListener("keydown", event => selectWithKeyboard(event, 1));
+    swatchB.addEventListener("keydown", event => selectWithKeyboard(event, 2));
     swatchA.addEventListener("dblclick", () => colorA.click());
     swatchB.addEventListener("dblclick", () => colorB.click());
+    editYarn.addEventListener("click", () => (activeYarn === 1 ? colorA : colorB).click());
+    el("swap-yarns").addEventListener("click", cb.onSwapYarns);
     colorA.addEventListener("input",  cb.onColorChange);
     colorB.addEventListener("input",  cb.onColorChange);
     // `change` fires when the picker closes — that's the user's "I'm done"
@@ -144,10 +238,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
     colorB.addEventListener("change", cb.onColorCommit);
 
     function setPrimary(slot: 1 | 2) {
+        activeYarn = slot;
         swatchA.classList.toggle("swatch--active", slot === 1);
         swatchB.classList.toggle("swatch--active", slot === 2);
         swatchA.setAttribute("aria-pressed", String(slot === 1));
         swatchB.setAttribute("aria-pressed", String(slot === 2));
+        editYarn.setAttribute("aria-label", `Edit Yarn ${slot === 1 ? "A" : "B"}`);
+        editYarn.title = `Edit Yarn ${slot === 1 ? "A" : "B"} colour`;
     }
     function setColors(a: string, b: string) {
         colorA.value = a; colorB.value = b;
@@ -495,7 +592,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setMaskMove, setPrimary, setColors, setAxes,
+        setTool, setMaskMove, setSelectionState, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
         setHistory, setEditError,

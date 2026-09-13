@@ -5,7 +5,7 @@
 
 import { describe, test, expect } from "vitest";
 import { Store } from "../src/store";
-import { copyFloat, cutFloat, pasteClipboard, hasClipboard } from "../src/clipboard";
+import { copyFloat, cutFloat, pasteClipboard, hasClipboard, clipboardCellCount } from "../src/clipboard";
 import { filledPixels, makeFloat, rowSession } from "./_helpers";
 import type { Float } from "../src/types";
 
@@ -46,6 +46,19 @@ describe("copyFloat", () => {
         expect(s.state.pixels).toBe(pixelsBefore);  // canvas untouched
         expect(s.state.float).toBe(floatBefore);    // float untouched
         expect(hasClipboard()).toBe(true);
+        expect(clipboardCellCount()).toBe(1);
+    });
+
+    test("reports the number of occupied clipboard cells", () => {
+        const s = storeOf({
+            pixels: filledPixels(3, 3, 1),
+            float:  makeFloat([
+                { x: 0, y: 0, v: 2 },
+                { x: 2, y: 2, v: 2 },
+            ]),
+        });
+        copyFloat(s);
+        expect(clipboardCellCount()).toBe(2);
     });
 });
 

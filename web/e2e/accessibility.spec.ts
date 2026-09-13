@@ -6,8 +6,8 @@ test("active tool and yarn expose their selected state", async ({ page }) => {
     await expect(page.getByRole("group", { name: "Paint tools" })).toBeVisible();
     const pencil = page.getByRole("button", { name: "Pencil" });
     const fill = page.getByRole("button", { name: "Fill" });
-    const primary = page.getByRole("button", { name: "Primary colour" });
-    const secondary = page.getByRole("button", { name: "Secondary colour" });
+    const primary = page.getByRole("button", { name: "Yarn A", exact: true });
+    const secondary = page.getByRole("button", { name: "Yarn B", exact: true });
 
     await expect(pencil).toHaveAttribute("aria-pressed", "true");
     await expect(fill).toHaveAttribute("aria-pressed", "false");
@@ -48,7 +48,7 @@ test("context strip follows the active tool, yarn, selection, and transforms", a
     await expect(status).toContainText("Yarn A");
 
     await page.getByRole("button", { name: "Fill" }).click();
-    await page.getByRole("button", { name: "Secondary colour" }).click();
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await expect(status).toContainText("Fill");
     await expect(status).toContainText("Yarn B");
 
@@ -66,4 +66,39 @@ test("context strip follows the active tool, yarn, selection, and transforms", a
 
     await page.locator("label:has(#live-transforms)").click();
     await expect(status).toContainText("Transforms paused");
+});
+
+test("yarn controls expose select, edit, and undoable swap actions", async ({ page }) => {
+    await bootApp(page);
+    const yarnA = page.getByRole("button", { name: "Yarn A", exact: true });
+    const yarnB = page.getByRole("button", { name: "Yarn B", exact: true });
+    const edit = page.locator("#edit-yarn");
+    const swap = page.getByRole("button", { name: "Swap yarns" });
+
+    await expect(yarnA).toContainText("A");
+    await expect(yarnB).toContainText("B");
+    await expect(yarnA).toHaveAttribute("aria-pressed", "true");
+    await expect(edit).toBeVisible();
+    await expect(swap).toBeVisible();
+
+    await yarnB.focus();
+    await page.keyboard.press("Space");
+    await expect(edit).toHaveAccessibleName("Edit Yarn B");
+    await yarnA.focus();
+    await page.keyboard.press("Enter");
+    await expect(edit).toHaveAccessibleName("Edit Yarn A");
+    await yarnB.click();
+
+    const before = await page.evaluate(() => ({
+        a: (document.getElementById("color-a") as HTMLInputElement).value,
+        b: (document.getElementById("color-b") as HTMLInputElement).value,
+    }));
+    await swap.click();
+    await expect(yarnB).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#color-a")).toHaveValue(before.b);
+    await expect(page.locator("#color-b")).toHaveValue(before.a);
+
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.locator("#color-a")).toHaveValue(before.a);
+    await expect(page.locator("#color-b")).toHaveValue(before.b);
 });

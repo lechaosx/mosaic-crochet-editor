@@ -74,13 +74,13 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 - [x] Add concise, non-duplicated active context.
   - Surface active tool, active Yarn A/B, coordinates, selection count, current transform live/paused state, and existing invalid-overlay count near their owning controls.
   - Avoid introducing the future blocker/warning taxonomy until concrete blocking cases exist.
-- [ ] Expose existing selection and clipboard operations to touch without changing their outcomes.
+- [x] Expose existing selection and clipboard operations to touch without changing their outcomes.
   - Provide Move, Duplicate, Move selection area, Copy, Cut, Paste, and Deselect with text labels and shortcut hints.
   - Keep the current Delete behavior labelled conservatively until its unusual conditional semantics are separately redesigned and tested.
-- [ ] Explain existing blocked/no-op canvas actions contextually.
+- [x] Explain existing blocked/no-op canvas actions contextually.
   - Cover painting outside a selection, protected cells, invalid Overlay targets, and unavailable Move.
   - Coalesce feedback within one gesture and keep hover-only explanations supplementary.
-- [ ] Rename primary/secondary colours to Yarn A/B and add colour-independent active state plus visible Edit and Swap actions.
+- [x] Rename primary/secondary colours to Yarn A/B and add colour-independent active state plus visible Edit and Swap actions.
   - Preserve current pixel semantics and file compatibility.
   - Defer labels, similarity analysis, and persistent accessibility preferences until Instructions consumes them.
 

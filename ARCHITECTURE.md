@@ -51,6 +51,7 @@ Thin binding layer — `src/lib.rs` only. — **Agent's choice**
 
 - **`ExportSession`** — `#[wasm_bindgen]` struct; JS owns it, calls `.next()` per line, calls `.free()`. Avoids global session state. — **your decision**
 - **`transformed_target_indices`** — exposes the shared target generator so the TS Invert tool can dedupe symmetry and repeat targets per stroke without re-implementing the transform logic in JS. — **Agent's choice**
+- **`overlay_target_available_*`** — exposes Rust's inward-cell geometry so the web layer can explain unavailable Overlay targets without duplicating row/round rules. — **Agent's choice**
 
 ### `logic` (`@mosaic/logic`)
 Pure TypeScript — no DOM, `lib: ["ESNext"]` enforced. All modules are free functions; `Store` is the only class (justified by the commit-chain invariant).
@@ -117,7 +118,7 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 - Export uses a native `<dialog>`; Pattern, **Symmetry and repeat**, Settings, and More use the native HTML `popover` attribute. — **Agent's choice**
 - **Edit popover commits before any outside input**: capture-phase `pointerdown` / `keydown` listeners on `document` explicitly `hidePopover()` the Edit popover when input lands outside it, so its `onEditClose` history push runs synchronously *before* the outside button or shortcut handler. Without this the click/keydown ordering is browser-dependent and `Undo` (etc.) could see the pre-commit head and silently drop the live preview. — **your decision**
 - Swatches use a unified `bindLongPress` helper for click-to-select / long-press-to-edit on any pointer type, plus `dblclick` for desktop double-click. — **Agent's choice**
-- The canvas context strip derives its content directly from the current `Store` and highlight plan; it owns no session state. — **Agent's choice**
+- Persistent canvas context derives directly from the current `Store` and highlight plan. Rejected-action feedback is transient per-gesture UI state, coalesced before it reaches the context strip, and is not persisted. — **Agent's choice**
 
 ### Toolbar layout
 - Two `<div class="tb-row">` wrappers around the five groups, switched between `display: contents` (wide) and full-width flex containers (narrow). — **Agent's choice**
