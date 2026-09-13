@@ -3,6 +3,7 @@ pub enum Stitch {
     Sc,
     Oc,
     Ch,
+    Unresolved,
 }
 
 impl Stitch {
@@ -11,6 +12,7 @@ impl Stitch {
             Stitch::Sc => "sc",
             Stitch::Oc => "oc",
             Stitch::Ch => "ch",
+            Stitch::Unresolved => "?",
         }
     }
 }

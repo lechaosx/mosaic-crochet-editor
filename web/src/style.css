@@ -716,7 +716,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Instructions Text workspace
+   Instructions workspace
    ────────────────────────────────────────────────────────────────────────── */
 .instructions-workspace {
   grid-row: 1;
@@ -724,7 +724,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(16rem, 1fr) auto;
+  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
   gap: var(--space-3);
   padding: clamp(var(--space-3), 3vw, var(--space-5));
   overflow: auto;
@@ -744,6 +744,111 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .instructions-header h1 { margin: 0; color: var(--fg-0); font-size: var(--font-lg); }
 .instructions-kicker { color: var(--accent); font-size: var(--font-sm); }
 .instructions-intro { margin: 0; max-width: 52rem; color: var(--fg-2); }
+
+.instructions-tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: var(--border);
+}
+
+.instructions-tabs .btn {
+  border-color: transparent;
+  border-radius: var(--radius-1) var(--radius-1) 0 0;
+}
+
+.instructions-tabs .btn[aria-selected="true"] {
+  color: var(--fg-0);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.instructions-overview {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
+  gap: var(--space-3);
+}
+
+.instructions-chart {
+  position: relative;
+  min-width: 0;
+  min-height: 16rem;
+  overflow: hidden;
+  background: var(--bg-0);
+  border: var(--border);
+  border-radius: var(--radius-1);
+}
+
+#instructions-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.instructions-sequence {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-1);
+  border: var(--border);
+  border-radius: var(--radius-1);
+}
+
+.instructions-sequence-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: var(--border);
+}
+
+.instructions-sequence h2 { color: var(--fg-0); font-size: var(--font-base); }
+#instructions-focus-status { color: var(--fg-2); font-size: var(--font-sm); }
+
+#instructions-units {
+  min-height: 0;
+  list-style: none;
+  overflow: auto;
+}
+
+.instructions-unit {
+  width: 100%;
+  min-height: var(--hit);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border-bottom: var(--border);
+}
+
+.instructions-unit:hover { background: var(--bg-2); }
+.instructions-unit[aria-pressed="true"] {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.instructions-unit-meta { color: var(--fg-0); white-space: nowrap; }
+.instructions-unit code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fg-2);
+  font: var(--font-sm)/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.instructions-text-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(16rem, 1fr) auto;
+  gap: var(--space-3);
+}
 
 .instructions-legend {
   display: flex;
@@ -778,6 +883,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
   resize: none;
 }
 
+@media (max-width: 48rem), (orientation: portrait) {
+  .instructions-overview {
+    grid-template: minmax(14rem, 3fr) minmax(10rem, 2fr) / minmax(0, 1fr);
+  }
+}
+
 .warning {
   padding: var(--space-2) var(--space-3);
   background: var(--danger-soft);
@@ -785,6 +896,28 @@ input[type="checkbox"] { accent-color: var(--accent); }
   border-radius: var(--radius-1);
   color: var(--danger);
   font-size: var(--font-sm);
+}
+
+.instructions-blockers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+
+.instructions-blockers strong { color: var(--fg-0); }
+
+#instructions-issues {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex-basis: 100%;
+}
+
+.instructions-issue[aria-pressed="true"] {
+  color: var(--fg-0);
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 1px var(--danger);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────

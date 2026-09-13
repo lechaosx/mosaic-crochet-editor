@@ -120,7 +120,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 - [x] Replace the export modal with an Instructions Text peer workspace.
   - Show the exact Copy/Download text, preserve Design state across switching, and provide a defined notation legend.
   - Do not add Live, composition, WIP reconstruction, or traversal editing in this commit.
-- [ ] Add a minimal Overview using the finished chart and structured row/round list.
+- [x] Add a minimal Overview using the finished chart and structured row/round list.
   - Selecting a line focuses the corresponding path without changing data or introducing progress.
   - Keep Overview inspectable with blockers; link issues to the chart, prevent Live from starting, and expose Text as a labelled draft with explicit unresolved positions.
 

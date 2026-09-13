@@ -1,6 +1,7 @@
 import { PlanType, lock_invalid_row, lock_invalid_round,
          overlay_target_available_row, overlay_target_available_round,
-         export_start_row, export_start_round } from "@mosaic/wasm";
+         instruction_start_row, instruction_start_round,
+         InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateStatus } from "./render";
@@ -54,6 +55,10 @@ const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
+const instructionsViewport = makeViewport(document.getElementById("instructions-canvas") as HTMLCanvasElement);
+const instructionsCtx = instructionsViewport.canvas.getContext("2d", { alpha: false })!;
+const instructionsRs = makeRendererState();
+let instructionsPreviewStore: Store | null = null;
 let selectionMoveMode: SelectionMoveMode = "move";
 let navigateLatched = false;
 let navigateMomentary = false;
@@ -162,6 +167,15 @@ function syncSelectPreview() {
 }
 
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, () => render(viewport, ctx, rs, store));
+observeCanvasResize(
+    instructionsViewport.canvas,
+    v => { instructionsViewport.dpr = v; },
+    () => {
+        if (instructionsPreviewStore) {
+            render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
+        }
+    },
+);
 
 // Renderer + side-effect channels (Store invokes them on every `commit`).
 store.setRenderer (s => render(viewport, ctx, rs, s));
@@ -564,20 +578,63 @@ async function onInstructions() {
         : store.state.pixels;
     const dlg = ui.openInstructions();
     let cancelled = false;
-    dlg.onClose(() => { cancelled = true; });
-    let hasInvalid = false;
+    dlg.onClose(() => {
+        cancelled = true;
+        instructionsPreviewStore = null;
+        instructionsRs.focusPath = null;
+        render(viewport, ctx, rs, store);
+    });
     const plan = store.plan;
+    const issues: { x: number; y: number }[] = [];
+    const issueCoords = new Set<string>();
     for (let i = 0; i < plan.length; i += 4) {
-        if (plan[i] === PlanType.Invalid) { hasInvalid = true; break; }
+        if (plan[i] !== PlanType.Invalid) continue;
+        const x = plan[i + 2];
+        const y = plan[i + 3];
+        const key = `${x},${y}`;
+        if (issueCoords.has(key)) continue;
+        issueCoords.add(key);
+        issues.push({ x, y });
     }
-    dlg.setWarning(hasInvalid);
+
+    instructionsPreviewStore = new Store({
+        ...store.state,
+        pixels: exportPixels,
+        axes: [],
+        repeat: defaultRepeatGrid(),
+        liveTransforms: false,
+        float: null,
+    });
+    fitToView(
+        instructionsViewport.canvas,
+        instructionsViewport.view,
+        store.state.pattern,
+        store.state.rotation,
+    );
+    render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
+
+    dlg.onUnitFocus((flatCoords) => {
+        instructionsRs.focusPath = [];
+        for (let i = 0; i < flatCoords.length; i += 2) {
+            instructionsRs.focusPath.push({ x: flatCoords[i], y: flatCoords[i + 1] });
+        }
+        if (instructionsPreviewStore) {
+            render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
+        }
+    });
+    dlg.onIssueFocus((issue) => {
+        instructionsRs.focusPath = [{ x: issue.x, y: issue.y }];
+        if (instructionsPreviewStore) {
+            render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
+        }
+    });
 
     const startSession = (alt: boolean) => {
         const { pattern } = store.state;
         const { canvasWidth: W, canvasHeight: H } = pattern;
-        if (pattern.mode === "row") return export_start_row(exportPixels, W, H, alt);
+        if (pattern.mode === "row") return instruction_start_row(exportPixels, W, H, alt);
         const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
-        return export_start_round(exportPixels, W, H, vw, vh, ox, oy, rounds, alt);
+        return instruction_start_round(exportPixels, W, H, vw, vh, ox, oy, rounds, alt);
     };
 
     let runId = 0;
@@ -585,15 +642,32 @@ async function onInstructions() {
         const myRun = ++runId;
         dlg.setBusy(true);
         dlg.clearText();
+        dlg.clearUnits();
+        dlg.setBlockers(issues);
         const session = startSession(dlg.alternate());
         const total = session.total();
         let count = 0;
-        let line: string | undefined;
-        while ((line = session.next()) !== undefined) {
-            if (cancelled || myRun !== runId) { session.free(); dlg.endProgress(); return; }
-            dlg.appendLine(line);
+        let unit = session.next();
+        while (unit !== undefined) {
+            if (cancelled || myRun !== runId) {
+                unit.free();
+                session.free();
+                dlg.endProgress();
+                return;
+            }
+            const label = `${unit.kind() === InstructionUnitKind.Row ? "Row" : "Round"} ${unit.number()}`;
+            const text = unit.text();
+            const workedCoords = Array.from(unit.worked_coords());
+            const yarn = unit.yarn() === InstructionYarn.A ? "A" : "B";
+            unit.free();
+            dlg.appendUnit({ label, yarn, text, workedCoords });
+            dlg.appendLine(text);
             dlg.setProgress(++count, total);
             await new Promise<void>(res => requestAnimationFrame(() => res()));
+            unit = session.next();
+        }
+        for (const issue of issues) {
+            dlg.appendLine(`Unresolved overlay at (${issue.x}, ${issue.y}): no chart work step can be derived.`);
         }
         session.free();
         dlg.endProgress();

@@ -96,18 +96,34 @@ export interface UIHandle {
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
     closeEdit:          () => void;
-    openInstructions:   () => InstructionsTextView;
+    openInstructions:   () => InstructionsView;
 }
 
-export interface InstructionsTextView {
+export interface InstructionOverviewUnit {
+    label: string;
+    yarn: "A" | "B";
+    text: string;
+    workedCoords: number[];
+}
+
+export interface InstructionIssue {
+    x: number;
+    y: number;
+}
+
+export interface InstructionsView {
     setProgress: (count: number, total: number) => void;
     endProgress: () => void;
     appendLine:  (line: string) => void;
+    appendUnit:  (unit: InstructionOverviewUnit) => void;
     clearText:   () => void;
-    setWarning:  (visible: boolean) => void;
+    clearUnits:  () => void;
+    setBlockers: (issues: InstructionIssue[]) => void;
     alternate:   () => boolean;
     setBusy:     (busy: boolean) => void;
     onAlternate: (cb: () => void) => void;
+    onUnitFocus: (cb: (coords: number[], label: string) => void) => void;
+    onIssueFocus: (cb: (issue: InstructionIssue) => void) => void;
     onClose:     (cb: () => void) => void;
     close:       () => void;
 }
@@ -644,13 +660,22 @@ export function mountUI(cb: UICallbacks): UIHandle {
         refreshWipeAvailability();
     }
 
-    /* ── Instructions Text workspace ────────────────────────────────── */
+    /* ── Instructions workspace ─────────────────────────────────────── */
     const instructions   = el("instructions-workspace");
     const canvasArea     = el("canvas").parentElement as HTMLElement;
     const authoringDock  = el("authoring-dock");
+    const overviewPanel  = el("instructions-overview");
+    const textPanel      = el("instructions-text-panel");
+    const overviewTab    = el<HTMLButtonElement>("instructions-overview-tab");
+    const textTab        = el<HTMLButtonElement>("instructions-text-tab");
+    const instructionsTitle = el("instructions-title");
+    const unitsList      = el<HTMLOListElement>("instructions-units");
+    const focusStatus    = el("instructions-focus-status");
     const exportText     = el<HTMLTextAreaElement>("export-text");
     const exportProgress = el("export-progress");
     const exportWarning  = el("export-warning");
+    const blockerSummary = el("instructions-blocker-summary");
+    const issuesList     = el("instructions-issues");
     const alternateChk   = el<HTMLInputElement>("alternate");
     el("export-copy").addEventListener("click", () =>
         navigator.clipboard.writeText(exportText.value)
@@ -662,12 +687,38 @@ export function mountUI(cb: UICallbacks): UIHandle {
         URL.revokeObjectURL(url);
     });
 
-    function openInstructions(): InstructionsTextView {
+    function selectInstructionsTab(tab: "overview" | "text") {
+        const overview = tab === "overview";
+        overviewPanel.hidden = !overview;
+        textPanel.hidden = overview;
+        overviewTab.setAttribute("aria-selected", String(overview));
+        textTab.setAttribute("aria-selected", String(!overview));
+        overviewTab.tabIndex = overview ? 0 : -1;
+        textTab.tabIndex = overview ? -1 : 0;
+        instructionsTitle.textContent = overview ? "Overview" : "Text";
+    }
+    overviewTab.addEventListener("click", () => selectInstructionsTab("overview"));
+    textTab.addEventListener("click", () => selectInstructionsTab("text"));
+    for (const tab of [overviewTab, textTab]) {
+        tab.addEventListener("keydown", event => {
+            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const overview = event.key === "ArrowLeft" || event.key === "Home";
+            selectInstructionsTab(overview ? "overview" : "text");
+            (overview ? overviewTab : textTab).focus();
+        });
+    }
+
+    function openInstructions(): InstructionsView {
         const altListeners: (() => void)[] = [];
         const closeListeners: (() => void)[] = [];
+        const focusListeners: ((coords: number[], label: string) => void)[] = [];
+        const issueListeners: ((issue: InstructionIssue) => void)[] = [];
+        let activeFocus: HTMLButtonElement | null = null;
         const inspectorWasHidden = inspectorHost.hidden;
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
+        selectInstructionsTab("overview");
         instructions.hidden = false;
         canvasArea.hidden = true;
         authoringDock.hidden = true;
@@ -695,14 +746,70 @@ export function mountUI(cb: UICallbacks): UIHandle {
             appendLine: (line) => {
                 exportText.value += (exportText.value ? "\n" : "") + line;
             },
+            appendUnit: (unit) => {
+                const item = document.createElement("li");
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "instructions-unit";
+                button.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}`);
+                button.setAttribute("aria-pressed", "false");
+                const meta = document.createElement("span");
+                meta.className = "instructions-unit-meta";
+                meta.textContent = `${unit.label} · Yarn ${unit.yarn}`;
+                const text = document.createElement("code");
+                text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
+                button.append(meta, text);
+                item.append(button);
+                unitsList.append(item);
+                const focus = () => {
+                    activeFocus?.setAttribute("aria-pressed", "false");
+                    activeFocus = button;
+                    button.setAttribute("aria-pressed", "true");
+                    focusStatus.textContent = `Showing ${unit.label} path`;
+                    focusListeners.forEach(f => f(unit.workedCoords, unit.label));
+                };
+                button.addEventListener("click", focus);
+                if (activeFocus === null) focus();
+            },
             clearText: () => { exportText.value = ""; },
-            setWarning: (v) => { exportWarning.hidden = !v; },
+            clearUnits: () => {
+                unitsList.replaceChildren();
+                activeFocus = null;
+                focusStatus.textContent = "";
+            },
+            setBlockers: (issues) => {
+                issuesList.replaceChildren();
+                exportWarning.hidden = issues.length === 0;
+                blockerSummary.textContent = issues.length === 1
+                    ? "Draft — 1 unresolved overlay position"
+                    : `Draft — ${issues.length} unresolved overlay positions`;
+                for (const issue of issues) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.className = "btn instructions-issue";
+                    button.setAttribute("aria-label", `Focus unresolved overlay at ${issue.x}, ${issue.y}`);
+                    button.setAttribute("aria-pressed", "false");
+                    button.textContent = `Unresolved overlay · ${issue.x}, ${issue.y}`;
+                    const focus = () => {
+                        activeFocus?.setAttribute("aria-pressed", "false");
+                        activeFocus = button;
+                        button.setAttribute("aria-pressed", "true");
+                        focusStatus.textContent = `Showing issue at ${issue.x}, ${issue.y}`;
+                        issueListeners.forEach(f => f(issue));
+                    };
+                    button.addEventListener("click", focus);
+                    issuesList.append(button);
+                    if (activeFocus === null) focus();
+                }
+            },
             alternate: () => alternateChk.checked,
             setBusy: (busy) => {
                 el<HTMLButtonElement>("export-copy")    .disabled = busy;
                 el<HTMLButtonElement>("export-download").disabled = busy;
             },
             onAlternate: (f) => altListeners.push(f),
+            onUnitFocus: (f) => focusListeners.push(f),
+            onIssueFocus: (f) => issueListeners.push(f),
             onClose:     (f) => closeListeners.push(f),
             close,
         };

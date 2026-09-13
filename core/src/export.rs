@@ -38,10 +38,10 @@ pub struct WorkSequence {
 }
 
 fn stitch_from_highlight(highlights: &Array2<u8>, coord: IVec2) -> Stitch {
-    if highlights[[coord.y as usize, coord.x as usize]] == common::HIGHLIGHT_VALID_OVERLAY {
-        Stitch::Oc
-    } else {
-        Stitch::Sc
+    match highlights[[coord.y as usize, coord.x as usize]] {
+        common::HIGHLIGHT_VALID_OVERLAY => Stitch::Oc,
+        common::HIGHLIGHT_INVALID => Stitch::Unresolved,
+        _ => Stitch::Sc,
     }
 }
 
@@ -279,6 +279,16 @@ mod tests {
 
         assert_eq!(export_row_at(&hl, v(1, 3), false, 0), "Row 1: oc");
         assert_eq!(export_row_at(&hl, v(1, 3), false, 1), "Row 2: sc");
+    }
+
+    #[test]
+    fn unresolved_overlay_is_not_emitted_as_single_crochet() {
+        let mut hl = no_highlights(1, 3);
+        hl[[2, 0]] = common::HIGHLIGHT_INVALID;
+
+        let work = row_work_at(&hl, v(1, 3), false, 0);
+        assert_eq!(work[0].kind, Stitch::Unresolved);
+        assert_eq!(export_row_at(&hl, v(1, 3), false, 0), "Row 1: ?");
     }
 
     #[test]

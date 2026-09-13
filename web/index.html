@@ -91,20 +91,19 @@
       </div>
     </main>
 
-    <main id="instructions-workspace" class="instructions-workspace" aria-label="Instructions Text" hidden>
+    <main id="instructions-workspace" class="instructions-workspace" aria-label="Instructions" hidden>
       <header class="instructions-header">
         <div>
           <div class="instructions-kicker">Instructions</div>
-          <h1>Text</h1>
+          <h1 id="instructions-title">Overview</h1>
         </div>
         <button class="btn" id="instructions-design" type="button">Back to Design</button>
       </header>
+      <div class="instructions-tabs" role="tablist" aria-label="Instructions view">
+        <button class="btn" id="instructions-overview-tab" type="button" role="tab" aria-controls="instructions-overview" aria-selected="true">Overview</button>
+        <button class="btn" id="instructions-text-tab" type="button" role="tab" aria-controls="instructions-text-panel" aria-selected="false">Text</button>
+      </div>
       <p class="instructions-intro">Chart-derived work in crochet order. Foundations, transitions, joins, and finishing remain your choice.</p>
-      <dl class="instructions-legend" aria-label="Notation legend">
-        <div><dt>sc</dt><dd>Single crochet</dd></div>
-        <div><dt>ch</dt><dd>Chain</dd></div>
-        <div><dt>oc</dt><dd>Chart-required overlay operation</dd></div>
-      </dl>
       <div class="instructions-options">
         <label class="toggle">
           <input type="checkbox" id="alternate">
@@ -113,14 +112,35 @@
         </label>
         <span id="export-progress" class="instructions-progress" hidden></span>
       </div>
-      <div id="export-warning" class="warning" hidden>
-        ⚠ Pattern has invalid placements (! marks). Instructions may be incorrect.
+      <div id="export-warning" class="warning instructions-blockers" hidden>
+        <strong id="instructions-blocker-summary"></strong>
+        <span>Text is a draft. Question marks and unresolved lines identify work the chart cannot derive.</span>
+        <div id="instructions-issues" aria-label="Instruction blockers"></div>
       </div>
-      <textarea id="export-text" aria-label="Compressed instructions" readonly spellcheck="false"></textarea>
-      <footer class="instructions-actions">
-        <button class="btn" id="export-copy" type="button" aria-label="Copy text">Copy</button>
-        <button class="btn" id="export-download" type="button" aria-label="Download text">Download .txt</button>
-      </footer>
+      <section id="instructions-overview" class="instructions-overview" role="tabpanel" aria-labelledby="instructions-overview-tab">
+        <div class="instructions-chart">
+          <canvas id="instructions-canvas" role="img" aria-label="Finished chart preview">Finished chart preview with the selected work path highlighted.</canvas>
+        </div>
+        <div class="instructions-sequence">
+          <div class="instructions-sequence-header">
+            <h2>Work sequence</h2>
+            <span id="instructions-focus-status" role="status" aria-label="Preview focus" aria-live="polite"></span>
+          </div>
+          <ol id="instructions-units" aria-label="Work sequence"></ol>
+        </div>
+      </section>
+      <section id="instructions-text-panel" class="instructions-text-panel" role="tabpanel" aria-labelledby="instructions-text-tab" hidden>
+        <dl class="instructions-legend" aria-label="Notation legend">
+          <div><dt>sc</dt><dd>Single crochet</dd></div>
+          <div><dt>ch</dt><dd>Chain</dd></div>
+          <div><dt>oc</dt><dd>Chart-required overlay operation</dd></div>
+        </dl>
+        <textarea id="export-text" aria-label="Compressed instructions" readonly spellcheck="false"></textarea>
+        <footer class="instructions-actions">
+          <button class="btn" id="export-copy" type="button" aria-label="Copy text">Copy</button>
+          <button class="btn" id="export-download" type="button" aria-label="Download text">Download .txt</button>
+        </footer>
+      </section>
     </main>
 
     <aside id="inspector-host" class="inspector-host" aria-labelledby="inspector-title" hidden>

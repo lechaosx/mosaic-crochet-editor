@@ -3,7 +3,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use glam::IVec2;
-use mosaic_crochet_core::{common, export, tools};
+use mosaic_crochet_core::{common, export, pattern, tools};
 use ndarray::Array2;
 use wasm_bindgen::prelude::*;
 
@@ -67,7 +67,7 @@ const _: () = {
     assert!(PlanDir::Right as u8 == common::PLAN_DIR_RIGHT);
 };
 
-enum ExportMode {
+enum InstructionMode {
     Row {
         canvas_size: IVec2,
         alternate: bool,
@@ -82,48 +82,120 @@ enum ExportMode {
 }
 
 #[wasm_bindgen]
-pub struct ExportSession {
+#[derive(Clone, Copy)]
+pub enum InstructionUnitKind {
+    Row = 0,
+    Round = 1,
+}
+
+#[wasm_bindgen]
+#[derive(Clone, Copy)]
+pub enum InstructionYarn {
+    A = 0,
+    B = 1,
+}
+
+#[wasm_bindgen]
+pub struct InstructionUnit {
+    kind: InstructionUnitKind,
+    number: u32,
+    yarn: InstructionYarn,
+    text: String,
+    worked_coords: Vec<i32>,
+}
+
+#[wasm_bindgen]
+impl InstructionUnit {
+    pub fn kind(&self) -> InstructionUnitKind {
+        self.kind
+    }
+
+    pub fn number(&self) -> u32 {
+        self.number
+    }
+
+    pub fn yarn(&self) -> InstructionYarn {
+        self.yarn
+    }
+
+    pub fn text(&self) -> String {
+        self.text.clone()
+    }
+
+    pub fn worked_coords(&self) -> Vec<i32> {
+        self.worked_coords.clone()
+    }
+}
+
+#[wasm_bindgen]
+pub struct InstructionSession {
     highlights: Array2<u8>,
-    mode: ExportMode,
+    mode: InstructionMode,
     index: usize,
     total: usize,
 }
 
 #[wasm_bindgen]
-impl ExportSession {
+impl InstructionSession {
     pub fn total(&self) -> usize {
         self.total
     }
 
-    // JavaScript consumes this exported method incrementally; Rust Iterator
-    // trait methods are not exported through wasm-bindgen.
     #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<String> {
+    pub fn next(&mut self) -> Option<InstructionUnit> {
         if self.index >= self.total {
             return None;
         }
-        let i = self.index;
+        let index = self.index;
         self.index += 1;
-        Some(match &self.mode {
-            ExportMode::Row {
+        let sequence = match &self.mode {
+            InstructionMode::Row {
                 canvas_size,
                 alternate,
-            } => export::export_row_at(&self.highlights, *canvas_size, *alternate, i),
-            ExportMode::Round {
+            } => export::row_work_sequence_at(&self.highlights, *canvas_size, *alternate, index),
+            InstructionMode::Round {
                 canvas_size,
                 virtual_size,
                 offset,
                 rounds,
                 alternate,
-            } => export::export_round_at(
+            } => export::round_work_sequence_at(
                 &self.highlights,
                 *canvas_size,
                 *virtual_size,
                 *offset,
                 *rounds,
                 *alternate,
-                i,
+                index,
             ),
+        };
+        let first = sequence.steps.first().expect("work unit has visible steps");
+        let (kind, number) = match first.unit {
+            export::WorkUnitId::Row(number) => (InstructionUnitKind::Row, number),
+            export::WorkUnitId::Round(number) => (InstructionUnitKind::Round, number),
+        };
+        let yarn = match first.yarn {
+            export::YarnSlot::A => InstructionYarn::A,
+            export::YarnSlot::B => InstructionYarn::B,
+        };
+        let label = match kind {
+            InstructionUnitKind::Row => "Row",
+            InstructionUnitKind::Round => "Round",
+        };
+        let worked_coords = sequence
+            .steps
+            .iter()
+            .flat_map(|step| [step.worked_coord.x, step.worked_coord.y])
+            .collect();
+        Some(InstructionUnit {
+            kind,
+            number,
+            yarn,
+            text: format!(
+                "{label} {number}: {}",
+                pattern::to_string(&sequence.compression)
+            ),
+            worked_coords,
         })
     }
 }
@@ -183,10 +255,15 @@ pub fn build_highlight_plan_round(
 }
 
 #[wasm_bindgen]
-pub fn export_start_row(pixels: &[u8], width: i32, height: i32, alternate: bool) -> ExportSession {
-    ExportSession {
+pub fn instruction_start_row(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    alternate: bool,
+) -> InstructionSession {
+    InstructionSession {
         highlights: highlights_row(pixels, width, height),
-        mode: ExportMode::Row {
+        mode: InstructionMode::Row {
             canvas_size: IVec2::new(width, height),
             alternate,
         },
@@ -196,7 +273,7 @@ pub fn export_start_row(pixels: &[u8], width: i32, height: i32, alternate: bool)
 }
 
 #[wasm_bindgen]
-pub fn export_start_round(
+pub fn instruction_start_round(
     pixels: &[u8],
     canvas_width: i32,
     canvas_height: i32,
@@ -206,13 +283,13 @@ pub fn export_start_round(
     offset_y: i32,
     rounds: i32,
     alternate: bool,
-) -> ExportSession {
+) -> InstructionSession {
     let canvas_size = IVec2::new(canvas_width, canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset = IVec2::new(offset_x, offset_y);
-    ExportSession {
+    InstructionSession {
         highlights: highlights_round(pixels, canvas_size, virtual_size, offset, rounds),
-        mode: ExportMode::Round {
+        mode: InstructionMode::Round {
             canvas_size,
             virtual_size,
             offset,
@@ -221,6 +298,40 @@ pub fn export_start_round(
         },
         index: 0,
         total: rounds as usize,
+    }
+}
+
+#[cfg(test)]
+mod instruction_session_tests {
+    use super::*;
+
+    #[test]
+    fn row_session_exposes_unit_metadata_text_and_worked_path() {
+        let pixels = initialize_row_pattern(3, 3);
+        let mut session = instruction_start_row(&pixels, 3, 3, false);
+
+        assert_eq!(session.total(), 2);
+        let unit = session.next().expect("first row");
+        assert_eq!(unit.kind() as u8, InstructionUnitKind::Row as u8);
+        assert_eq!(unit.number(), 1);
+        assert_eq!(unit.yarn() as u8, InstructionYarn::B as u8);
+        assert_eq!(unit.text(), "Row 1: sc × 3");
+        assert_eq!(unit.worked_coords(), vec![0, 1, 1, 1, 2, 1]);
+    }
+
+    #[test]
+    fn round_session_exposes_the_visible_worked_path() {
+        let pixels = initialize_round_pattern(7, 7, 7, 7, 0, 0, 3);
+        let mut session = instruction_start_round(&pixels, 7, 7, 7, 7, 0, 0, 3, false);
+
+        assert_eq!(session.total(), 3);
+        let unit = session.next().expect("first round");
+        assert_eq!(unit.kind() as u8, InstructionUnitKind::Round as u8);
+        assert_eq!(unit.number(), 1);
+        assert_eq!(unit.yarn() as u8, InstructionYarn::A as u8);
+        assert!(unit.text().starts_with("Round 1:"));
+        assert_eq!(unit.worked_coords().len() % 2, 0);
+        assert!(!unit.worked_coords().is_empty());
     }
 }
 

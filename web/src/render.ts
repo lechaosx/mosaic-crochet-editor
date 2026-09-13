@@ -115,6 +115,7 @@ export interface RendererState {
     // guides at reduced alpha so the user can see "release = gone."
     axesInDeleteZone: Set<string>;
     previewRepeatGuides: boolean;
+    focusPath: { x: number; y: number }[] | null;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
 }
@@ -138,6 +139,7 @@ export function makeRendererState(): RendererState {
         selectionDashOffset:    0,
         axesInDeleteZone:       new Set<string>(),
         previewRepeatGuides:    false,
+        focusPath:              null,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
     };
@@ -416,6 +418,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
+    renderFocusPath(ctx, view, dpr, rs.focusPath);
     renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, store.plan, m, hlOpacity / 100);
     renderRepeatGuides(ctx, view, dpr, pattern, repeat, rs.contrastingColor, rs.previewRepeatGuides);
     renderSymmetryGuides(ctx, view, dpr, pattern, axes, rs.contrastingColor, rs.axesInDeleteZone);
@@ -444,6 +447,35 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
     if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
+}
+
+function renderFocusPath(
+    ctx: CanvasRenderingContext2D,
+    view: ViewState,
+    dpr: number,
+    path: { x: number; y: number }[] | null,
+) {
+    if (!path?.length) return;
+    ctx.save();
+    ctx.fillStyle = "rgba(214, 83, 163, 0.24)";
+    for (const point of path) ctx.fillRect(point.x, point.y, 1, 1);
+    ctx.strokeStyle = "#d653a3";
+    ctx.lineWidth = 2 / (view.zoom * dpr);
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(path[0].x + 0.5, path[0].y + 0.5);
+    for (let i = 1; i < path.length; i++) {
+        const previous = path[i - 1];
+        const point = path[i];
+        if (Math.abs(point.x - previous.x) + Math.abs(point.y - previous.y) <= 1) {
+            ctx.lineTo(point.x + 0.5, point.y + 0.5);
+        } else {
+            ctx.moveTo(point.x + 0.5, point.y + 0.5);
+        }
+    }
+    ctx.stroke();
+    ctx.restore();
 }
 
 // Trace the selection's boundary as one or more closed polylines (one per

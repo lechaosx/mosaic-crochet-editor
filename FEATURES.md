@@ -127,11 +127,12 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
 - `.mcw` stores pattern geometry, pixels, and colours; symmetry axes, repeat settings, and floats remain session-only. Loading keeps the current transforms and drops the active float. — **your decision** (float and repeat boundaries); **Agent's choice** (axis boundary)
-- Instructions Text is a peer workspace to Design. It retains exact compressed Copy/Download output, a notation legend, alternate-direction generation, and the live editor state when returning to Design. — **Agent's choice**
-- Instructions emits pattern text line-by-line with a live progress counter; returning to Design cancels generation. — **your decision** (line-by-line, cancellation); **Agent's choice** (progress counter)
+- Instructions is a peer workspace to Design. It opens on a read-only Overview that pairs the finished chart with a structured row/round list; selecting a unit focuses its chart path without changing project data or progress. Landscape places chart and list side by side, while portrait stacks them. — **Agent's choice**
+- Instructions Text retains exact compressed Copy/Download output for valid charts, a notation legend, alternate-direction generation, and the live editor state when returning to Design. — **Agent's choice**
+- Instructions emits structured work units line-by-line with a live progress counter; returning to Design cancels generation. — **your decision** (line-by-line, cancellation); **Agent's choice** (structured units, progress counter)
 - Instructions assigns `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**
 - Alternate-direction toggle in Instructions Text re-generates immediately on change. — **your decision**
-- Warning banner shown when the pattern has invalid placements; Instructions Text is not blocked. — **Agent's choice**
+- Invalid overlay placements are blockers linked to their chart coordinates. Overview remains available and Text remains copyable as a labelled draft, using `?` for unresolved in-sequence work and one coordinate-bearing unresolved line per blocker. — **Agent's choice**
 
 ### Instructions limitations
 

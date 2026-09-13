@@ -56,6 +56,8 @@ Traversal settings order chart work. They do not alter the chart, prescribe tran
 
 Overview remains inspectable when blockers exist and links them to chart positions. Live cannot start. Text may remain available only as an explicit draft that marks every unresolved position instead of silently substituting `sc`.
 
+Draft Text uses `?` when unresolved work occupies a generated row/round step and appends a coordinate-bearing unresolved line for every blocker, including work outside the generated path.
+
 ## Representative fixtures
 
 Coordinates below use the authored canvas with `(0, 0)` at its top-left.
