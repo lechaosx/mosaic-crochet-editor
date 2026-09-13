@@ -120,9 +120,17 @@ The **⚙** button on the right of the toolbar opens a Settings popover:
 - **Load** opens a file picker and restores pattern geometry, pixels, and colours. Symmetry and repeat transforms are session state and remain unchanged.
 - **Export** opens a modal where the pattern is converted to text line-by-line. Each `oc` belongs to the worked row or round containing its visible ✕, while the covered supporting pixel remains an internal chart detail. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
-Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
+Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. Drawing remains live on the canvas while dragging and updates recovery storage when the stroke is released. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
+
+The context strip at the bottom of the canvas shows the active tool and Yarn A/B, overlay totals, invalid placements, selection size, and whether configured transforms are live or paused. Pattern coordinates appear while the pointer is over the canvas. The strip wraps on compact screens.
+
+### Responsive toolbar
+
+Toolbar actions use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. Desktop uses one row and tablets recompose to two rows. The current phone-width layout keeps all eight authoring tools and both yarns visible across three rows; Pattern, Load, Save, Export, view rotation, and Settings move into **More**. The same controls move between locations, so their behavior does not change.
 
 ### Keyboard shortcuts
+
+Toolbar tools and yarn swatches expose their selected state to assistive technology. Pattern choices and switches remain native radio buttons and checkboxes, so they can be focused and operated with the standard arrow and Space keys.
 
 | Action | Key |
 |---|---|

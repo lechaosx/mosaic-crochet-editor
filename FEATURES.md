@@ -137,6 +137,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Input model
 
 - Single pointer-event path for mouse, pen, and touch. — **Agent's choice**
+- Active tool and yarn controls expose pressed state; visually styled radios and switches retain native focus and keyboard behavior. — **Agent's choice**
 - Swatches: tap to select; double-click (desktop) or long-press (any pointer) to edit the colour. Right-click on desktop also paints with the secondary colour without re-selecting. — **your decision** (click + double-click + long-press); **Agent's choice** (unified pointer long-press)
 - Every button has a hover label. Keyboard shortcuts cover all tools, add each symmetry-axis kind, apply active transforms to a selection, rotate, select colours, edit the selection, and undo/redo. — **your decision** (hover labels + shortcuts); **Agent's choice** (specific bindings)
 
@@ -144,7 +145,26 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Five groups in fixed visual order on a wide screen: file/history, highlights/rotation, paint tools, transforms, colours. — **your decision**
 - On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; paint tools + transforms + colours on row 2), each row distributed with `space-between`. — **your decision**
-- When even the two-row layout would overflow, button height and font size shrink to fit. The two breakpoints come from runtime measurements of each group's intrinsic width — they kick in exactly when content stops fitting, never sooner. — **your decision** (auto-shrink); **Agent's choice** (measure-driven)
+- Toolbar actions use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. When the two-row layout would overflow, the current compact composition keeps all eight authoring tools and both yarns visible while moving Pattern, Load, Save, Export, rotation, and Settings into More. — **Agent's choice**
+- One-row, two-row, and compact breakpoints derive from the groups' measured intrinsic widths rather than device labels. — **Agent's choice**
+- A wrapping canvas context strip shows the active tool and yarn, hovered coordinates, selection size, valid and invalid overlay counts, and live/paused transform state when transforms are configured. — **Agent's choice**
+
+## Adaptive workspace conventions
+
+These decisions constrain the future redesign; they do not imply that every layout described here is implemented yet.
+
+- Desktop, tablet, and phone use one recognisable interaction model. Placement and density may adapt, but tool names, grouping, ordering, state, and meaning remain consistent. Tablets, especially 10–11 inch landscape tablets with touch or pen, are a reference authoring posture rather than an enlarged phone afterthought. — **your decision**
+- Layout responds to available space while interaction enhancements respond to actual pointer, keyboard, and pen capabilities. Hybrid devices are not classified exclusively as desktop or touch, and no fixed orientation is required. — **Agent's choice**
+- Wide layouts use a document bar, authoring tool rail, central canvas, contextual inspector, and status area. Constrained layouts recompose the same controls into a compact app bar, bottom or side authoring dock, context strip, and non-modal inspector sheet. — **Agent's choice**
+- Fine-pointer controls may use 36 × 36 CSS-pixel targets; direct touch controls use at least 44 × 44 CSS pixels. Typography and spacing scale with user text settings, and controls reflow instead of shrinking below their applicable target. — **Agent's choice**
+- Command surfaces preserve logical grouping and never require horizontal scrolling. When a group no longer fits, the workspace recomposes or moves lower-frequency commands into labelled overflow instead of unpredictably shrinking controls. — **Agent's choice**
+- Frequent and contextual actions remain directly visible. Lower-frequency commands may move into More or an inspector, where icon-only actions gain text labels; essential actions never depend solely on hover, right-click, long-press, modifier keys, or pen hover. Those inputs remain accelerators. — **Agent's choice**
+- Dragging and direct manipulation provide an explicit click/tap or mode-based alternative where the operation permits one. Mouse, touch, pen, and keyboard routes produce the same document outcomes. — **Agent's choice**
+- Active, selected, unavailable, warning, and error states use visible non-colour cues. Disabled actions that need explanation remain discoverable and explain their prerequisite locally; contextually meaningless actions may be omitted. — **Agent's choice**
+- Multi-step and previewed edits expose clear pending state and explicit completion or cancellation. Undo and Redo remain predictable recovery paths, while modal confirmation is reserved for consequential actions that cannot be safely reversed. — **Agent's choice**
+- Recomposition preserves the canvas focal cell, selection, active tool, inspector context, and uncommitted transaction. Inspector content remains the same whether pinned, presented as a drawer, or shown as a bottom sheet. — **Agent's choice**
+- The workspace supports increased text size, visible keyboard focus, reduced motion, forced colours/high contrast, safe-area insets, and browser zoom outside custom canvas gestures. Short motion is used only to clarify spatial or state relationships. — **Agent's choice**
+- The canvas remains the visual priority. Persistent state appears near its owning affordance, immediate coordinates and interaction feedback use the context strip, and completion or failure feedback appears without unexpectedly dismissing or committing work. — **Agent's choice**
 
 ## Pattern popover
 

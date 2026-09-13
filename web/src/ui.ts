@@ -115,9 +115,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
     maskMove.addEventListener("click", cb.onMaskMove);
 
     function setTool(t: Tool) {
-        (Object.keys(toolButtons) as Tool[]).forEach(k =>
-            toolButtons[k].classList.toggle("btn--active", k === t)
-        );
+        (Object.keys(toolButtons) as Tool[]).forEach(k => {
+            const active = k === t;
+            toolButtons[k].classList.toggle("btn--active", active);
+            toolButtons[k].setAttribute("aria-pressed", String(active));
+        });
     }
     function setMaskMove(active: boolean) {
         maskMove.classList.toggle("btn--active", active);
@@ -144,6 +146,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setPrimary(slot: 1 | 2) {
         swatchA.classList.toggle("swatch--active", slot === 1);
         swatchB.classList.toggle("swatch--active", slot === 2);
+        swatchA.setAttribute("aria-pressed", String(slot === 1));
+        swatchB.setAttribute("aria-pressed", String(slot === 2));
     }
     function setColors(a: string, b: string) {
         colorA.value = a; colorB.value = b;
@@ -501,40 +505,49 @@ export function mountUI(cb: UICallbacks): UIHandle {
 }
 
 // ─── Toolbar layout ──────────────────────────────────────────────────────────
-// Each group is measured at full scale (--hit 2.25rem, --font-base 0.875rem)
-// and at the minimum scale (2/3 those). From those two samples we derive:
-//   • bpSingleRow_full — vp where all 5 groups fit on one row at full size
-//   • bpTwoRow_full    — vp where the wider of the two narrow rows fits at full size
-//   • bpTwoRow_min     — same at min scale (2/3 of full)
-// Layout decisions:
-//   • narrow-class on when vp < bpSingleRow_full
-//   • below bpTwoRow_full, scale solves exactly for `width(scale) = vp`. The
-//     two measurements give a linear `width(scale) = fixed + variable·scale`,
-//     so the scale needed to fit any vp is `(vp − fixed) / variable`. No
-//     floor: extreme zoom is the user's call.
-const FULL_HIT = 36, FULL_HIT_SM = 28, FULL_FONT = 14;
-// Second measurement point for the linear width(scale) model — not a clamp.
-// Picking 2/3 gives a span wide enough that the linear approximation stays
-// accurate for any scale we'd realistically need at runtime.
-const LO_SAMPLE = 2 / 3;
-
 function mountToolbarLayout() {
     const toolbar  = document.getElementById("toolbar") as HTMLElement;
     const groupSel = [".g-file", ".g-paint", ".g-transform", ".g-colors", ".g-hlrot"] as const;
     type Widths = Record<typeof groupSel[number], number>;
+    const fileGroup = document.querySelector(".g-file") as HTMLElement;
+    const viewGroup = document.querySelector(".g-hlrot") as HTMLElement;
+    const moreButton = el<HTMLButtonElement>("btn-more");
+    const morePopover = el("more-popover");
+    const moreActions = el("more-actions");
+    const fileActions = [el("btn-edit"), el("btn-load"), el("btn-save"), el("btn-export")];
+    const viewActions = [el("rotate-ccw"), el("rotate-cw"), el("btn-hl-toggle")];
+    let compact = false;
+    let bpSingleRow = Infinity;
+    let bpTwoRow = 0;
 
-    let bpSingleRow_full = Infinity;
-    let bpTwoRow_full    = 0;
-    let bpTwoRow_min     = 0;
+    moreButton.addEventListener("click", e => {
+        e.preventDefault();
+        if (morePopover.matches(":popover-open")) morePopover.hidePopover();
+        else {
+            positionPopover(morePopover, moreButton, "left");
+            morePopover.showPopover();
+        }
+    });
+    morePopover.addEventListener("toggle", e => {
+        moreButton.setAttribute("aria-expanded", String((e as ToggleEvent).newState === "open"));
+    });
+    moreActions.addEventListener("click", e => {
+        if ((e.target as Element).closest("button") && morePopover.matches(":popover-open"))
+            morePopover.hidePopover();
+    });
 
-    function measureAtScale(scale: number): Widths {
-        toolbar.style.setProperty("--hit",       `${FULL_HIT * scale}px`);
-        toolbar.style.setProperty("--hit-sm",    `${FULL_HIT_SM * scale}px`);
-        toolbar.style.setProperty("--font-base", `${FULL_FONT * scale}px`);
-        void toolbar.offsetHeight;
-        return Object.fromEntries(
-            groupSel.map(s => [s, (document.querySelector(s) as HTMLElement).offsetWidth])
-        ) as Widths;
+    function setCompact(next: boolean) {
+        if (compact === next) return;
+        compact = next;
+        if (compact) {
+            moreActions.append(...fileActions, ...viewActions);
+            moreButton.hidden = false;
+        } else {
+            fileGroup.prepend(...fileActions);
+            viewGroup.append(...viewActions);
+            moreButton.hidden = true;
+            if (morePopover.matches(":popover-open")) morePopover.hidePopover();
+        }
     }
 
     function thresholds(w: Widths, padding: number, gap: number) {
@@ -549,44 +562,26 @@ function mountToolbarLayout() {
     }
 
     function measure() {
-        // Measure outside the narrow layout so all 5 groups participate
-        // directly in the toolbar's flex layout (display: contents on tb-row).
-        const wasNarrow = toolbar.classList.contains("toolbar--narrow");
-        toolbar.classList.remove("toolbar--narrow");
-
-        const w_full = measureAtScale(1);
-        const w_min  = measureAtScale(LO_SAMPLE);
+        setCompact(false);
+        toolbar.classList.remove("toolbar--narrow", "toolbar--compact");
+        const widths = Object.fromEntries(
+            groupSel.map(s => [s, (document.querySelector(s) as HTMLElement).offsetWidth])
+        ) as Widths;
 
         const cs = getComputedStyle(toolbar);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
         const gap     = parseFloat(cs.columnGap) || 0;
-
-        const tFull = thresholds(w_full, padding, gap);
-        const tMin  = thresholds(w_min,  padding, gap);
-        bpSingleRow_full = tFull.singleRow;
-        bpTwoRow_full    = tFull.twoRow;
-        bpTwoRow_min     = tMin.twoRow;
-
-        if (wasNarrow) toolbar.classList.add("toolbar--narrow");
+        const measured = thresholds(widths, padding, gap);
+        bpSingleRow = measured.singleRow;
+        bpTwoRow = measured.twoRow;
     }
 
     function applyLayout() {
         const vp = window.innerWidth;
-        toolbar.classList.toggle("toolbar--narrow", vp < bpSingleRow_full);
-
-        let scale = 1;
-        if (vp < bpTwoRow_full) {
-            // Linear width(scale) = fixed + variable·scale, derived from the two
-            // measurements (full at scale 1, min at scale 2/3). Solve for the
-            // scale that makes width(scale) == vp.
-            const variable = 3 * (bpTwoRow_full - bpTwoRow_min);
-            const fixed    = bpTwoRow_full - variable;
-            scale = variable > 0 ? (vp - fixed) / variable : 1;
-            scale = Math.min(1, Math.max(0, scale));
-        }
-        toolbar.style.setProperty("--hit",       `${FULL_HIT    * scale}px`);
-        toolbar.style.setProperty("--hit-sm",    `${FULL_HIT_SM * scale}px`);
-        toolbar.style.setProperty("--font-base", `${FULL_FONT   * scale}px`);
+        const useCompact = vp < bpTwoRow;
+        setCompact(useCompact);
+        toolbar.classList.toggle("toolbar--narrow", vp < bpSingleRow);
+        toolbar.classList.toggle("toolbar--compact", useCompact);
     }
 
     function update() { measure(); applyLayout(); }

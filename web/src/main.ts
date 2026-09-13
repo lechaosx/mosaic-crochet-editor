@@ -149,7 +149,7 @@ store.setPersistFn(s => saveToLocalStorage(s));
 
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
-store.addObserver(s => updateStatus(s.plan, null, null));
+store.addObserver(s => updateStatus(s, null, null, hasConfiguredTransforms()));
 store.addObserver(s => {
     ui.setTransformState(
         Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveTransforms,
@@ -217,7 +217,7 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         const newPixels = next;
         store.commit(state => { state.pixels = newPixels; }, { persist: false });
     }
-    updateStatus(store.plan, x, y);
+    updateStatus(store, x, y, hasConfiguredTransforms());
 }
 
 function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
@@ -826,7 +826,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         gesture = null;
         store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
     },
-    onHover:      (x, y) => updateStatus(store.plan, x, y),
+    onHover:      (x, y) => updateStatus(store, x, y, hasConfiguredTransforms()),
     onView:       () => render(viewport, ctx, rs, store),
 });
 

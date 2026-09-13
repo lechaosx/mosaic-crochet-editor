@@ -18,6 +18,17 @@ const ANTS_SCREEN_PX_PER_SEC = 24;
 // look. With 24 px/s + 3 px/step the visual ticks ~8 times per second.
 const ANTS_STEP_PX = 3;
 
+const TOOL_LABELS = {
+    pencil: "Pencil",
+    fill: "Fill",
+    eraser: "Eraser",
+    invert: "Invert",
+    overlay: "Overlay",
+    select: "Select",
+    wand: "Magic wand",
+    move: "Move",
+} as const;
+
 // `PlanDir` → outward offset in pattern coords. Single source of truth for
 // the direction enum decoding; the actual direction *selection* per cell
 // happens in Rust (`build_highlight_plan_*`).
@@ -797,7 +808,8 @@ function renderSymmetryGuides(
 }
 
 // ── Status bar ─────────────────────────────────────────────────────────────
-export function updateStatus(plan: Int16Array | null, x: number | null, y: number | null) {
+export function updateStatus(store: Store, x: number | null, y: number | null, hasTransforms: boolean) {
+    const plan = store.plan;
     if (!plan) return;
     // Corners emit two records sharing the same wrong cell — counted once
     // each since each is a distinct visible glyph.
@@ -806,9 +818,20 @@ export function updateStatus(plan: Int16Array | null, x: number | null, y: numbe
         if (plan[i] === PlanType.Valid) valid++;
         else                            invalid++;
     }
-    const coord = x !== null && y !== null ? `${x}, ${y}` : "";
-    const overlays = `${valid} overlay${valid !== 1 ? "s" : ""}`;
-    const inv = invalid > 0 ? `${invalid} invalid` : "";
-    const el = document.getElementById("status")!;
-    el.textContent = [coord, overlays, inv].filter(Boolean).join("  ·  ");
+    const selection = store.state.float?.pixels.reduce((count, pixel) => count + Number(pixel !== 0), 0) ?? 0;
+    const setItem = (id: string, text: string) => {
+        const item = document.getElementById(id)!;
+        item.textContent = text;
+        item.hidden = text === "";
+    };
+
+    setItem("status-tool", TOOL_LABELS[store.state.activeTool]);
+    setItem("status-yarn", `Yarn ${store.state.primaryColor === 1 ? "A" : "B"}`);
+    setItem("status-coordinates", x !== null && y !== null ? `${x}, ${y}` : "");
+    setItem("status-selection", selection > 0 ? `${selection} selected` : "");
+    setItem("status-overlays", `${valid} overlay${valid !== 1 ? "s" : ""}`);
+    setItem("status-invalid", invalid > 0 ? `${invalid} invalid` : "");
+    setItem("status-transforms", hasTransforms
+        ? `Transforms ${store.state.liveTransforms ? "live" : "paused"}`
+        : "");
 }

@@ -18,6 +18,7 @@
         <button class="btn" id="btn-export" title="Export pattern as text">Export</button>
         <button class="btn" id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
         <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
+        <button class="btn" id="btn-more" title="More commands" aria-haspopup="menu" aria-expanded="false" hidden>More</button>
       </div>
       <div class="tb-group g-hlrot">
         <button class="btn btn--icon" id="rotate-ccw" title="Rotate counter-clockwise (Shift+R)" aria-label="Rotate counter-clockwise">↺</button>
@@ -27,7 +28,7 @@
     </div>
 
     <div class="tb-row">
-      <div class="tb-group g-paint" role="radiogroup" aria-label="Paint tools">
+      <div class="tb-group g-paint" role="group" aria-label="Paint tools">
         <button class="btn btn--icon" id="tool-pencil" title="Pencil (P)" aria-label="Pencil">✏️</button>
         <button class="btn btn--icon" id="tool-fill"   title="Fill (F)"   aria-label="Fill">🪣</button>
         <button class="btn btn--icon" id="tool-eraser"  title="Eraser (E) — restore natural; right-click adds overlay" aria-label="Eraser">🧹</button>
@@ -35,7 +36,7 @@
         <button class="btn btn--icon" id="tool-invert"  title="Invert (I)" aria-label="Invert">⇋</button>
       </div>
 
-      <div class="tb-group g-transform" aria-label="Transform">
+      <div class="tb-group g-transform" role="group" aria-label="Transform">
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select">▭</button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand">✨</button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move">✥</button>
@@ -43,7 +44,7 @@
         <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" popovertarget="sym-popover" title="Symmetry and repeat: no transforms configured" aria-haspopup="dialog" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured">⊕</button>
       </div>
 
-      <div class="tb-group g-colors" aria-label="Colours">
+      <div class="tb-group g-colors" role="group" aria-label="Colours">
         <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Primary colour (1) — double-click or long-press to edit" aria-label="Primary colour">
           <input type="color" id="color-a" value="#000000" tabindex="-1">
         </div>
@@ -54,9 +55,21 @@
     </div>
   </header>
 
+  <div id="more-popover" popover role="menu" aria-label="More commands">
+    <div id="more-actions"></div>
+  </div>
+
   <main class="canvas-area">
     <canvas id="canvas"></canvas>
-    <div id="status" class="status"></div>
+    <div id="status" class="status" aria-label="Canvas context">
+      <span id="status-tool"></span>
+      <span id="status-yarn"></span>
+      <span id="status-coordinates" hidden></span>
+      <span id="status-selection" hidden></span>
+      <span id="status-overlays"></span>
+      <span id="status-invalid" hidden></span>
+      <span id="status-transforms" hidden></span>
+    </div>
   </main>
 
   <!-- ── Settings popover ─────────────────────────────────────────────── -->

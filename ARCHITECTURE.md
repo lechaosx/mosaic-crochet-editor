@@ -113,18 +113,20 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 
 ### UI layer
 - `ui.ts` exposes `mountUI(callbacks): UIHandle`. Callbacks fire from DOM events; setters on the handle push state back into the DOM. No reactive framework. — **Agent's choice**
-- Export uses a native `<dialog>`; Pattern, **Symmetry and repeat**, and Settings use the native HTML `popover` attribute. — **Agent's choice**
+- Styled radios and checkboxes use a visually-hidden focusable input rather than `display: none`; their label or track renders the focus indicator. Tool and yarn setters update `aria-pressed` with the visual active class. — **Agent's choice**
+- Export uses a native `<dialog>`; Pattern, **Symmetry and repeat**, Settings, and More use the native HTML `popover` attribute. — **Agent's choice**
 - **Edit popover commits before any outside input**: capture-phase `pointerdown` / `keydown` listeners on `document` explicitly `hidePopover()` the Edit popover when input lands outside it, so its `onEditClose` history push runs synchronously *before* the outside button or shortcut handler. Without this the click/keydown ordering is browser-dependent and `Undo` (etc.) could see the pre-commit head and silently drop the live preview. — **your decision**
 - Swatches use a unified `bindLongPress` helper for click-to-select / long-press-to-edit on any pointer type, plus `dblclick` for desktop double-click. — **Agent's choice**
+- The canvas context strip derives its content directly from the current `Store` and highlight plan; it owns no session state. — **Agent's choice**
 
 ### Toolbar layout
 - Two `<div class="tb-row">` wrappers around the five groups, switched between `display: contents` (wide) and full-width flex containers (narrow). — **Agent's choice**
-- Breakpoints derived at runtime from each group's measured intrinsic width at two scales (full and 2/3), not hard-coded. — **Agent's choice**
+- Breakpoints derive at runtime from each group's full-size intrinsic width. Below the two-row threshold, the existing secondary-command elements move into More and CSS wraps the remaining groups without shrinking hit targets. — **Agent's choice**
 
 ### Styling
 - CSS custom-property tokens (`--space-*`, `--radius-*`, `--font-*`, `--bg-*`, `--fg-*`, `--accent`, `--hit`).
 - **rem** for typography/spacing; **em** for self-scaling components; **px** only for borders, shadows, and JS-set toolbar tokens; **%, fr, vw, vh, dvh** for responsive. No 62.5% root-font hack. — **your decision**
-- The toolbar's `--hit` and `--font-base` are JS-set (from measured widths). Everything else uses the rem tokens. — **Agent's choice**
+- Toolbar hit targets use a 36 CSS-pixel token on wide fine-pointer layouts and a 44 CSS-pixel token when any coarse pointer is available or the viewport is at most 48rem wide; typography and spacing use rem tokens and reflow independently. — **Agent's choice**
 
 ### Pixel encoding
 - In memory: 3 values — 0 = inner hole (transparent sentinel), 1 = COLOR_A, 2 = COLOR_B. The sentinel doubles as the universal "skip this cell" guard (`!= 0`) across every tool. — **your decision**
