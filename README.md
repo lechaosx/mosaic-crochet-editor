@@ -121,11 +121,11 @@ The **⚙** button in the document bar opens Settings in the inspector:
 
 ### Saving
 
-- **Save** downloads the pattern as a `.mcw` file (JSON). Modern browsers (Chrome/Edge) open a save dialog; Firefox downloads immediately.
+- **Save .mcw** saves the editable pattern as a `.mcw` file (JSON). Modern browsers (Chrome/Edge) open a save dialog; Firefox downloads immediately.
 - **Load** opens a file picker and restores pattern geometry, pixels, and colours. Symmetry and repeat transforms are session state and remain unchanged. Invalid files and files from a newer unsupported `.mcw` version are reported without replacing the current pattern.
 - **Export** opens a modal where the pattern is converted to text line-by-line. Each `oc` belongs to the worked row or round containing its visible ✕, while the covered supporting pixel remains an internal chart detail. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
-Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. Drawing remains live on the canvas while dragging and updates recovery storage when the stroke is released. Existing v4 browser recovery and Undo history migrate automatically to the current version. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
+Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to browser-local recovery and restore on refresh. The document bar reports **Saved locally**, **Recovered from this device**, or **Local save failed**; a failure means recent changes may be lost if the tab closes. This automatic recovery is separate from **Save .mcw** and never means an editable pattern file was updated. Drawing remains live on the canvas while dragging and updates recovery storage when the stroke is released. Existing v4 browser recovery and Undo history migrate automatically to the current version. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
 
 The context strip at the bottom of the canvas shows the active tool and Yarn A/B, overlay totals, invalid placements, selection size, and whether configured transforms are live or paused. Pattern coordinates appear while the pointer is over the canvas. The selection or clipboard count opens its contextual action card. The strip wraps on compact screens.
 

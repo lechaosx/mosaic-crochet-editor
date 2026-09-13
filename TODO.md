@@ -103,7 +103,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 - [x] Add explicit Fit, zoom, Rotate view left/right, Reset view rotation, and Navigate controls without changing rotation pivot semantics.
   - Retain existing wheel, pinch, and middle-button navigation.
   - Add Space-drag only as a tested momentary Navigate override.
-- [ ] Make local-recovery failure visible and distinguish browser recovery from `.mcw` saving.
+- [x] Make local-recovery failure visible and distinguish browser recovery from `.mcw` saving.
   - Defer persistent file-handle freshness, last-download history, and replacement guards until serialization ownership is proven.
 
 ### Stage 3 — Structured chart companion

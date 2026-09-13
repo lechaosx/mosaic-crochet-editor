@@ -121,6 +121,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Editor session state, including axes, repeat settings, live-transform mode, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (transform lifetime)
 - A continuous paint stroke renders every update but writes session recovery once on release. — **Agent's choice**
 - Legacy v4 recovery and Undo data migrate once into independently versioned v5 envelopes; a failed recovery migration write keeps the usable legacy copy. — **Agent's choice**
+- The document bar reports browser recovery as saved, restored, or failed independently from the explicitly named **Save .mcw** file action. — **Agent's choice**
 
 ## Save / Load / Export
 

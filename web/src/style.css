@@ -98,6 +98,22 @@ input  { font: inherit; color: inherit; }
   gap: var(--space-1);
 }
 
+.document-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--hit);
+  padding-inline: var(--space-2);
+  color: var(--fg-2);
+  border-radius: var(--radius-1);
+  font-size: var(--font-sm);
+  white-space: nowrap;
+}
+
+.document-status[data-state="failed"] {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
 .workspace {
   position: relative;
   flex: 1 1 0;

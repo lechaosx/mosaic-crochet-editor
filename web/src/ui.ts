@@ -91,6 +91,7 @@ export interface UIHandle {
     setTransformState:  (hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) => void;
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
+    setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
     setViewState:       (zoom: number, rotation: number, navigating: boolean) => void;
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
@@ -462,6 +463,17 @@ export function mountUI(cb: UICallbacks): UIHandle {
         el<HTMLButtonElement>("btn-redo").disabled = !canR;
     }
 
+    function setRecoveryStatus(state: "saved" | "recovered" | "failed") {
+        const status = el("recovery-status");
+        status.dataset.state = state;
+        status.textContent = state === "failed"
+            ? "Local save failed"
+            : state === "recovered" ? "Recovered from this device" : "Saved locally";
+        status.title = state === "failed"
+            ? "Browser recovery could not be updated; recent changes may be lost if this tab closes."
+            : "Browser recovery is current. Save .mcw creates a separate editable pattern file.";
+    }
+
     function setViewState(zoom: number, rotation: number, navigating: boolean) {
         el("view-zoom-value").textContent = `${Math.round(zoom)} px`;
         const navigate = el<HTMLButtonElement>("view-navigate");
@@ -692,7 +704,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setTool, setMaskMove, setSelectionState, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
-        setHistory, setViewState, setEditError,
+        setHistory, setRecoveryStatus, setViewState, setEditError,
         syncEditInputs, closeEdit,
         openExport,
     };

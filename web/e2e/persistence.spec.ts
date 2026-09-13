@@ -4,6 +4,23 @@ import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
 
+test("local recovery failure stays visible and does not imply an mcw save", async ({ page }) => {
+    await page.addInitScript(() => {
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === "mosaic-recovery") throw new DOMException("full", "QuotaExceededError");
+            return setItem.call(this, key, value);
+        };
+    });
+
+    await bootApp(page);
+    const recoveryStatus = page.getByRole("status", { name: "Browser recovery" });
+    await expect(recoveryStatus).toHaveText("Local save failed");
+    await expect(page.getByRole("button", { name: "Save .mcw" })).toBeVisible();
+    await clickCell(page, 0, 1);
+    await expect(recoveryStatus).toHaveText("Local save failed");
+});
+
 test("continuous paint writes recovery once when the stroke completes", async ({ page }) => {
     await page.addInitScript(() => {
         const setItem = Storage.prototype.setItem;
@@ -50,6 +67,8 @@ test("paint, reload, content survives via localStorage", async ({ page }) => {
     await page.reload();
     // Wait for the app to fully re-render.
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
+    await expect(page.getByRole("status", { name: "Browser recovery" }))
+        .toHaveText("Recovered from this device");
     const c = await cellCoord(page, 0, 1);
     expect((await pixelRGB(page, c.cx, c.cy))).toEqual(A);
 });

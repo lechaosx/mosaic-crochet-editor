@@ -108,9 +108,14 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV5 {
     };
 }
 
-export function saveToLocalStorage(s: Readonly<SessionState>) {
-    localStorage.setItem(RECOVERY_KEY, JSON.stringify(recoveryFromSession(s)));
-    localStorage.removeItem(LEGACY_RECOVERY_KEY);
+export function saveToLocalStorage(s: Readonly<SessionState>): boolean {
+    try {
+        localStorage.setItem(RECOVERY_KEY, JSON.stringify(recoveryFromSession(s)));
+        localStorage.removeItem(LEGACY_RECOVERY_KEY);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function loadFromLocalStorage(): SessionState | null {

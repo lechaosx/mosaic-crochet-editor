@@ -166,7 +166,9 @@ observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, () => render(vi
 // Renderer + side-effect channels (Store invokes them on every `commit`).
 store.setRenderer (s => render(viewport, ctx, rs, s));
 store.setHistoryFn(s => historySave(s));
-store.setPersistFn(s => saveToLocalStorage(s));
+store.setPersistFn(s => {
+    ui.setRecoveryStatus(saveToLocalStorage(s) ? "saved" : "failed");
+});
 
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
@@ -1124,6 +1126,7 @@ ui.setTransformState(
 ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
+ui.setRecoveryStatus(saved ? "recovered" : "saved");
 
 if (saved) {
     fitToView(viewport.canvas, viewport.view, store.state.pattern, store.state.rotation);

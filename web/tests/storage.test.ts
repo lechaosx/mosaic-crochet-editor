@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // localStorage IO tests — pure pack/unpack tests live in logic/tests/storage.test.ts.
 
-import { describe, test, expect, beforeEach } from "vitest";
+import { describe, test, expect, beforeEach, vi } from "vitest";
 import { saveToLocalStorage, loadFromLocalStorage } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
@@ -9,6 +9,20 @@ import { addAxis } from "@mosaic/logic/symmetry";
 beforeEach(() => { localStorage.clear(); });
 
 describe("saveToLocalStorage / loadFromLocalStorage", () => {
+    test("reports a failed recovery write without throwing", () => {
+        const originalSetItem = Storage.prototype.setItem;
+        const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
+            if (key === "mosaic-recovery") throw new DOMException("full", "QuotaExceededError");
+            return originalSetItem.call(this, key, value);
+        });
+
+        try {
+            expect(saveToLocalStorage(rowSession(3, 3))).toBe(false);
+        } finally {
+            setItem.mockRestore();
+        }
+    });
+
     test("round-trip preserves all serialised session fields", () => {
         const s = rowSession(3, 3, {
             colorA: "#11ff22",
