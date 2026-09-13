@@ -1,8 +1,8 @@
-import { ViewState, clampZoom } from "./render";
+import { ViewState, zoomAt } from "./render";
 
 interface Pointer { x: number; y: number; button: number; type: string; }
 
-type Mode = "idle" | "paint" | "gesture" | "gesture-end" | "middle-pan";
+type Mode = "idle" | "paint" | "gesture" | "gesture-end" | "middle-pan" | "navigate-pan";
 
 export interface PointerModifiers {
     shift: boolean;
@@ -18,6 +18,7 @@ export interface GestureCallbacks {
     onPaintCancel: () => void;     // discard stroke (revert to pre-stroke pixels)
     onHover:       (x: number | null, y: number | null) => void;
     onView:        () => void;     // re-render after view change (pan/zoom)
+    navigate:      () => boolean;
 }
 
 // `clientToPattern` is supplied by the caller: it takes raw client coords and
@@ -28,17 +29,6 @@ export interface GestureCallbacks {
 export type ClientToPattern = (clientX: number, clientY: number)
     => { x: number; y: number; inside: boolean } | null;
 
-function zoomAt(canvas: HTMLCanvasElement, view: ViewState, clientX: number, clientY: number, factor: number) {
-    const rect = canvas.getBoundingClientRect();
-    const dx = clientX - (rect.left + rect.width  / 2);
-    const dy = clientY - (rect.top  + rect.height / 2);
-    const newZoom = clampZoom(view.zoom * factor);
-    const f = newZoom / view.zoom;
-    view.panX = dx - f * (dx - view.panX);
-    view.panY = dy - f * (dy - view.panY);
-    view.zoom = newZoom;
-}
-
 export function mountGestures(
     canvas: HTMLCanvasElement, view: ViewState,
     clientToPattern: ClientToPattern, cb: GestureCallbacks,
@@ -48,7 +38,7 @@ export function mountGestures(
 
     let gestMid = { x: 0, y: 0 };
     let gestDist = 0;
-    let middlePan = { startX: 0, startY: 0, originX: 0, originY: 0 };
+    let pan = { pointerId: -1, startX: 0, startY: 0, originX: 0, originY: 0 };
 
     function pts() { return [...pointers.values()]; }
     function midpoint() { const [a, b] = pts(); return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
@@ -69,12 +59,22 @@ export function mountGestures(
         if (e.pointerType === "mouse" && e.button === 1) {
             e.preventDefault();
             if (mode !== "idle") return;
-            middlePan = { startX: e.clientX, startY: e.clientY, originX: view.panX, originY: view.panY };
+            pan = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
+                originX: view.panX, originY: view.panY };
             mode = "middle-pan";
             canvas.setPointerCapture(e.pointerId);
             return;
         }
         if (e.pointerType === "mouse" && e.button !== 0 && e.button !== 2) return;
+        if (cb.navigate() && e.button === 0) {
+            e.preventDefault();
+            if (mode !== "idle") return;
+            pan = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
+                originX: view.panX, originY: view.panY };
+            mode = "navigate-pan";
+            canvas.setPointerCapture(e.pointerId);
+            return;
+        }
 
         pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, button: e.button, type: e.pointerType });
         canvas.setPointerCapture(e.pointerId);
@@ -90,9 +90,9 @@ export function mountGestures(
     });
 
     canvas.addEventListener("pointermove", e => {
-        if (mode === "middle-pan") {
-            view.panX = middlePan.originX + (e.clientX - middlePan.startX);
-            view.panY = middlePan.originY + (e.clientY - middlePan.startY);
+        if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
+            view.panX = pan.originX + (e.clientX - pan.startX);
+            view.panY = pan.originY + (e.clientY - pan.startY);
             cb.onView();
             return;
         }
@@ -123,7 +123,7 @@ export function mountGestures(
     });
 
     function release(e: PointerEvent) {
-        if (mode === "middle-pan" && e.pointerType === "mouse" && e.button === 1) {
+        if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
             mode = "idle";
             canvas.releasePointerCapture(e.pointerId);
             return;
@@ -145,7 +145,7 @@ export function mountGestures(
     }
 
     function cancel(e: PointerEvent) {
-        if (mode === "middle-pan" && e.pointerType === "mouse" && e.button === 1) {
+        if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
             mode = "idle";
             canvas.releasePointerCapture(e.pointerId);
             return;

@@ -99,9 +99,11 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Auto-fit zoom on every new pattern, file load, or refresh — accounts for the current rotation's bounding box so a rotated pattern still fits. — **Agent's choice**
 - Wheel zoom anchored at the cursor; pinch zoom anchored at the gesture midpoint. — **Agent's choice**
+- A persistent canvas cluster exposes Fit, Zoom out, rendered cell size, Zoom in, Navigate, Rotate view left/right, and Reset view rotation. Fit uses the whole pattern; button zoom preserves the canvas-centre focal cell. — **Agent's choice**
 - Rotation is ±45° increments around the **pattern centre** (panned patterns rotate in place), with a 250 ms ease-out animation. Rotation accumulates unbounded; persists across refreshes. — **your decision**
 - Top-of-pattern indicator fades in during rotation animation, fades out once it settles. — **Agent's choice**
 - Pan is middle-mouse drag (desktop) or two-finger drag (touch); resets to centre on new pattern / load; not persisted across refresh. — **your decision** (reset on new); **Agent's choice** (input bindings)
+- Navigate is a view-only mode distinct from Move: its button latches single-pointer panning without changing the selected authoring tool, choosing an authoring tool exits it, and Space-drag enables it only while Space is held. — **Agent's choice**
 - Two-finger gesture from a single-finger paint discards the in-flight stroke — no stray pixels from accidental gestures. — **Agent's choice**
 - Browser or operating-system pointer cancellation restores the complete pre-edit state without adding an undo snapshot. — **Agent's choice**
 
@@ -149,7 +151,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Document and history commands occupy a top document bar; paint, transform, and yarn controls occupy a separate authoring dock without changing their established order. — **Agent's choice**
 - At 64rem and wider the dock is a left rail and an open inspector is a right column. Constrained layouts place the dock below the canvas and present the same inspector content as a non-modal bottom sheet. — **Agent's choice**
 - Pattern, Selection, Mirror & Repeat, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
-- Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document and view commands move into More. — **Agent's choice**
+- Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document commands and Settings move into More. — **Agent's choice**
 - The compact document-bar breakpoint derives from its groups' measured intrinsic widths rather than device labels. — **Agent's choice**
 - A wrapping canvas context strip shows the active tool and yarn, hovered coordinates, an actionable selection or clipboard count, valid and invalid overlay counts, and live/paused transform state when transforms are configured. — **Agent's choice**
 

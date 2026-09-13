@@ -3,7 +3,7 @@ import { PlanType, lock_invalid_row, lock_invalid_round,
          export_start_row, export_start_round } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
-         render, fitToView, screenToPattern, screenToPatternFrac, updateStatus } from "./render";
+         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateStatus } from "./render";
 import { applyEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized,
@@ -55,6 +55,8 @@ const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
 let selectionMoveMode: SelectionMoveMode = "move";
+let navigateLatched = false;
+let navigateMomentary = false;
 
 // Move-tool drag mode, chosen at paintdown from the UI mode and modifiers:
 //   "move"      → no modifier; drag repositions the float, release records.
@@ -168,6 +170,9 @@ store.setPersistFn(s => saveToLocalStorage(s));
 
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
+store.addObserver(s => ui.setViewState(
+    viewport.view.zoom, s.state.rotation, navigateLatched || navigateMomentary,
+));
 store.addObserver(s => updateStatus(s, null, null, hasConfiguredTransforms()));
 store.addObserver(s => {
     ui.setTransformState(
@@ -337,6 +342,10 @@ function onReplicateSelection() {
 // Switching tools keeps any active float alive — paint tools clip to its
 // shifted mask, so the selection survives across tool changes.
 function setTool(t: Tool) {
+    if (navigateLatched) {
+        navigateLatched = false;
+        ui.setViewState(viewport.view.zoom, store.state.rotation, navigateMomentary);
+    }
     ui.setCanvasFeedback(null);
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
@@ -392,6 +401,24 @@ function onLockInvalidToggle() {
 }
 function rotate(delta: number) {
     store.commit(s => { s.rotation += delta; }, { recompute: false });
+}
+function resetRotation() {
+    store.commit(s => { s.rotation = 0; }, { recompute: false });
+}
+function fitPattern() {
+    fitToView(viewport.canvas, viewport.view, store.state.pattern, store.state.rotation);
+    render(viewport, ctx, rs, store);
+    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
+}
+function zoomView(factor: number) {
+    const rect = viewport.canvas.getBoundingClientRect();
+    zoomAt(viewport.canvas, viewport.view, rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
+    render(viewport, ctx, rs, store);
+    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
+}
+function toggleNavigate() {
+    navigateLatched = !navigateLatched;
+    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
 }
 
 // Paste switches to the Move tool so the user can drag the result.
@@ -605,6 +632,10 @@ const ui: UIHandle = mountUI({
     onUndo: undo,
     onRedo: redo,
     onRotate: rotate,
+    onResetRotation: resetRotation,
+    onFit: fitPattern,
+    onZoom: zoomView,
+    onNavigate: toggleNavigate,
     onEditOpen, onEditChange, onEditApply, onEditCancel,
     onSave, onLoad, onExport,
 });
@@ -929,13 +960,25 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
     },
     onHover:      (x, y) => updateStatus(store, x, y, hasConfiguredTransforms()),
-    onView:       () => render(viewport, ctx, rs, store),
+    onView:       () => {
+        render(viewport, ctx, rs, store);
+        ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
+    },
+    navigate:     () => navigateLatched || navigateMomentary,
 });
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────
 document.addEventListener("keydown", e => {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    if (e.code === "Space" && (t === document.body || t === viewport.canvas)) {
+        e.preventDefault();
+        if (!e.repeat) {
+            navigateMomentary = true;
+            ui.setViewState(viewport.view.zoom, store.state.rotation, true);
+        }
+        return;
+    }
     if (e.ctrlKey || e.metaKey) {
         if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
         else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
@@ -1036,7 +1079,10 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
-    if (e.key === "Alt") {
+    if (e.code === "Space") {
+        navigateMomentary = false;
+        ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched);
+    } else if (e.key === "Alt") {
         if (maskArrowState && store.state.float) {
             const shifted = shiftedFloatMask(store.state);
             const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
@@ -1053,6 +1099,8 @@ document.addEventListener("keyup", e => {
 window.addEventListener("blur", () => {
     ctrlArrowStamped = false;
     maskArrowState   = null;
+    navigateMomentary = false;
+    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched);
 });
 
 // ── Initial DOM-input sync + first render ────────────────────────────────────
@@ -1090,3 +1138,4 @@ if (saved) {
     historyReset(store.state);
     ui.setHistory(canUndo(), canRedo());
 }
+ui.setViewState(viewport.view.zoom, store.state.rotation, false);

@@ -41,7 +41,7 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 ## Using the app
 
-The workspace separates document commands from authoring controls. On wide screens, tools occupy a left rail and an opened inspector takes a right column beside the canvas. On narrower screens, the same tool groups move below the canvas and the same inspector becomes a non-modal bottom sheet. Pattern, Selection, Mirror & Repeat, and Settings share that inspector; its close button dismisses the current section. At phone widths, lower-frequency document and view commands move into **More**.
+The workspace separates document commands from authoring controls. On wide screens, tools occupy a left rail and an opened inspector takes a right column beside the canvas. On narrower screens, the same tool groups move below the canvas and the same inspector becomes a non-modal bottom sheet. Pattern, Selection, Mirror & Repeat, and Settings share that inspector; its close button dismisses the current section. At phone widths, lower-frequency document commands and Settings move into **More**.
 
 ### Patterns
 
@@ -113,10 +113,11 @@ The **⚙** button in the document bar opens Settings in the inspector:
 
 ### Zoom, pan, rotation
 
-- **Zoom**: scroll wheel (anchored at the cursor) or two-finger pinch on touch (anchored at the gesture midpoint). Auto-fits to the viewport on every new pattern, file load, or refresh — including when the pattern is rotated.
-- **Pan**: middle-mouse drag, or two-finger drag on touch.
+- **Zoom**: use **−** / **+** in the canvas controls, scroll the wheel, or pinch with two fingers. Buttons preserve the canvas-centre focal cell; wheel and pinch use the pointer or gesture midpoint. The displayed value is the rendered cell size. New patterns, loaded files, and refreshes auto-fit to the viewport.
+- **Fit**: centres the whole pattern and fits its current rotated bounds into the canvas.
+- **Pan**: choose **Navigate** and drag with mouse, pen, or one finger; choose an authoring tool to leave Navigate. Hold **Space** while dragging for momentary Navigate. Middle-mouse drag and two-finger drag remain direct shortcuts.
 - If the browser or operating system cancels an active drawing pointer, the unfinished edit is discarded. Starting a two-finger gesture also discards any unfinished one-finger edit before navigation begins.
-- **Rotate**: ↺ / ↻ buttons. Rotates ±45° around the pattern centre with a 250 ms animation. A small accent triangle near the top edge of the pattern fades in during the animation so you can tell which way is "up".
+- **Rotate view**: ↺ / ↻ rotate ±45° around the pattern centre; **0°** resets the view rotation. A small accent triangle near the top edge of the pattern fades in during the animation so you can tell which way is "up".
 
 ### Saving
 
@@ -132,7 +133,7 @@ When a canvas action cannot proceed, the context strip explains the immediate ca
 
 ### Responsive workspace
 
-Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. At 64rem and wider the authoring dock is a left rail and an open inspector is pinned beside the canvas. Below that width the dock wraps beneath the canvas and the inspector overlays it as a bottom sheet. The current phone dock keeps all eight authoring tools and both yarns visible across up to three rows; Pattern, Load, Save, Export, view rotation, and Settings move into **More**. Responsive recomposition moves the same controls without changing their state or behavior.
+Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. At 64rem and wider the authoring dock is a left rail and an open inspector is pinned beside the canvas. Below that width the dock wraps beneath the canvas and the inspector overlays it as a bottom sheet. The current phone dock keeps all eight authoring tools and both yarns visible across up to three rows; Pattern, Load, Save, Export, and Settings move into **More**. Responsive recomposition moves the same controls without changing their state or behavior.
 
 ### Keyboard shortcuts
 

@@ -198,6 +198,20 @@ export function clampZoom(z: number) {
     return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
 }
 
+export function zoomAt(
+    canvas: HTMLCanvasElement, view: ViewState,
+    clientX: number, clientY: number, factor: number,
+) {
+    const rect = canvas.getBoundingClientRect();
+    const dx = clientX - (rect.left + rect.width  / 2);
+    const dy = clientY - (rect.top  + rect.height / 2);
+    const newZoom = clampZoom(view.zoom * factor);
+    const f = newZoom / view.zoom;
+    view.panX = dx - f * (dx - view.panX);
+    view.panY = dy - f * (dy - view.panY);
+    view.zoom = newZoom;
+}
+
 // Pan/zoom/rotation all go through ctx so the rotation pivot is the *pattern*
 // centre (not canvas centre): centre the pattern, scale, rotate, translate
 // to canvas-centre + pan.

@@ -399,6 +399,45 @@ input[type="checkbox"] { accent-color: var(--accent); }
   overscroll-behavior: none;
 }
 
+#canvas.canvas--navigate { cursor: grab; }
+#canvas.canvas--navigate:active { cursor: grabbing; }
+
+.canvas-controls {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+  max-width: calc(100% - 2 * var(--space-3));
+  padding: var(--space-1);
+  background: rgba(20, 20, 22, 0.7);
+  border-radius: var(--radius-1);
+  backdrop-filter: blur(0.5rem);
+  -webkit-backdrop-filter: blur(0.5rem);
+  z-index: 5;
+}
+
+.canvas-control-group {
+  display: flex;
+  gap: var(--space-1);
+}
+
+#view-zoom-value {
+  display: grid;
+  place-items: center;
+  min-width: 3.5rem;
+  height: var(--hit);
+  padding-inline: var(--space-1);
+  color: var(--fg-1);
+  background: var(--bg-2);
+  border: 1px solid var(--bg-4);
+  border-radius: var(--radius-1);
+  font-size: var(--font-sm);
+  font-variant-numeric: tabular-nums;
+}
+
 .status {
   position: absolute;
   bottom: var(--space-2);

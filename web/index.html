@@ -20,8 +20,6 @@
         <button class="btn" id="btn-more" title="More commands" aria-haspopup="menu" aria-expanded="false" hidden>More</button>
       </div>
       <div class="document-actions g-hlrot">
-        <button class="btn btn--icon" id="rotate-ccw" title="Rotate counter-clockwise (Shift+R)" aria-label="Rotate counter-clockwise">↺</button>
-        <button class="btn btn--icon" id="rotate-cw"  title="Rotate clockwise (R)"               aria-label="Rotate clockwise">↻</button>
         <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false">⚙</button>
       </div>
   </header>
@@ -66,6 +64,20 @@
 
     <main class="canvas-area">
       <canvas id="canvas"></canvas>
+      <div class="canvas-controls" role="group" aria-label="Canvas view">
+        <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate">✋</button>
+        <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>
+        <div class="canvas-control-group">
+          <button class="btn btn--icon" id="view-zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+          <output id="view-zoom-value" aria-label="Rendered cell size">16 px</output>
+          <button class="btn btn--icon" id="view-zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+        </div>
+        <div class="canvas-control-group">
+          <button class="btn btn--icon" id="rotate-ccw" type="button" title="Rotate view left (Shift+R)" aria-label="Rotate view left">↺</button>
+          <button class="btn btn--icon" id="view-rotation-reset" type="button" title="Reset view rotation" aria-label="Reset view rotation">0°</button>
+          <button class="btn btn--icon" id="rotate-cw" type="button" title="Rotate view right (R)" aria-label="Rotate view right">↻</button>
+        </div>
+      </div>
       <div id="status" class="status" aria-label="Canvas context">
         <span id="status-tool"></span>
         <span id="status-yarn"></span>

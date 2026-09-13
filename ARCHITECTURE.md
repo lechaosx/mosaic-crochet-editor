@@ -110,14 +110,18 @@ Pointer-event state machine — one path for mouse, pen, touch:
 | `gesture` | second pointer arrives | pinch-zoom + pan, anchored at midpoint |
 | `gesture-end` | one pointer released | latch until last is released |
 | `middle-pan` | mouse middle button | pan only |
+| `navigate-pan` | Navigate + primary pointer, or Space + primary pointer | pan only |
 
 When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (reverted to pre-stroke pixels), so an accidental two-finger pan never leaves stray pixels. A `pointercancel` in `paint` routes through the same rollback callback instead of the release/commit callback. — **Agent's choice**
+
+Latched and momentary Navigate state lives in `main.ts`; `gesture.ts` receives only a predicate and keeps an in-progress pan independent of later key release. `zoomAt` is shared render-layer view math, used by gestures with a pointer anchor and by zoom buttons with the canvas centre. — **Agent's choice**
 
 ### UI layer
 - `ui.ts` exposes `mountUI(callbacks): UIHandle`. Callbacks fire from DOM events; setters on the handle push state back into the DOM. No reactive framework. — **Agent's choice**
 - Styled radios and checkboxes use a visually-hidden focusable input rather than `display: none`; their label or track renders the focus indicator. Tool and yarn setters update `aria-pressed` with the visual active class. — **Agent's choice**
 - Export uses a native `<dialog>` and More uses a light-dismiss popover. Pattern, Selection, Mirror & Repeat, and Settings are sections in one non-modal inspector host. — **Agent's choice**
 - Pattern editing is an explicit transaction. `main.ts` owns a deep-enough baseline of pattern, pixels, and float; every preview derives from that baseline and skips persistence. Apply writes one history/recovery boundary, while Cancel or Escape replaces the preview with the baseline. Capture listeners block unrelated outside commands, canvas authoring callbacks no-op during the transaction, and canvas wheel navigation remains active. — **Agent's choice**
+- Canvas view controls mutate `Viewport` directly and render without project history. Rotation continues through the browser-local session preference so the renderer's existing pattern-centre animation remains the only rotation path. — **Agent's choice**
 - Swatches use a unified `bindLongPress` helper for click-to-select / long-press-to-edit on any pointer type, plus `dblclick` for desktop double-click. — **Agent's choice**
 - Persistent canvas context derives directly from the current `Store` and highlight plan. Rejected-action feedback is transient per-gesture UI state, coalesced before it reaches the context strip, and is not persisted. — **Agent's choice**
 

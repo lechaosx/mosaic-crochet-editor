@@ -21,6 +21,13 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     await bootApp(page);
 
     await expectTargetsAtLeast(page, 44);
+    const viewButtons = page.getByRole("group", { name: "Canvas view" }).getByRole("button");
+    for (let i = 0; i < await viewButtons.count(); i++) {
+        const box = await viewButtons.nth(i).boundingBox();
+        expect(box!.width).toBeGreaterThanOrEqual(44);
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    expect(await page.locator(".canvas-controls").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await expect(page.getByRole("button", { name: "More" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Pattern" })).toBeHidden();
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);

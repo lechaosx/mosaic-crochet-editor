@@ -64,6 +64,10 @@ export interface UICallbacks {
     onUndo:            () => void;
     onRedo:            () => void;
     onRotate:          (delta: number) => void;
+    onResetRotation:   () => void;
+    onFit:             () => void;
+    onZoom:            (factor: number) => void;
+    onNavigate:        () => void;
     onEditOpen:        () => void;
     onEditChange:      () => void;
     onEditApply:       () => void;
@@ -87,6 +91,7 @@ export interface UIHandle {
     setTransformState:  (hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) => void;
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
+    setViewState:       (zoom: number, rotation: number, navigating: boolean) => void;
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
     closeEdit:          () => void;
@@ -441,15 +446,29 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
 
-    /* ── Undo / redo / rotate ────────────────────────────────────────── */
+    /* ── History and canvas view ─────────────────────────────────────── */
     el("btn-undo")  .addEventListener("click", cb.onUndo);
     el("btn-redo")  .addEventListener("click", cb.onRedo);
     el("rotate-cw") .addEventListener("click", () => cb.onRotate( 45));
     el("rotate-ccw").addEventListener("click", () => cb.onRotate(-45));
+    el("view-rotation-reset").addEventListener("click", cb.onResetRotation);
+    el("view-fit").addEventListener("click", cb.onFit);
+    el("view-zoom-in").addEventListener("click", () => cb.onZoom(1.15));
+    el("view-zoom-out").addEventListener("click", () => cb.onZoom(1 / 1.15));
+    el("view-navigate").addEventListener("click", cb.onNavigate);
 
     function setHistory(canU: boolean, canR: boolean) {
         el<HTMLButtonElement>("btn-undo").disabled = !canU;
         el<HTMLButtonElement>("btn-redo").disabled = !canR;
+    }
+
+    function setViewState(zoom: number, rotation: number, navigating: boolean) {
+        el("view-zoom-value").textContent = `${Math.round(zoom)} px`;
+        const navigate = el<HTMLButtonElement>("view-navigate");
+        navigate.classList.toggle("btn--active", navigating);
+        navigate.setAttribute("aria-pressed", String(navigating));
+        el("canvas").classList.toggle("canvas--navigate", navigating);
+        el<HTMLButtonElement>("view-rotation-reset").disabled = rotation % 360 === 0;
     }
 
     /* ── Save / load / export ────────────────────────────────────────── */
@@ -673,7 +692,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setTool, setMaskMove, setSelectionState, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
-        setHistory, setEditError,
+        setHistory, setViewState, setEditError,
         syncEditInputs, closeEdit,
         openExport,
     };
@@ -688,7 +707,7 @@ function mountToolbarLayout() {
     const morePopover = el("more-popover");
     const moreActions = el("more-actions");
     const fileActions = [el("btn-edit"), el("btn-load"), el("btn-save"), el("btn-export")];
-    const viewActions = [el("rotate-ccw"), el("rotate-cw"), el("btn-hl-toggle")];
+    const viewActions = [el("btn-hl-toggle")];
     let compact = false;
     let compactBelow = 0;
 

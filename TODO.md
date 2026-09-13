@@ -100,7 +100,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - Treat the current three-row phone toolbar as a safe intermediate state, not the final compact composition.
   - Keep inspector content independent of pinned/drawer placement.
   - Defer Peek/Half/Full detents, resizable pinning, automatic pan restoration, posture memory, and the full system-Back stack.
-- [ ] Add explicit Fit, zoom, Rotate view left/right, Reset view rotation, and Navigate controls without changing rotation pivot semantics.
+- [x] Add explicit Fit, zoom, Rotate view left/right, Reset view rotation, and Navigate controls without changing rotation pivot semantics.
   - Retain existing wheel, pinch, and middle-button navigation.
   - Add Space-drag only as a tested momentary Navigate override.
 - [ ] Make local-recovery failure visible and distinguish browser recovery from `.mcw` saving.
