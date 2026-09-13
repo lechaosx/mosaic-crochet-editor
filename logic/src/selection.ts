@@ -194,21 +194,29 @@ export function replicateSelection(store: Store): ReplicateSelectionResult {
 
 // ── Store-mutating selection ops ─────────────────────────────────────────────
 
-export function applySelectionMod(store: Store, region: Uint8Array, mode: SelectMode): void {
+export interface SelectionCommitOptions {
+    history?: boolean;
+    persist?: boolean;
+}
+
+export function applySelectionMod(
+    store: Store, region: Uint8Array, mode: SelectMode, opts?: SelectionCommitOptions,
+): void {
     const s = store.state;
     const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
+    const commitOpts = { history: opts?.history ?? true, persist: opts?.persist };
 
     if (mode === "replace") {
         const base = s.float ? visiblePixels(s) : s.pixels;
         const lifted = liftCells(base, s.pattern, region);
-        store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
+        store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, commitOpts);
         return;
     }
 
     if (!s.float) {
         if (mode === "add") {
             const lifted = liftCells(s.pixels, s.pattern, region);
-            store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, { history: true });
+            store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, commitOpts);
         }
         return;
     }
@@ -255,7 +263,7 @@ export function applySelectionMod(store: Store, region: Uint8Array, mode: Select
         store.commit(state => {
             state.pixels = newPixels;
             state.float  = { x: eMinX, y: eMinY, w: ew, h: eh, pixels: ep };
-        }, { history: true });
+        }, commitOpts);
         return;
     }
 
@@ -283,7 +291,7 @@ export function applySelectionMod(store: Store, region: Uint8Array, mode: Select
     store.commit(state => {
         state.pixels = newCanvasPixels;
         state.float  = anyLeft ? { ...f, pixels: newFP } : null;
-    }, { history: true });
+    }, commitOpts);
 }
 
 export function commitSelectRect(
@@ -296,14 +304,16 @@ export function commitSelectRect(
     applySelectionMod(store, region, mode);
 }
 
-export function commitWandAt(store: Store, x: number, y: number, mode: SelectMode): void {
+export function commitWandAt(
+    store: Store, x: number, y: number, mode: SelectMode, opts?: SelectionCommitOptions,
+): void {
     const s = store.state;
     const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
     devAssert(x >= 0 && x < W && y >= 0 && y < H, "commitWandAt out of bounds");
     const visible = visiblePixels(s);
     if (visible[y * W + x] === 0) return;
     const region = wand_select(visible, W, H, x, y, 0, new Uint8Array(0));
-    applySelectionMod(store, region, mode);
+    applySelectionMod(store, region, mode, opts);
 }
 
 export function selectAll(store: Store): void {

@@ -212,10 +212,10 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
             }
         }
         const newFloat = { ...f, pixels: newFP };
-        store.commit(state => { state.float = newFloat; });
+        store.commit(state => { state.float = newFloat; }, { persist: false });
     } else {
         const newPixels = next;
-        store.commit(state => { state.pixels = newPixels; });
+        store.commit(state => { state.pixels = newPixels; }, { persist: false });
     }
     updateStatus(store.plan, x, y);
 }
@@ -708,7 +708,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             if (p.y < 0 || p.y >= store.state.pattern.canvasHeight) return;
             if (gesture.lastCell && gesture.lastCell.x === p.x && gesture.lastCell.y === p.y) return;
             gesture.lastCell = { x: p.x, y: p.y };
-            commitWandAt(store, p.x, p.y, gesture.mode);
+            commitWandAt(store, p.x, p.y, gesture.mode, { history: false, persist: false });
             return;
         }
         // gesture.kind === "paint"

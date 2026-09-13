@@ -144,8 +144,26 @@ export function mountGestures(
         }
     }
 
+    function cancel(e: PointerEvent) {
+        if (mode === "middle-pan" && e.pointerType === "mouse" && e.button === 1) {
+            mode = "idle";
+            canvas.releasePointerCapture(e.pointerId);
+            return;
+        }
+        if (!pointers.has(e.pointerId)) return;
+        pointers.delete(e.pointerId);
+        if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+
+        if (mode === "paint") {
+            cb.onPaintCancel();
+            mode = "idle";
+        } else if (mode === "gesture" || mode === "gesture-end") {
+            mode = pointers.size === 0 ? "idle" : "gesture-end";
+        }
+    }
+
     canvas.addEventListener("pointerup", release);
-    canvas.addEventListener("pointercancel", release);
+    canvas.addEventListener("pointercancel", cancel);
     canvas.addEventListener("pointerleave", e => {
         if (mode === "idle" && !pointers.has(e.pointerId)) cb.onHover(null, null);
     });

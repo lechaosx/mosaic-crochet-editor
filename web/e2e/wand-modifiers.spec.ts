@@ -32,6 +32,32 @@ test("Shift+wand-click adds a second region to the existing selection", async ({
     expect((await pixelRGB(page, c5.cx, c5.cy))).toEqual(A);
 });
 
+test("one wand sweep creates one undoable selection edit", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    await clickCell(page, 4, 1);
+    await page.keyboard.press("w");
+    const historyBefore = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+    );
+
+    await dragCells(page, 0, 1, 4, 1);
+
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+    )).toBe(historyBefore + 1);
+
+    await page.keyboard.press("Control+z");
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-pattern-v4")!).float,
+    )).toBeNull();
+    for (const x of [0, 4]) {
+        const cell = await cellCoord(page, x, 1);
+        expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
+    }
+});
+
 // The Ctrl+wand-click "remove" semantic is reliably covered at the
 // state level in `tests/interactions.test.ts` (wand-add-then-remove
 // chain). E2E coverage for that variant ran into the alternating-row

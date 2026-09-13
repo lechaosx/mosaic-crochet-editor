@@ -4,6 +4,43 @@ import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
 
+test("continuous paint writes recovery once when the stroke completes", async ({ page }) => {
+    await page.addInitScript(() => {
+        const setItem = Storage.prototype.setItem;
+        let patternWrites = 0;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === "mosaic-pattern-v4") patternWrites++;
+            return setItem.call(this, key, value);
+        };
+        Object.defineProperty(window, "__patternWriteCount", { get: () => patternWrites });
+    });
+    await bootApp(page);
+    const writesBefore = await page.evaluate(() =>
+        (window as typeof window & { __patternWriteCount: number }).__patternWriteCount,
+    );
+    const start = await cellCoord(page, 0, 1);
+    const end = await cellCoord(page, 3, 1);
+
+    await page.mouse.move(start.cx, start.cy);
+    await page.mouse.down();
+    await page.mouse.move(end.cx, end.cy, { steps: 10 });
+
+    expect(await pixelRGB(page, end.cx, end.cy)).toEqual(A);
+    expect(await page.evaluate(() =>
+        (window as typeof window & { __patternWriteCount: number }).__patternWriteCount,
+    )).toBe(writesBefore);
+
+    await page.mouse.up();
+    expect(await page.evaluate(() =>
+        (window as typeof window & { __patternWriteCount: number }).__patternWriteCount,
+    )).toBe(writesBefore + 1);
+
+    await page.reload();
+    await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
+    const restored = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, restored.cx, restored.cy)).toEqual(A);
+});
+
 test("paint, reload, content survives via localStorage", async ({ page }) => {
     await bootApp(page);
     // Paint a recognisable cell (0, 1) = primary A (cell baseline is B).

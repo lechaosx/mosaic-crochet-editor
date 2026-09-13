@@ -11,6 +11,27 @@ test("single-finger drag paints", async ({ page }) => {
     }
 });
 
+test("system pointer cancellation restores the stroke without adding history", async ({ page }) => {
+    await bootApp(page);
+    const point = await cellCoord(page, 1, 1);
+    const before = await pixelRGB(page, point.cx, point.cy);
+    const session = await page.context().newCDPSession(page);
+
+    await session.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: point.cx, y: point.cy, id: 0 }],
+    });
+    expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
+
+    await session.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+    await session.detach();
+
+    expect(await pixelRGB(page, point.cx, point.cy)).toEqual(before);
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+    )).toBe(1);
+});
+
 test("two-finger drag and pinch changes the view without leaving a paint mark", async ({ page }) => {
     await bootApp(page);
     const a = await cellCoord(page, 1, 1);
@@ -34,6 +55,9 @@ test("two-finger drag and pinch changes the view without leaving a paint mark", 
     expect(after).not.toEqual(before);
     const source = await cellCoord(page, 1, 1);
     expect(await pixelRGB(page, source.cx, source.cy)).not.toEqual([0, 0, 0]);
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+    )).toBe(1);
 });
 
 test("Mask move toggle supports a modifier-free touch drag", async ({ page }) => {

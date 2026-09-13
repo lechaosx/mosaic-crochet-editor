@@ -746,6 +746,20 @@ describe("commitWandAt", () => {
         expect(floatCellCount(s.state.float!)).toBe(9);
     });
 
+    test("can update a sweep preview without history or persistence", () => {
+        const s = storeOf(3, 3, { pixels: filledPixels(3, 3, 1) });
+        const history = vi.fn();
+        const persist = vi.fn();
+        s.setHistoryFn(history);
+        s.setPersistFn(persist);
+
+        commitWandAt(s, 0, 0, "replace", { history: false, persist: false });
+
+        expect(floatCellCount(s.state.float!)).toBe(9);
+        expect(history).not.toHaveBeenCalled();
+        expect(persist).not.toHaveBeenCalled();
+    });
+
     test("out-of-bounds click throws in dev (callers must validate first)", () => {
         // The wand bounds check is an invariant: gesture.ts (main.ts:556)
         // already filters OOB before calling. The inner check is a dev

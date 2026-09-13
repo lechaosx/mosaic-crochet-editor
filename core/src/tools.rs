@@ -1236,6 +1236,15 @@ mod tests {
     }
 
     #[test]
+    fn paint_overlay_round_can_target_outward_from_a_corner_neighbour() {
+        let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
+        let out = paint_overlay_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 0, 2, &[]);
+        let support = v(1, 2);
+        let natural = natural_color_round(v(9, 9), v(0, 0), 3, support);
+        assert_eq!(out[2 * 9 + 1], opposite_color(natural));
+    }
+
+    #[test]
     fn paint_overlay_round_non_corner_click_paints_inward() {
         // (1, 4): rfe=1, non-corner. Inward is (2, 4) (step toward centre).
         // Paint should make (2, 4) opposite-of-natural.

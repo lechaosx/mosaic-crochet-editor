@@ -1,6 +1,6 @@
 # Mosaic Crochet Web
 
-A browser-based design tool for inset mosaic crochet patterns. Draw pixel patterns, get real-time stitch validation, and export human-readable crochet instructions.
+A browser-based editor for alternating-yarn mosaic crochet charts. Draw pixel patterns, review derived overlay positions, and export a chart-derived work sequence.
 
 **▶ [Try it now](https://lechaosx.github.io/mosaic-crochet-editor/)** — no install, runs in your browser.
 
@@ -45,11 +45,11 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 Click **Pattern** to open the dimensions popover. Two modes:
 
-- **Row** — a rectangular grid worked row by row. Set width and height.
-- **Round** — concentric rounds worked from the outside in. Set inner width / height / rounds, plus a sub-mode:
+- **Row** — a rectangular grid worked row by row. Height includes the unnumbered bottom foundation; the row above it is Row 1.
+- **Round** — concentric rounds numbered from the innermost band outward. Set inner width / height / rounds, plus an authored extent:
   - **Full** — all four sides.
-  - **Half** — bottom half only; the pattern folds at the inner-hole boundary.
-  - **Quarter** — bottom-left quarter; folds at both inner-hole boundaries.
+  - **Half** — bottom half only.
+  - **Quarter** — bottom-left quarter only.
 
 Settings update the canvas live and the **Wipe** toggle controls whether existing pixels are preserved across the change. Light-dismissing the popover commits your changes; **Ctrl+Z** reverts.
 
@@ -62,10 +62,10 @@ Eight tools, in the toolbar's tools group:
 - **Pencil** — paint the active colour.
 - **Fill** — flood-fill a connected region (stops at the selection boundary when a selection is active).
 - **Eraser** — left click restores pixels to the underlying alternating colour; right click paints the *opposite* (the exact inverse).
-- **Overlay** — click where you want a ✕; the inward neighbour is painted so the highlight pass draws a ✕ at the clicked cell. Right-click clears it. No-op on round-mode corners (no overlay stitch fits there).
+- **Overlay** — click where you want a ✕; the inward neighbour is painted so the highlight pass draws a ✕ at the clicked cell. Right-click clears it. A diagonal round-corner pixel is not overlayable because it emits the complete `(sc, ch, sc)` group; neighbouring pixels retain normal Overlay behavior.
 - **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
 - **Select** — drag a rectangle to **lift** those cells into a floating selection: their values move into the float, the canvas below them resets to the natural alternating colour. **Shift+drag** adds to the selection; **Ctrl+drag** removes (re-anchors the rest); no-modifier replaces. A single click lifts one cell.
-- **Magic wand** — click a cell to lift its connected same-colour region as a float. Same Shift / Ctrl / no-modifier semantics as the rect tool.
+- **Magic wand** — click a cell to lift its connected same-colour region as a float. Same Shift / Ctrl / no-modifier semantics as the rect tool. Dragging can sweep across regions; the entire sweep is one Undo step.
 - **Move** — drag inside the float to reposition it. Release just stops dragging; the float stays alive across tool changes and saving until you deselect (`Ctrl+Shift+A`), replace the selection, resize the pattern, or load another file. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's content is baked into the canvas at the start, the drag carries the same marquee shape, and on release the canvas content at the new position is re-lifted as the new float (the original content stays where it was). The **Mask** toggle beside Move enables the same behavior without a keyboard modifier; it stays enabled until you turn it off or select another tool. **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
 
 With **Apply while drawing** enabled, all five drawing tools respect the configured symmetry and repeat transforms. Turn it off to edit only the source cell while keeping the same transformation ready for selection stamping. The eraser restores each transformed pixel to *its own* natural colour, not the click point's.
@@ -104,20 +104,21 @@ Two swatches: primary (left) and secondary (right). Click to select; double-clic
 The **⚙** button on the right of the toolbar opens a Settings popover:
 
 - **Highlight opacity** — fades the ✕ / ! glyphs; 0 hides them entirely. Defaults to 100%.
-- **Show numbers** — row numbers in the left gutter, round numbers above (half/quarter) or in the corner cells (full).
+- **Show numbers** — worked-row numbers in the left gutter with the foundation left unnumbered; round numbers appear above half/quarter charts or in the corner cells of full charts.
 - **Lock cells with no valid overlay** — blocks paint on cells where an overlay stitch can't physically fit (top row in row mode; outermost ring and diagonal corners in round mode). Fixing an already-wrong cell still works.
 
 ### Zoom, pan, rotation
 
 - **Zoom**: scroll wheel (anchored at the cursor) or two-finger pinch on touch (anchored at the gesture midpoint). Auto-fits to the viewport on every new pattern, file load, or refresh — including when the pattern is rotated.
 - **Pan**: middle-mouse drag, or two-finger drag on touch.
+- If the browser or operating system cancels an active drawing pointer, the unfinished edit is discarded. Starting a two-finger gesture also discards any unfinished one-finger edit before navigation begins.
 - **Rotate**: ↺ / ↻ buttons. Rotates ±45° around the pattern centre with a 250 ms animation. A small accent triangle near the top edge of the pattern fades in during the animation so you can tell which way is "up".
 
 ### Saving
 
 - **Save** downloads the pattern as a `.mcw` file (JSON). Modern browsers (Chrome/Edge) open a save dialog; Firefox downloads immediately.
 - **Load** opens a file picker and restores pattern geometry, pixels, and colours. Symmetry and repeat transforms are session state and remain unchanged.
-- **Export** opens a modal where the pattern is converted to text line-by-line. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
+- **Export** opens a modal where the pattern is converted to text line-by-line. Each `oc` belongs to the worked row or round containing its visible ✕, while the covered supporting pixel remains an internal chart detail. Toggle **Alternate direction** to flip the work direction. Copy or download the result.
 
 Tool, colour, symmetry axes, repeat grid, live-transform mode, rotation, settings, the active float, and the committed canvas auto-save to `localStorage` and restore on refresh. `.mcw` files contain pattern geometry, pixels, and colours only. Save and Export bake the visible float into their output without changing the live selection.
 

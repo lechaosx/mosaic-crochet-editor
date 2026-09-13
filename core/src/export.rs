@@ -27,7 +27,10 @@ pub fn export_row_at(
     row_index: usize,
 ) -> String {
     let mut flat: Vec<SequenceItem> = walk::row_walk_at(canvas_size, row_index)
-        .map(|coord| SequenceItem::Stitch(stitch_from_highlight(highlights, coord)))
+        .map(|coord| {
+            let support = coord + IVec2::Y;
+            SequenceItem::Stitch(stitch_from_highlight(highlights, support))
+        })
         .collect();
     if alternate && row_index % 2 == 1 {
         flat.reverse();
@@ -60,8 +63,10 @@ pub fn export_round_at(
 
         let stitch = if walk::is_corner_coord(physical_coord, offset, virtual_size) {
             Stitch::Ch
+        } else if walk::window(physical_parent, canvas_size) {
+            stitch_from_highlight(highlights, physical_parent)
         } else {
-            stitch_from_highlight(highlights, physical_coord)
+            Stitch::Sc
         };
 
         if Some(physical_parent) != current_parent {
@@ -113,7 +118,40 @@ mod tests {
         Array2::zeros((h as usize, w as usize))
     }
 
+    // ── Row export ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn row_overlay_belongs_to_the_row_worked_above_its_support() {
+        let mut hl = no_highlights(1, 3);
+        hl[[2, 0]] = common::HIGHLIGHT_VALID_OVERLAY;
+
+        assert_eq!(export_row_at(&hl, v(1, 3), false, 0), "Row 1: oc");
+        assert_eq!(export_row_at(&hl, v(1, 3), false, 1), "Row 2: sc");
+    }
+
     // ── Round export ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn round_overlay_belongs_to_the_round_worked_outside_its_support() {
+        let mut hl = no_highlights(7, 7);
+        hl[[3, 2]] = common::HIGHLIGHT_VALID_OVERLAY;
+
+        let round_1 = export_round_at(&hl, v(7, 7), v(7, 7), v(0, 0), 3, false, 0);
+        let round_2 = export_round_at(&hl, v(7, 7), v(7, 7), v(0, 0), 3, false, 1);
+
+        assert!(!round_1.contains("oc"));
+        assert!(round_2.contains("oc"));
+    }
+
+    #[test]
+    fn neighbouring_pixel_can_emit_overlay_beside_a_corner_group() {
+        let mut hl = no_highlights(7, 7);
+        hl[[2, 1]] = common::HIGHLIGHT_VALID_OVERLAY;
+
+        let round_3 = export_round_at(&hl, v(7, 7), v(7, 7), v(0, 0), 3, false, 2);
+
+        assert!(round_3.contains("(sc, ch, sc), oc"));
+    }
 
     // innerW=1, innerH=1, rounds=2 → virtual 5×5, canvas 5×5, offset (0,0).
     // Round 1 (innermost, round_index=0): 8 stitches, all sharing the same

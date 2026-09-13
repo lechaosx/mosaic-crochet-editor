@@ -608,7 +608,7 @@ function renderHighlightSymbols(
     ctx.restore();
 }
 
-// Row labels in the left gutter — row 1 at the bottom (mosaic convention).
+// Row labels in the left gutter; the bottom canvas row is the unnumbered foundation.
 function renderRowLabels(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     pattern: RowState, m: DOMMatrix,
@@ -621,9 +621,9 @@ function renderRowLabels(
     ctx.fillStyle  = "rgba(210, 210, 220, 0.75)";
     ctx.textAlign  = "right";
     ctx.textBaseline = "middle";
-    for (let y = 0; y < H; y++) {
+    for (let y = 0; y < H - 1; y++) {
         const p = m.transformPoint({ x: -0.25, y: y + 0.5 });
-        ctx.fillText(String(H - y), p.x, p.y);
+        ctx.fillText(String(H - 1 - y), p.x, p.y);
     }
     ctx.restore();
 }
