@@ -716,90 +716,57 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Dialog (the dialog element itself is the styled box)
+   Instructions Text workspace
    ────────────────────────────────────────────────────────────────────────── */
-dialog {
-  margin: auto;
-  padding: 0;
+.instructions-workspace {
+  grid-row: 1;
+  grid-column: 1;
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(16rem, 1fr) auto;
+  gap: var(--space-3);
+  padding: clamp(var(--space-3), 3vw, var(--space-5));
+  overflow: auto;
   color: var(--fg-1);
-  background: var(--bg-1);
-  border: 1px solid var(--bg-4);
-  border-radius: var(--radius-2);
-  box-shadow: var(--shadow-2);
-  width: min(40rem, 96vw);
-  max-height: 86dvh;
-  overflow: hidden;
+  background: var(--bg-0);
 }
 
-dialog[open] {
-  display: flex;
-  flex-direction: column;
-}
-
-dialog.dlg--narrow { width: min(24rem, 96vw); }
-
-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
-}
-
-.dlg-header {
+.instructions-header,
+.instructions-options,
+.instructions-actions {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: var(--border);
-}
-.dlg-title {
-  font-size: var(--font-lg);
-  font-weight: 600;
-  color: var(--fg-0);
 }
 
-.dlg-progress {
+.instructions-header { justify-content: space-between; }
+.instructions-header h1 { margin: 0; color: var(--fg-0); font-size: var(--font-lg); }
+.instructions-kicker { color: var(--accent); font-size: var(--font-sm); }
+.instructions-intro { margin: 0; max-width: 52rem; color: var(--fg-2); }
+
+.instructions-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.instructions-legend div { display: flex; align-items: baseline; gap: var(--space-2); }
+.instructions-legend dt { color: var(--fg-0); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+.instructions-legend dd { margin: 0; color: var(--fg-2); }
+.instructions-actions { justify-content: flex-end; }
+
+.instructions-progress {
   font-size: var(--font-sm);
   color: var(--fg-2);
   font-variant-numeric: tabular-nums;
   animation: pulse 1s ease-in-out infinite alternate;
 }
 
-.dlg-close {
-  margin-left: auto;
-  width: var(--hit);
-  height: var(--hit);
-  border-radius: var(--radius-1);
-  color: var(--fg-2);
-  cursor: pointer;
-  font-size: 1.1rem;
-  transition: background var(--t-fast), color var(--t-fast);
-}
-.dlg-close:hover { background: var(--bg-3); color: var(--fg-0); }
-
-.dlg-body {
-  /* basis auto so the dialog grows to its content; min-height 0 still lets the
-     body shrink and scroll when content exceeds the dialog's max-height */
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  overflow: auto;
-}
-
-.dlg-message { font-size: var(--font-base); color: var(--fg-1); }
-
-.dlg-footer {
-  display: flex;
-  gap: var(--space-2);
-  justify-content: flex-end;
-  padding: var(--space-3) var(--space-4);
-  border-top: var(--border);
-}
-
 #export-text {
-  flex: 1 1 auto;
+  width: 100%;
+  min-height: 16rem;
   background: var(--bg-0);
   color: var(--fg-1);
   border: 1px solid var(--bg-4);
@@ -884,7 +851,8 @@ dialog::backdrop {
 }
 
 @media (min-width: 64rem) {
-  .canvas-area { grid-column: 2; }
+  .canvas-area,
+  .instructions-workspace { grid-column: 2; }
 }
 
 @media (prefers-reduced-motion: reduce) {

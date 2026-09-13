@@ -46,7 +46,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Inner-hole cells behave as outside-the-canvas — never lifted into a float, never affected by paint through one, never outlined. A float can partially or fully extend off-canvas (e.g. after moving it to the edge); off-canvas cells are invisible and skipped on anchor. — **your decision**
 - **Marquee rendering**: marching-ants outline along the float's shifted mask boundary, one continuous closed loop per connected component (dashes flow around the perimeter rather than restarting per cell-edge). Drawn in the palette-aware `contrastingColor`, animated as discrete jumps (~8 ticks/sec, dash-offset snapped to 3-screen-px steps), speed zoom-independent. During a Select drag a static unclamped rect outline overlays the same style; in replace mode the existing float's outline is hidden during the drag. — **your decision**
 - **Live highlights**: `store.plan` is recomputed from `visiblePixels(state)` on every commit, so the ✕ / ! markers reflect the float's current position automatically — no per-frame WASM rebuild. — **your decision**
-- **Persistence**: the float is *session* state — it lives in `SessionState`, history snapshots, and browser recovery so it survives refresh. It is never written to `.mcw` files (still v2 schema) or to export output: `onSave` / `onExport` bake the float into a throwaway snapshot for the file/session and leave the live float alone, so the marquee persists across save. — **your decision**
+- **Persistence**: the float is *session* state — it lives in `SessionState`, history snapshots, and browser recovery so it survives refresh. It is never written to `.mcw` files (still v2 schema) or to instruction output: `onSave` / `onInstructions` bake the float into a throwaway snapshot for the file/session and leave the live float alone. — **your decision**
 - **Canvas resize with an active float**: `onEditChange` bakes the float into the source pixels via `visiblePixels` before passing to the resize, then drops the float (its mask coords would be invalid in the new geometry). Content carries across; selection state doesn't. — **your decision**
 - **Keyboard shortcuts summary**:
   - `Ctrl+A` — lift all paintable cells into float. `Ctrl+Shift+A` / `Esc` — anchor and clear.
@@ -123,16 +123,17 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Legacy v4 recovery and Undo data migrate once into independently versioned v5 envelopes; a failed recovery migration write keeps the usable legacy copy. — **Agent's choice**
 - The document bar reports browser recovery as saved, restored, or failed independently from the explicitly named **Save .mcw** file action. — **Agent's choice**
 
-## Save / Load / Export
+## Save / Load / Instructions
 
 - File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
 - `.mcw` stores pattern geometry, pixels, and colours; symmetry axes, repeat settings, and floats remain session-only. Loading keeps the current transforms and drops the active float. — **your decision** (float and repeat boundaries); **Agent's choice** (axis boundary)
-- Export emits pattern text line-by-line with a live progress counter; closing the modal cancels generation. — **your decision** (line-by-line, cancellation); **Agent's choice** (progress counter)
-- Export assigns `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**
-- Alternate-direction toggle below the modal header re-generates immediately on change. — **your decision**
-- Warning banner shown when the pattern has invalid placements; export is not blocked. — **Agent's choice**
+- Instructions Text is a peer workspace to Design. It retains exact compressed Copy/Download output, a notation legend, alternate-direction generation, and the live editor state when returning to Design. — **Agent's choice**
+- Instructions emits pattern text line-by-line with a live progress counter; returning to Design cancels generation. — **your decision** (line-by-line, cancellation); **Agent's choice** (progress counter)
+- Instructions assigns `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**
+- Alternate-direction toggle in Instructions Text re-generates immediately on change. — **your decision**
+- Warning banner shown when the pattern has invalid placements; Instructions Text is not blocked. — **Agent's choice**
 
-### Export limitations
+### Instructions limitations
 
 - Round joins are not emitted. — **Agent's choice**
 - Foundation method is not indicated. — **Agent's choice**

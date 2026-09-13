@@ -117,7 +117,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 - [x] Expose compression structure as a renderer-independent result.
   - Keep arbitrary compression groups separate from domain-semantic rows, rounds, sides, or authored repeats.
   - Verify the existing text renderer remains byte-for-byte compatible.
-- [ ] Replace the export modal with an Instructions Text peer workspace.
+- [x] Replace the export modal with an Instructions Text peer workspace.
   - Show the exact Copy/Download text, preserve Design state across switching, and provide a defined notation legend.
   - Do not add Live, composition, WIP reconstruction, or traversal editing in this commit.
 - [ ] Add a minimal Overview using the finished chart and structured row/round list.

@@ -74,7 +74,7 @@ export interface UICallbacks {
     onEditCancel:      () => void;
     onSave:            () => void;
     onLoad:            () => void;
-    onExport:          () => void;
+    onInstructions:    () => void;
 }
 
 export interface UIHandle {
@@ -96,10 +96,10 @@ export interface UIHandle {
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
     closeEdit:          () => void;
-    openExport:         () => ExportDialog;
+    openInstructions:   () => InstructionsTextView;
 }
 
-export interface ExportDialog {
+export interface InstructionsTextView {
     setProgress: (count: number, total: number) => void;
     endProgress: () => void;
     appendLine:  (line: string) => void;
@@ -483,10 +483,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         el<HTMLButtonElement>("view-rotation-reset").disabled = rotation % 360 === 0;
     }
 
-    /* ── Save / load / export ────────────────────────────────────────── */
+    /* ── Save / load / Instructions ─────────────────────────────────── */
     el("btn-save")  .addEventListener("click", cb.onSave);
     el("btn-load")  .addEventListener("click", cb.onLoad);
-    el("btn-export").addEventListener("click", cb.onExport);
+    el("btn-export").addEventListener("click", cb.onInstructions);
 
     /* ── Pattern inspector ────────────────────────────────────────────── */
     const editWidget = el("edit-pattern-widget");
@@ -644,14 +644,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
         refreshWipeAvailability();
     }
 
-    /* ── Export dialog ───────────────────────────────────────────────── */
-    const exportDlg      = el<HTMLDialogElement>("export-dialog");
+    /* ── Instructions Text workspace ────────────────────────────────── */
+    const instructions   = el("instructions-workspace");
+    const canvasArea     = el("canvas").parentElement as HTMLElement;
+    const authoringDock  = el("authoring-dock");
     const exportText     = el<HTMLTextAreaElement>("export-text");
     const exportProgress = el("export-progress");
     const exportWarning  = el("export-warning");
     const alternateChk   = el<HTMLInputElement>("alternate");
-    bindBackdropClose(exportDlg);
-    el("export-close").addEventListener("click", () => exportDlg.close());
     el("export-copy").addEventListener("click", () =>
         navigator.clipboard.writeText(exportText.value)
     );
@@ -662,19 +662,29 @@ export function mountUI(cb: UICallbacks): UIHandle {
         URL.revokeObjectURL(url);
     });
 
-    function openExport(): ExportDialog {
-        exportDlg.showModal();
+    function openInstructions(): InstructionsTextView {
         const altListeners: (() => void)[] = [];
         const closeListeners: (() => void)[] = [];
+        const inspectorWasHidden = inspectorHost.hidden;
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
+        instructions.hidden = false;
+        canvasArea.hidden = true;
+        authoringDock.hidden = true;
+        inspectorHost.hidden = true;
+        el("btn-export").setAttribute("aria-current", "page");
 
-        const onClose = () => {
-            exportDlg.removeEventListener("close", onClose);
+        const close = () => {
             alternateChk.removeEventListener("change", onAlt);
+            instructions.hidden = true;
+            canvasArea.hidden = false;
+            authoringDock.hidden = false;
+            inspectorHost.hidden = inspectorWasHidden;
+            el("btn-export").removeAttribute("aria-current");
             closeListeners.forEach(f => f());
+            el<HTMLButtonElement>("btn-export").focus();
         };
-        exportDlg.addEventListener("close", onClose);
+        el("instructions-design").addEventListener("click", close, { once: true });
 
         return {
             setProgress: (count, total) => {
@@ -694,7 +704,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             },
             onAlternate: (f) => altListeners.push(f),
             onClose:     (f) => closeListeners.push(f),
-            close:       () => exportDlg.close(),
+            close,
         };
     }
 
@@ -706,7 +716,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setTransformState, setTransformError,
         setHistory, setRecoveryStatus, setViewState, setEditError,
         syncEditInputs, closeEdit,
-        openExport,
+        openInstructions,
     };
 }
 
@@ -776,11 +786,6 @@ function mountToolbarLayout() {
     if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(update);
     }
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function bindBackdropClose(dlg: HTMLDialogElement) {
-    dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
 }
 
 // Position a popover under its anchor button using fixed coords.

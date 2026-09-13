@@ -556,15 +556,13 @@ async function onLoad() {
     refreshSymmetryUi();
 }
 
-// ── Export ───────────────────────────────────────────────────────────────────
-async function onExport() {
-    // Export reflects the user-visible state. Bake the float into a local
-    // pixels buffer for the export session but leave the live float alive —
-    // closing the export dialog shouldn't drop the user's selection.
+// ── Instructions ─────────────────────────────────────────────────────────────
+async function onInstructions() {
+    // Instructions reflect the visible pattern without anchoring the live float.
     const exportPixels = store.state.float
         ? anchorIntoCanvas(store.state).pixels
         : store.state.pixels;
-    const dlg = ui.openExport();
+    const dlg = ui.openInstructions();
     let cancelled = false;
     dlg.onClose(() => { cancelled = true; });
     let hasInvalid = false;
@@ -639,7 +637,7 @@ const ui: UIHandle = mountUI({
     onZoom: zoomView,
     onNavigate: toggleNavigate,
     onEditOpen, onEditChange, onEditApply, onEditCancel,
-    onSave, onLoad, onExport,
+    onSave, onLoad, onInstructions,
 });
 
 const clientToPattern = (cx: number, cy: number) => {
