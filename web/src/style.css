@@ -76,10 +76,9 @@ button { font: inherit; color: inherit; background: none; border: 0; }
 input  { font: inherit; color: inherit; }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Toolbar
+   Adaptive workspace shell
    ────────────────────────────────────────────────────────────────────────── */
-/* JS selects one-row, two-row, or compact composition from measured group widths. */
-.toolbar {
+.document-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -92,53 +91,118 @@ input  { font: inherit; color: inherit; }
   flex-shrink: 0;
 }
 
-.tb-group {
+.document-actions,
+.dock-group {
   display: flex;
   align-items: center;
   gap: var(--space-1);
 }
 
-/* Wide layout: tb-row wrappers vanish, the 5 groups participate in the
-   toolbar's own flex layout in DOM order: file, hl-rot, paint, transform, colours.
-   `order` rearranges them visually to file, paint, transform, colours, hl-rot. */
-.tb-row { display: contents; }
+.workspace {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: grid;
+  grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
+}
 
-.g-file      { order: 1; }
-.g-paint     { order: 2; }
-.g-transform { order: 3; }
-.g-colors    { order: 4; }
-.g-hlrot     { order: 5; }
-
-/* Narrow layout: each tb-row becomes a full-width flex container. The
-   toolbar wraps to exactly two visible rows; row-1 holds file + hl-rot,
-   row-2 holds tools / sym / colours. */
-.toolbar--narrow .tb-row {
+.authoring-dock {
+  grid-row: 2;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  flex: 0 0 100%;
-  gap: var(--space-2);
-}
-
-.toolbar--compact .tb-row:last-child {
   justify-content: flex-start;
   flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) max(var(--space-2), env(safe-area-inset-bottom));
+  background: var(--bg-1);
+  border-top: var(--border);
+  z-index: 10;
 }
-.toolbar--compact .g-file {
+
+.dock-group { flex-wrap: wrap; }
+
+.document-bar--compact .g-file {
   width: 100%;
   flex-wrap: wrap;
 }
-.toolbar--compact .g-hlrot:empty { display: none; }
-.toolbar--compact .g-paint,
-.toolbar--compact .g-transform {
-  max-width: 100%;
-  flex-wrap: wrap;
-}
-.toolbar--compact .g-paint     { order: 1; }
-.toolbar--compact .g-colors    { order: 2; margin-inline-start: auto; }
-.toolbar--compact .g-transform { order: 3; }
+.document-bar--compact .g-hlrot:empty { display: none; }
 
-.tb-spacer { flex: 1 1 0; min-width: 0; }
+.inspector-host {
+  position: fixed;
+  inset: auto 0 0;
+  max-height: min(70dvh, 38rem);
+  display: flex;
+  flex-direction: column;
+  color: var(--fg-1);
+  background: var(--bg-2);
+  border-top: var(--border);
+  border-radius: var(--radius-2) var(--radius-2) 0 0;
+  box-shadow: var(--shadow-2);
+  z-index: 20;
+}
+
+.inspector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: var(--hit);
+  padding: var(--space-2) var(--space-3);
+  color: var(--fg-0);
+  border-bottom: var(--border);
+}
+
+.inspector-content {
+  min-height: 0;
+  padding: var(--space-3);
+  padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+  overflow: auto;
+}
+
+.inspector-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+@media (min-width: 64rem) {
+  .workspace {
+    grid-template: minmax(0, 1fr) / auto minmax(0, 1fr) auto;
+  }
+
+  .authoring-dock {
+    grid-row: 1;
+    grid-column: 1;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    padding: var(--space-2);
+    border-top: 0;
+    border-right: var(--border);
+    overflow-y: auto;
+  }
+
+  .dock-group {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .dock-group + .dock-group {
+    padding-top: var(--space-2);
+    border-top: var(--border);
+  }
+
+  .inspector-host {
+    position: static;
+    grid-column: 3;
+    width: clamp(18rem, 24vw, 23rem);
+    max-height: none;
+    border-top: 0;
+    border-left: var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    z-index: auto;
+  }
+}
 
 /* ──────────────────────────────────────────────────────────────────────────
    Buttons
@@ -316,6 +380,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
    Canvas area & status
    ────────────────────────────────────────────────────────────────────────── */
 .canvas-area {
+  grid-row: 1;
+  grid-column: 1;
   flex: 1 1 0;
   position: relative;
   overflow: hidden;
@@ -371,19 +437,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 /* Popovers default to display:none from the UA stylesheet; only opt in when open. */
-#new-pattern-widget:popover-open,
-#edit-pattern-widget:popover-open,
-#sym-popover:popover-open,
-#hl-popover:popover-open,
-#more-popover:popover-open,
-#selection-popover:popover-open {
+#more-popover:popover-open {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
-
-#new-pattern-widget,
-#edit-pattern-widget { min-width: 16rem; }
 
 .pattern-actions {
   display: flex;
@@ -391,13 +449,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   gap: var(--space-2);
 }
 
-#hl-popover  { min-width: 18rem; }
-#sym-popover { min-width: 22rem; }
 #more-popover { min-width: min(18rem, 92vw); }
-#selection-popover {
-  inset: auto var(--space-3) calc(var(--space-5) + var(--hit)) auto;
-  width: min(32rem, calc(100vw - 2 * var(--space-3)));
-}
 #more-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -495,7 +547,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
 /* Toggle / delete buttons inside the list use a smaller hit target than the
-   toolbar to keep rows compact. */
+   primary controls to keep rows compact. */
 .sym-list-row .btn--icon {
   --hit: var(--hit-sm, 28px);
   min-width: var(--hit);
@@ -768,18 +820,16 @@ dialog::backdrop {
    Narrow viewport tweaks
    ────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 30rem) {
-  .toolbar { padding: var(--space-1) var(--space-2); }
-  #selection-popover {
-    inset: auto 0 0 0;
-    width: 100%;
-    max-width: none;
-    border-radius: var(--radius-2) var(--radius-2) 0 0;
-    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
-  }
+  .document-bar { padding: var(--space-1) var(--space-2); }
+  .authoring-dock { gap: var(--space-1); padding-inline: var(--space-2); }
   .selection-modes,
   .selection-actions { grid-template-columns: 1fr; }
   .selection-modes .btn,
   .selection-actions .btn { justify-content: space-between; }
+}
+
+@media (min-width: 64rem) {
+  .canvas-area { grid-column: 2; }
 }
 
 @media (prefers-reduced-motion: reduce) {

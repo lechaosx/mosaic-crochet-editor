@@ -9,10 +9,9 @@
   <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
-  <header class="toolbar" id="toolbar">
-    <div class="tb-row">
-      <div class="tb-group g-file">
-        <button class="btn" id="btn-edit"   popovertarget="edit-pattern-widget" aria-haspopup="dialog" aria-expanded="false" title="Pattern dimensions">Pattern</button>
+  <header class="document-bar" id="document-bar">
+      <div class="document-actions g-file">
+        <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions">Pattern</button>
         <button class="btn" id="btn-load"   title="Load .mcw file">Load</button>
         <button class="btn" id="btn-save"   title="Save as .mcw file">Save</button>
         <button class="btn" id="btn-export" title="Export pattern as text">Export</button>
@@ -20,15 +19,20 @@
         <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
         <button class="btn" id="btn-more" title="More commands" aria-haspopup="menu" aria-expanded="false" hidden>More</button>
       </div>
-      <div class="tb-group g-hlrot">
+      <div class="document-actions g-hlrot">
         <button class="btn btn--icon" id="rotate-ccw" title="Rotate counter-clockwise (Shift+R)" aria-label="Rotate counter-clockwise">↺</button>
         <button class="btn btn--icon" id="rotate-cw"  title="Rotate clockwise (R)"               aria-label="Rotate clockwise">↻</button>
-        <button class="btn btn--icon" id="btn-hl-toggle" popovertarget="hl-popover" title="Settings" aria-label="Settings" aria-haspopup="dialog">⚙</button>
+        <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false">⚙</button>
       </div>
-    </div>
+  </header>
 
-    <div class="tb-row">
-      <div class="tb-group g-paint" role="group" aria-label="Paint tools">
+  <div id="more-popover" popover role="menu" aria-label="More commands">
+    <div id="more-actions"></div>
+  </div>
+
+  <div class="workspace">
+    <nav class="authoring-dock" id="authoring-dock" aria-label="Authoring tools">
+      <div class="dock-group g-paint" role="group" aria-label="Paint tools">
         <button class="btn btn--icon" id="tool-pencil" title="Pencil (P)" aria-label="Pencil">✏️</button>
         <button class="btn btn--icon" id="tool-fill"   title="Fill (F)"   aria-label="Fill">🪣</button>
         <button class="btn btn--icon" id="tool-eraser"  title="Eraser (E) — restore natural; right-click adds overlay" aria-label="Eraser">🧹</button>
@@ -36,15 +40,15 @@
         <button class="btn btn--icon" id="tool-invert"  title="Invert (I)" aria-label="Invert">⇋</button>
       </div>
 
-      <div class="tb-group g-transform" role="group" aria-label="Transform">
+      <div class="dock-group g-transform" role="group" aria-label="Transform">
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select">▭</button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand">✨</button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move">✥</button>
         <button class="btn" id="move-mask" title="Move the selection mask without moving its content" aria-label="Mask move" aria-pressed="false">Mask</button>
-        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" popovertarget="sym-popover" title="Symmetry and repeat: no transforms configured" aria-haspopup="dialog" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured">⊕</button>
+        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Symmetry and repeat: no transforms configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured">⊕</button>
       </div>
 
-      <div class="tb-group g-colors" role="group" aria-label="Yarns">
+      <div class="dock-group g-colors" role="group" aria-label="Yarns">
         <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Select Yarn A (1) — double-click or long-press to edit" aria-label="Yarn A" aria-pressed="true">
           <span class="swatch-label" aria-hidden="true">A</span>
           <span class="swatch-check" aria-hidden="true">✓</span>
@@ -58,28 +62,29 @@
         <button class="btn" id="edit-yarn" type="button" aria-label="Edit Yarn A" title="Edit Yarn A colour">Edit</button>
         <button class="btn" id="swap-yarns" type="button" aria-label="Swap yarns" title="Swap Yarn A and Yarn B colours">Swap</button>
       </div>
-    </div>
-  </header>
+    </nav>
 
-  <div id="more-popover" popover role="menu" aria-label="More commands">
-    <div id="more-actions"></div>
-  </div>
+    <main class="canvas-area">
+      <canvas id="canvas"></canvas>
+      <div id="status" class="status" aria-label="Canvas context">
+        <span id="status-tool"></span>
+        <span id="status-yarn"></span>
+        <span id="status-coordinates" hidden></span>
+        <span id="status-feedback" class="status-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+        <button id="status-selection" class="status-action" type="button" aria-controls="inspector-host" aria-expanded="false" hidden></button>
+        <span id="status-overlays"></span>
+        <span id="status-invalid" hidden></span>
+        <span id="status-transforms" hidden></span>
+      </div>
+    </main>
 
-  <main class="canvas-area">
-    <canvas id="canvas"></canvas>
-    <div id="status" class="status" aria-label="Canvas context">
-      <span id="status-tool"></span>
-      <span id="status-yarn"></span>
-      <span id="status-coordinates" hidden></span>
-      <span id="status-feedback" class="status-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></span>
-      <button id="status-selection" class="status-action" type="button" popovertarget="selection-popover" aria-haspopup="dialog" hidden></button>
-      <span id="status-overlays"></span>
-      <span id="status-invalid" hidden></span>
-      <span id="status-transforms" hidden></span>
-    </div>
-  </main>
-
-  <div id="selection-popover" popover role="dialog" aria-label="Selection">
+    <aside id="inspector-host" class="inspector-host" aria-labelledby="inspector-title" hidden>
+      <header class="inspector-header">
+        <strong id="inspector-title">Inspector</strong>
+        <button class="btn btn--icon btn--ghost" id="inspector-close" type="button" aria-label="Close inspector">×</button>
+      </header>
+      <div class="inspector-content">
+  <section id="selection-popover" class="inspector-panel" role="dialog" aria-label="Selection" hidden>
     <div class="selection-card-header">
       <strong id="selection-card-title">Selection</strong>
       <span id="selection-card-clipboard"></span>
@@ -97,10 +102,10 @@
     </div>
     <div id="selection-deselect-help" class="popover-help">Deselect places the content and removes the selection.</div>
     <div id="selection-paste-help" class="popover-help">Nothing copied yet.</div>
-  </div>
+  </section>
 
-  <!-- ── Settings popover ─────────────────────────────────────────────── -->
-  <div id="hl-popover" popover>
+  <!-- ── Settings inspector ───────────────────────────────────────────── -->
+  <section id="hl-popover" class="inspector-panel" aria-label="Settings" hidden>
     <div class="popover-row" title="Fades the ✕ overlay marks and ! invalid marks. 0 hides them entirely.">
       <span class="popover-label">Highlight opacity</span>
       <input type="range" id="hl-opacity" value="100" min="0" max="100" aria-label="Highlight opacity">
@@ -119,10 +124,10 @@
       <input type="checkbox" id="lock-invalid">
       <span class="toggle-track"></span>
     </label>
-  </div>
+  </section>
 
-  <!-- ── Symmetry popover ────────────────────────────────────────────── -->
-  <div id="sym-popover" popover>
+  <!-- ── Mirror & Repeat inspector ───────────────────────────────────── -->
+  <section id="sym-popover" class="inspector-panel" aria-label="Mirror and repeat" hidden>
     <div class="popover-row">
       <span class="popover-label">Add axis</span>
       <div class="sym-add-row">
@@ -170,10 +175,10 @@
       <div id="replicate-selection-hint" class="popover-help" aria-live="polite">Select cells and configure a transformation.</div>
       <div id="transform-error" class="warning" role="alert" hidden></div>
     </div>
-  </div>
+  </section>
 
-  <!-- ── Pattern (Edit) popover ──────────────────────────────────────── -->
-  <div id="edit-pattern-widget" popover="manual" role="dialog" aria-label="Pattern">
+  <!-- ── Pattern inspector ────────────────────────────────────────────── -->
+  <section id="edit-pattern-widget" class="inspector-panel" aria-label="Pattern" hidden>
     <div class="segmented">
       <label><input type="radio" name="edit-mode" value="row" checked> Row</label>
       <label><input type="radio" name="edit-mode" value="round"> Round</label>
@@ -221,6 +226,9 @@
       <button class="btn" id="edit-cancel" type="button">Cancel</button>
       <button class="btn" id="edit-apply" type="button">Apply</button>
     </div>
+  </section>
+      </div>
+    </aside>
   </div>
 
   <!-- ── Export dialog ──────────────────────────────────────────────── -->

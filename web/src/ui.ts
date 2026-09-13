@@ -26,8 +26,8 @@ function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => v
     target.addEventListener("pointerleave",  cancel);
 }
 
-// ─── Symmetry-popover button ids ──────────────────────────────────────────────
-// One "Add <kind>" button per kind in the popover's add row.
+// ─── Mirror & Repeat button ids ───────────────────────────────────────────────
+// One "Add <kind>" button per kind in the inspector's add row.
 const SYM_ADD_BUTTONS: { id: string; key: SymKey; glyph: string }[] = [
     { id: "add-sym-v",  key: "V",  glyph: "↔" },
     { id: "add-sym-h",  key: "H",  glyph: "↕" },
@@ -108,6 +108,55 @@ export interface ExportDialog {
 
 // ─── Mount ────────────────────────────────────────────────────────────────────
 export function mountUI(cb: UICallbacks): UIHandle {
+    type InspectorPanel = "selection" | "settings" | "transforms" | "pattern";
+    const inspectorHost = el("inspector-host");
+    const inspectorTitle = el("inspector-title");
+    const inspectorPanels: Record<InspectorPanel, HTMLElement> = {
+        selection: el("selection-popover"),
+        settings: el("hl-popover"),
+        transforms: el("sym-popover"),
+        pattern: el("edit-pattern-widget"),
+    };
+    const inspectorTriggers: Record<InspectorPanel, HTMLElement> = {
+        selection: el("status-selection"),
+        settings: el("btn-hl-toggle"),
+        transforms: el("btn-sym-toggle"),
+        pattern: el("btn-edit"),
+    };
+    let activeInspector: InspectorPanel | null = null;
+
+    function isInspectorOpen(panel: InspectorPanel) {
+        return !inspectorHost.hidden && activeInspector === panel;
+    }
+
+    function openInspector(panel: InspectorPanel, title: string) {
+        if (activeInspector === "pattern" && panel !== "pattern") return;
+        if (activeInspector === "transforms" && panel !== "transforms") {
+            cb.onTransformPopoverToggle(false);
+        }
+        activeInspector = panel;
+        inspectorHost.hidden = false;
+        inspectorTitle.textContent = title;
+        (Object.keys(inspectorPanels) as InspectorPanel[]).forEach(key => {
+            inspectorPanels[key].hidden = key !== panel;
+            inspectorTriggers[key].setAttribute("aria-expanded", String(key === panel));
+        });
+        if (panel === "transforms") cb.onTransformPopoverToggle(true);
+    }
+
+    function closeInspector(commitPattern = false) {
+        if (activeInspector === "pattern" && !commitPattern) cb.onEditCancel();
+        if (activeInspector === "transforms") cb.onTransformPopoverToggle(false);
+        inspectorHost.hidden = true;
+        (Object.keys(inspectorPanels) as InspectorPanel[]).forEach(key => {
+            inspectorPanels[key].hidden = true;
+            inspectorTriggers[key].setAttribute("aria-expanded", "false");
+        });
+        activeInspector = null;
+    }
+
+    el("inspector-close").addEventListener("click", () => closeInspector());
+
     /* ── Tool buttons ─────────────────────────────────────────────────── */
     const toolButtons: Record<Tool, HTMLButtonElement> = {
         pencil:  el("tool-pencil"),
@@ -138,7 +187,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     /* ── Selection card ──────────────────────────────────────────────── */
-    const selectionPopover = el("selection-popover");
     const selectionTrigger = el<HTMLButtonElement>("status-selection");
     const selectionTitle = el("selection-card-title");
     const selectionClipboard = el("selection-card-clipboard");
@@ -157,13 +205,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     selectionTrigger.addEventListener("click", event => {
         event.preventDefault();
-        if (selectionPopover.matches(":popover-open")) selectionPopover.hidePopover();
-        else selectionPopover.showPopover();
+        if (isInspectorOpen("selection")) closeInspector();
+        else openInspector("selection", "Selection");
     });
     (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(mode =>
         modeButtons[mode].addEventListener("click", () => {
             cb.onSelectionMoveMode(mode);
-            selectionPopover.hidePopover();
+            closeInspector();
         })
     );
     selectionCopy.addEventListener("click", cb.onSelectionCopy);
@@ -199,8 +247,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
             modeButtons[key].classList.toggle("btn--active", active);
             modeButtons[key].setAttribute("aria-pressed", String(active));
         });
-        if (!hasSelection && !hasClip && selectionPopover.matches(":popover-open")) {
-            selectionPopover.hidePopover();
+        if (!hasSelection && !hasClip && isInspectorOpen("selection")) {
+            closeInspector();
         }
     }
 
@@ -253,19 +301,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
         swatchB.style.background = b;
     }
 
-    /* ── Symmetry popover ─────────────────────────────────────────────── */
-    const symPopover = el("sym-popover");
+    /* ── Mirror & Repeat inspector ────────────────────────────────────── */
     const symList    = el("sym-list");
     const symToggle  = el("btn-sym-toggle");
 
     symToggle.addEventListener("click", e => {
         e.preventDefault();
-        if (symPopover.matches(":popover-open")) { symPopover.hidePopover(); return; }
-        positionPopover(symPopover, symToggle, "right");
-        symPopover.showPopover();
-    });
-    symPopover.addEventListener("toggle", e => {
-        cb.onTransformPopoverToggle((e as ToggleEvent).newState === "open");
+        if (isInspectorOpen("transforms")) closeInspector();
+        else openInspector("transforms", "Mirror & Repeat");
     });
 
     SYM_ADD_BUTTONS.forEach(({ id, key }) =>
@@ -300,9 +343,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setTransformError(message: string | null) {
         transformError.textContent = message ?? "";
         transformError.hidden = message === null;
-        if (message !== null && !symPopover.matches(":popover-open")) {
-            positionPopover(symPopover, symToggle, "right");
-            symPopover.showPopover();
+        if (message !== null && !isInspectorOpen("transforms")) {
+            openInspector("transforms", "Mirror & Repeat");
         }
     }
 
@@ -388,15 +430,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
             return row;
         }));
     }
-    /* ── Highlight popover ────────────────────────────────────────────── */
-    const hlPopover = el("hl-popover");
-
+    /* ── Settings inspector ───────────────────────────────────────────── */
     el("btn-hl-toggle").addEventListener("click", e => {
-        // Intercept the popovertarget toggle so we can position before showing.
         e.preventDefault();
-        if (hlPopover.matches(":popover-open")) { hlPopover.hidePopover(); return; }
-        positionPopover(hlPopover, el("btn-hl-toggle"), "right");
-        hlPopover.showPopover();
+        if (isInspectorOpen("settings")) closeInspector();
+        else openInspector("settings", "Settings");
     });
     el<HTMLInputElement>("hl-opacity")        .addEventListener("input",  cb.onHighlightChange);
     el<HTMLInputElement>("invalid-intensity") .addEventListener("input",  cb.onInvalidIntensityChange);
@@ -419,7 +457,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el("btn-load")  .addEventListener("click", cb.onLoad);
     el("btn-export").addEventListener("click", cb.onExport);
 
-    /* ── Pattern (Edit) popover ──────────────────────────────────────── */
+    /* ── Pattern inspector ────────────────────────────────────────────── */
     const editWidget = el("edit-pattern-widget");
     const btnEdit    = el<HTMLButtonElement>("btn-edit");
     const editError  = el("edit-error");
@@ -434,16 +472,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     function closeEdit() {
-        editWidget.hidePopover();
-        btnEdit.setAttribute("aria-expanded", "false");
+        closeInspector(true);
     }
 
     btnEdit.addEventListener("click", e => {
         e.preventDefault();
-        if (editWidget.matches(":popover-open")) return;
-        positionPopover(editWidget, btnEdit, "left");
-        editWidget.showPopover();
-        btnEdit.setAttribute("aria-expanded", "true");
+        if (isInspectorOpen("pattern")) return;
+        openInspector("pattern", "Pattern");
         cb.onEditOpen();
         editWidget.querySelector<HTMLElement>("input:not([disabled]), button:not([disabled])")?.focus();
     });
@@ -467,7 +502,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     });
 
     const blockOutsideEdit = (e: Event) => {
-        if (!editWidget.matches(":popover-open") || editWidget.contains(e.target as Node)) return;
+        if (!isInspectorOpen("pattern") || editWidget.contains(e.target as Node)) return;
+        if ((e.target as Element).closest?.("#inspector-close")) return;
         if (e.target === canvas) return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -475,7 +511,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     document.addEventListener("pointerdown", blockOutsideEdit, true);
     document.addEventListener("click", blockOutsideEdit, true);
     document.addEventListener("keydown", e => {
-        if (!editWidget.matches(":popover-open") || editWidget.contains(e.target as Node)) return;
+        if (!isInspectorOpen("pattern") || editWidget.contains(e.target as Node)) return;
         if (e.key === "Escape") {
             cb.onEditCancel();
             closeEdit();
@@ -518,12 +554,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
             el("edit-row-controls")  .hidden = mode !== "row";
             el("edit-round-controls").hidden = mode !== "round";
             refreshWipeAvailability();
-            if (editWidget.matches(":popover-open")) cb.onEditChange();
+            if (isInspectorOpen("pattern")) cb.onEditChange();
         });
     });
     document.querySelectorAll<HTMLInputElement>('[name="edit-submode"]').forEach(radio => {
         radio.addEventListener("change", () => {
-            if (editWidget.matches(":popover-open")) cb.onEditChange();
+            if (isInspectorOpen("pattern")) cb.onEditChange();
         });
     });
     const EDIT_INPUTS: { id: string; min: number }[] = [
@@ -536,7 +572,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     EDIT_INPUTS.forEach(({ id, min }) => {
         const apply = () => {
             refreshWipeAvailability();
-            if (editWidget.matches(":popover-open")) cb.onEditChange();
+            if (isInspectorOpen("pattern")) cb.onEditChange();
         };
         el(id).addEventListener("input", apply);
         el(id).addEventListener("change", () => {
@@ -545,7 +581,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         });
     });
     el<HTMLInputElement>("edit-wipe").addEventListener("change", () => {
-        if (editWidget.matches(":popover-open")) cb.onEditChange();
+        if (isInspectorOpen("pattern")) cb.onEditChange();
     });
 
     function syncEditInputs(s: PatternState) {
@@ -568,7 +604,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             el<HTMLInputElement>("edit-inner-height").value = String(innerH);
             el<HTMLInputElement>("edit-rounds")      .value = String(s.rounds);
         }
-        // Each fresh popover open resets the user preference to "preserve"
+        // Each fresh Pattern open resets the user preference to "preserve"
         // (i.e. Wipe unchecked) and drops any stashed force-state from the
         // previous open.
         const wipeEl = el<HTMLInputElement>("edit-wipe");
@@ -645,9 +681,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
 // ─── Toolbar layout ──────────────────────────────────────────────────────────
 function mountToolbarLayout() {
-    const toolbar  = document.getElementById("toolbar") as HTMLElement;
-    const groupSel = [".g-file", ".g-paint", ".g-transform", ".g-colors", ".g-hlrot"] as const;
-    type Widths = Record<typeof groupSel[number], number>;
+    const documentBar = el("document-bar");
     const fileGroup = document.querySelector(".g-file") as HTMLElement;
     const viewGroup = document.querySelector(".g-hlrot") as HTMLElement;
     const moreButton = el<HTMLButtonElement>("btn-more");
@@ -656,8 +690,7 @@ function mountToolbarLayout() {
     const fileActions = [el("btn-edit"), el("btn-load"), el("btn-save"), el("btn-export")];
     const viewActions = [el("rotate-ccw"), el("rotate-cw"), el("btn-hl-toggle")];
     let compact = false;
-    let bpSingleRow = Infinity;
-    let bpTwoRow = 0;
+    let compactBelow = 0;
 
     moreButton.addEventListener("click", e => {
         e.preventDefault();
@@ -689,38 +722,19 @@ function mountToolbarLayout() {
         }
     }
 
-    function thresholds(w: Widths, padding: number, gap: number) {
-        return {
-            singleRow: padding + 4 * gap +
-                w[".g-file"] + w[".g-paint"] + w[".g-transform"] + w[".g-colors"] + w[".g-hlrot"],
-            twoRow: Math.max(
-                padding + gap     + w[".g-file"]   + w[".g-hlrot"],
-                padding + 2 * gap + w[".g-paint"]  + w[".g-transform"] + w[".g-colors"],
-            ),
-        };
-    }
-
     function measure() {
         setCompact(false);
-        toolbar.classList.remove("toolbar--narrow", "toolbar--compact");
-        const widths = Object.fromEntries(
-            groupSel.map(s => [s, (document.querySelector(s) as HTMLElement).offsetWidth])
-        ) as Widths;
-
-        const cs = getComputedStyle(toolbar);
+        documentBar.classList.remove("document-bar--compact");
+        const cs = getComputedStyle(documentBar);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
         const gap     = parseFloat(cs.columnGap) || 0;
-        const measured = thresholds(widths, padding, gap);
-        bpSingleRow = measured.singleRow;
-        bpTwoRow = measured.twoRow;
+        compactBelow = padding + gap + fileGroup.offsetWidth + viewGroup.offsetWidth;
     }
 
     function applyLayout() {
-        const vp = window.innerWidth;
-        const useCompact = vp < bpTwoRow;
+        const useCompact = window.innerWidth < compactBelow;
         setCompact(useCompact);
-        toolbar.classList.toggle("toolbar--narrow", vp < bpSingleRow);
-        toolbar.classList.toggle("toolbar--compact", useCompact);
+        documentBar.classList.toggle("document-bar--compact", useCompact);
     }
 
     function update() { measure(); applyLayout(); }

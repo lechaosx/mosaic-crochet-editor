@@ -59,17 +59,17 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Symmetry and repeat
 
-- Fresh sessions have no axes. The **Symmetry and repeat** popover and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
-- Each axis is independently enabled or deleted from the **Symmetry and repeat** popover. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
+- Fresh sessions have no axes. The **Mirror & Repeat** inspector and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
+- Each axis is independently enabled or deleted from the **Mirror & Repeat** inspector. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
 - Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
 - **Apply while drawing** independently controls whether the configured symmetry and repeat recipe applies to future pencil, fill, eraser, overlay, and invert operations. It defaults on, persists as session state, and is not part of undo history. — **your decision**
-- The transform toolbar button distinguishes no configured recipe, configured with live drawing, and configured with live drawing paused. — **Agent's choice**
+- The transform dock button distinguishes no configured recipe, configured with live drawing, and configured with live drawing paused. — **Agent's choice**
 - A single repeat grid has tile width and height plus horizontal and vertical copy counts per side. Copies extend in both directions, their Cartesian product includes the source position, and symmetry completes before the grid tiles the motif. — **your decision**
 - Repeat state survives refresh and undo but is not stored in `.mcw`; file load and canvas resize retain it. — **your decision**
 - Repeat grids are limited to 4,096 configured positions. An operation aborts atomically when it would exceed 1,048,576 transformed claims. — **your decision**
-- Dotted tile guides preview while the popover is open and remain visible while repeat is enabled. — **your decision**
+- Dotted tile guides preview while the transform inspector is open and remain visible while repeat is enabled. — **your decision**
 - **Stamp transformed copies** (`T`) applies the configured symmetry and repeat recipe to a floating selection regardless of the live-drawing toggle, without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours claiming one destination reject the whole action. — **your decision**
-- Stamp conflicts and safety-limit failures appear inline in the transform popover; changing editor state or completing a stamp clears the transient message. — **Agent's choice**
+- Stamp conflicts and safety-limit failures appear inline in the transform inspector; changing editor state or completing a stamp clears the transient message. — **Agent's choice**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
 - **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
 - **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
@@ -82,7 +82,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Foundation row (bottom) is overlay-able: there's no inner row to clash with, so any colour there is a valid overlay onto the row above. — **your decision**
 - **✕** is drawn in the *other* pixel colour (auto-contrast — on an A-cell it uses colour B, and vice versa). The ✕ literally shows the colour that would land there if you overlaid. — **your decision**
 - **!** is drawn in a *third palette colour* computed at render time: the hue around the colour wheel that maximises the minimum hue-distance to both user colours, at moderate saturation/lightness (HSL 65% / 50%). The marker pops against any palette without ever blending in (auto-contrast can collide with high-saturation pixel colours; a third colour can't). — **your decision**
-- Two sliders in the Settings popover (behind the **⚙** button):
+- Two sliders in the Settings inspector (behind the **⚙** button):
   - **Highlight opacity** (default 100%) — dims both ✕ and !.
   - **Invalid marker intensity** (default 65%) — adjusts only the ! marker's HSL saturation, full range 0–100%. Hue and lightness stay algorithmic; the user can tune the "vibe" without bypassing the palette-aware hue choice. — **your decision**
 - **Lock invalid** toggle (off by default): silently reverts any paint/fill/invert write to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when the cell was already correctly coloured. Fixing an already-wrong cell still works. — **your decision**
@@ -93,7 +93,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Round labels: innermost ring numbered 1, outermost = R. — **your decision**
 - Round placement: full mode → top-left corner cell of each ring; half/quarter → above the canvas, centred on column r. — **your decision**
 - Glyphs stay upright regardless of canvas rotation; positions follow the pattern's pan/zoom/rotation. — **your decision**
-- Toggleable via a switch in the Settings popover. — **your decision**
+- Toggleable via a switch in the Settings inspector. — **your decision**
 
 ## View
 
@@ -144,17 +144,18 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - An actionable selection count opens a labelled Selection card on every input type. It exposes Move content, Duplicate content, Move selection area, Copy, Cut, Paste, and Deselect using the existing float semantics; after the selection is removed, a clipboard count keeps Paste discoverable. Move outcomes are temporary UI state and reset to Move content after leaving Move. — **Agent's choice**
 - The context strip reports why a canvas gesture was rejected when painting outside the selection, starting Move without or outside a selection, choosing a geometrically unavailable Overlay target, or editing a protected cell. Repeated rejection within one gesture is coalesced into one polite status announcement. — **Agent's choice**
 
-## Toolbar
+## Workspace shell
 
-- Five groups in fixed visual order on a wide screen: file/history, highlights/rotation, paint tools, transforms, colours. — **your decision**
-- On narrow screens the toolbar reflows to two rows (file/history + highlights/rotation on row 1; paint tools + transforms + colours on row 2), each row distributed with `space-between`. — **your decision**
-- Toolbar actions use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. When the two-row layout would overflow, the current compact composition keeps all eight authoring tools and both yarns visible while moving Pattern, Load, Save, Export, rotation, and Settings into More. — **Agent's choice**
-- One-row, two-row, and compact breakpoints derive from the groups' measured intrinsic widths rather than device labels. — **Agent's choice**
+- Document and history commands occupy a top document bar; paint, transform, and yarn controls occupy a separate authoring dock without changing their established order. — **Agent's choice**
+- At 64rem and wider the dock is a left rail and an open inspector is a right column. Constrained layouts place the dock below the canvas and present the same inspector content as a non-modal bottom sheet. — **Agent's choice**
+- Pattern, Selection, Mirror & Repeat, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
+- Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document and view commands move into More. — **Agent's choice**
+- The compact document-bar breakpoint derives from its groups' measured intrinsic widths rather than device labels. — **Agent's choice**
 - A wrapping canvas context strip shows the active tool and yarn, hovered coordinates, an actionable selection or clipboard count, valid and invalid overlay counts, and live/paused transform state when transforms are configured. — **Agent's choice**
 
 ## Adaptive workspace conventions
 
-These decisions constrain the future redesign; they do not imply that every layout described here is implemented yet.
+These decisions constrain continued development beyond the first adaptive shell.
 
 - Desktop, tablet, and phone use one recognisable interaction model. Placement and density may adapt, but tool names, grouping, ordering, state, and meaning remain consistent. Tablets, especially 10–11 inch landscape tablets with touch or pen, are a reference authoring posture rather than an enlarged phone afterthought. — **your decision**
 - Layout responds to available space while interaction enhancements respond to actual pointer, keyboard, and pen capabilities. Hybrid devices are not classified exclusively as desktop or touch, and no fixed orientation is required. — **Agent's choice**
@@ -169,9 +170,9 @@ These decisions constrain the future redesign; they do not imply that every layo
 - The workspace supports increased text size, visible keyboard focus, reduced motion, forced colours/high contrast, safe-area insets, and browser zoom outside custom canvas gestures. Short motion is used only to clarify spatial or state relationships. — **Agent's choice**
 - The canvas remains the visual priority. Persistent state appears near its owning affordance, immediate coordinates and interaction feedback use the context strip, and completion or failure feedback appears without unexpectedly dismissing or committing work. — **Agent's choice**
 
-## Pattern popover
+## Pattern inspector
 
-- Single **Pattern** toolbar button handles both "create from scratch" and "edit in place" via the same popover (no separate New button). Mode, dimensions, and submode remain editable with a live canvas preview. — **your decision**
+- Single **Pattern** document-bar button handles both "create from scratch" and "edit in place" via the same inspector section (no separate New button). Mode, dimensions, and submode remain editable with a live canvas preview. — **your decision**
 - Live preview as inputs change. Painted cells are preserved across resizing / submode toggles where they map:
   - **Row mode** — bottom-left anchored: the foundation stays put vertically; column 0 stays put horizontally. Adding rows grows upward, adding columns grows to the right; shrinking truncates from the same far edges. — **your decision**
   - **Round mode** — bottom-left anchored, partitioned into 4 corner blocks (`rounds × rounds` each, one per canvas corner) and 4 straight strips between them. Each region transfers independently: corner blocks anchor to their canvas corner; horizontal strips (top/bottom) anchor to top/bottom vertically and are left-anchored within the strip; vertical strips (left/right) anchor to left/right horizontally and are bottom-anchored within the strip (so detail near the foundation stays put when inner height changes). No collisions; shrinking inner dims drops cells from the side opposite the strip's anchor. — **your decision**

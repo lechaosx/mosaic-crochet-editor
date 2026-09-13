@@ -131,5 +131,5 @@ test("Yarn A and B plus Edit and Swap remain directly available on phone", async
     await expect(page.getByRole("button", { name: "Yarn B", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Edit Yarn A" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Swap yarns" })).toBeVisible();
-    expect(await page.locator("#toolbar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.locator("#authoring-dock").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });

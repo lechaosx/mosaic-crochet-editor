@@ -41,9 +41,11 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 ## Using the app
 
+The workspace separates document commands from authoring controls. On wide screens, tools occupy a left rail and an opened inspector takes a right column beside the canvas. On narrower screens, the same tool groups move below the canvas and the same inspector becomes a non-modal bottom sheet. Pattern, Selection, Mirror & Repeat, and Settings share that inspector; its close button dismisses the current section. At phone widths, lower-frequency document and view commands move into **More**.
+
 ### Patterns
 
-Click **Pattern** to open the dimensions popover. Two modes:
+Click **Pattern** to open the dimensions inspector. Two modes:
 
 - **Row** — a rectangular grid worked row by row. Height includes the unnumbered bottom foundation; the row above it is Row 1.
 - **Round** — concentric rounds numbered from the innermost band outward. Set inner width / height / rounds, plus an authored extent:
@@ -53,11 +55,11 @@ Click **Pattern** to open the dimensions popover. Two modes:
 
 Settings update the canvas live and the **Wipe** toggle controls whether existing pixels are preserved across the change. Choose **Apply** to commit the preview as one Undo step, or **Cancel** / **Escape** to restore the state from when Pattern opened. Invalid input keeps the last valid preview and disables Apply. Clicking elsewhere does not dismiss Pattern or edit the canvas; canvas zoom remains available while you decide.
 
-Canvas dimensions may contain up to 16,777,216 cells total, with either axis up to 1,048,576 cells for unusually long, narrow patterns. The Pattern popover reports an inline error without replacing the current canvas when those safety bounds are exceeded; invalid `.mcw` dimensions are rejected during load.
+Canvas dimensions may contain up to 16,777,216 cells total, with either axis up to 1,048,576 cells for unusually long, narrow patterns. The Pattern inspector reports an inline error without replacing the current canvas when those safety bounds are exceeded; invalid `.mcw` dimensions are rejected during load.
 
 ### Drawing
 
-Eight tools, in the toolbar's tools group:
+Eight tools, grouped in the authoring dock:
 
 - **Pencil** — paint the active colour.
 - **Fill** — flood-fill a connected region (stops at the selection boundary when a selection is active).
@@ -89,21 +91,21 @@ Active mirror axes are drawn as dashed guides; central rotation is shown as a do
 
 Active axes compose automatically: for example, vertical and horizontal mirrors together produce the corresponding four-cell orbit without adding a separate central-axis entry.
 
-Enable **Include repeat** to add fixed tile offsets to the transformation. Horizontal and vertical copy counts are per side: `1` horizontal and `1` vertical produces a 3×3 set of positions including the source. When symmetry and repeat are both configured, symmetry creates the complete motif first and the repeat grid tiles that motif. Dotted tile guides remain visible while repeat is included and preview while the popover is open.
+Enable **Include repeat** to add fixed tile offsets to the transformation. Horizontal and vertical copy counts are per side: `1` horizontal and `1` vertical produces a 3×3 set of positions including the source. When symmetry and repeat are both configured, symmetry creates the complete motif first and the repeat grid tiles that motif. Dotted tile guides remain visible while repeat is included and preview while the inspector is open.
 
 The repeat grid accepts at most 4,096 positions. Operations also abort instead of leaving partial output if their transformed target claims exceed 1,048,576.
 
-**Apply while drawing** affects future pencil, fill, eraser, overlay, and invert operations only. **Stamp transformed copies** applies the same configured transformation to content that already exists in the floating selection, even when live drawing is off. Choose it or press **T**; the source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict in the transform popover and leaves the canvas unchanged.
+**Apply while drawing** affects future pencil, fill, eraser, overlay, and invert operations only. **Stamp transformed copies** applies the same configured transformation to content that already exists in the floating selection, even when live drawing is off. Choose it or press **T**; the source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict in the transform inspector and leaves the canvas unchanged.
 
-The transform toolbar button has no badge when no recipe is configured, an accent dot while configured transforms apply during drawing, and a pause badge when the recipe remains configured but live application is off.
+The transform dock button has no badge when no recipe is configured, an accent dot while configured transforms apply during drawing, and a pause badge when the recipe remains configured but live application is off.
 
 ### Yarns
 
-The labelled **Yarn A** and **Yarn B** swatches remain directly available at every toolbar size. A visible check and outline identify the active yarn independently of colour. Click, tap, Enter, or Space selects a yarn. **Edit** opens the native colour picker for the active yarn; double-clicking or long-pressing either swatch edits that yarn directly. **Swap** exchanges the two colours without changing the pattern's A/B cells or which logical yarn is active, and Undo restores the previous colours.
+The labelled **Yarn A** and **Yarn B** swatches remain directly available at every dock size. A visible check and outline identify the active yarn independently of colour. Click, tap, Enter, or Space selects a yarn. **Edit** opens the native colour picker for the active yarn; double-clicking or long-pressing either swatch edits that yarn directly. **Swap** exchanges the two colours without changing the pattern's A/B cells or which logical yarn is active, and Undo restores the previous colours.
 
 ### Highlights
 
-The **⚙** button on the right of the toolbar opens a Settings popover:
+The **⚙** button in the document bar opens Settings in the inspector:
 
 - **Highlight opacity** — fades the ✕ / ! glyphs; 0 hides them entirely. Defaults to 100%.
 - **Show numbers** — worked-row numbers in the left gutter with the foundation left unnumbered; round numbers appear above half/quarter charts or in the corner cells of full charts.
@@ -128,9 +130,9 @@ The context strip at the bottom of the canvas shows the active tool and Yarn A/B
 
 When a canvas action cannot proceed, the context strip explains the immediate cause: the pointer is outside the selection, Move needs a selection or must start inside it, an Overlay target has no inward supporting cell, or Settings skipped a protected destination. Repeated blocked cells in one drag produce one message; beginning another canvas action clears it.
 
-### Responsive toolbar
+### Responsive workspace
 
-Toolbar actions use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. Desktop uses one row and tablets recompose to two rows. The current phone-width layout keeps all eight authoring tools and both yarns visible across three rows; Pattern, Load, Save, Export, view rotation, and Settings move into **More**. The same controls move between locations, so their behavior does not change.
+Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. At 64rem and wider the authoring dock is a left rail and an open inspector is pinned beside the canvas. Below that width the dock wraps beneath the canvas and the inspector overlays it as a bottom sheet. The current phone dock keeps all eight authoring tools and both yarns visible across up to three rows; Pattern, Load, Save, Export, view rotation, and Settings move into **More**. Responsive recomposition moves the same controls without changing their state or behavior.
 
 ### Keyboard shortcuts
 
@@ -196,7 +198,7 @@ Builds the generated WASM package and production web bundle, then runs all three
 
 - **Rust** (`cargo test`) — geometry, walk generators, pattern compression.
 - **TS unit + properties** (`bun run test:logic` for pure logic, `bun run test:web` for IO layer, Vitest) — store / selection / paint / clipboard / symmetry / repeat / storage / pattern + `fast-check`-generated property assertions for pack/unpack round-trips, lift-anchor identity, wand BFS invariants, history undo/redo balance; plus history and localStorage persistence.
-- **E2E** (`bun run test:e2e`, Playwright, desktop Chromium) — full UX flows: tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry and repeat transforms, Edit popover.
+- **E2E** (`bun run test:e2e`, Playwright, desktop Chromium) — full UX flows: adaptive workspace, tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry and repeat transforms, Pattern inspector.
 
 CI rejects Rust formatting drift and reports Clippy warnings with `cargo fmt --all -- --check` and `cargo clippy --workspace`.
 

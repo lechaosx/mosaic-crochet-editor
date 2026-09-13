@@ -94,7 +94,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 - [x] Implement explicit Pattern Apply/Cancel as a narrow vertical slice.
   - Add failing E2E coverage for outside interaction, Escape/Cancel restoration, invalid-field last-valid preview, and one history entry on Apply.
   - Defer resize handles, new preservation anchors, diagrams, output links, and Live/transform reconciliation.
-- [ ] Build the first adaptive shell with a document bar, existing tools, canvas, compact status, and one open/closed inspector host.
+- [x] Build the first adaptive shell with a document bar, existing tools, canvas, compact status, and one open/closed inspector host.
   - Separate document actions from authoring tools: use a document bar, tool rail, pinned inspector, and status area on wide layouts; use a compact app bar, bottom or side authoring dock, and inspector sheet when space is constrained.
   - Recompose the same named and ordered controls rather than creating separate desktop and touch interfaces.
   - Treat the current three-row phone toolbar as a safe intermediate state, not the final compact composition.

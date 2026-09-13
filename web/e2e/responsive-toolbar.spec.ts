@@ -23,13 +23,14 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     await expectTargetsAtLeast(page, 44);
     await expect(page.getByRole("button", { name: "More" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Pattern" })).toBeHidden();
-    expect(await page.locator("#toolbar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 
     await page.getByRole("button", { name: "More" }).click();
     await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Load", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
     await page.getByRole("button", { name: "Pattern" }).click();
+    await expect(page.locator("#inspector-host")).toBeVisible();
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 
     await page.keyboard.press("Escape");
@@ -38,17 +39,26 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
         window.dispatchEvent(new Event("resize"));
     });
     await expectTargetsAtLeast(page, 44);
-    expect(await page.locator("#toolbar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
-test("compact layouts keep 44px tools without horizontal overflow", async ({ page }) => {
+test("constrained layouts place the authoring dock below the canvas and use an inspector sheet", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 44);
-    expect(await page.locator("#toolbar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const canvas = await page.locator(".canvas-area").boundingBox();
+    const dock = await page.locator("#authoring-dock").boundingBox();
+    expect(dock!.y).toBeGreaterThanOrEqual(canvas!.y + canvas!.height - 1);
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const inspector = await page.locator("#inspector-host").boundingBox();
+    expect(inspector!.y).toBeGreaterThan(canvas!.y);
+    expect(inspector!.width).toBe(768);
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
-test("wide fine-pointer layouts use compact desktop targets", async ({ page }) => {
+test("wide layouts use a document bar, left tool rail, and pinned inspector column", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 36);
@@ -56,5 +66,38 @@ test("wide fine-pointer layouts use compact desktop targets", async ({ page }) =
     const pencilBox = await page.locator("#tool-pencil").boundingBox();
     expect(pencilBox!.width).toBeLessThan(44);
     expect(pencilBox!.height).toBeLessThan(44);
-    expect(await page.locator("#toolbar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const documentBar = await page.locator("#document-bar").boundingBox();
+    const dock = await page.locator("#authoring-dock").boundingBox();
+    const canvasBefore = await page.locator(".canvas-area").boundingBox();
+    expect(dock!.y).toBeGreaterThanOrEqual(documentBar!.y + documentBar!.height - 1);
+    expect(canvasBefore!.x).toBeGreaterThanOrEqual(dock!.x + dock!.width - 1);
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const canvasAfter = await page.locator(".canvas-area").boundingBox();
+    const inspector = await page.locator("#inspector-host").boundingBox();
+    expect(inspector!.x).toBeGreaterThanOrEqual(canvasAfter!.x + canvasAfter!.width - 1);
+    expect(canvasAfter!.width).toBeLessThan(canvasBefore!.width);
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
+
+test("inspector controls keep their state while the same host recomposes", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await bootApp(page);
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const originalWidth = await page.locator("#edit-width").inputValue();
+    await page.locator("#edit-width").fill("20");
+    await expect(page.locator("#inspector-title")).toHaveText("Pattern");
+
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await expect(page.locator("#inspector-host")).toBeVisible();
+    await expect(page.locator("#edit-width")).toHaveValue("20");
+    const inspector = await page.locator("#inspector-host").boundingBox();
+    expect(inspector!.width).toBe(768);
+
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await expect(page.locator("#inspector-host")).toBeHidden();
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await expect(page.locator("#edit-width")).toHaveValue(originalWidth);
 });
