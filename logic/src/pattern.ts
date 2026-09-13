@@ -37,7 +37,7 @@ export function patternDimensionError(pattern: PatternState): string | null {
     if (![virtualWidth, virtualHeight, offsetX, offsetY, rounds].every(Number.isSafeInteger)
         || (virtualWidth as number) <= 0 || (virtualHeight as number) <= 0
         || (offsetX as number) < 0 || (offsetY as number) < 0 || (rounds as number) <= 0) {
-        return "Round-pattern dimensions must be whole positive numbers.";
+        return "Centre-out pattern dimensions must be whole positive numbers.";
     }
     if ((virtualWidth as number) > MAX_CANVAS_DIMENSION * 2
         || (virtualHeight as number) > MAX_CANVAS_DIMENSION * 2
@@ -45,7 +45,7 @@ export function patternDimensionError(pattern: PatternState): string | null {
         || (rounds as number) * 2 > (virtualHeight as number)
         || (offsetX as number) + (width as number) > (virtualWidth as number)
         || (offsetY as number) + (height as number) > (virtualHeight as number)) {
-        return "Round-pattern geometry is invalid.";
+        return "Centre-out pattern geometry is invalid.";
     }
     return null;
 }

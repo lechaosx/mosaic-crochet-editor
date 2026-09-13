@@ -25,8 +25,8 @@ test("active tool and yarn expose their selected state", async ({ page }) => {
 test("segmented radios and switches retain native keyboard operation", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
-    const row = page.getByRole("radio", { name: "Row" });
-    const round = page.getByRole("radio", { name: "Round" });
+    const row = page.getByRole("radio", { name: "Rows" });
+    const round = page.getByRole("radio", { name: "Centre-out" });
     await row.focus();
     await page.keyboard.press("ArrowRight");
     await expect(round).toBeChecked();

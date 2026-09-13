@@ -132,7 +132,7 @@
       <input type="checkbox" id="labels-on" checked>
       <span class="toggle-track"></span>
     </label>
-    <label class="toggle popover-row" title="Block paint on cells that can never host a valid overlay (top row in row mode; outermost ring and diagonal corners in round mode). Fixing an already-wrong cell still works.">
+    <label class="toggle popover-row" title="Block paint on cells that can never host a valid overlay (top row in Rows; outermost ring and diagonal corners in Centre-out). Fixing an already-wrong cell still works.">
       <span class="popover-label">Lock cells with no valid overlay</span>
       <input type="checkbox" id="lock-invalid">
       <span class="toggle-track"></span>
@@ -193,8 +193,8 @@
   <!-- ── Pattern inspector ────────────────────────────────────────────── -->
   <section id="edit-pattern-widget" class="inspector-panel" aria-label="Pattern" hidden>
     <div class="segmented">
-      <label><input type="radio" name="edit-mode" value="row" checked> Row</label>
-      <label><input type="radio" name="edit-mode" value="round"> Round</label>
+      <label><input type="radio" name="edit-mode" value="row" checked> Rows</label>
+      <label><input type="radio" name="edit-mode" value="round"> Centre-out</label>
     </div>
 
     <div id="edit-row-controls" class="field-group">
@@ -230,7 +230,7 @@
 
     <div id="edit-error" class="warning" role="alert" hidden></div>
 
-    <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on for row/round mode switches.">
+    <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on when switching between Rows and Centre-out.">
       <input type="checkbox" id="edit-wipe">
       <span class="toggle-track"></span>
       Wipe

@@ -135,7 +135,7 @@ describe("patternDimensionError", () => {
             offsetX: 0,
             offsetY: 5,
             rounds: 2,
-        })).toMatch(/geometry/);
+        })).toMatch(/Centre-out pattern geometry/);
     });
 });
 

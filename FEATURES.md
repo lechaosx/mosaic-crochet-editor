@@ -16,7 +16,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Pattern modes
 
-- Two geometries: row and centre-out round. — **your decision**
+- The two pattern geometries are named **Rows** and **Centre-out**; their worked units remain rows and rounds. — **your decision**
 - Full, half, and quarter are authored extents: the complete centre-out chart, its bottom half, or its bottom-left quarter. They imply no transform. — **your decision**
 
 ## Drawing

@@ -47,8 +47,8 @@ The workspace separates document commands from authoring controls. On wide scree
 
 Click **Pattern** to open the dimensions inspector. Two modes:
 
-- **Row** — a rectangular grid worked row by row. Height includes the unnumbered bottom foundation; the row above it is Row 1.
-- **Round** — concentric rounds numbered from the innermost band outward. Set inner width / height / rounds, plus an authored extent:
+- **Rows** — a rectangular grid worked row by row. Height includes the unnumbered bottom foundation; the row above it is Row 1.
+- **Centre-out** — concentric rounds numbered from the innermost band outward. Set inner width / height / rounds, plus an authored extent:
   - **Full** — all four sides.
   - **Half** — bottom half only.
   - **Quarter** — bottom-left quarter only.
@@ -109,7 +109,7 @@ The **⚙** button in the document bar opens Settings in the inspector:
 
 - **Highlight opacity** — fades the ✕ / ! glyphs; 0 hides them entirely. Defaults to 100%.
 - **Show numbers** — worked-row numbers in the left gutter with the foundation left unnumbered; round numbers appear above half/quarter charts or in the corner cells of full charts.
-- **Lock cells with no valid overlay** — blocks paint on cells where an overlay stitch can't physically fit (top row in row mode; outermost ring and diagonal corners in round mode). Fixing an already-wrong cell still works.
+- **Lock cells with no valid overlay** — blocks paint on cells where an overlay stitch can't physically fit (top row in Rows; outermost ring and diagonal corners in Centre-out). Fixing an already-wrong cell still works.
 
 ### Zoom, pan, rotation
 
