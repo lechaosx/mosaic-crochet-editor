@@ -132,7 +132,8 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - Prototype conclusion: retain both workflows as explicit Colour, Overlay, and Arrange tool groups; defer global strategy state.
 - [ ] Prototype transform improvements against real sparse motifs without changing saved transform semantics.
   - [x] First add exact selection previews and direct repeat-distance manipulation to the current axes/repeat model.
-  - Separately test mask packing, directional counts, quarter-turn repeat, stagger, mirrored addressing, collision rules, and inverse editing in a pure evaluator.
+  - [x] Test mask packing, directional counts, spacing, stagger offsets, combined-grid collisions, and inverse source mapping in a pure evaluator.
+  - [ ] Add quarter-turn repeat and alternate mirrored addressing to the pure evaluator.
   - Preserve multiple Central axes; require a lossless migration before replacing them.
 - [ ] Prototype Live as row/round-level progress only.
   - Use the finished chart, current-row/round focus, current yarn, Done, Back, and exact local resume against a frozen structured plan.
