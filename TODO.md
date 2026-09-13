@@ -136,9 +136,10 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
   - [x] Add exact quarter-turn repeat and signed-parity alternate mirrored addressing to the pure evaluator.
   - Existing multiple Central axes remain untouched; replacing them still requires a lossless migration.
   - Prototype conclusion: the source-mapped Source → Around centre → Grid model is coherent; runtime integration remains incremental and must preserve current saved semantics.
-- [ ] Prototype Live as row/round-level progress only.
+- [x] Prototype Live as row/round-level progress only.
   - Use the finished chart, current-row/round focus, current yarn, Done, Back, and exact local resume against a frozen structured plan.
   - Validate during real crochet sessions before adding run/stitch tracking or chart-derived WIP rendering.
+  - Prototype conclusion: row/round boundaries provide a usable low-click baseline; richer compression-tree stepping and WIP rendering remain deferred until crochet-session feedback justifies them.
 - [ ] Prototype one deterministic composed-output preset in pure chart geometry.
   - Start with As authored plus one applicable Mirror-to-full or Rotate-to-full case.
   - Validate shared corners, yarn phase, paths, and source mapping before adding project state or Source/Output workspaces.

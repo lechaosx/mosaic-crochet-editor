@@ -108,6 +108,7 @@
       </header>
       <div class="instructions-tabs" role="tablist" aria-label="Instructions view">
         <button class="btn" id="instructions-overview-tab" type="button" role="tab" aria-controls="instructions-overview" aria-selected="true">Overview</button>
+        <button class="btn" id="instructions-live-tab" type="button" role="tab" aria-controls="instructions-live" aria-selected="false" disabled>Live</button>
         <button class="btn" id="instructions-text-tab" type="button" role="tab" aria-controls="instructions-text-panel" aria-selected="false">Text</button>
       </div>
       <p class="instructions-intro">Chart-derived work in crochet order. Foundations, transitions, joins, and finishing remain your choice.</p>
@@ -136,6 +137,19 @@
           <ol id="instructions-units" aria-label="Work sequence"></ol>
         </div>
       </section>
+      <section id="instructions-live" class="instructions-live" role="tabpanel" aria-labelledby="instructions-live-tab" hidden>
+        <article class="instructions-live-card">
+          <div class="instructions-live-progress" id="instructions-live-progress" role="status" aria-live="polite"></div>
+          <h2 id="instructions-live-unit"></h2>
+          <strong class="instructions-live-yarn" id="instructions-live-yarn"></strong>
+          <code id="instructions-live-text"></code>
+          <div class="instructions-live-actions">
+            <button class="btn" id="instructions-live-back" type="button">Back</button>
+            <button class="btn" id="instructions-live-done" type="button">Done</button>
+          </div>
+        </article>
+      </section>
+      <p id="instructions-live-unavailable" class="instructions-live-unavailable" hidden></p>
       <section id="instructions-text-panel" class="instructions-text-panel" role="tabpanel" aria-labelledby="instructions-text-tab" hidden>
         <dl class="instructions-legend" aria-label="Notation legend">
           <div><dt>sc</dt><dd>Single crochet</dd></div>

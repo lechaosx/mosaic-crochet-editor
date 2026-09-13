@@ -17,6 +17,8 @@ test("Instructions Overview focuses work units and returning preserves Design", 
 
     await page.getByRole("tab", { name: "Text" }).click();
     await page.keyboard.press("ArrowLeft");
+    await expect(page.getByRole("tab", { name: "Live" })).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("ArrowLeft");
     await expect(page.getByRole("tab", { name: "Overview" })).toHaveAttribute("aria-selected", "true");
     await page.getByRole("tab", { name: "Text" }).click();
     await expect(page.getByText("oc", { exact: true })).toBeVisible();
@@ -50,4 +52,42 @@ test("Instructions links blockers and labels unresolved text as a draft", async 
     await page.getByRole("tab", { name: "Text" }).click();
     await expect(page.getByRole("textbox", { name: "Compressed instructions" }))
         .toHaveValue(/Unresolved overlay at \(0, 0\)/);
+});
+
+test("Live advances by whole rows and resumes the exact instruction plan", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 0, 1);
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    const liveTab = page.getByRole("tab", { name: "Live" });
+    await expect(liveTab).toBeEnabled();
+    await liveTab.click();
+    await expect(page.getByRole("heading", { name: "Row 1" })).toBeVisible();
+    await expect(page.getByText("Yarn B", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Back one row" })).toBeDisabled();
+
+    await page.getByRole("button", { name: "Done with Row 1" }).click();
+    await expect(page.getByRole("heading", { name: "Row 2" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Back one row" })).toBeEnabled();
+
+    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Live" }).click();
+    await expect(page.getByRole("heading", { name: "Row 2" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Back to Design" }).click();
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Live" }).click();
+    await expect(page.getByRole("heading", { name: "Row 1" })).toBeVisible();
+});
+
+test("Live is unavailable while instruction blockers remain", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 0, 0);
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await expect(page.getByRole("tab", { name: "Live" })).toBeDisabled();
+    await expect(page.getByText("Resolve chart issues to use Live.")).toBeVisible();
 });

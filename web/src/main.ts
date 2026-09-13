@@ -15,7 +15,7 @@ import { addAxis, removeAxis, toggleAxisActive,
          axisOffCanvas } from "@mosaic/logic/symmetry";
 import { defaultRepeatGrid, repeatGridError, transformsToFlat } from "@mosaic/logic/repeat";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
-import { mountUI, UIHandle, SelectionMoveMode } from "./ui";
+import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
@@ -23,6 +23,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION } from "@mosaic/logic/pattern";
+import { fingerprintInstructionPlan, loadLiveProgress, saveLiveProgress } from "./live-progress";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -652,6 +653,7 @@ async function onInstructions() {
         dlg.setBlockers(issues);
         const session = startSession(dlg.alternate());
         const total = session.total();
+        const units: InstructionOverviewUnit[] = [];
         let count = 0;
         let unit = session.next();
         while (unit !== undefined) {
@@ -666,7 +668,9 @@ async function onInstructions() {
             const workedCoords = Array.from(unit.worked_coords());
             const yarn = unit.yarn() === InstructionYarn.A ? "A" : "B";
             unit.free();
-            dlg.appendUnit({ label, yarn, text, workedCoords });
+            const overviewUnit: InstructionOverviewUnit = { label, yarn, text, workedCoords };
+            units.push(overviewUnit);
+            dlg.appendUnit(overviewUnit);
             dlg.appendLine(text);
             dlg.setProgress(++count, total);
             await new Promise<void>(res => requestAnimationFrame(() => res()));
@@ -676,6 +680,12 @@ async function onInstructions() {
             dlg.appendLine(`Unresolved overlay at (${issue.x}, ${issue.y}): no chart work step can be derived.`);
         }
         session.free();
+        if (!cancelled && myRun === runId) {
+            const fingerprint = fingerprintInstructionPlan(units);
+            dlg.setLivePlan(units, loadLiveProgress(fingerprint, units.length), completedUnits => {
+                saveLiveProgress(fingerprint, completedUnits);
+            });
+        }
         dlg.endProgress();
         dlg.setBusy(false);
     };

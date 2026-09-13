@@ -118,6 +118,8 @@ export interface InstructionsView {
     appendUnit:  (unit: InstructionOverviewUnit) => void;
     clearText:   () => void;
     clearUnits:  () => void;
+    setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
+                  onProgress: (completedUnits: number) => void) => void;
     setBlockers: (issues: InstructionIssue[]) => void;
     alternate:   () => boolean;
     setBusy:     (busy: boolean) => void;
@@ -665,9 +667,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const canvasArea     = el("canvas").parentElement as HTMLElement;
     const authoringDock  = el("authoring-dock");
     const overviewPanel  = el("instructions-overview");
+    const livePanel      = el("instructions-live");
     const textPanel      = el("instructions-text-panel");
     const overviewTab    = el<HTMLButtonElement>("instructions-overview-tab");
+    const liveTab        = el<HTMLButtonElement>("instructions-live-tab");
     const textTab        = el<HTMLButtonElement>("instructions-text-tab");
+    const instructionsChart = el("instructions-canvas").parentElement as HTMLElement;
     const instructionsTitle = el("instructions-title");
     const unitsList      = el<HTMLOListElement>("instructions-units");
     const focusStatus    = el("instructions-focus-status");
@@ -677,6 +682,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const blockerSummary = el("instructions-blocker-summary");
     const issuesList     = el("instructions-issues");
     const alternateChk   = el<HTMLInputElement>("alternate");
+    const liveUnavailable = el("instructions-live-unavailable");
+    const liveProgress   = el("instructions-live-progress");
+    const liveUnit       = el("instructions-live-unit");
+    const liveYarn       = el("instructions-live-yarn");
+    const liveText       = el("instructions-live-text");
+    const liveBack       = el<HTMLButtonElement>("instructions-live-back");
+    const liveDone       = el<HTMLButtonElement>("instructions-live-done");
     el("export-copy").addEventListener("click", () =>
         navigator.clipboard.writeText(exportText.value)
     );
@@ -687,25 +699,41 @@ export function mountUI(cb: UICallbacks): UIHandle {
         URL.revokeObjectURL(url);
     });
 
-    function selectInstructionsTab(tab: "overview" | "text") {
-        const overview = tab === "overview";
-        overviewPanel.hidden = !overview;
-        textPanel.hidden = overview;
-        overviewTab.setAttribute("aria-selected", String(overview));
-        textTab.setAttribute("aria-selected", String(!overview));
-        overviewTab.tabIndex = overview ? 0 : -1;
-        textTab.tabIndex = overview ? -1 : 0;
-        instructionsTitle.textContent = overview ? "Overview" : "Text";
+    type InstructionsTab = "overview" | "live" | "text";
+    let instructionsTabChanged: ((tab: InstructionsTab) => void) | null = null;
+
+    function selectInstructionsTab(tab: InstructionsTab) {
+        if (tab === "live" && liveTab.disabled) return;
+        overviewPanel.hidden = tab !== "overview";
+        livePanel.hidden = tab !== "live";
+        textPanel.hidden = tab !== "text";
+        if (tab === "overview") overviewPanel.prepend(instructionsChart);
+        if (tab === "live") livePanel.prepend(instructionsChart);
+        for (const [name, button] of [
+            ["overview", overviewTab], ["live", liveTab], ["text", textTab],
+        ] as const) {
+            const selected = tab === name;
+            button.setAttribute("aria-selected", String(selected));
+            button.tabIndex = selected ? 0 : -1;
+        }
+        instructionsTitle.textContent = tab === "overview" ? "Overview" : tab === "live" ? "Live" : "Text";
+        instructionsTabChanged?.(tab);
     }
     overviewTab.addEventListener("click", () => selectInstructionsTab("overview"));
+    liveTab.addEventListener("click", () => selectInstructionsTab("live"));
     textTab.addEventListener("click", () => selectInstructionsTab("text"));
-    for (const tab of [overviewTab, textTab]) {
+    for (const tab of [overviewTab, liveTab, textTab]) {
         tab.addEventListener("keydown", event => {
             if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
             event.preventDefault();
-            const overview = event.key === "ArrowLeft" || event.key === "Home";
-            selectInstructionsTab(overview ? "overview" : "text");
-            (overview ? overviewTab : textTab).focus();
+            const enabled = [overviewTab, liveTab, textTab].filter(button => !button.disabled);
+            const current = enabled.indexOf(tab);
+            const target = event.key === "Home" ? enabled[0]
+                : event.key === "End" ? enabled.at(-1)!
+                : enabled[(current + (event.key === "ArrowLeft" ? -1 : 1) + enabled.length) % enabled.length];
+            const name = target === overviewTab ? "overview" : target === liveTab ? "live" : "text";
+            selectInstructionsTab(name);
+            target.focus();
         });
     }
 
@@ -715,6 +743,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const focusListeners: ((coords: number[], label: string) => void)[] = [];
         const issueListeners: ((issue: InstructionIssue) => void)[] = [];
         let activeFocus: HTMLButtonElement | null = null;
+        let liveUnits: readonly InstructionOverviewUnit[] = [];
+        let liveCompleted = 0;
+        let liveProgressChanged = (_completedUnits: number) => {};
+        let isBusy = true;
+        let hasBlockers = false;
         const inspectorWasHidden = inspectorHost.hidden;
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
@@ -725,8 +758,69 @@ export function mountUI(cb: UICallbacks): UIHandle {
         inspectorHost.hidden = true;
         el("btn-export").setAttribute("aria-current", "page");
 
+        const workKind = () => liveUnits[0]?.label.startsWith("Round") ? "round" : "row";
+        const focusLive = (unit: InstructionOverviewUnit) => {
+            focusListeners.forEach(f => f(unit.workedCoords, unit.label));
+        };
+        const renderLive = () => {
+            const total = liveUnits.length;
+            liveProgress.textContent = `${liveCompleted} of ${total} complete`;
+            liveBack.disabled = liveCompleted === 0;
+            liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
+            if (liveCompleted >= total) {
+                liveUnit.textContent = "Pattern complete";
+                liveYarn.hidden = true;
+                liveText.textContent = "All chart-derived work units are complete.";
+                liveDone.hidden = true;
+                if (total > 0) focusLive(liveUnits[total - 1]);
+                return;
+            }
+            const unit = liveUnits[liveCompleted];
+            liveUnit.textContent = unit.label;
+            liveYarn.hidden = false;
+            liveYarn.textContent = `Yarn ${unit.yarn}`;
+            liveText.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
+            liveDone.hidden = false;
+            liveDone.setAttribute("aria-label", `Done with ${unit.label}`);
+            focusLive(unit);
+        };
+        const refreshLiveAvailability = () => {
+            liveTab.disabled = isBusy || hasBlockers || liveUnits.length === 0;
+            if (hasBlockers) {
+                liveUnavailable.textContent = "Resolve chart issues to use Live.";
+                liveUnavailable.hidden = false;
+            } else if (!isBusy && liveUnits.length === 0) {
+                liveUnavailable.textContent = "No rows or rounds are available for Live.";
+                liveUnavailable.hidden = false;
+            } else {
+                liveUnavailable.hidden = true;
+            }
+            if (liveTab.disabled && liveTab.getAttribute("aria-selected") === "true") {
+                selectInstructionsTab("overview");
+            }
+        };
+        instructionsTabChanged = tab => {
+            if (tab === "live" && liveUnits.length > 0) renderLive();
+            if (tab === "overview") activeFocus?.click();
+        };
+        liveBack.onclick = () => {
+            if (liveCompleted === 0) return;
+            liveCompleted--;
+            liveProgressChanged(liveCompleted);
+            renderLive();
+        };
+        liveDone.onclick = () => {
+            if (liveCompleted >= liveUnits.length) return;
+            liveCompleted++;
+            liveProgressChanged(liveCompleted);
+            renderLive();
+        };
+
         const close = () => {
             alternateChk.removeEventListener("change", onAlt);
+            instructionsTabChanged = null;
+            liveBack.onclick = null;
+            liveDone.onclick = null;
             instructions.hidden = true;
             canvasArea.hidden = false;
             authoringDock.hidden = false;
@@ -776,8 +870,19 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 unitsList.replaceChildren();
                 activeFocus = null;
                 focusStatus.textContent = "";
+                liveUnits = [];
+                liveCompleted = 0;
+                refreshLiveAvailability();
+            },
+            setLivePlan: (units, completedUnits, onProgress) => {
+                liveUnits = units;
+                liveCompleted = Math.min(Math.max(0, completedUnits), units.length);
+                liveProgressChanged = onProgress;
+                refreshLiveAvailability();
+                if (liveTab.getAttribute("aria-selected") === "true") renderLive();
             },
             setBlockers: (issues) => {
+                hasBlockers = issues.length > 0;
                 issuesList.replaceChildren();
                 exportWarning.hidden = issues.length === 0;
                 blockerSummary.textContent = issues.length === 1
@@ -801,11 +906,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
                     issuesList.append(button);
                     if (activeFocus === null) focus();
                 }
+                refreshLiveAvailability();
             },
             alternate: () => alternateChk.checked,
             setBusy: (busy) => {
+                isBusy = busy;
                 el<HTMLButtonElement>("export-copy")    .disabled = busy;
                 el<HTMLButtonElement>("export-download").disabled = busy;
+                refreshLiveAvailability();
             },
             onAlternate: (f) => altListeners.push(f),
             onUnitFocus: (f) => focusListeners.push(f),
