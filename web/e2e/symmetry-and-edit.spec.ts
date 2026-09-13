@@ -129,7 +129,7 @@ test("repeat grid copies live paint in both directions", async ({ page }) => {
     await page.locator("#repeat-copies-y").fill("0");
     await page.locator("label:has(#repeat-enabled)").click();
     await expect(page.locator("#repeat-enabled")).toBeChecked();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-pattern-v4")!).repeat))
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.repeat))
         .toEqual({ enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0 });
     await page.locator("#btn-sym-toggle").click();
 
@@ -304,7 +304,7 @@ test("Load rejects a future file without replacing the active session", async ({
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
-    const before = await page.evaluate(() => localStorage.getItem("mosaic-pattern-v4"));
+    const before = await page.evaluate(() => localStorage.getItem("mosaic-recovery"));
 
     const dialogMessage = new Promise<string>(resolve => {
         page.once("dialog", async dialog => {
@@ -322,5 +322,5 @@ test("Load rejects a future file without replacing the active session", async ({
     });
 
     await expect(dialogMessage).resolves.toBe("This pattern uses unsupported .mcw version 3.");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-pattern-v4"))).toBe(before);
+    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
 });

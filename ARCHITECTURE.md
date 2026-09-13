@@ -79,7 +79,7 @@ Vite + TypeScript I/O shell. Imports `@mosaic/logic` and `@mosaic/wasm`.
 | `render.ts` | `RendererState` struct (canvas, ctx, view pan/zoom, animation state, colour cache) + `render`, `screenToPattern`, `fitToView`, `clampZoom`, `updateStatus` | free functions + state struct |
 | `gesture.ts` | Pointer-event state machine. `mountGestures(r, callbacks)` takes renderer state explicitly. | free function |
 | `ui.ts` | Toolbar wiring (tools, swatches, transforms, popovers, dialogs) + responsive toolbar layout | `mountUI` returns `UIHandle` |
-| `history.ts` | Undo/redo snapshot stack, localStorage-backed (`mosaic-history-v4`); takes/returns `SessionState` slices | free functions |
+| `history.ts` | Undo/redo snapshot stack, localStorage-backed (`mosaic-history`); takes/returns bounded `SessionState` slices | free functions |
 | `storage-io.ts` | Browser recovery storage plus file-picker/download I/O; delegates `.mcw` content to `@mosaic/logic/mcw` | free functions |
 | `pattern.ts` | DOM adapter: reads Edit popover inputs, calls `@mosaic/logic/pattern.applyEditSettings` | free function |
 | `dom.ts` | Small DOM helpers (`el`, `radioValue`, `readClampedInt`) | free functions |
@@ -147,7 +147,8 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
   | Display preferences | View rotation and visibility today; future theme, yarn differentiation, handedness, focus layout, and text wrapping | Browser-local; excluded from `.mcw` and project history |
   | Future Live progress | Confirmed crochet progress and progress-only Back boundaries | Browser-local recovery and a separate progress history; excluded from `.mcw` and project Undo/Redo |
 
-  Current recovery v4 stores these browser-local categories together; the ownership boundary governs future migrations and file-schema additions. — **your decision**
+  Recovery v5 physically separates document, workspace, and preferences. History v5 stores document, active selection, and the axis/repeat recipe as separate bounded fields; a future retained transform-source bitmap belongs to workspace recovery rather than every Undo snapshot. — **your decision** (ownership); **Agent's choice** (v5 envelopes)
+- Browser recovery and editor history use stable `mosaic-recovery` and `mosaic-history` keys with independently versioned payloads. Existing `mosaic-pattern-v4` and unversioned `mosaic-history-v4` payloads migrate to v5 after successful decoding; the legacy recovery remains when writing its migrated replacement fails. — **Agent's choice**
 - Single mutable owner: `Store` (class, in `store.ts`) owns `SessionState`. Direct mutation of `store.state` is blocked at the type level (`Readonly<SessionState>`); all writes go through `store.commit(mutate, opts?)`. — **your decision**
 - `commit` runs the chain: recompute highlight plan → push history (if `history`) → render (via registered renderer) → persist (via registered persister) → run observers. Defaults: recompute on, render on, history off, persist on. — **joint**
 - Paint preview commits set `persist: false`; the release commit writes both the single undo snapshot and the final recovery state. — **Agent's choice**
@@ -190,7 +191,7 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 ## Build & CI
 
 - `build:wasm` (wasm-pack) writes `wasm/pkg/`; `build:web` type-checks and writes the Vite bundle to `web/dist/`. `dev:rust` watches via `cargo-watch`. — **Agent's choice**
-- `@mosaic/logic` exports pure TypeScript (`store`, `selection`, `paint`, `pattern`, `symmetry`, `repeat`, `clipboard`, `storage` serialisation). `web/src/` keeps the I/O shell: `history.ts` (localStorage-backed undo), `storage-io.ts` (localStorage + file picker), DOM adapters. Stryker mutates only `logic/src/` — I/O paths are covered by E2E. — **joint**
+- `@mosaic/logic` exports pure TypeScript (`store`, `selection`, `paint`, `pattern`, `symmetry`, `repeat`, `clipboard`, packed storage, and the `.mcw` codec). `web/src/` keeps the I/O shell: `history.ts` (localStorage-backed undo), `storage-io.ts` (localStorage + file picker), DOM adapters. Stryker mutates only `logic/src/` — I/O paths are covered by E2E. — **joint**
 - `flake.nix` provides rustup, wasm-pack, bun, cargo-watch, plus `playwright-driver.browsers` and the env vars to point Playwright at the nixpkgs-built chromium-headless-shell (downloaded binaries don't link against system libs on NixOS). — **joint**
 - `rust-toolchain.toml`: nightly + `wasm32-unknown-unknown`. — **Agent's choice**
 - GitHub Actions: single `ci.yml` — `test-rust` enforces rustfmt and reports Clippy warnings before running Rust tests; warnings do not fail CI because floating nightly toolchains can introduce new lints. `build-wasm` runs in parallel; `test-logic`, `test-io`, and `build-app` fan out from `build-wasm`; `test-e2e` runs against the `build-app` artifact; `deploy` is gated on all test jobs and reuses the `build-app` artifact. `test-logic` runs typecheck (`tsc -p logic/tsconfig.json`) before tests, enforcing the no-DOM boundary in CI. — **Agent's choice** (workflow shape); **your decision** (warning policy and no custom packaging)

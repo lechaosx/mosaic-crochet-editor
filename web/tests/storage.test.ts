@@ -54,17 +54,17 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
     test("wrong version → null even with otherwise-valid payload", () => {
         const valid = rowSession(3, 3);
         saveToLocalStorage(valid);
-        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v4")!);
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         raw.version = 999;
-        localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
         expect(loadFromLocalStorage()).toBeNull();
     });
 
     test("saved sessions without repeat settings receive disabled defaults", () => {
         saveToLocalStorage(rowSession(3, 3));
-        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v4")!);
-        delete raw.repeat;
-        localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        delete raw.workspace.repeat;
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
         expect(loadFromLocalStorage()!.repeat).toEqual({
             enabled: false,
@@ -82,34 +82,34 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         const loaded = loadFromLocalStorage();
         expect(loaded!.liveTransforms).toBe(false);
 
-        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v4")!);
-        delete raw.liveTransforms;
-        localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        delete raw.workspace.liveTransforms;
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
         const migrated = loadFromLocalStorage();
         expect(migrated!.liveTransforms).toBe(true);
     });
 
     test("missing state → null", () => {
-        localStorage.setItem("mosaic-pattern-v4", JSON.stringify({ version: 4, pixels: "" }));
+        localStorage.setItem("mosaic-recovery", JSON.stringify({ version: 5 }));
         expect(loadFromLocalStorage()).toBeNull();
     });
 
     test("malformed JSON → null and clears the bad blob", () => {
-        localStorage.setItem("mosaic-pattern-v4", "{not json");
+        localStorage.setItem("mosaic-recovery", "{not json");
         expect(loadFromLocalStorage()).toBeNull();
-        expect(localStorage.getItem("mosaic-pattern-v4")).toBeNull();
+        expect(localStorage.getItem("mosaic-recovery")).toBeNull();
     });
 
     test("oversized saved dimensions are rejected before pixel allocation", () => {
         const valid = rowSession(3, 3);
         saveToLocalStorage(valid);
-        const raw = JSON.parse(localStorage.getItem("mosaic-pattern-v4")!);
-        raw.state.canvasWidth = 1_048_577;
-        raw.state.canvasHeight = 1;
-        localStorage.setItem("mosaic-pattern-v4", JSON.stringify(raw));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        raw.document.state.canvasWidth = 1_048_577;
+        raw.document.state.canvasHeight = 1;
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
         expect(loadFromLocalStorage()).toBeNull();
-        expect(localStorage.getItem("mosaic-pattern-v4")).toBeNull();
+        expect(localStorage.getItem("mosaic-recovery")).toBeNull();
     });
 
     test("non-square canvas with float round-trips correctly", () => {

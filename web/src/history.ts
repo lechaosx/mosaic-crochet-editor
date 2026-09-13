@@ -9,10 +9,12 @@ import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@
 import { defaultAxes } from "@mosaic/logic/symmetry";
 import { defaultRepeatGrid, repeatGridError } from "@mosaic/logic/repeat";
 
-const LS_KEY = "mosaic-history-v4";
-const MAX    = 64;
+const HISTORY_KEY        = "mosaic-history";
+const LEGACY_HISTORY_KEY = "mosaic-history-v4";
+const HISTORY_VERSION    = 5;
+const MAX                = 64;
 
-interface Snapshot {
+interface SnapshotV4 {
     state:   PatternState;
     pixels:  string;             // 1-bit-packed, base64
     float:   PackedFloat | null; // bbox-compact float (x/y/w/h + raw pixels)
@@ -21,26 +23,69 @@ interface Snapshot {
     colorA:  string;
     colorB:  string;
 }
+interface Snapshot {
+    document: {
+        state:  PatternState;
+        pixels: string;
+        colorA: string;
+        colorB: string;
+    };
+    selection: PackedFloat | null;
+    transforms: {
+        axes?:   Axis[];
+        repeat?: RepeatGrid;
+    };
+}
 interface HistoryBlob {
+    version:   5;
     snapshots: Snapshot[];
     index:     number;
 }
 
+function migrateHistory(value: unknown): HistoryBlob | null {
+    if (typeof value !== "object" || value === null) return null;
+    const data = value as Record<string, unknown>;
+    if (!Array.isArray(data.snapshots) || typeof data.index !== "number") return null;
+    if (data.version === HISTORY_VERSION) {
+        if (!data.snapshots.every(snapshot => typeof snapshot === "object" && snapshot !== null
+            && typeof (snapshot as Record<string, unknown>).document === "object")) return null;
+        return data as unknown as HistoryBlob;
+    }
+    if (data.version !== undefined) return null;
+    if (!data.snapshots.every(snapshot => typeof snapshot === "object" && snapshot !== null
+        && (snapshot as Record<string, unknown>).state)) return null;
+    return {
+        version: HISTORY_VERSION,
+        snapshots: (data.snapshots as SnapshotV4[]).map(snapshot => ({
+            document: {
+                state: snapshot.state, pixels: snapshot.pixels,
+                colorA: snapshot.colorA, colorB: snapshot.colorB,
+            },
+            selection: snapshot.float,
+            transforms: { axes: snapshot.axes, repeat: snapshot.repeat },
+        })),
+        index: data.index,
+    };
+}
+
 function read(): HistoryBlob | null {
-    const raw = localStorage.getItem(LS_KEY);
+    const current = localStorage.getItem(HISTORY_KEY);
+    const sourceKey = current === null ? LEGACY_HISTORY_KEY : HISTORY_KEY;
+    const raw = current ?? localStorage.getItem(LEGACY_HISTORY_KEY);
     if (!raw) return null;
     try {
-        const h = JSON.parse(raw);
-        if (!h || !Array.isArray(h.snapshots) || typeof h.index !== "number") return null;
-        if (h.snapshots.length > 0 && (typeof h.snapshots[0] !== "object" || !h.snapshots[0].state)) return null;
-        return h as HistoryBlob;
+        const history = migrateHistory(JSON.parse(raw));
+        if (!history) return null;
+        if (sourceKey === LEGACY_HISTORY_KEY) write(history);
+        return history;
     } catch { return null; }
 }
 
 function write(h: HistoryBlob) {
     while (true) {
         try {
-            localStorage.setItem(LS_KEY, JSON.stringify(h));
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+            localStorage.removeItem(LEGACY_HISTORY_KEY);
             return;
         } catch (e) {
             if (!(e instanceof DOMException) || e.name !== "QuotaExceededError") throw e;
@@ -53,26 +98,25 @@ function write(h: HistoryBlob) {
 
 function snapshotFrom(s: Readonly<SessionState>): Snapshot {
     return {
-        state:  s.pattern,
-        pixels: packPixels(s.pixels),
-        float:  s.float ? packFloat(s.float) : null,
-        axes:   s.axes,
-        repeat: s.repeat,
-        colorA: s.colorA,
-        colorB: s.colorB,
+        document: {
+            state: s.pattern, pixels: packPixels(s.pixels),
+            colorA: s.colorA, colorB: s.colorB,
+        },
+        selection: s.float ? packFloat(s.float) : null,
+        transforms: { axes: s.axes, repeat: s.repeat },
     };
 }
 
 export function historySave(s: Readonly<SessionState>) {
-    const h    = read() ?? { snapshots: [], index: -1 };
+    const h    = read() ?? { version: HISTORY_VERSION, snapshots: [], index: -1 };
     const snap = snapshotFrom(s);
     const head = h.index >= 0 ? h.snapshots[h.index] : null;
-    if (head && head.pixels === snap.pixels
-            && JSON.stringify(head.float) === JSON.stringify(snap.float)
-            && JSON.stringify(head.axes) === JSON.stringify(snap.axes)
-            && JSON.stringify(head.repeat) === JSON.stringify(snap.repeat)
-            && head.colorA === snap.colorA && head.colorB === snap.colorB
-            && JSON.stringify(head.state) === JSON.stringify(snap.state)) {
+    if (head && head.document.pixels === snap.document.pixels
+            && JSON.stringify(head.selection) === JSON.stringify(snap.selection)
+            && JSON.stringify(head.transforms) === JSON.stringify(snap.transforms)
+            && head.document.colorA === snap.document.colorA
+            && head.document.colorB === snap.document.colorB
+            && JSON.stringify(head.document.state) === JSON.stringify(snap.document.state)) {
         return;
     }
     h.snapshots.splice(h.index + 1);
@@ -83,7 +127,7 @@ export function historySave(s: Readonly<SessionState>) {
 }
 
 export function historyReset(s: Readonly<SessionState>) {
-    write({ snapshots: [snapshotFrom(s)], index: 0 });
+    write({ version: HISTORY_VERSION, snapshots: [snapshotFrom(s)], index: 0 });
 }
 
 export function historyEnsureInitialized(s: Readonly<SessionState>) {
@@ -106,17 +150,17 @@ export interface Restored {
 
 function restoredAt(h: HistoryBlob): Restored {
     const s = h.snapshots[h.index];
-    const repeat = s.repeat ?? defaultRepeatGrid();
+    const repeat = s.transforms.repeat ?? defaultRepeatGrid();
     return {
-        pattern: s.state,
-        pixels:  unpackPixels(s.pixels, s.state),
-        float:   s.float ? unpackFloat(s.float) : null,
+        pattern: s.document.state,
+        pixels:  unpackPixels(s.document.pixels, s.document.state),
+        float:   s.selection ? unpackFloat(s.selection) : null,
         // Pre-upgrade snapshots have no axes; current fresh sessions also
         // default to an empty list.
-        axes:    s.axes ?? defaultAxes(s.state.canvasWidth, s.state.canvasHeight),
+        axes:    s.transforms.axes ?? defaultAxes(s.document.state.canvasWidth, s.document.state.canvasHeight),
         repeat:  repeatGridError(repeat) ? defaultRepeatGrid() : repeat,
-        colorA:  s.colorA,
-        colorB:  s.colorB,
+        colorA:  s.document.colorA,
+        colorB:  s.document.colorB,
     };
 }
 

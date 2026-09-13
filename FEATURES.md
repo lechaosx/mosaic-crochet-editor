@@ -46,7 +46,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Inner-hole cells behave as outside-the-canvas — never lifted into a float, never affected by paint through one, never outlined. A float can partially or fully extend off-canvas (e.g. after moving it to the edge); off-canvas cells are invisible and skipped on anchor. — **your decision**
 - **Marquee rendering**: marching-ants outline along the float's shifted mask boundary, one continuous closed loop per connected component (dashes flow around the perimeter rather than restarting per cell-edge). Drawn in the palette-aware `contrastingColor`, animated as discrete jumps (~8 ticks/sec, dash-offset snapped to 3-screen-px steps), speed zoom-independent. During a Select drag a static unclamped rect outline overlays the same style; in replace mode the existing float's outline is hidden during the drag. — **your decision**
 - **Live highlights**: `store.plan` is recomputed from `visiblePixels(state)` on every commit, so the ✕ / ! markers reflect the float's current position automatically — no per-frame WASM rebuild. — **your decision**
-- **Persistence**: the float is *session* state — it lives in `SessionState`, history snapshots, and localStorage (`mosaic-pattern-v4` schema) so it survives refresh. It is never written to `.mcw` files (still v2 schema) or to export output: `onSave` / `onExport` bake the float into a throwaway snapshot for the file/session and leave the live float alone, so the marquee persists across save. — **your decision**
+- **Persistence**: the float is *session* state — it lives in `SessionState`, history snapshots, and browser recovery so it survives refresh. It is never written to `.mcw` files (still v2 schema) or to export output: `onSave` / `onExport` bake the float into a throwaway snapshot for the file/session and leave the live float alone, so the marquee persists across save. — **your decision**
 - **Canvas resize with an active float**: `onEditChange` bakes the float into the source pixels via `visiblePixels` before passing to the resize, then drops the float (its mask coords would be invalid in the new geometry). Content carries across; selection state doesn't. — **your decision**
 - **Keyboard shortcuts summary**:
   - `Ctrl+A` — lift all paintable cells into float. `Ctrl+Shift+A` / `Esc` — anchor and clear.
@@ -108,7 +108,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## History
 
 - Up to 64 history states per session. — **Agent's choice**
-- History survives page refresh — snapshots persist to `localStorage` (1-bit packed, keyed under `mosaic-history-v4`). On refresh the saved stack is restored as-is. — **your decision**
+- History survives page refresh — independently versioned snapshots persist to `localStorage` under the stable `mosaic-history` key. — **your decision** (persistence); **Agent's choice** (versioned envelope and key)
 - Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
 - Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
 - Symmetry-axis and repeat-grid state are part of undo. Undo restores the axis list, every axis position, and the repeat settings. — **your decision**
@@ -118,6 +118,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Editor session state, including axes, repeat settings, live-transform mode, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (transform lifetime)
 - A continuous paint stroke renders every update but writes session recovery once on release. — **Agent's choice**
+- Legacy v4 recovery and Undo data migrate once into independently versioned v5 envelopes; a failed recovery migration write keeps the usable legacy copy. — **Agent's choice**
 
 ## Save / Load / Export
 

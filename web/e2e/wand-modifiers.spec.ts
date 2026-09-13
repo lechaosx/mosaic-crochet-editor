@@ -39,18 +39,18 @@ test("one wand sweep creates one undoable selection edit", async ({ page }) => {
     await clickCell(page, 4, 1);
     await page.keyboard.press("w");
     const historyBefore = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
     );
 
     await dragCells(page, 0, 1, 4, 1);
 
     expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
     )).toBe(historyBefore + 1);
 
     await page.keyboard.press("Control+z");
     expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-pattern-v4")!).float,
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float,
     )).toBeNull();
     for (const x of [0, 4]) {
         const cell = await cellCoord(page, x, 1);

@@ -9,7 +9,7 @@ test("continuous paint writes recovery once when the stroke completes", async ({
         const setItem = Storage.prototype.setItem;
         let patternWrites = 0;
         Storage.prototype.setItem = function (key, value) {
-            if (key === "mosaic-pattern-v4") patternWrites++;
+            if (key === "mosaic-recovery") patternWrites++;
             return setItem.call(this, key, value);
         };
         Object.defineProperty(window, "__patternWriteCount", { get: () => patternWrites });

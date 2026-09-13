@@ -68,11 +68,11 @@ describe("historySave / historyReset", () => {
 
     test("invalid repeat settings in persisted history restore disabled defaults", () => {
         historyReset(rowSession(3, 3));
-        const raw = JSON.parse(localStorage.getItem("mosaic-history-v4")!);
-        raw.snapshots[0].repeat = {
+        const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
+        raw.snapshots[0].transforms.repeat = {
             enabled: true, tileWidth: 0, tileHeight: 1, copiesX: 1, copiesY: 1,
         };
-        localStorage.setItem("mosaic-history-v4", JSON.stringify(raw));
+        localStorage.setItem("mosaic-history", JSON.stringify(raw));
 
         expect(historyPeek()!.repeat).toEqual({
             enabled: false,

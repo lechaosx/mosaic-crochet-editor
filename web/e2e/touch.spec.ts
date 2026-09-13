@@ -28,7 +28,7 @@ test("system pointer cancellation restores the stroke without adding history", a
 
     expect(await pixelRGB(page, point.cx, point.cy)).toEqual(before);
     expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
     )).toBe(1);
 });
 
@@ -56,7 +56,7 @@ test("two-finger drag and pinch changes the view without leaving a paint mark", 
     const source = await cellCoord(page, 1, 1);
     expect(await pixelRGB(page, source.cx, source.cy)).not.toEqual([0, 0, 0]);
     expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history-v4")!).snapshots.length,
+        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
     )).toBe(1);
 });
 
