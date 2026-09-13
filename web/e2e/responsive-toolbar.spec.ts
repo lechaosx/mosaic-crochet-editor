@@ -21,6 +21,7 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     await bootApp(page);
 
     await expectTargetsAtLeast(page, 44);
+    await expect(page.locator(".dock-group-label").first()).toBeHidden();
     const viewButtons = page.getByRole("group", { name: "Canvas view" }).getByRole("button");
     for (let i = 0; i < await viewButtons.count(); i++) {
         const box = await viewButtons.nth(i).boundingBox();
@@ -69,6 +70,9 @@ test("wide layouts use a document bar, left tool rail, and pinned inspector colu
     await page.setViewportSize({ width: 1280, height: 800 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 36);
+    await expect(page.getByText("Colour", { exact: true })).toBeVisible();
+    await expect(page.getByText("Overlay", { exact: true })).toBeVisible();
+    await expect(page.getByText("Arrange", { exact: true })).toBeVisible();
 
     const pencilBox = await page.locator("#tool-pencil").boundingBox();
     expect(pencilBox!.width).toBeLessThan(44);

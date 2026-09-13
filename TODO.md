@@ -126,9 +126,10 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md).
 
 ### Stage 4 — Product prototypes and decision gates
 
-- [ ] Prototype Colour Design versus Stitch Placement with concrete tasks and tool outcomes.
+- [x] Prototype Colour Design versus Stitch Placement with concrete tasks and tool outcomes.
   - Test whether two persistent strategies are understood or whether explicit tool names/groups are sufficient.
   - Do not add strategy state, persistence, or strategy-sensitive transforms until behavior is unambiguous and validated.
+  - Prototype conclusion: retain both workflows as explicit Colour, Overlay, and Arrange tool groups; defer global strategy state.
 - [ ] Prototype transform improvements against real sparse motifs without changing saved transform semantics.
   - First add exact previews and direct manipulation to the current axes/repeat model.
   - Separately test mask packing, directional counts, quarter-turn repeat, stagger, mirrored addressing, collision rules, and inverse editing in a pure evaluator.

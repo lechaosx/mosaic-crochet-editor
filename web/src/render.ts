@@ -19,14 +19,14 @@ const ANTS_SCREEN_PX_PER_SEC = 24;
 const ANTS_STEP_PX = 3;
 
 const TOOL_LABELS = {
-    pencil: "Pencil",
-    fill: "Fill",
-    eraser: "Eraser",
-    invert: "Invert",
-    overlay: "Overlay",
-    select: "Select",
-    wand: "Magic wand",
-    move: "Move",
+    pencil: "Colour · Pencil",
+    fill: "Colour · Fill",
+    eraser: "Colour · Eraser",
+    invert: "Colour · Invert",
+    overlay: "Overlay placement",
+    select: "Arrange · Select",
+    wand: "Arrange · Magic wand",
+    move: "Arrange · Move",
 } as const;
 
 // `PlanDir` → outward offset in pattern coords. Single source of truth for

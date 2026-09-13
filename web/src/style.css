@@ -137,6 +137,8 @@ input  { font: inherit; color: inherit; }
 
 .dock-group { flex-wrap: wrap; }
 
+.dock-group-label { display: none; }
+
 .document-bar--compact .g-file {
   width: 100%;
   flex-wrap: wrap;
@@ -200,6 +202,15 @@ input  { font: inherit; color: inherit; }
   .dock-group {
     flex-direction: column;
     flex-wrap: nowrap;
+  }
+
+  .dock-group-label {
+    display: block;
+    padding-inline: var(--space-1);
+    color: var(--fg-2);
+    font-size: var(--font-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .dock-group + .dock-group {

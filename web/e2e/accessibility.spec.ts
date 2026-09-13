@@ -3,7 +3,9 @@ import { bootApp, cellCoord, clickCell } from "./_helpers";
 
 test("active tool and yarn expose their selected state", async ({ page }) => {
     await bootApp(page);
-    await expect(page.getByRole("group", { name: "Paint tools" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Colour tools" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Overlay tools" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Arrange tools" })).toBeVisible();
     const pencil = page.getByRole("button", { name: "Pencil" });
     const fill = page.getByRole("button", { name: "Fill" });
     const primary = page.getByRole("button", { name: "Yarn A", exact: true });
@@ -44,13 +46,16 @@ test("context strip follows the active tool, yarn, selection, and transforms", a
     await bootApp(page);
     const status = page.locator("#status");
 
-    await expect(status).toContainText("Pencil");
+    await expect(status).toContainText("Colour · Pencil");
     await expect(status).toContainText("Yarn A");
 
     await page.getByRole("button", { name: "Fill" }).click();
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
-    await expect(status).toContainText("Fill");
+    await expect(status).toContainText("Colour · Fill");
     await expect(status).toContainText("Yarn B");
+
+    await page.getByRole("button", { name: "Overlay" }).click();
+    await expect(status).toContainText("Overlay placement");
 
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);

@@ -134,7 +134,9 @@ When a canvas action cannot proceed, the context strip explains the immediate ca
 
 ### Responsive workspace
 
-Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. At 64rem and wider the authoring dock is a left rail and an open inspector is pinned beside the canvas. Below that width the dock wraps beneath the canvas and the inspector overlays it as a bottom sheet. The current phone dock keeps all eight authoring tools and both yarns visible across up to three rows; Pattern, Load, Save, Export, and Settings move into **More**. Responsive recomposition moves the same controls without changing their state or behavior.
+Authoring is tool-led rather than controlled by a global strategy switch. **Colour** contains Pencil, Fill, Eraser, and Invert; **Overlay** places the chart-required overlay operation; **Arrange** contains Select, Magic wand, Move, and Mirror & Repeat. The canvas context identifies the active group and tool. Wide tool rails show group headings, while compact layouts omit the headings and retain the same ordered controls and active-context text.
+
+Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. At 64rem and wider the authoring dock is a left rail and an open inspector is pinned beside the canvas. Below that width the dock wraps beneath the canvas and the inspector overlays it as a bottom sheet. The current phone dock keeps all eight authoring tools and both yarns visible across up to three rows; Pattern, Load, Save, Instructions, and Settings move into **More**. Responsive recomposition moves the same controls without changing their state or behavior.
 
 ### Keyboard shortcuts
 

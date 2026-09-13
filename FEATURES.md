@@ -142,6 +142,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Input model
 
+- Colour editing, Overlay placement, and Arrange operations are explicit tool groups rather than persistent global authoring strategies. Wide rails show the group headings; compact layouts preserve the same tool order and identify the active intent in the canvas context. — **your decision** (retain both colour and overlay workflows); **Agent's choice** (tool-led grouping instead of strategy state)
 - Single pointer-event path for mouse, pen, and touch. — **Agent's choice**
 - Active tool and yarn controls expose pressed state; visually styled radios and switches retain native focus and keyboard behavior. — **Agent's choice**
 - Yarn A/B swatches are visibly labelled and expose a check marker plus pressed state for the active logical yarn. Tap, click, Enter, or Space selects; visible Edit follows the active yarn, while double-click or long-press edits a specific yarn directly. Swap exchanges the two colours as one undoable edit without changing pixel values or the active logical yarn. Right-click on the canvas temporarily uses the other yarn. — **your decision** (click + double-click + long-press, A/B semantics); **Agent's choice** (visible labels/actions, keyboard activation, unified pointer long-press)

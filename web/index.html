@@ -31,15 +31,21 @@
 
   <div class="workspace">
     <nav class="authoring-dock" id="authoring-dock" aria-label="Authoring tools">
-      <div class="dock-group g-paint" role="group" aria-label="Paint tools">
-        <button class="btn btn--icon" id="tool-pencil" title="Pencil (P)" aria-label="Pencil">✏️</button>
-        <button class="btn btn--icon" id="tool-fill"   title="Fill (F)"   aria-label="Fill">🪣</button>
-        <button class="btn btn--icon" id="tool-eraser"  title="Eraser (E) — restore natural; right-click adds overlay" aria-label="Eraser">🧹</button>
-        <button class="btn btn--icon" id="tool-overlay" title="Overlay (O) — paint ✕ stitches; right-click restores natural" aria-label="Overlay">✕</button>
-        <button class="btn btn--icon" id="tool-invert"  title="Invert (I)" aria-label="Invert">⇋</button>
+      <div class="dock-group g-paint" role="group" aria-label="Colour tools">
+        <span class="dock-group-label" aria-hidden="true">Colour</span>
+        <button class="btn btn--icon" id="tool-pencil" title="Pencil — set finished-square colour (P)" aria-label="Pencil">✏️</button>
+        <button class="btn btn--icon" id="tool-fill"   title="Fill a finished-colour region (F)" aria-label="Fill">🪣</button>
+        <button class="btn btn--icon" id="tool-eraser" title="Restore natural row or round colour (E); right-click adds overlay" aria-label="Eraser">🧹</button>
+        <button class="btn btn--icon" id="tool-invert" title="Invert finished-square colours (I)" aria-label="Invert">⇋</button>
       </div>
 
-      <div class="dock-group g-transform" role="group" aria-label="Transform">
+      <div class="dock-group g-overlay" role="group" aria-label="Overlay tools">
+        <span class="dock-group-label" aria-hidden="true">Overlay</span>
+        <button class="btn btn--icon" id="tool-overlay" title="Place a chart-required overlay (O); right-click removes it" aria-label="Overlay">✕</button>
+      </div>
+
+      <div class="dock-group g-transform" role="group" aria-label="Arrange tools">
+        <span class="dock-group-label" aria-hidden="true">Arrange</span>
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select">▭</button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand">✨</button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move">✥</button>
@@ -48,6 +54,7 @@
       </div>
 
       <div class="dock-group g-colors" role="group" aria-label="Yarns">
+        <span class="dock-group-label" aria-hidden="true">Yarns</span>
         <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Select Yarn A (1) — double-click or long-press to edit" aria-label="Yarn A" aria-pressed="true">
           <span class="swatch-label" aria-hidden="true">A</span>
           <span class="swatch-check" aria-hidden="true">✓</span>
