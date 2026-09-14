@@ -429,7 +429,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setAxes(axes: ReadonlyArray<Axis>) {
         // Axis lists stay small in normal editor use, so rebuilding avoids
         // stateful DOM diffing without affecting interaction latency.
-        symList.replaceChildren(...axes.map(a => {
+        symList.replaceChildren(...axes.map((a, index) => {
             const row = document.createElement("div");
             row.className = "sym-list-row" + (a.active ? "" : " is-inactive");
             row.dataset.axisId = a.id;
@@ -449,16 +449,34 @@ export function mountUI(cb: UICallbacks): UIHandle {
             toggle.type = "button";
             toggle.title = `${a.active ? "Disable" : "Enable"} ${description}`;
             toggle.setAttribute("aria-label", toggle.title);
+            toggle.dataset.axisAction = "toggle";
             toggle.textContent = a.active ? "●" : "○";
-            toggle.addEventListener("click", () => cb.onToggleAxis(a.id));
+            toggle.addEventListener("click", () => {
+                cb.onToggleAxis(a.id);
+                const replacement = Array.from(symList.children)
+                    .find(child => (child as HTMLElement).dataset.axisId === a.id);
+                replacement?.querySelector<HTMLButtonElement>("[data-axis-action='toggle']")?.focus();
+            });
 
             const del = document.createElement("button");
             del.className = "btn btn--icon";
             del.type = "button";
             del.title = `Delete ${description}`;
             del.setAttribute("aria-label", del.title);
+            del.dataset.axisAction = "delete";
             del.textContent = "×";
-            del.addEventListener("click", () => cb.onDeleteAxis(a.id));
+            del.addEventListener("click", () => {
+                const fallback = axes[index + 1] ?? axes[index - 1];
+                cb.onDeleteAxis(a.id);
+                if (fallback) {
+                    const replacement = Array.from(symList.children)
+                        .find(child => (child as HTMLElement).dataset.axisId === fallback.id);
+                    replacement?.querySelector<HTMLButtonElement>("[data-axis-action='delete']")?.focus();
+                } else {
+                    const addButton = SYM_ADD_BUTTONS.find(button => button.key === a.kind)!;
+                    el<HTMLButtonElement>(addButton.id).focus();
+                }
+            });
 
             row.append(kind, pos, toggle, del);
             return row;

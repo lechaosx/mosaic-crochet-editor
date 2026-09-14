@@ -120,3 +120,23 @@ test("dynamic symmetry actions name their axis and position", async ({ page }) =
     await disable.click();
     await expect(page.getByRole("button", { name: "Enable vertical axis at x=4" })).toBeVisible();
 });
+
+test("dynamic symmetry actions retain keyboard focus after rebuilding the axis list", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: "Add vertical" }).click();
+    await page.getByRole("button", { name: "Add horizontal" }).click();
+
+    const disableVertical = page.getByRole("button", { name: "Disable vertical axis at x=4" });
+    await disableVertical.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("button", { name: "Enable vertical axis at x=4" })).toBeFocused();
+
+    const deleteVertical = page.getByRole("button", { name: "Delete vertical axis at x=4" });
+    await deleteVertical.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("button", { name: "Delete horizontal axis at y=4" })).toBeFocused();
+
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("button", { name: "Add horizontal" })).toBeFocused();
+});
