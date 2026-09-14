@@ -53,6 +53,21 @@ test("Instructions tab navigation does not move selected Design content", async 
     expect(await pixelRGB(page, original.cx, original.cy)).toEqual([0, 0, 0]);
 });
 
+test("Design shortcuts are inert while Instructions is open", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 0, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.keyboard.press("p");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Back to Design" }).click();
+
+    await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: /selected/ })).toBeVisible();
+});
+
 test("Instructions links blockers and labels unresolved text as a draft", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();

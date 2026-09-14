@@ -62,6 +62,7 @@ const instructionsViewport = makeViewport(document.getElementById("instructions-
 const instructionsCtx = instructionsViewport.canvas.getContext("2d", { alpha: false })!;
 const instructionsRs = makeRendererState();
 let instructionsPreviewStore: Store | null = null;
+let instructionsOpen = false;
 let selectionMoveMode: SelectionMoveMode = "move";
 let navigateLatched = false;
 let navigateMomentary = false;
@@ -584,8 +585,10 @@ async function onInstructions() {
         ? anchorIntoCanvas(store.state).pixels
         : store.state.pixels;
     const dlg = ui.openInstructions();
+    instructionsOpen = true;
     let cancelled = false;
     dlg.onClose(() => {
+        instructionsOpen = false;
         cancelled = true;
         instructionsPreviewStore = null;
         instructionsRs.focusPath = null;
@@ -1106,6 +1109,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
 document.addEventListener("keydown", e => {
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    if (instructionsOpen) return;
     if (e.code === "Space" && (t === document.body || t === viewport.canvas)) {
         e.preventDefault();
         if (!e.repeat) {
