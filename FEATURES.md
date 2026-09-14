@@ -100,7 +100,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 - Auto-fit zoom on every new pattern, file load, or refresh — accounts for the current rotation's bounding box so a rotated pattern still fits. — **Agent's choice**
 - Wheel zoom anchored at the cursor; pinch zoom anchored at the gesture midpoint. — **Agent's choice**
-- A persistent canvas cluster exposes Fit, Zoom out, rendered cell size, Zoom in, Navigate, Rotate view left/right, and Reset view rotation. Fit uses the whole pattern; button zoom preserves the canvas-centre focal cell. — **Agent's choice**
+- A persistent canvas cluster exposes Fit, Zoom out, rendered cell size, Zoom in, Navigate, Rotate view left/right, and Reset view rotation with the current signed angle. Fit uses the whole pattern; button zoom preserves the canvas-centre focal cell. — **Agent's choice**
 - Rotation is ±45° increments around the **pattern centre** (panned patterns rotate in place), with a 250 ms ease-out animation. Rotation accumulates unbounded; persists across refreshes. — **your decision**
 - Top-of-pattern indicator fades in during rotation animation, fades out once it settles. — **Agent's choice**
 - Pan is middle-mouse drag (desktop) or two-finger drag (touch); resets to centre on new pattern / load; not persisted across refresh. — **your decision** (reset on new); **Agent's choice** (input bindings)

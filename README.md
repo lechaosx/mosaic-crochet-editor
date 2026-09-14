@@ -121,7 +121,7 @@ The **⚙** button in the document bar opens Settings in the inspector:
 - **Fit**: centres the whole pattern and fits its current rotated bounds into the canvas.
 - **Pan**: choose **Navigate** and drag with mouse, pen, or one finger; choose an authoring tool to leave Navigate. Hold **Space** while dragging for momentary Navigate. Middle-mouse drag and two-finger drag remain direct shortcuts.
 - If the browser or operating system cancels an active drawing pointer, the unfinished edit is discarded. Starting a two-finger gesture also discards any unfinished one-finger edit before navigation begins.
-- **Rotate view**: ↺ / ↻ rotate ±45° around the pattern centre; **0°** resets the view rotation. A small accent triangle near the top edge of the pattern fades in during the animation so you can tell which way is "up".
+- **Rotate view**: ↺ / ↻ rotate ±45° around the pattern centre; the reset control shows the current signed angle and returns it to **0°**. A small accent triangle near the top edge of the pattern fades in during the animation so you can tell which way is "up".
 
 ### Saving
 

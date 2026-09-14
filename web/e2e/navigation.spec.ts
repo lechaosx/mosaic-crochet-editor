@@ -42,9 +42,19 @@ test("canvas view controls zoom, fit, rotate, and reset without editing", async 
     await controls.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(350);
     expect(Math.abs((await matrix(page)).b)).toBeGreaterThan(1);
-    await controls.getByRole("button", { name: "Reset view rotation" }).click();
+    const reset = controls.getByRole("button", { name: "Reset view rotation" });
+    await expect(reset).toHaveText("45°");
+    await expect(reset).toHaveAttribute("aria-label", "Reset view rotation from 45°");
+    await reset.click();
     await page.waitForTimeout(350);
     expect((await matrix(page)).b).toBeCloseTo(0, 4);
+    await expect(reset).toHaveText("0°");
+
+    await controls.getByRole("button", { name: "Rotate view left" }).click();
+    await page.waitForTimeout(350);
+    await expect(reset).toHaveText("−45°");
+    await expect(reset).toHaveAttribute("aria-label", "Reset view rotation from −45°");
+    await reset.click();
     expect(await historyLength(page)).toBe(history);
 });
 

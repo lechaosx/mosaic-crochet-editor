@@ -561,7 +561,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
         navigate.classList.toggle("btn--active", navigating);
         navigate.setAttribute("aria-pressed", String(navigating));
         el("canvas").classList.toggle("canvas--navigate", navigating);
-        el<HTMLButtonElement>("view-rotation-reset").disabled = rotation % 360 === 0;
+        const normalized = ((Math.round(rotation) % 360) + 360) % 360;
+        const signed = normalized > 180 ? normalized - 360 : normalized;
+        const angle = `${signed < 0 ? "−" : ""}${Math.abs(signed)}°`;
+        const reset = el<HTMLButtonElement>("view-rotation-reset");
+        reset.textContent = angle;
+        reset.disabled = signed === 0;
+        reset.setAttribute("aria-label", signed === 0 ? "Reset view rotation" : `Reset view rotation from ${angle}`);
+        reset.title = signed === 0 ? "Reset view rotation" : `Reset view rotation from ${angle}`;
     }
 
     /* ── Save / load / Instructions ─────────────────────────────────── */
