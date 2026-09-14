@@ -840,10 +840,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
             liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
             liveBack.title = `Back one ${workKind()}`;
             if (liveCompleted >= total) {
+                const doneHadFocus = document.activeElement === liveDone;
                 liveUnit.textContent = "Pattern complete";
                 liveYarn.hidden = true;
                 liveText.textContent = "All chart-derived work units are complete.";
                 liveDone.hidden = true;
+                if (doneHadFocus) liveUnit.focus();
                 if (total > 0) focusLive(liveUnits[total - 1]);
                 return;
             }

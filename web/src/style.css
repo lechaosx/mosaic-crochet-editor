@@ -813,6 +813,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .instructions-live-unavailable { margin: 0; }
 .instructions-live-save-warning { margin: 0; }
 .instructions-live-card h2 { color: var(--fg-0); font-size: var(--font-lg); }
+.instructions-live-card h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .instructions-live-yarn {
   align-self: flex-start;

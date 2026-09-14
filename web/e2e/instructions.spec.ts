@@ -132,7 +132,7 @@ test("Live completes and reopens a Centre-out round as one boundary", async ({ p
     await expect(back).toBeDisabled();
 
     await page.getByRole("button", { name: "Done with Round 1" }).click();
-    await expect(page.getByRole("heading", { name: "Pattern complete" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pattern complete" })).toBeFocused();
     await expect(live.getByRole("status")).toContainText("1 of 1 complete");
     await expect(back).toBeEnabled();
     await expect(page.getByRole("button", { name: /Done with/ })).toBeHidden();
