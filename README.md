@@ -146,6 +146,8 @@ Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts an
 
 Toolbar tools and yarn swatches expose their selected state to assistive technology. Yarn swatches respond to Enter and Space. Pattern choices and switches remain native radio buttons and checkboxes, so they can be focused and operated with the standard arrow and Space keys.
 
+The rendered Design canvas is exposed as **Editable pattern chart**, while the Instructions canvas is exposed as **Finished chart preview**. Authoring actions and current state remain available through the labelled tools and canvas context strip.
+
 | Action | Key |
 |---|---|
 | Pencil / Fill / Eraser / Overlay / Invert / Select / Wand / Move | **P** / **F** / **E** / **O** / **I** / **S** / **W** / **M** |

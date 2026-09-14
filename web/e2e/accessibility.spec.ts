@@ -3,6 +3,7 @@ import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
 
 test("active tool and yarn expose their selected state", async ({ page }) => {
     await bootApp(page);
+    await expect(page.getByRole("img", { name: "Editable pattern chart" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Colour tools" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Overlay tools" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Arrange tools" })).toBeVisible();

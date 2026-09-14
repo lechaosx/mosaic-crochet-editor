@@ -158,6 +158,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Composite keyboard widgets consume their navigation keys so Instructions tabs and compact More cannot also move selected canvas content. — **Agent's choice**
 - An actionable selection count opens a labelled Selection card on every input type. It exposes Move content, Duplicate content, Move selection area, Copy, Cut, Paste, and Deselect using the existing float semantics; after the selection is removed, a clipboard count keeps Paste discoverable. Move outcomes are temporary UI state and reset to Move content after leaving Move. — **Agent's choice**
 - The context strip reports why a canvas gesture was rejected when painting outside the selection, starting Move without or outside a selection, choosing a geometrically unavailable Overlay target, or editing a protected cell. Repeated rejection within one gesture is coalesced into one polite status announcement. — **Agent's choice**
+- Design and Instructions expose their rendered canvases as distinctly named chart images; labelled controls and context remain the operable interface. — **Agent's choice**
 
 ## Workspace shell
 
