@@ -298,4 +298,10 @@ test("explicit inspector opening moves focus to its first available control", as
 
     await page.getByRole("button", { name: "Pattern" }).click();
     await expect(page.getByRole("radio", { name: "Rows" })).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Pattern" }).click();
+    await expect(page.getByRole("radio", { name: "Rows" })).toBeFocused();
 });
