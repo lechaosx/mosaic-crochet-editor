@@ -267,10 +267,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
         if (hasSelection) {
             selectionTrigger.textContent = `${selectedCount} selected`;
             selectionTrigger.setAttribute("aria-label", `${selectedCount} selected`);
+            selectionTrigger.title = `Open actions for ${selectedCount} selected ${selectedCount === 1 ? "cell" : "cells"}`;
             selectionTitle.textContent = `Selection · ${selectedCount} ${selectedCount === 1 ? "cell" : "cells"}`;
         } else if (hasClip) {
             selectionTrigger.textContent = `Clipboard · ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`;
             selectionTrigger.setAttribute("aria-label", `Clipboard, ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`);
+            selectionTrigger.title = `Open clipboard actions for ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`;
             selectionTitle.textContent = "Clipboard";
         }
         selectionClipboard.textContent = hasSelection && hasClip
@@ -820,6 +822,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             liveProgress.textContent = `${liveCompleted} of ${total} complete`;
             liveBack.disabled = liveCompleted === 0;
             liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
+            liveBack.title = `Back one ${workKind()}`;
             if (liveCompleted >= total) {
                 liveUnit.textContent = "Pattern complete";
                 liveYarn.hidden = true;
@@ -835,6 +838,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             liveText.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
             liveDone.hidden = false;
             liveDone.setAttribute("aria-label", `Done with ${unit.label}`);
+            liveDone.title = `Done with ${unit.label}`;
             focusLive(unit);
         };
         const refreshLiveAvailability = () => {
@@ -899,6 +903,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 button.type = "button";
                 button.className = "instructions-unit";
                 button.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}`);
+                button.title = `Focus ${unit.label} path on the chart`;
                 button.setAttribute("aria-pressed", "false");
                 const meta = document.createElement("span");
                 meta.className = "instructions-unit-meta";
@@ -950,6 +955,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
                     button.type = "button";
                     button.className = "btn instructions-issue";
                     button.setAttribute("aria-label", `Focus unresolved overlay at ${issue.x}, ${issue.y}`);
+                    button.title = `Focus unresolved overlay at ${issue.x}, ${issue.y}`;
                     button.setAttribute("aria-pressed", "false");
                     button.textContent = `Unresolved overlay · ${issue.x}, ${issue.y}`;
                     const focus = () => {

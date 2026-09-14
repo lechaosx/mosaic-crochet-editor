@@ -182,3 +182,40 @@ test("Escape closes an inspector before applying a canvas shortcut", async ({ pa
     await expect(page.locator("#inspector-host")).toBeHidden();
     await expect(settings).toBeFocused();
 });
+
+test("visible buttons provide hover labels across editor surfaces", async ({ page }) => {
+    await bootApp(page);
+    const expectHoverLabels = async (surface: string) => {
+        const missing = await page.locator("button:visible").evaluateAll(buttons =>
+            buttons.filter(button => !button.title.trim())
+                .map(button => button.id || button.textContent?.trim() || "unnamed"),
+        );
+        expect(missing, surface).toEqual([]);
+    };
+
+    await expectHoverLabels("Design");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expectHoverLabels("Settings inspector");
+    await page.getByRole("button", { name: "Close inspector" }).click();
+
+    await page.keyboard.press("Control+a");
+    await page.getByRole("button", { name: /selected/ }).click();
+    await expectHoverLabels("Selection inspector");
+    await page.getByRole("button", { name: "Close inspector" }).click();
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await expectHoverLabels("Pattern inspector");
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: "Add vertical" }).click();
+    await expectHoverLabels("Transform inspector");
+    await page.getByRole("button", { name: "Close inspector" }).click();
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await expectHoverLabels("Instructions Overview");
+    await page.getByRole("tab", { name: "Text" }).click();
+    await expectHoverLabels("Instructions Text");
+    await page.getByRole("tab", { name: "Live" }).click();
+    await expectHoverLabels("Instructions Live");
+});
