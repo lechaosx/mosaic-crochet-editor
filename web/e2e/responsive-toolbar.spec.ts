@@ -34,10 +34,10 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 
     await page.getByRole("button", { name: "More" }).click();
-    await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Load", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await expect(page.getByRole("menuitem", { name: "Pattern" })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Load", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
+    await page.getByRole("menuitem", { name: "Pattern" }).click();
     await expect(page.locator("#inspector-host")).toBeVisible();
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 

@@ -1027,6 +1027,7 @@ function mountToolbarLayout() {
     const moreActions = el("more-actions");
     const fileActions = [el("btn-edit"), el("btn-load"), el("btn-save"), el("btn-export")];
     const viewActions = [el("btn-hl-toggle")];
+    const compactActions = [...fileActions, ...viewActions] as HTMLButtonElement[];
     let compact = false;
     let compactBelow = 0;
 
@@ -1036,6 +1037,7 @@ function mountToolbarLayout() {
         else {
             positionPopover(morePopover, moreButton, "left");
             morePopover.showPopover();
+            compactActions.find(button => !button.disabled)?.focus();
         }
     });
     morePopover.addEventListener("toggle", e => {
@@ -1045,16 +1047,34 @@ function mountToolbarLayout() {
         if ((e.target as Element).closest("button") && morePopover.matches(":popover-open"))
             morePopover.hidePopover();
     });
+    morePopover.addEventListener("keydown", e => {
+        if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
+        e.preventDefault();
+        const enabled = compactActions.filter(button => !button.disabled);
+        const current = enabled.indexOf(document.activeElement as HTMLButtonElement);
+        const target = e.key === "Home" ? enabled[0]
+            : e.key === "End" ? enabled.at(-1)!
+            : enabled[(current + (e.key === "ArrowUp" ? -1 : 1) + enabled.length) % enabled.length];
+        target.focus();
+    });
 
     function setCompact(next: boolean) {
         if (compact === next) return;
         compact = next;
         if (compact) {
+            for (const button of compactActions) {
+                button.setAttribute("role", "menuitem");
+                button.tabIndex = -1;
+            }
             moreActions.append(...fileActions, ...viewActions);
             moreButton.hidden = false;
         } else {
             fileGroup.prepend(...fileActions);
             viewGroup.append(...viewActions);
+            for (const button of compactActions) {
+                button.removeAttribute("role");
+                button.tabIndex = 0;
+            }
             moreButton.hidden = true;
             if (morePopover.matches(":popover-open")) morePopover.hidePopover();
         }

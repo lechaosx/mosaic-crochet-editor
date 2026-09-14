@@ -157,9 +157,35 @@ test("closing an inspector restores focus to the available authoring context", a
     await page.setViewportSize({ width: 360, height: 740 });
     const more = page.getByRole("button", { name: "More" });
     await more.click();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("menuitem", { name: "Pattern" }).click();
     await page.keyboard.press("Escape");
     await expect(more).toBeFocused();
+});
+
+test("compact More exposes and navigates a keyboard menu", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootApp(page);
+
+    const more = page.getByRole("button", { name: "More" });
+    await more.focus();
+    await page.keyboard.press("Enter");
+
+    const pattern = page.getByRole("menuitem", { name: "Pattern" });
+    await expect(pattern).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("menuitem", { name: "Load" })).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(page.getByRole("menuitem", { name: "Settings" })).toBeFocused();
+    await page.keyboard.press("Home");
+    await expect(pattern).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(more).toBeFocused();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await expect(page.getByRole("menuitem")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
 });
 
 test("Escape closes an inspector before applying a canvas shortcut", async ({ page }) => {
