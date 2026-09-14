@@ -168,6 +168,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
         if (panel === "transforms") cb.onTransformPopoverToggle(true);
     }
 
+    function focusFirstInspectorControl(panel: InspectorPanel) {
+        const controls = inspectorPanels[panel].querySelectorAll<HTMLElement>(
+            "button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
+        );
+        Array.from(controls).find(control => control.getClientRects().length > 0)?.focus();
+    }
+
     function closeInspector(commitPattern = false) {
         const panel = activeInspector;
         if (activeInspector === "pattern" && !commitPattern) cb.onEditCancel();
@@ -247,7 +254,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     selectionTrigger.addEventListener("click", event => {
         event.preventDefault();
         if (isInspectorOpen("selection")) closeInspector();
-        else openInspector("selection", "Selection");
+        else {
+            openInspector("selection", "Selection");
+            focusFirstInspectorControl("selection");
+        }
     });
     (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(mode =>
         modeButtons[mode].addEventListener("click", () => {
@@ -351,7 +361,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     symToggle.addEventListener("click", e => {
         e.preventDefault();
         if (isInspectorOpen("transforms")) closeInspector();
-        else openInspector("transforms", "Mirror & Repeat");
+        else {
+            openInspector("transforms", "Mirror & Repeat");
+            focusFirstInspectorControl("transforms");
+        }
     });
 
     SYM_ADD_BUTTONS.forEach(({ id, key }) =>
@@ -505,7 +518,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el("btn-hl-toggle").addEventListener("click", e => {
         e.preventDefault();
         if (isInspectorOpen("settings")) closeInspector();
-        else openInspector("settings", "Settings");
+        else {
+            openInspector("settings", "Settings");
+            focusFirstInspectorControl("settings");
+        }
     });
     el<HTMLInputElement>("hl-opacity")        .addEventListener("input",  cb.onHighlightChange);
     el<HTMLInputElement>("invalid-intensity") .addEventListener("input",  cb.onInvalidIntensityChange);
@@ -576,7 +592,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         if (isInspectorOpen("pattern")) return;
         openInspector("pattern", "Pattern");
         cb.onEditOpen();
-        editWidget.querySelector<HTMLElement>("input:not([disabled]), button:not([disabled])")?.focus();
+        focusFirstInspectorControl("pattern");
     });
 
     editApply.addEventListener("click", () => {

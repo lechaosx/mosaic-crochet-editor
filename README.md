@@ -83,7 +83,7 @@ Tap or click the selected-cell count in the context strip to open the Selection 
 
 A ✕ marks valid overlay-stitch positions; a ! marks invalid placements. Both are drawn in the *opposite* pixel colour so they stay visible against either palette, and they update as you draw.
 
-Close an inspector with its close button or **Escape**. Dismissal happens before canvas shortcuts and returns keyboard focus to the opener. If that opener is no longer available, focus returns to **More** on compact layouts or to the active authoring tool.
+Opening an inspector explicitly moves keyboard focus to its first available control. Close it with its close button or **Escape**. Dismissal happens before canvas shortcuts and returns focus to the opener. If that opener is no longer available, focus returns to **More** on compact layouts or to the active authoring tool.
 
 ### Symmetry and repeat
 

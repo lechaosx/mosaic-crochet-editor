@@ -219,3 +219,23 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await page.getByRole("tab", { name: "Live" }).click();
     await expectHoverLabels("Instructions Live");
 });
+
+test("explicit inspector opening moves focus to its first available control", async ({ page }) => {
+    await bootApp(page);
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByRole("slider", { name: "Highlight opacity" })).toBeFocused();
+    await page.keyboard.press("Escape");
+
+    await page.keyboard.press("Control+a");
+    await page.getByRole("button", { name: /selected/ }).click();
+    await expect(page.getByRole("button", { name: "Move content" })).toBeFocused();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await expect(page.getByRole("button", { name: "Add vertical" })).toBeFocused();
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await expect(page.getByRole("radio", { name: "Rows" })).toBeFocused();
+});
