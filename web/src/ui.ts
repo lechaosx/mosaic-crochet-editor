@@ -191,6 +191,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     el("inspector-close").addEventListener("click", () => closeInspector());
+    document.addEventListener("keydown", event => {
+        if (event.key !== "Escape" || activeInspector === null || activeInspector === "pattern") return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeInspector();
+    }, true);
 
     /* ── Tool buttons ─────────────────────────────────────────────────── */
     const toolButtons: Record<Tool, HTMLButtonElement> = {

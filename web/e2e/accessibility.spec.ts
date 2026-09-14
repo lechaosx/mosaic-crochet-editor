@@ -161,3 +161,24 @@ test("closing an inspector restores focus to the available authoring context", a
     await page.keyboard.press("Escape");
     await expect(more).toBeFocused();
 });
+
+test("Escape closes an inspector before applying a canvas shortcut", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("Control+a");
+    const selection = page.getByRole("button", { name: /selected/ });
+    await selection.click();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#inspector-host")).toBeHidden();
+    await expect(selection).toBeVisible();
+    await expect(selection).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(selection).toBeHidden();
+
+    const settings = page.getByRole("button", { name: "Settings" });
+    await settings.click();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#inspector-host")).toBeHidden();
+    await expect(settings).toBeFocused();
+});
