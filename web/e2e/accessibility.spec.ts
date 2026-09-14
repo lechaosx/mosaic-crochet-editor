@@ -188,6 +188,21 @@ test("compact More exposes and navigates a keyboard menu", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
 });
 
+test("Tab leaves and closes the compact More menu", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootApp(page);
+
+    const more = page.getByRole("button", { name: "More" });
+    await more.click();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#more-popover")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Pencil" })).toBeFocused();
+
+    await more.click();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator("#more-popover")).toBeHidden();
+});
+
 test("compact menu navigation does not move selected canvas content", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);

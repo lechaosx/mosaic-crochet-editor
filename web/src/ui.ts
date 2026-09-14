@@ -1049,6 +1049,10 @@ function mountToolbarLayout() {
             morePopover.hidePopover();
     });
     morePopover.addEventListener("keydown", e => {
+        if (e.key === "Tab") {
+            morePopover.hidePopover();
+            return;
+        }
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
         e.preventDefault();
         e.stopPropagation();
