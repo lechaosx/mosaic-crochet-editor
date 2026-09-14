@@ -4,6 +4,8 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 **your decision** = decided by the user. **Agent's choice** = proposed and implemented without explicit instruction. **joint** = discussed and decided together.
 
+- The product name is **Mosaic Crochet Editor**. — **your decision**
+
 ## Glossary
 
 - **Float** — a "lifted" layer sitting above the canvas. Selecting always lifts: the canvas at the selected cells is reset to natural baseline and the original pixel values move into the float. Stored as a compact bounding box (`x`, `y`, `w`, `h`) with absolute canvas-cell coordinates; `pixels[i] !== 0` determines membership (no separate mask array).

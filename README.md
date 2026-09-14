@@ -1,4 +1,4 @@
-# Mosaic Crochet Web
+# Mosaic Crochet Editor
 
 A browser-based editor for alternating-yarn mosaic crochet charts. Draw pixel patterns, review derived overlay positions, and export a chart-derived work sequence.
 
