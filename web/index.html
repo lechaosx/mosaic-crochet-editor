@@ -271,7 +271,7 @@
 
   <!-- ── Pattern inspector ────────────────────────────────────────────── -->
   <section id="edit-pattern-widget" class="inspector-panel" aria-label="Pattern" hidden>
-    <div class="segmented">
+    <div class="segmented" role="radiogroup" aria-label="Pattern geometry">
       <label><input type="radio" name="edit-mode" value="row" checked> Rows</label>
       <label><input type="radio" name="edit-mode" value="round"> Centre-out</label>
     </div>
@@ -288,7 +288,7 @@
     </div>
 
     <div id="edit-round-controls" class="field-group" hidden>
-      <div class="segmented">
+      <div class="segmented" role="radiogroup" aria-label="Authored extent">
         <label><input type="radio" name="edit-submode" value="full" checked> Full</label>
         <label><input type="radio" name="edit-submode" value="half"> Half</label>
         <label><input type="radio" name="edit-submode" value="quarter"> Quarter</label>
