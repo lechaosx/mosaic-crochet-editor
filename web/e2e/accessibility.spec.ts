@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, clickCell } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
 
 test("active tool and yarn expose their selected state", async ({ page }) => {
     await bootApp(page);
@@ -186,6 +186,24 @@ test("compact More exposes and navigates a keyboard menu", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
     await expect(page.getByRole("menuitem")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
+});
+
+test("compact menu navigation does not move selected canvas content", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootApp(page);
+    await clickCell(page, 0, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);
+    await expect(page.getByRole("button", { name: /selected/ })).toBeVisible();
+
+    await page.getByRole("button", { name: "More" }).click();
+    await page.keyboard.press("ArrowDown");
+    await page.locator("#more-popover").evaluate((popover: HTMLElement) => popover.hidePopover());
+    await page.getByRole("button", { name: /selected/ }).click();
+    await page.getByRole("button", { name: "Deselect" }).click();
+
+    const original = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, original.cx, original.cy)).toEqual([0, 0, 0]);
 });
 
 test("Escape closes an inspector before applying a canvas shortcut", async ({ page }) => {

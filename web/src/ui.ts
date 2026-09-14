@@ -797,6 +797,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         tab.addEventListener("keydown", event => {
             if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
             event.preventDefault();
+            event.stopPropagation();
             const enabled = [overviewTab, liveTab, textTab].filter(button => !button.disabled);
             const current = enabled.indexOf(tab);
             const target = event.key === "Home" ? enabled[0]
@@ -1050,6 +1051,7 @@ function mountToolbarLayout() {
     morePopover.addEventListener("keydown", e => {
         if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) return;
         e.preventDefault();
+        e.stopPropagation();
         const enabled = compactActions.filter(button => !button.disabled);
         const current = enabled.indexOf(document.activeElement as HTMLButtonElement);
         const target = e.key === "Home" ? enabled[0]

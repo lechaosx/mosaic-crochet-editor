@@ -38,6 +38,21 @@ test("Instructions Overview focuses work units and returning preserves Design", 
     expect(await pixelRGB(page, painted.cx, painted.cy)).toEqual([0, 0, 0]);
 });
 
+test("Instructions tab navigation does not move selected Design content", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 0, 1);
+    await page.keyboard.press("Control+a");
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Text" }).click();
+    await page.keyboard.press("ArrowLeft");
+    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.keyboard.press("Escape");
+
+    const original = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, original.cx, original.cy)).toEqual([0, 0, 0]);
+});
+
 test("Instructions links blockers and labels unresolved text as a draft", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
