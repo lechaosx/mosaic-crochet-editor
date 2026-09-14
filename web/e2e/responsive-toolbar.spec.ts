@@ -16,6 +16,96 @@ async function expectTargetsAtLeast(page: Page, minimum: number) {
     }
 }
 
+async function renderedBounds(page: Page) {
+    return page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
+        const { width, height } = canvas;
+        const pixels = canvas.getContext("2d", { willReadFrequently: true })!
+            .getImageData(0, 0, width, height).data;
+        let minX = width, minY = height, maxX = -1, maxY = -1;
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const i = (y * width + x) * 4;
+                if (pixels[i] === 22 && pixels[i + 1] === 22 && pixels[i + 2] === 24) continue;
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+            }
+        }
+        return { minX, minY, maxX, maxY, width, height };
+    });
+}
+
+test("Fit keeps row numbers inside constrained canvases", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootApp(page);
+
+    for (const viewport of [{ width: 360, height: 740 }, { width: 820, height: 1180 }]) {
+        await page.setViewportSize(viewport);
+        await page.getByRole("button", { name: "Fit view" }).click();
+        const bounds = await renderedBounds(page);
+        expect(bounds.minX, `${viewport.width}px left edge`).toBeGreaterThanOrEqual(4);
+        expect(bounds.maxX, `${viewport.width}px right edge`).toBeLessThanOrEqual(bounds.width - 5);
+        expect(bounds.minY, `${viewport.width}px top edge`).toBeGreaterThanOrEqual(4);
+        expect(bounds.maxY, `${viewport.width}px bottom edge`).toBeLessThanOrEqual(bounds.height - 5);
+    }
+});
+
+test("turning row numbers on reframes the phone canvas and updates cell size", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootApp(page);
+    const openSettings = async () => {
+        await page.getByRole("button", { name: "More" }).click();
+        await page.getByRole("menuitem", { name: "Settings" }).click();
+    };
+    await openSettings();
+    await page.getByText("Show numbers", { exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "Show numbers" })).not.toBeChecked();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Fit view" }).click();
+    const withoutNumbers = await page.evaluate(() => ({
+        scale: window.__test_matrix__!.a,
+        offset: window.__test_matrix__!.e,
+    }));
+
+    await openSettings();
+    await page.getByText("Show numbers", { exact: true }).click();
+    await expect(page.getByRole("checkbox", { name: "Show numbers" })).toBeChecked();
+    await page.keyboard.press("Escape");
+
+    const withNumbers = await page.evaluate(() => ({
+        scale: window.__test_matrix__!.a,
+        offset: window.__test_matrix__!.e,
+    }));
+    expect(withNumbers.scale).toBeLessThan(withoutNumbers.scale);
+    expect(withNumbers.offset).not.toBe(withoutNumbers.offset);
+    const dpr = await page.evaluate(() => window.devicePixelRatio);
+    const fittedCellSize = `${Math.round(withNumbers.scale / dpr)} px`;
+    await expect(page.locator("#view-zoom-value")).toHaveText(fittedCellSize);
+    const bounds = await renderedBounds(page);
+    expect(bounds.minX).toBeGreaterThanOrEqual(4);
+});
+
+test("Fit keeps rotated half-round numbers inside a phone canvas", async ({ page }) => {
+    await page.setViewportSize({ width: 820, height: 1180 });
+    await bootApp(page);
+    await page.locator("#btn-edit").click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.getByText("Half", { exact: true }).click();
+    await page.locator("#edit-apply").click();
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+
+    await page.getByRole("button", { name: "Fit view" }).click();
+
+    const bounds = await renderedBounds(page);
+    expect(bounds.minX).toBeGreaterThanOrEqual(4);
+    expect(bounds.maxX).toBeLessThanOrEqual(bounds.width - 5);
+    expect(bounds.minY).toBeGreaterThanOrEqual(4);
+    expect(bounds.maxY).toBeLessThanOrEqual(bounds.height - 5);
+});
+
 test("phone toolbar keeps authoring tools full-size and moves secondary commands to More", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);

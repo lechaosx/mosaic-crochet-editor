@@ -417,6 +417,11 @@ function onInvalidIntensityInput() {
 }
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
+    if (v) {
+        fitToView(
+            viewport.canvas, viewport.view, store.state.pattern, store.state.rotation, true,
+        );
+    }
     store.commit(s => { s.labelsVisible = v; }, { recompute: false });
 }
 function onLockInvalidToggle() {
@@ -430,7 +435,10 @@ function resetRotation() {
     store.commit(s => { s.rotation = 0; }, { recompute: false });
 }
 function fitPattern() {
-    fitToView(viewport.canvas, viewport.view, store.state.pattern, store.state.rotation);
+    fitToView(
+        viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
+        store.state.labelsVisible,
+    );
     render(viewport, ctx, rs, store);
     ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
 }
@@ -497,7 +505,9 @@ function onEditChange() {
     }
     ui.setEditError(null);
     const { pattern, pixels } = edited;
-    fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
+    fitToView(
+        viewport.canvas, viewport.view, pattern, store.state.rotation, store.state.labelsVisible,
+    );
     store.commit(s => {
         s.pattern  = pattern;
         s.pixels   = pixels;
@@ -516,7 +526,10 @@ function onEditCancel() {
     if (!editBaseline) return;
     const baseline = editBaseline;
     editBaseline = null;
-    fitToView(viewport.canvas, viewport.view, baseline.pattern, store.state.rotation);
+    fitToView(
+        viewport.canvas, viewport.view, baseline.pattern, store.state.rotation,
+        store.state.labelsVisible,
+    );
     store.replace({
         ...store.state,
         pattern: baseline.pattern,
@@ -530,7 +543,12 @@ function onEditCancel() {
 function applyRestored(r: Restored) {
     const dimsChanged = r.pattern.canvasWidth  !== store.state.pattern.canvasWidth
                      || r.pattern.canvasHeight !== store.state.pattern.canvasHeight;
-    if (dimsChanged) fitToView(viewport.canvas, viewport.view, r.pattern, store.state.rotation);
+    if (dimsChanged) {
+        fitToView(
+            viewport.canvas, viewport.view, r.pattern, store.state.rotation,
+            store.state.labelsVisible,
+        );
+    }
     store.replace(
         { ...store.state, pattern: r.pattern, pixels: r.pixels, float: r.float,
           axes: r.axes, repeat: r.repeat, colorA: r.colorA, colorB: r.colorB },
@@ -566,7 +584,10 @@ async function onLoad() {
         return;
     }
     if (!loaded) return;
-    fitToView(viewport.canvas, viewport.view, loaded.pattern, store.state.rotation);
+    fitToView(
+        viewport.canvas, viewport.view, loaded.pattern, store.state.rotation,
+        store.state.labelsVisible,
+    );
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
           colorA: loaded.colorA, colorB: loaded.colorB, float: null },
@@ -622,6 +643,7 @@ async function onInstructions() {
         instructionsViewport.view,
         store.state.pattern,
         store.state.rotation,
+        store.state.labelsVisible,
     );
     render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
 
@@ -1268,13 +1290,19 @@ ui.setHistory(canUndo(), canRedo());
 ui.setRecoveryStatus(saved ? "recovered" : "saved");
 
 if (saved) {
-    fitToView(viewport.canvas, viewport.view, store.state.pattern, store.state.rotation);
+    fitToView(
+        viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
+        store.state.labelsVisible,
+    );
     refreshSymmetryUi();
     historyEnsureInitialized(store.state);
     render(viewport, ctx, rs, store);
 } else {
     const { pattern, pixels } = applyEditSettings();
-    fitToView(viewport.canvas, viewport.view, pattern, store.state.rotation);
+    fitToView(
+        viewport.canvas, viewport.view, pattern, store.state.rotation,
+        store.state.labelsVisible,
+    );
     store.commit(s => { s.pattern = pattern; s.pixels = pixels; });
     refreshSymmetryUi();
     historyReset(store.state);

@@ -260,21 +260,59 @@ export function screenToPatternFrac(
 
 export function fitToView(
     canvas: HTMLCanvasElement, view: ViewState, pattern: PatternState, rotationDeg: number,
+    labelsVisible: boolean,
 ) {
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
     const margin = 0.92;
-    // Rotated W×H rectangle's axis-aligned bounding box:
-    // (W·|cos θ| + H·|sin θ|, W·|sin θ| + H·|cos θ|).
     const rad = rotationDeg * Math.PI / 180;
-    const c = Math.abs(Math.cos(rad));
-    const s = Math.abs(Math.sin(rad));
+    const c = Math.cos(rad);
+    const s = Math.sin(rad);
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
-    const aabbW = W * c + H * s;
-    const aabbH = W * s + H * c;
-    view.zoom = clampZoom(margin * Math.min(rect.width / aabbW, rect.height / aabbH));
-    view.panX = 0;
-    view.panY = 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    const include = (x: number, y: number, halfWidth = 0, halfHeight = 0) => {
+        const rx = x * c - y * s;
+        const ry = x * s + y * c;
+        minX = Math.min(minX, rx - halfWidth);
+        minY = Math.min(minY, ry - halfHeight);
+        maxX = Math.max(maxX, rx + halfWidth);
+        maxY = Math.max(maxY, ry + halfHeight);
+    };
+    include(-W / 2, -H / 2);
+    include( W / 2, -H / 2);
+    include(-W / 2,  H / 2);
+    include( W / 2,  H / 2);
+
+    if (labelsVisible && pattern.mode === "row") {
+        const labelWidth = 0.34 * String(H - 1).length;
+        // The right-aligned labels stay upright while their anchors rotate with the chart.
+        const includeRowLabel = (y: number) => {
+            const x = -W / 2 - 0.25;
+            const ry = y - H / 2;
+            const anchorX = x * c - ry * s;
+            const anchorY = x * s + ry * c;
+            minX = Math.min(minX, anchorX - labelWidth);
+            minY = Math.min(minY, anchorY - 0.28);
+            maxX = Math.max(maxX, anchorX);
+            maxY = Math.max(maxY, anchorY + 0.28);
+        };
+        includeRowLabel(0.5);
+        includeRowLabel(H - 1.5);
+    } else if (labelsVisible && pattern.mode === "round" && pattern.offsetY !== 0) {
+        const halfWidth = 0.34 * String(pattern.rounds).length;
+        const includeRoundLabel = (x: number) => {
+            include(x - W / 2, -H / 2 - 0.3, halfWidth, 0.28);
+        };
+        includeRoundLabel(0.5);
+        includeRoundLabel(pattern.rounds - 0.5);
+    }
+
+    view.zoom = clampZoom(margin * Math.min(
+        rect.width / (maxX - minX),
+        rect.height / (maxY - minY),
+    ));
+    view.panX = -view.zoom * (minX + maxX) / 2;
+    view.panY = -view.zoom * (minY + maxY) / 2;
 }
 
 // ── Animation ──────────────────────────────────────────────────────────────
