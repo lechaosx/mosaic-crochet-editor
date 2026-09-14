@@ -580,6 +580,7 @@ async function onLoad() {
 
 // ── Instructions ─────────────────────────────────────────────────────────────
 async function onInstructions() {
+    if (instructionsOpen) return;
     // Instructions reflect the visible pattern without anchoring the live float.
     const exportPixels = store.state.float
         ? anchorIntoCanvas(store.state).pixels

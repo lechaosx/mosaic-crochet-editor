@@ -68,6 +68,18 @@ test("Design shortcuts are inert while Instructions is open", async ({ page }) =
     await expect(page.getByRole("button", { name: /selected/ })).toBeVisible();
 });
 
+test("reselecting the current Instructions workspace preserves its view", async ({ page }) => {
+    await bootApp(page);
+    const instructions = page.getByRole("button", { name: "Instructions" });
+    await instructions.click();
+    await page.getByRole("tab", { name: "Text" }).click();
+
+    await instructions.click();
+
+    await expect(page.getByRole("tab", { name: "Text" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("textbox", { name: "Compressed instructions" })).toBeVisible();
+});
+
 test("Instructions links blockers and labels unresolved text as a draft", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
