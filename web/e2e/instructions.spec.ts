@@ -34,8 +34,21 @@ test("Instructions Overview focuses work units and returning preserves Design", 
     await page.getByRole("button", { name: "Back to Design" }).click();
     await expect(page.locator(".canvas-area")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Instructions" })).toBeFocused();
     const painted = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, painted.cx, painted.cy)).toEqual([0, 0, 0]);
+});
+
+test("Back to Design restores focus to More in the compact toolbar", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootApp(page);
+    const more = page.getByRole("button", { name: "More" });
+    await more.click();
+    await page.getByRole("menuitem", { name: "Instructions" }).click();
+
+    await page.getByRole("button", { name: "Back to Design" }).click();
+
+    await expect(more).toBeFocused();
 });
 
 test("Instructions tab navigation does not move selected Design content", async ({ page }) => {

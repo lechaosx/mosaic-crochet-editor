@@ -924,7 +924,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
             inspectorHost.hidden = inspectorWasHidden;
             el("btn-export").removeAttribute("aria-current");
             closeListeners.forEach(f => f());
-            el<HTMLButtonElement>("btn-export").focus();
+            const exportButton = el<HTMLButtonElement>("btn-export");
+            const moreButton = el<HTMLButtonElement>("btn-more");
+            (exportButton.getClientRects().length > 0 ? exportButton : moreButton).focus();
         };
         el("instructions-design").addEventListener("click", close, { once: true });
 
