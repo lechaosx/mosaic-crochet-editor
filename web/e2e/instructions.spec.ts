@@ -140,3 +140,40 @@ test("Live completes and reopens a Centre-out round as one boundary", async ({ p
     await back.click();
     await expect(page.getByRole("heading", { name: "Round 1" })).toBeVisible();
 });
+
+test("Text reports copy and download completion", async ({ page }) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: async () => undefined },
+        });
+    });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Text" }).click();
+    const status = page.getByRole("status", { name: "Text actions" });
+
+    await page.getByRole("button", { name: "Copy text" }).click();
+    await expect(status).toHaveText("Instructions copied.");
+
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Download text" }).click();
+    await expect((await download).suggestedFilename()).toBe("pattern.txt");
+    await expect(status).toHaveText("Downloaded pattern.txt.");
+});
+
+test("Text reports clipboard failure", async ({ page }) => {
+    await page.addInitScript(() => {
+        Object.defineProperty(navigator, "clipboard", {
+            configurable: true,
+            value: { writeText: async () => { throw new DOMException("denied", "NotAllowedError"); } },
+        });
+    });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await page.getByRole("tab", { name: "Text" }).click();
+
+    await page.getByRole("button", { name: "Copy text" }).click();
+    await expect(page.getByRole("status", { name: "Text actions" }))
+        .toHaveText("Could not copy instructions.");
+});

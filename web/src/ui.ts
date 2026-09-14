@@ -735,14 +735,21 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const liveText       = el("instructions-live-text");
     const liveBack       = el<HTMLButtonElement>("instructions-live-back");
     const liveDone       = el<HTMLButtonElement>("instructions-live-done");
-    el("export-copy").addEventListener("click", () =>
-        navigator.clipboard.writeText(exportText.value)
-    );
+    const exportActionStatus = el("export-action-status");
+    el("export-copy").addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(exportText.value);
+            exportActionStatus.textContent = "Instructions copied.";
+        } catch {
+            exportActionStatus.textContent = "Could not copy instructions.";
+        }
+    });
     el("export-download").addEventListener("click", () => {
         const blob = new Blob([exportText.value], { type: "text/plain" });
         const url = URL.createObjectURL(blob);
         Object.assign(document.createElement("a"), { href: url, download: "pattern.txt" }).click();
         URL.revokeObjectURL(url);
+        exportActionStatus.textContent = "Downloaded pattern.txt.";
     });
 
     type InstructionsTab = "overview" | "live" | "text";
@@ -911,7 +918,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 button.addEventListener("click", focus);
                 if (activeFocus === null) focus();
             },
-            clearText: () => { exportText.value = ""; },
+            clearText: () => {
+                exportText.value = "";
+                exportActionStatus.textContent = "";
+            },
             clearUnits: () => {
                 unitsList.replaceChildren();
                 activeFocus = null;
