@@ -112,15 +112,15 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await expect(card).toBeVisible();
     await expect(card.getByRole("button", { name: "Duplicate content" })).toHaveAttribute("aria-pressed", "true");
 
-    await card.getByRole("button", { name: "Cut" }).tap();
+    await card.getByRole("button", { name: "Cut" }).click();
     const clipboardSummary = page.getByRole("button", { name: "Clipboard, 1 cell" });
     await expect(clipboardSummary).toBeVisible();
     const hovered = await cellCoord(page, 2, 1);
     await page.mouse.move(hovered.cx, hovered.cy);
     await expect(clipboardSummary).toBeVisible();
-    await card.getByRole("button", { name: "Paste" }).tap();
+    await card.getByRole("button", { name: "Paste" }).click();
     await expect(page.getByRole("button", { name: "1 selected" })).toBeVisible();
-    await card.getByRole("button", { name: "Deselect" }).tap();
+    await card.getByRole("button", { name: "Deselect" }).click();
     await expect(summary).toBeHidden();
     expect(await pixelRGB(page, destination.cx, destination.cy)).toEqual([0, 0, 0]);
 });
