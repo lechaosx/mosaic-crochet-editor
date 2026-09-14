@@ -92,6 +92,7 @@ export interface UIHandle {
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
+    setDocumentError:   (message: string | null) => void;
     setViewState:       (zoom: number, rotation: number, navigating: boolean) => void;
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
@@ -553,6 +554,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
         status.title = state === "failed"
             ? "Browser recovery could not be updated; recent changes may be lost if this tab closes."
             : "Browser recovery is current. Save .mcw creates a separate editable pattern file.";
+    }
+
+    function setDocumentError(message: string | null) {
+        const error = el("document-error");
+        error.textContent = message ?? "";
+        error.hidden = message === null;
     }
 
     function setViewState(zoom: number, rotation: number, navigating: boolean) {
@@ -1019,7 +1026,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setTool, setMaskMove, setSelectionState, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
-        setHistory, setRecoveryStatus, setViewState, setEditError,
+        setHistory, setRecoveryStatus, setDocumentError, setViewState, setEditError,
         syncEditInputs, closeEdit,
         openInstructions,
     };

@@ -333,12 +333,6 @@ test("Edit popover rejects a canvas above the safety ceiling", async ({ page }) 
 
 test("Load reports invalid pattern dimensions", async ({ page }) => {
     await bootApp(page);
-    const dialogMessage = new Promise<string>(resolve => {
-        page.once("dialog", async dialog => {
-            resolve(dialog.message());
-            await dialog.dismiss();
-        });
-    });
     const chooserPromise = page.waitForEvent("filechooser");
     await page.locator("#btn-load").click();
     const chooser = await chooserPromise;
@@ -354,7 +348,14 @@ test("Load reports invalid pattern dimensions", async ({ page }) => {
         })),
     });
 
-    await expect(dialogMessage).resolves.toMatch(/whole positive numbers/);
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText(/whole positive numbers/);
+
+    const retryChooserPromise = page.waitForEvent("filechooser");
+    await page.locator("#btn-load").click();
+    const retryChooser = await retryChooserPromise;
+    await retryChooser.setFiles([]);
+    await expect(alert).toBeHidden();
 });
 
 test("Load rejects a future file without replacing the active session", async ({ page }) => {
@@ -363,12 +364,6 @@ test("Load rejects a future file without replacing the active session", async ({
     await clickCell(page, 0, 1);
     const before = await page.evaluate(() => localStorage.getItem("mosaic-recovery"));
 
-    const dialogMessage = new Promise<string>(resolve => {
-        page.once("dialog", async dialog => {
-            resolve(dialog.message());
-            await dialog.dismiss();
-        });
-    });
     const chooserPromise = page.waitForEvent("filechooser");
     await page.locator("#btn-load").click();
     const chooser = await chooserPromise;
@@ -378,6 +373,6 @@ test("Load rejects a future file without replacing the active session", async ({
         buffer: Buffer.from(JSON.stringify({ version: 3 })),
     });
 
-    await expect(dialogMessage).resolves.toBe("This pattern uses unsupported .mcw version 3.");
+    await expect(page.getByRole("alert")).toHaveText("This pattern uses unsupported .mcw version 3.");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
 });

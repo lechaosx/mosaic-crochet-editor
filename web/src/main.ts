@@ -557,11 +557,12 @@ async function onSave() {
     await saveToFile(snapshot);
 }
 async function onLoad() {
+    ui.setDocumentError(null);
     let loaded: LoadedFile | null;
     try {
         loaded = await loadFromFile();
     } catch (error) {
-        window.alert(error instanceof Error ? error.message : "Invalid pattern file.");
+        ui.setDocumentError(error instanceof Error ? error.message : "Invalid pattern file.");
         return;
     }
     if (!loaded) return;
