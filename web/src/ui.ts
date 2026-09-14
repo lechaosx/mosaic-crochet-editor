@@ -558,9 +558,15 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     function setDocumentError(message: string | null) {
         const error = el("document-error");
-        error.textContent = message ?? "";
+        el("document-error-message").textContent = message ?? "";
         error.hidden = message === null;
     }
+    el("document-error-dismiss").addEventListener("click", () => {
+        setDocumentError(null);
+        const load = el<HTMLButtonElement>("btn-load");
+        const more = el<HTMLButtonElement>("btn-more");
+        (load.getClientRects().length > 0 ? load : more).focus();
+    });
 
     function setViewState(zoom: number, rotation: number, navigating: boolean) {
         el("view-zoom-value").textContent = `${Math.round(zoom)} px`;

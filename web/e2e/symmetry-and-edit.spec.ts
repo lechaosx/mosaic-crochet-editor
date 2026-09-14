@@ -373,6 +373,12 @@ test("Load rejects a future file without replacing the active session", async ({
         buffer: Buffer.from(JSON.stringify({ version: 3 })),
     });
 
-    await expect(page.getByRole("alert")).toHaveText("This pattern uses unsupported .mcw version 3.");
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("This pattern uses unsupported .mcw version 3.");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
+
+    await page.setViewportSize({ width: 360, height: 740 });
+    await page.getByRole("button", { name: "Dismiss load error" }).click();
+    await expect(alert).toBeHidden();
+    await expect(page.getByRole("button", { name: "More" })).toBeFocused();
 });

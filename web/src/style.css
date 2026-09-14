@@ -115,8 +115,12 @@ input  { font: inherit; color: inherit; }
 }
 
 .document-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   flex: 1 0 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
   color: var(--danger);
   background: var(--danger-soft);
   border: 1px solid var(--danger);
