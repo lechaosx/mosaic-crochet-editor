@@ -107,3 +107,16 @@ test("yarn controls expose select, edit, and undoable swap actions", async ({ pa
     await expect(page.locator("#color-a")).toHaveValue(before.a);
     await expect(page.locator("#color-b")).toHaveValue(before.b);
 });
+
+test("dynamic symmetry actions name their axis and position", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: "Add vertical" }).click();
+
+    const disable = page.getByRole("button", { name: "Disable vertical axis at x=4" });
+    await expect(disable).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete vertical axis at x=4" })).toBeVisible();
+
+    await disable.click();
+    await expect(page.getByRole("button", { name: "Enable vertical axis at x=4" })).toBeVisible();
+});

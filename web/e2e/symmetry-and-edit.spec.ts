@@ -50,10 +50,10 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await expect(row).toBeVisible();
     await expect(row).not.toHaveClass(/is-inactive/);
     // Toggle it off — visual class flips.
-    await row.locator("button[title='Disable axis']").click();
+    await row.getByRole("button", { name: "Disable vertical axis at x=4" }).click();
     await expect(page.locator(".sym-list-row").first()).toHaveClass(/is-inactive/);
     // Delete — row disappears.
-    await page.locator(".sym-list-row button[title='Delete axis']").click();
+    await page.getByRole("button", { name: "Delete vertical axis at x=4" }).click();
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
@@ -116,7 +116,7 @@ test("T reports stamp conflicts inline and recipe changes clear the error", asyn
     await expect(error).toBeVisible();
     expect(dialogSeen).toBe(false);
 
-    await page.locator(".sym-list-row button[title='Disable axis']").click();
+    await page.getByRole("button", { name: "Disable vertical axis at x=4" }).click();
     await expect(error).toBeHidden();
 });
 

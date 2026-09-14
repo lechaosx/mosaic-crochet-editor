@@ -418,6 +418,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
         }
     }
     const KIND_GLYPH: Record<SymKey, string> = { V: "↔", H: "↕", C: "⊕", D1: "╲", D2: "╱" };
+    const KIND_NAME: Record<SymKey, string> = {
+        V: "vertical",
+        H: "horizontal",
+        C: "central",
+        D1: "diagonal",
+        D2: "anti-diagonal",
+    };
 
     function setAxes(axes: ReadonlyArray<Axis>) {
         // Axis lists stay small in normal editor use, so rebuilding avoids
@@ -435,18 +442,21 @@ export function mountUI(cb: UICallbacks): UIHandle {
             pos.className = "sym-list-row__pos";
             pos.textContent = formatPosition(a);
 
+            const description = `${KIND_NAME[a.kind]} axis at ${formatPosition(a)}`;
+
             const toggle = document.createElement("button");
             toggle.className = "btn btn--icon";
             toggle.type = "button";
-            toggle.title = a.active ? "Disable axis" : "Enable axis";
+            toggle.title = `${a.active ? "Disable" : "Enable"} ${description}`;
+            toggle.setAttribute("aria-label", toggle.title);
             toggle.textContent = a.active ? "●" : "○";
             toggle.addEventListener("click", () => cb.onToggleAxis(a.id));
 
             const del = document.createElement("button");
             del.className = "btn btn--icon";
             del.type = "button";
-            del.title = "Delete axis";
-            del.setAttribute("aria-label", "Delete axis");
+            del.title = `Delete ${description}`;
+            del.setAttribute("aria-label", del.title);
             del.textContent = "×";
             del.addEventListener("click", () => cb.onDeleteAxis(a.id));
 
