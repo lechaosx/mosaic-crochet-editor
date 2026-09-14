@@ -90,6 +90,12 @@ test("yarn controls expose select, edit, and undoable swap actions", async ({ pa
     await expect(swap).toBeVisible();
 
     await yarnB.focus();
+    const focusOutline = await yarnB.evaluate(element => {
+        const style = getComputedStyle(element);
+        return { style: style.outlineStyle, width: parseFloat(style.outlineWidth) };
+    });
+    expect(focusOutline.style).toBe("solid");
+    expect(focusOutline.width).toBeGreaterThanOrEqual(2);
     await page.keyboard.press("Space");
     await expect(edit).toHaveAccessibleName("Edit Yarn B");
     await yarnA.focus();
