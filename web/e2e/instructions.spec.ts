@@ -7,6 +7,7 @@ test("Instructions Overview focuses work units and returning preserves Design", 
 
     await page.getByRole("button", { name: "Instructions" }).click();
     await expect(page.getByRole("main", { name: "Instructions" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeFocused();
     await expect(page.locator(".canvas-area")).toBeHidden();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
     await expect(page.getByRole("img", { name: "Finished chart preview" })).toBeVisible();

@@ -828,6 +828,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         authoringDock.hidden = true;
         inspectorHost.hidden = true;
         el("btn-export").setAttribute("aria-current", "page");
+        instructionsTitle.focus();
 
         const workKind = () => liveUnits[0]?.label.startsWith("Round") ? "round" : "row";
         const focusLive = (unit: InstructionOverviewUnit) => {
