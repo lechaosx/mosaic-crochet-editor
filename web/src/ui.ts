@@ -169,6 +169,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     function closeInspector(commitPattern = false) {
+        const panel = activeInspector;
         if (activeInspector === "pattern" && !commitPattern) cb.onEditCancel();
         if (activeInspector === "transforms") cb.onTransformPopoverToggle(false);
         inspectorHost.hidden = true;
@@ -177,6 +178,16 @@ export function mountUI(cb: UICallbacks): UIHandle {
             inspectorTriggers[key].setAttribute("aria-expanded", "false");
         });
         activeInspector = null;
+
+        const trigger = panel === null ? null : inspectorTriggers[panel];
+        const more = el<HTMLButtonElement>("btn-more");
+        const activeTool = document.querySelector<HTMLButtonElement>(
+            ".authoring-dock .btn[aria-pressed='true']",
+        );
+        const target = trigger && trigger.getClientRects().length > 0
+            ? trigger
+            : more.getClientRects().length > 0 ? more : activeTool;
+        target?.focus();
     }
 
     el("inspector-close").addEventListener("click", () => closeInspector());

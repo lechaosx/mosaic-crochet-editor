@@ -83,6 +83,8 @@ Tap or click the selected-cell count in the context strip to open the Selection 
 
 A ✕ marks valid overlay-stitch positions; a ! marks invalid placements. Both are drawn in the *opposite* pixel colour so they stay visible against either palette, and they update as you draw.
 
+Closing an inspector returns keyboard focus to its opener. If that opener is no longer available, focus returns to **More** on compact layouts or to the active authoring tool.
+
 ### Symmetry and repeat
 
 New patterns start without active transforms. Open **Symmetry and repeat** and add any of five axis kinds: **↔ Vertical**, **↕ Horizontal**, **⊕ Central**, **╲ Diagonal**, or **╱ Anti-diagonal**. Each axis has its own enable/disable and delete controls, whose hover and accessibility labels identify the axis kind and position. Keyboard focus follows an axis when it is toggled or deleted. You can add multiple axes of the same kind.

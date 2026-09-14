@@ -140,3 +140,24 @@ test("dynamic symmetry actions retain keyboard focus after rebuilding the axis l
     await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: "Add horizontal" })).toBeFocused();
 });
+
+test("closing an inspector restores focus to the available authoring context", async ({ page }) => {
+    await bootApp(page);
+
+    const settings = page.getByRole("button", { name: "Settings" });
+    await settings.click();
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await expect(settings).toBeFocused();
+
+    await page.keyboard.press("Control+a");
+    await page.getByRole("button", { name: /selected/ }).click();
+    await page.getByRole("button", { name: "Deselect" }).click();
+    await expect(page.getByRole("button", { name: "Pencil" })).toBeFocused();
+
+    await page.setViewportSize({ width: 360, height: 740 });
+    const more = page.getByRole("button", { name: "More" });
+    await more.click();
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.keyboard.press("Escape");
+    await expect(more).toBeFocused();
+});
