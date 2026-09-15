@@ -207,6 +207,7 @@ export function loadFromFile(): Promise<LoadedFile | null> {
                     reject(error instanceof Error ? error : new Error("Invalid pattern file."));
                 }
             };
+            reader.onerror = () => reject(new Error("Could not read pattern file."));
             reader.readAsText(file);
         });
         input.addEventListener("cancel", () => resolve(null));

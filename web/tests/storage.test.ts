@@ -2,7 +2,7 @@
 // localStorage IO tests — pure pack/unpack tests live in logic/tests/storage.test.ts.
 
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
-import { saveToLocalStorage, loadFromLocalStorage, saveToFile } from "../src/storage-io";
+import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
 
@@ -157,5 +157,31 @@ describe("saveToFile", () => {
         });
 
         await expect(saveToFile(rowSession(3, 3))).rejects.toThrow("Disk full.");
+    });
+});
+
+describe("loadFromFile", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    test("rejects when the selected file cannot be read", async () => {
+        vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(function () {
+            Object.defineProperty(this, "files", {
+                value: [new File(["{}"], "pattern.mcw", { type: "application/json" })],
+            });
+            this.dispatchEvent(new Event("change"));
+        });
+        vi.spyOn(FileReader.prototype, "readAsText").mockImplementation(function () {
+            this.onerror?.(new ProgressEvent("error"));
+        });
+
+        const outcome = await Promise.race([
+            loadFromFile().then(
+                () => "resolved",
+                error => error instanceof Error ? error.message : "rejected",
+            ),
+            new Promise<string>(resolve => setTimeout(() => resolve("pending"), 0)),
+        ]);
+
+        expect(outcome).toBe("Could not read pattern file.");
     });
 });
