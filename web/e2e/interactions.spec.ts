@@ -116,6 +116,27 @@ test("Pattern Apply creates one history entry", async ({ page }) => {
     expect(await recoveryWidth(page)).toBe(9);
 });
 
+test("Pattern describes resize and geometry-change consequences", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+
+    await expect(page.getByLabel("Centre opening width")).toBeAttached();
+    await expect(page.getByLabel("Centre opening height")).toBeAttached();
+    await expect(page.getByText("Start with a blank pattern", { exact: true })).toBeVisible();
+
+    await page.locator("#edit-width").fill("10");
+    await page.locator("#edit-width").dispatchEvent("input");
+    await expect(page.locator("#edit-summary")).toHaveText(
+        "10 × 9 cells · 81 preserved · 9 added · 0 removed",
+    );
+    await expect(page.locator("#edit-apply")).toHaveText("Apply");
+
+    await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
+    await expect(page.locator("#edit-apply")).toHaveText("Start with a blank centre-out pattern");
+    await expect(page.locator("#edit-summary")).toContainText("0 preserved");
+    await expect(page.locator("#edit-summary")).toContainText("81 removed");
+});
+
 test("save with active float doesn't drop the selection", async ({ page }) => {
     await bootApp(page);
     // Lift a cell, then trigger save with the picker shimmed to cancel.

@@ -95,6 +95,7 @@ export interface UIHandle {
     setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
     setViewState:       (zoom: number, rotation: number, navigating: boolean) => void;
     setEditError:       (message: string | null) => void;
+    setEditSummary:     (width: number, height: number, preserved: number, added: number, removed: number) => void;
     syncEditInputs:     (s: PatternState) => void;
     closeEdit:          () => void;
     openInstructions:   () => InstructionsView;
@@ -597,12 +598,17 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const editError  = el("edit-error");
     const editApply  = el<HTMLButtonElement>("edit-apply");
     const editCancel = el<HTMLButtonElement>("edit-cancel");
+    const editSummary = el("edit-summary");
     const canvas     = el("canvas");
 
     function setEditError(message: string | null) {
         editError.textContent = message ?? "";
         editError.hidden = message === null;
         editApply.disabled = message !== null;
+    }
+
+    function setEditSummary(width: number, height: number, preserved: number, added: number, removed: number) {
+        editSummary.textContent = `${width} × ${height} cells · ${preserved} preserved · ${added} added · ${removed} removed`;
     }
 
     function closeEdit() {
@@ -680,6 +686,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
             delete wipeEl.dataset.userPref;
         }
         wipeEl.disabled = force;
+        editApply.textContent = force
+            ? `Start with a blank ${newMode === "row" ? "row" : "centre-out"} pattern`
+            : "Apply";
     }
 
     document.querySelectorAll<HTMLInputElement>('[name="edit-mode"]').forEach(radio => {
@@ -1036,7 +1045,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setTool, setMaskMove, setSelectionState, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
-        setHistory, setRecoveryStatus, setDocumentError, setViewState, setEditError,
+        setHistory, setRecoveryStatus, setDocumentError, setViewState, setEditError, setEditSummary,
         syncEditInputs, closeEdit,
         openInstructions,
     };

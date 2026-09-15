@@ -4,9 +4,7 @@ import { applyEditSettings as applyEditSettingsLogic, EditSettings } from "@mosa
 import { PatternState } from "@mosaic/logic/types";
 import { readClampedInt, radioValue } from "./dom";
 
-export function applyEditSettings(
-    source?: { pattern: PatternState; pixels: Uint8Array },
-): { pattern: PatternState; pixels: Uint8Array } {
+export function readEditSettings(): EditSettings {
     const mode    = radioValue("edit-mode") as "row" | "round";
     const wipeEl  = document.getElementById("edit-wipe") as HTMLInputElement | null;
     const wipe    = wipeEl ? (wipeEl.checked || wipeEl.disabled) : false;
@@ -28,5 +26,11 @@ export function applyEditSettings(
             wipe,
         };
     }
-    return applyEditSettingsLogic(settings, source);
+    return settings;
+}
+
+export function applyEditSettings(
+    source?: { pattern: PatternState; pixels: Uint8Array },
+): { pattern: PatternState; pixels: Uint8Array } {
+    return applyEditSettingsLogic(readEditSettings(), source);
 }

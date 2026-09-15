@@ -198,7 +198,8 @@ These decisions constrain continued development beyond the first adaptive shell.
   - **Mode switch** (row↔round) is inherently a wipe. — **your decision**
 - Live preview always derives from the state captured when Pattern opens, so destructive scrubbing is reversible without committing: reduce rounds to 1 and back to 20 brings the original pattern back. — **your decision** (reversible preview); **Agent's choice** (transaction baseline)
 - **Apply** commits the current valid preview as one Undo step. **Cancel** and **Escape** restore the opening state without history; invalid input retains the last valid preview and disables Apply. Outside authoring and command input is blocked without dismissing the transaction, while canvas zoom remains available. — **Agent's choice**
-- **Wipe** defaults off so compatible edits preserve painted pixels. Mode switches force it on and disabled; switching back before closing restores the user's preference. — **your decision**
+- **Start with a blank pattern** defaults off so compatible edits preserve painted pixels. Mode switches force it on and disabled; switching back before closing restores the user's preference. — **your decision**
+- Pattern previews report resulting dimensions and exact preserved, added, and removed cell counts; a Rows/Centre-out switch names its blank-pattern result on the final action. — **Agent's choice**
 - Numeric inputs typed below the field's minimum are normalised on blur. — **your decision**
 - Canvas dimensions are limited to 16,777,216 cells total and 1,048,576 cells per axis. Invalid Pattern edits leave the current preview intact and show an inline error; invalid saved dimensions are rejected before pixel allocation. — **joint**
 

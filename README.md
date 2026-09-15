@@ -48,12 +48,12 @@ The workspace separates document commands from authoring controls. On wide scree
 Click **Pattern** to open the dimensions inspector. Two modes:
 
 - **Rows** — a rectangular grid worked row by row. Height includes the unnumbered bottom foundation; the row above it is Row 1.
-- **Centre-out** — concentric rounds numbered from the innermost band outward. Set inner width / height / rounds, plus an authored extent:
+- **Centre-out** — concentric rounds numbered from the innermost band outward. Set centre opening width / height / rounds, plus an authored extent:
   - **Full** — all four sides.
   - **Half** — bottom half only.
   - **Quarter** — bottom-left quarter only.
 
-Settings update the canvas live and the **Wipe** toggle controls whether existing pixels are preserved across the change. Choose **Apply** to commit the preview as one Undo step, or **Cancel** / **Escape** to restore the state from when Pattern opened. Invalid input keeps the last valid preview and disables Apply. Clicking elsewhere does not dismiss Pattern or edit the canvas; canvas zoom remains available while you decide.
+Settings update the canvas live. The inspector shows resulting dimensions and how many cells are preserved, added, or removed. **Start with a blank pattern** replaces existing content with natural colours; switching between Rows and Centre-out requires a blank pattern and names that result on the final action. Choose **Apply** to commit a compatible preview as one Undo step, or **Cancel** / **Escape** to restore the state from when Pattern opened. Invalid input keeps the last valid preview and disables Apply. Clicking elsewhere does not dismiss Pattern or edit the canvas; canvas zoom remains available while you decide.
 
 Canvas dimensions may contain up to 16,777,216 cells total, with either axis up to 1,048,576 cells for unusually long, narrow patterns. The Pattern inspector reports an inline error without replacing the current canvas when those safety bounds are exceeded; invalid `.mcw` dimensions are rejected during load.
 

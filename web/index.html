@@ -294,11 +294,11 @@
         <label><input type="radio" name="edit-submode" value="quarter"> Quarter</label>
       </div>
       <div class="field-row">
-        <label for="edit-inner-width">Inner W</label>
+        <label for="edit-inner-width">Centre opening width</label>
         <input type="number" id="edit-inner-width" value="3" min="0" max="1048576">
       </div>
       <div class="field-row">
-        <label for="edit-inner-height">Inner H</label>
+        <label for="edit-inner-height">Centre opening height</label>
         <input type="number" id="edit-inner-height" value="3" min="0" max="1048576">
       </div>
       <div class="field-row">
@@ -312,8 +312,9 @@
     <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on when switching between Rows and Centre-out.">
       <input type="checkbox" id="edit-wipe">
       <span class="toggle-track"></span>
-      Wipe
+      Start with a blank pattern
     </label>
+    <p id="edit-summary" class="pattern-summary" role="status"></p>
     <div class="pattern-actions">
       <button class="btn" id="edit-cancel" type="button" title="Discard Pattern changes (Escape)">Cancel</button>
       <button class="btn" id="edit-apply" type="button" title="Apply Pattern changes">Apply</button>

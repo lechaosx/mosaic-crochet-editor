@@ -534,6 +534,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
   gap: var(--space-2);
 }
 
+.pattern-summary {
+  margin: 0;
+  color: var(--fg-2);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
 #more-popover { min-width: min(18rem, 92vw); }
 #more-actions {
   display: grid;

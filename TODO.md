@@ -40,7 +40,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 
 ### Stage 6 — Clarify the workflows already in use
 
-- [ ] Make Pattern changes describe their result before Apply.
+- [x] Make Pattern changes describe their result before Apply.
   - Rename `Inner W` and `Inner H` to `Centre opening width` and `Centre opening height`, and replace `Wipe` with `Start with a blank pattern`.
   - Show resulting dimensions plus preserved, added, and removed cell counts. When geometry changes, label the action `Start with a blank row/centre-out pattern` instead of presenting an ordinary Apply.
   - Verify same-geometry preservation, deliberate blanking, invalid last-valid previews, geometry changes, Cancel, and one-step Undo.

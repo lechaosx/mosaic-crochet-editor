@@ -6,7 +6,7 @@ import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateStatus,
          pickRepeatHandle, RepeatHandleAxis } from "./render";
-import { applyEditSettings } from "./pattern";
+import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReset, historyEnsureInitialized,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
@@ -22,7 +22,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          deleteFloat, clipFloatToCanvas, replicateSelection } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
-import { MAX_CANVAS_DIMENSION } from "@mosaic/logic/pattern";
+import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
 import { fingerprintInstructionPlan, loadLiveProgress, saveLiveProgress } from "./live-progress";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -481,6 +481,15 @@ function onEditOpen() {
         float: store.state.float ? { ...store.state.float, pixels: store.state.float.pixels.slice() } : null,
     };
     ui.syncEditInputs(store.state.pattern);
+    const source = {
+        pattern: editBaseline.pattern,
+        pixels: editBaseline.float
+            ? visiblePixels({ ...store.state, pattern: editBaseline.pattern,
+                pixels: editBaseline.pixels, float: editBaseline.float })
+            : editBaseline.pixels,
+    };
+    const summary = patternChangeSummary(readEditSettings(), source, source);
+    ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
 }
 function onEditChange() {
     // Re-derive the preview from the transaction baseline each tick so
@@ -489,13 +498,12 @@ function onEditChange() {
     // source pixels — otherwise the resize would silently drop the
     // float's content along with the geometry-invalid mask.
     const baseline = editBaseline;
-    const source: { pattern: PatternState; pixels: Uint8Array } | undefined = baseline
-        ? (baseline.float
-            ? { pattern: baseline.pattern,
-                pixels: visiblePixels({ ...store.state, pattern: baseline.pattern,
-                    pixels: baseline.pixels, float: baseline.float }) }
-            : { pattern: baseline.pattern, pixels: baseline.pixels })
-        : undefined;
+    if (!baseline) throw new Error("Pattern edit changed without an opening state.");
+    const source: { pattern: PatternState; pixels: Uint8Array } = baseline.float
+        ? { pattern: baseline.pattern,
+            pixels: visiblePixels({ ...store.state, pattern: baseline.pattern,
+                pixels: baseline.pixels, float: baseline.float }) }
+        : { pattern: baseline.pattern, pixels: baseline.pixels };
     let edited: { pattern: PatternState; pixels: Uint8Array };
     try {
         edited = applyEditSettings(source);
@@ -505,6 +513,8 @@ function onEditChange() {
     }
     ui.setEditError(null);
     const { pattern, pixels } = edited;
+    const summary = patternChangeSummary(readEditSettings(), source, edited);
+    ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
     fitToView(
         viewport.canvas, viewport.view, pattern, store.state.rotation, store.state.labelsVisible,
     );

@@ -9,6 +9,14 @@ export type EditSettings =
     | { mode: "row";   width: number; height: number; wipe: boolean }
     | { mode: "round"; innerWidth: number; innerHeight: number; rounds: number; subMode: "full" | "half" | "quarter"; wipe: boolean };
 
+export interface PatternChangeSummary {
+    width: number;
+    height: number;
+    preserved: number;
+    added: number;
+    removed: number;
+}
+
 export const MAX_CANVAS_DIMENSION = 1_048_576;
 export const MAX_CANVAS_CELLS = 16_777_216;
 
@@ -116,4 +124,26 @@ export function applyEditSettings(
         }
     }
     return { pattern: newPattern, pixels: newPixels };
+}
+
+export function patternChangeSummary(
+    settings: EditSettings,
+    source: { pattern: PatternState; pixels: Uint8Array },
+    result: { pattern: PatternState; pixels: Uint8Array },
+): PatternChangeSummary {
+    const oldCount = source.pixels.reduce((count, pixel) => count + Number(pixel !== 0), 0);
+    const newCount = result.pixels.reduce((count, pixel) => count + Number(pixel !== 0), 0);
+    let preserved = 0;
+    if (!settings.wipe && settings.mode === source.pattern.mode) {
+        const markers = source.pixels.map(pixel => pixel === 0 ? 0 : 255);
+        const mapped = applyEditSettings(settings, { pattern: source.pattern, pixels: markers });
+        preserved = mapped.pixels.reduce((count, pixel) => count + Number(pixel === 255), 0);
+    }
+    return {
+        width: result.pattern.canvasWidth,
+        height: result.pattern.canvasHeight,
+        preserved,
+        added: newCount - preserved,
+        removed: oldCount - preserved,
+    };
 }

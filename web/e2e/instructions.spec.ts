@@ -177,7 +177,7 @@ test("Live completes and reopens a Centre-out round as one boundary", async ({ p
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByLabel("Rounds").fill("1");
-    await page.getByRole("button", { name: "Apply" }).click();
+    await page.getByRole("button", { name: "Start with a blank centre-out pattern" }).click();
 
     await page.getByRole("button", { name: "Instructions" }).click();
     await page.getByRole("tab", { name: "Live" }).click();

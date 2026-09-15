@@ -1,6 +1,8 @@
 // Pure pattern helper tests — no DOM needed (parameters passed directly).
 import { describe, test, expect } from "vitest";
-import { applyEditSettings, EditSettings, patternDimensionError } from "../src/pattern";
+import {
+    applyEditSettings, EditSettings, patternChangeSummary, patternDimensionError,
+} from "../src/pattern";
 
 const rowBase: EditSettings = { mode: "row", width: 4, height: 3, wipe: false };
 
@@ -44,6 +46,44 @@ describe("applyEditSettings (row mode)", () => {
         expect(() => applyEditSettings({
             mode: "row", width: 4_097, height: 4_097, wipe: true,
         })).toThrow(/16,777,216/);
+    });
+});
+
+describe("patternChangeSummary", () => {
+    test("reports simultaneous preservation, addition, and removal", () => {
+        const source = applyEditSettings({
+            mode: "row", width: 4, height: 3, wipe: true,
+        });
+        const settings: EditSettings = {
+            mode: "row", width: 6, height: 2, wipe: false,
+        };
+        const result = applyEditSettings(settings, source);
+
+        expect(patternChangeSummary(settings, source, result)).toEqual({
+            width: 6,
+            height: 2,
+            preserved: 8,
+            added: 4,
+            removed: 4,
+        });
+    });
+
+    test("reports a deliberate blank pattern as replacing every cell", () => {
+        const source = applyEditSettings({
+            mode: "row", width: 4, height: 3, wipe: true,
+        });
+        const settings: EditSettings = {
+            mode: "row", width: 4, height: 3, wipe: true,
+        };
+        const result = applyEditSettings(settings, source);
+
+        expect(patternChangeSummary(settings, source, result)).toEqual({
+            width: 4,
+            height: 3,
+            preserved: 0,
+            added: 12,
+            removed: 12,
+        });
     });
 });
 
