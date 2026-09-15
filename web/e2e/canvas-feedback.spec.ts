@@ -37,7 +37,7 @@ test("Overlay explains geometrically unavailable targets", async ({ page }) => {
 test("locked cells explain why paint was rejected", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Settings" }).click();
-    await page.locator("label:has(#lock-invalid)").click();
+    await expect(page.getByRole("checkbox", { name: "Prevent impossible overlay placements" })).toBeChecked();
     await page.keyboard.press("Escape");
 
     await clickCell(page, 1, 0, { button: "right" });

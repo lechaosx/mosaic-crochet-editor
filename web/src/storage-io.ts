@@ -47,6 +47,7 @@ interface RecoveryV5 {
     };
     preferences: {
         hlOpacity:        number;
+        showGuidance?:     boolean;
         invalidIntensity: number;
         labelsVisible:    boolean;
         lockInvalid:      boolean;
@@ -102,6 +103,7 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV5 {
         },
         preferences: {
             hlOpacity: s.hlOpacity, invalidIntensity: s.invalidIntensity,
+            showGuidance: s.showGuidance ?? s.hlOpacity > 0,
             labelsVisible: s.labelsVisible, lockInvalid: s.lockInvalid,
             canvasRotation: s.rotation,
         },
@@ -140,7 +142,8 @@ export function loadFromLocalStorage(): SessionState | null {
             axes:             workspace.axes ?? defaultAxes(document.state.canvasWidth, document.state.canvasHeight),
             repeat,
             liveTransforms:   workspace.liveTransforms ?? true,
-            hlOpacity:        preferences.hlOpacity,
+            hlOpacity:        preferences.hlOpacity === 0 ? 100 : preferences.hlOpacity,
+            showGuidance:     preferences.showGuidance ?? preferences.hlOpacity > 0,
             invalidIntensity: preferences.invalidIntensity,
             float:            workspace.float ? unpackFloat(workspace.float) : null,
             labelsVisible:    preferences.labelsVisible,

@@ -59,7 +59,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 - [x] Replace emoji and mixed-glyph tool artwork with one coherent, yarn-neutral icon set.
   - Preserve tool names, order, shortcuts, target sizes, non-colour active states, and text alternatives.
   - Verify icons remain legible at compact and increased-text layouts and in forced-colour mode; do not test subjective pixel styling through source-text assertions.
-- [ ] Separate stitch-guidance visibility from placement prevention.
+- [x] Separate stitch-guidance visibility from placement prevention.
   - Present `Show stitch guidance` and `Prevent impossible overlay placements` as independent controls with concise descriptions; preserve existing saved behavior during migration.
   - Verify hiding guidance changes presentation only, while prevention continues to block only the existing protected edits and never blocks a corrective edit.
 

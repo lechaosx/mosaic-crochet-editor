@@ -95,6 +95,9 @@ test("reselecting the current Instructions workspace preserves its view", async 
 
 test("Instructions links blockers and labels unresolved text as a draft", async ({ page }) => {
     await bootApp(page);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 0, 0);
 
@@ -140,6 +143,9 @@ test("Live advances by whole rows and resumes the exact instruction plan", async
 
 test("Live is unavailable while instruction blockers remain", async ({ page }) => {
     await bootApp(page);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 0, 0);
 

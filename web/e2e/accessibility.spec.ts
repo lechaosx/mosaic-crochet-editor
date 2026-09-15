@@ -292,7 +292,7 @@ test("explicit inspector opening moves focus to its first available control", as
     await bootApp(page);
 
     await page.getByRole("button", { name: "Settings" }).click();
-    await expect(page.getByRole("slider", { name: "Highlight opacity" })).toBeFocused();
+    await expect(page.getByRole("checkbox", { name: "Show stitch guidance" })).toBeFocused();
     await page.keyboard.press("Escape");
 
     await page.keyboard.press("Control+a");

@@ -62,6 +62,7 @@ export interface UICallbacks {
     onTransformPopoverToggle: (open: boolean) => void;
     onReplicateSelection: () => void;
     onHighlightChange:        () => void;
+    onGuidanceChange:         () => void;
     onInvalidIntensityChange: () => void;
     onLabelsVisibleChange:    () => void;
     onLockInvalidChange: () => void;
@@ -594,6 +595,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         }
     });
     el<HTMLInputElement>("hl-opacity")        .addEventListener("input",  cb.onHighlightChange);
+    el<HTMLInputElement>("show-guidance")     .addEventListener("change", cb.onGuidanceChange);
     el<HTMLInputElement>("invalid-intensity") .addEventListener("input",  cb.onInvalidIntensityChange);
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);

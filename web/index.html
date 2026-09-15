@@ -235,9 +235,17 @@
 
   <!-- ── Settings inspector ───────────────────────────────────────────── -->
   <section id="hl-popover" class="inspector-panel" aria-label="Settings" hidden>
-    <div class="popover-row" title="Fades the ✕ overlay marks and ! invalid marks. 0 hides them entirely.">
-      <span class="popover-label">Highlight opacity</span>
-      <input type="range" id="hl-opacity" value="100" min="0" max="100" aria-label="Highlight opacity">
+    <div class="settings-choice">
+      <label class="toggle popover-row" title="Show chart-derived overlay and invalid-placement marks.">
+        <span class="popover-label">Show stitch guidance</span>
+        <input type="checkbox" id="show-guidance" aria-describedby="guidance-help" checked>
+        <span class="toggle-track"></span>
+      </label>
+      <p id="guidance-help" class="popover-help">Show ✕ overlays and ! placement warnings on the chart.</p>
+    </div>
+    <div class="popover-row" title="Fade the visible ✕ overlay marks and ! invalid marks.">
+      <span class="popover-label">Guidance opacity</span>
+      <input type="range" id="hl-opacity" value="100" min="1" max="100" aria-label="Guidance opacity">
     </div>
     <div class="popover-row" title="How vivid the ! invalid markers are. Hue is picked automatically to contrast with your colours; this slider only adjusts intensity.">
       <span class="popover-label">Invalid marker intensity</span>
@@ -248,11 +256,14 @@
       <input type="checkbox" id="labels-on" checked>
       <span class="toggle-track"></span>
     </label>
-    <label class="toggle popover-row" title="Block paint on cells that can never host a valid overlay (top row in Rows; outermost ring and diagonal corners in Centre-out). Fixing an already-wrong cell still works.">
-      <span class="popover-label">Lock cells with no valid overlay</span>
-      <input type="checkbox" id="lock-invalid">
-      <span class="toggle-track"></span>
-    </label>
+    <div class="settings-choice">
+      <label class="toggle popover-row" title="Prevent new marks on cells that can never host a valid overlay; corrections still work.">
+        <span class="popover-label">Prevent impossible overlay placements</span>
+        <input type="checkbox" id="lock-invalid" aria-describedby="prevention-help" checked>
+        <span class="toggle-track"></span>
+      </label>
+      <p id="prevention-help" class="popover-help">New impossible marks are blocked, but existing ones can be corrected. Turn off for free sketching.</p>
+    </div>
   </section>
 
   <!-- ── Mirror & Repeat inspector ───────────────────────────────────── -->

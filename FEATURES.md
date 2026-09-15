@@ -87,10 +87,11 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Foundation row (bottom) is overlay-able: there's no inner row to clash with, so any colour there is a valid overlay onto the row above. — **your decision**
 - **✕** is drawn in the *other* pixel colour (auto-contrast — on an A-cell it uses colour B, and vice versa). The ✕ literally shows the colour that would land there if you overlaid. — **your decision**
 - **!** is drawn in a *third palette colour* computed at render time: the hue around the colour wheel that maximises the minimum hue-distance to both user colours, at moderate saturation/lightness (HSL 65% / 50%). The marker pops against any palette without ever blending in (auto-contrast can collide with high-saturation pixel colours; a third colour can't). — **your decision**
+- **Show stitch guidance** independently hides or shows ✕ / ! without changing editing constraints; old 0%-opacity sessions reopen with guidance hidden. — **Agent's choice**
 - Two sliders in the Settings inspector (behind the **⚙** button):
-  - **Highlight opacity** (default 100%) — dims both ✕ and !.
+  - **Guidance opacity** (default 100%, minimum 1%) — dims visible ✕ and !. — **Agent's choice**
   - **Invalid marker intensity** (default 65%) — adjusts only the ! marker's HSL saturation, full range 0–100%. Hue and lightness stay algorithmic; the user can tune the "vibe" without bypassing the palette-aware hue choice. — **your decision**
-- **Lock invalid** toggle (off by default): silently reverts any paint/fill/invert write to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when the cell was already correctly coloured. Fixing an already-wrong cell still works. — **your decision**
+- **Prevent impossible overlay placements** reverts paint/fill/invert writes to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when it was correctly coloured; a contextual explanation appears and corrective edits still work. Fresh sessions start with prevention on, while saved sessions retain their setting. — **your decision** (protected-cell rule); **Agent's choice** (name, feedback, fresh default)
 
 ## Labels
 

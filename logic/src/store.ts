@@ -24,6 +24,7 @@ export interface SessionState {
     repeat:        RepeatGrid;
     liveTransforms: boolean;
     hlOpacity:        number;            // 0..100, matches the input range
+    showGuidance?:     boolean;
     invalidIntensity: number;            // 0..100, drives ! marker saturation
     // The active lifted-selection layer (on or near canvas). When present,
     // `pixels` carries the canvas with the float's cells cut to natural

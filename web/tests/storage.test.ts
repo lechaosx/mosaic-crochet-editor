@@ -61,6 +61,24 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.float!.pixels[0]).toBe(1);
     });
 
+    test("guidance visibility round-trips independently of placement prevention", () => {
+        saveToLocalStorage(rowSession(3, 3, { showGuidance: false, lockInvalid: true, hlOpacity: 65 }));
+        const loaded = loadFromLocalStorage()!;
+        expect(loaded.showGuidance).toBe(false);
+        expect(loaded.lockInvalid).toBe(true);
+        expect(loaded.hlOpacity).toBe(65);
+    });
+
+    test("older zero-opacity recovery stays visually hidden and retains its placement choice", () => {
+        saveToLocalStorage(rowSession(3, 3, { hlOpacity: 0, lockInvalid: false }));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        delete raw.preferences.showGuidance;
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
+        const loaded = loadFromLocalStorage()!;
+        expect(loaded.showGuidance).toBe(false);
+        expect(loaded.lockInvalid).toBe(false);
+    });
+
     test("nothing in localStorage → null", () => {
         expect(loadFromLocalStorage()).toBeNull();
     });

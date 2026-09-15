@@ -47,10 +47,11 @@ function defaultSession(): SessionState {
         repeat:         defaultRepeatGrid(),
         liveTransforms: true,
         hlOpacity:        100,
+        showGuidance:     true,
         invalidIntensity: 65,
         float:           null,
         labelsVisible:   true,
-        lockInvalid:     false,
+        lockInvalid:     true,
         rotation:        0,
     };
 }
@@ -570,6 +571,10 @@ function onHlOpacityInput() {
     const v = parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
     store.commit(s => { s.hlOpacity = v; }, { recompute: false });
 }
+function onGuidanceToggle() {
+    const visible = (document.getElementById("show-guidance") as HTMLInputElement).checked;
+    store.commit(s => { s.showGuidance = visible; }, { recompute: false });
+}
 function onInvalidIntensityInput() {
     const v = parseInt((document.getElementById("invalid-intensity") as HTMLInputElement).value);
     store.commit(s => { s.invalidIntensity = v; }, { recompute: false });
@@ -921,6 +926,7 @@ const ui: UIHandle = mountUI({
     onTransformPopoverToggle,
     onReplicateSelection,
     onHighlightChange:         onHlOpacityInput,
+    onGuidanceChange:          onGuidanceToggle,
     onInvalidIntensityChange:  onInvalidIntensityInput,
     onLabelsVisibleChange:     onLabelsToggle,
     onLockInvalidChange:   onLockInvalidToggle,
@@ -1488,6 +1494,7 @@ function syncDomInputs(s: Readonly<SessionState>) {
     (document.getElementById("color-a") as HTMLInputElement).value = s.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = s.colorB;
     (document.getElementById("hl-opacity")         as HTMLInputElement).value   = String(s.hlOpacity);
+    (document.getElementById("show-guidance")      as HTMLInputElement).checked = s.showGuidance ?? s.hlOpacity > 0;
     (document.getElementById("invalid-intensity")  as HTMLInputElement).value   = String(s.invalidIntensity);
     (document.getElementById("labels-on")          as HTMLInputElement).checked = s.labelsVisible;
     (document.getElementById("lock-invalid") as HTMLInputElement).checked = s.lockInvalid;

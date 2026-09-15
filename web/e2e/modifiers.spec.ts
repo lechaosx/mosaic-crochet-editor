@@ -177,6 +177,9 @@ test("Alt+Ctrl+drag is mask-only (Alt dominates Ctrl)", async ({ page }) => {
 
 test("Shift+Ctrl+wand-click adds (Shift dominates remove)", async ({ page }) => {
     await bootApp(page);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
     await page.keyboard.press("p");
     await clickCell(page, 0, 0);   // paint A at (0,0) — row 0, col 0
     await page.keyboard.press("w");

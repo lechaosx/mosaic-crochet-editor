@@ -720,6 +720,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-size: var(--font-sm);
 }
 
+.settings-choice { display: flex; flex-direction: column; gap: var(--space-1); }
+
 .popover-footer {
   display: flex;
   gap: var(--space-2);

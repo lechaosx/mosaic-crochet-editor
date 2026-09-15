@@ -459,7 +459,8 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     ctx.stroke();
 
     renderFocusPath(ctx, view, dpr, rs.focusPath);
-    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, rs.paintPreview?.plan ?? store.plan, m, hlOpacity / 100);
+    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, rs.paintPreview?.plan ?? store.plan, m,
+        store.state.showGuidance === false ? 0 : hlOpacity / 100);
     if (rs.paintPreview) renderPaintPreviewOutline(
         ctx, view, dpr, pattern, rs.paintPreview.before, rs.paintPreview.after,
         rs.paintPreview.unchangedTargets, rs.contrastingColor,

@@ -115,9 +115,10 @@ The labelled **Yarn A** and **Yarn B** swatches remain directly available at eve
 
 The **⚙** button in the document bar opens Settings in the inspector:
 
-- **Highlight opacity** — fades the ✕ / ! glyphs; 0 hides them entirely. Defaults to 100%.
+- **Show stitch guidance** — shows or hides chart-derived ✕ overlay marks and ! placement warnings. Turning it off changes the view, not what you can draw. Existing browser sessions saved with 0% highlight opacity reopen with this off.
+- **Guidance opacity** — fades visible ✕ / ! glyphs from 1–100%. Defaults to 100%.
 - **Show numbers** — worked-row numbers in the left gutter with the foundation left unnumbered; round numbers appear above half/quarter charts or in the corner cells of full charts.
-- **Lock cells with no valid overlay** — blocks paint on cells where an overlay stitch can't physically fit (top row in Rows; outermost ring and diagonal corners in Centre-out). Fixing an already-wrong cell still works.
+- **Prevent impossible overlay placements** — on for fresh sessions. It blocks new impossible marks (top row in Rows; outermost ring and diagonal corners in Centre-out), but still permits correcting an already-wrong cell. Turn it off for free sketching; saved sessions keep their prior choice.
 
 ### Zoom, pan, rotation
 
