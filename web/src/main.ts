@@ -566,13 +566,19 @@ function redo() { const r = historyRedo(); if (r) applyRestored(r); }
 
 // ── Save / load ──────────────────────────────────────────────────────────────
 async function onSave() {
+    ui.setDocumentError(null);
     // Save reflects the user-visible state — bake the float into a
     // throwaway snapshot for the file, but leave the live float alone so
     // the selection survives across save.
     const snapshot: SessionState = store.state.float
         ? { ...store.state, ...anchorIntoCanvas(store.state) }
         : store.state;
-    await saveToFile(snapshot);
+    try {
+        await saveToFile(snapshot);
+    } catch (error) {
+        const detail = error instanceof Error ? error.message : "The file could not be written.";
+        ui.setDocumentError(`Could not save pattern: ${detail}`, "save");
+    }
 }
 async function onLoad() {
     ui.setDocumentError(null);

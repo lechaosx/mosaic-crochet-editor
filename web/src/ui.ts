@@ -92,7 +92,7 @@ export interface UIHandle {
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
-    setDocumentError:   (message: string | null) => void;
+    setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
     setViewState:       (zoom: number, rotation: number, navigating: boolean) => void;
     setEditError:       (message: string | null) => void;
     syncEditInputs:     (s: PatternState) => void;
@@ -556,16 +556,18 @@ export function mountUI(cb: UICallbacks): UIHandle {
             : "Browser recovery is current. Save .mcw creates a separate editable pattern file.";
     }
 
-    function setDocumentError(message: string | null) {
+    let documentErrorReturn: "load" | "save" = "load";
+    function setDocumentError(message: string | null, returnTo: "load" | "save" = "load") {
         const error = el("document-error");
+        if (message !== null) documentErrorReturn = returnTo;
         el("document-error-message").textContent = message ?? "";
         error.hidden = message === null;
     }
     el("document-error-dismiss").addEventListener("click", () => {
         setDocumentError(null);
-        const load = el<HTMLButtonElement>("btn-load");
+        const action = el<HTMLButtonElement>(documentErrorReturn === "save" ? "btn-save" : "btn-load");
         const more = el<HTMLButtonElement>("btn-more");
-        (load.getClientRects().length > 0 ? load : more).focus();
+        (action.getClientRects().length > 0 ? action : more).focus();
     });
 
     function setViewState(zoom: number, rotation: number, navigating: boolean) {

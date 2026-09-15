@@ -138,6 +138,20 @@ test("save with active float doesn't drop the selection", async ({ page }) => {
     expect((await pixelRGB(page, c.cx, c.cy))[0]).toBeGreaterThan(200);
 });
 
+test("save reports file-system failures and restores focus", async ({ page }) => {
+    await bootApp(page);
+    await page.evaluate(() => {
+        (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker = () =>
+            Promise.reject(new Error("Disk full."));
+    });
+
+    await page.locator("#btn-save").click();
+
+    await expect(page.locator("#document-error")).toContainText("Disk full.");
+    await page.locator("#document-error-dismiss").click();
+    await expect(page.locator("#btn-save")).toBeFocused();
+});
+
 test("tool switch with active float keeps it alive (paint clips to mask)", async ({ page }) => {
     await bootApp(page);
     // Lift cells (1, 1)..(2, 1).

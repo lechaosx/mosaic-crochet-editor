@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 // localStorage IO tests — pure pack/unpack tests live in logic/tests/storage.test.ts.
 
-import { describe, test, expect, beforeEach, vi } from "vitest";
-import { saveToLocalStorage, loadFromLocalStorage } from "../src/storage-io";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { saveToLocalStorage, loadFromLocalStorage, saveToFile } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
 
@@ -135,5 +135,27 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.float!.x).toBe(3);
         expect(loaded!.float!.y).toBe(1);
         expect(loaded!.float!.pixels[0]).toBe(2);
+    });
+});
+
+describe("saveToFile", () => {
+    afterEach(() => {
+        delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
+    });
+
+    test("returns false when the file picker is cancelled", async () => {
+        Object.assign(window, {
+            showSaveFilePicker: () => Promise.reject(new DOMException("cancelled", "AbortError")),
+        });
+
+        await expect(saveToFile(rowSession(3, 3))).resolves.toBe(false);
+    });
+
+    test("propagates file picker failures", async () => {
+        Object.assign(window, {
+            showSaveFilePicker: () => Promise.reject(new Error("Disk full.")),
+        });
+
+        await expect(saveToFile(rowSession(3, 3))).rejects.toThrow("Disk full.");
     });
 });

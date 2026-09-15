@@ -180,7 +180,10 @@ export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
             await writable.write(json);
             await writable.close();
             return true;
-        } catch { return false; }
+        } catch (error) {
+            if (error instanceof DOMException && error.name === "AbortError") return false;
+            throw error;
+        }
     } else {
         const blob = new Blob([json], { type: "application/json" });
         const url  = URL.createObjectURL(blob);
