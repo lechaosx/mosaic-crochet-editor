@@ -461,7 +461,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         renderSelectionTransformPreview(ctx, view, dpr, pattern, pixels, float, axes, repeat, rs.colors, rs.contrastingColor);
     }
     renderRepeatGuides(ctx, view, dpr, pattern, repeat, rs.contrastingColor, rs.previewRepeatGuides);
-    renderSymmetryGuides(ctx, view, dpr, pattern, axes, rs.contrastingColor, rs.axesInDeleteZone);
+    renderSymmetryGuides(ctx, view, dpr, pattern, axes, rs.contrastingColor, rs.axesInDeleteZone, rs.previewRepeatGuides);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
@@ -924,7 +924,7 @@ function renderSelectionTransformPreview(
 function renderSymmetryGuides(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     pattern: PatternState, axes: ReadonlyArray<Axis>,
-    color: string, deleteZoneIds: ReadonlySet<string>,
+    color: string, deleteZoneIds: ReadonlySet<string>, editable: boolean,
 ) {
     const active = axes.filter(a => a.active);
     if (active.length === 0) return;
@@ -943,6 +943,20 @@ function renderSymmetryGuides(
         ctx.lineTo(x2, y2);
         ctx.stroke();
     };
+    const handle = (x: number, y: number) => {
+        if (!editable) return;
+        const r = 6 / (view.zoom * dpr);
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(x, y - r);
+        ctx.lineTo(x + r, y);
+        ctx.lineTo(x, y + r);
+        ctx.lineTo(x - r, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.setLineDash([dash, dashGap]);
+    };
 
     ctx.save();
     ctx.lineWidth = lw;
@@ -957,11 +971,13 @@ function renderSymmetryGuides(
                 // Vertical mirror line at cell-edge x; +0.5 shifts cell-index to render coords.
                 const x = a.x + 0.5;
                 draw(x, -overhang, x, H + overhang);
+                handle(x, H / 2);
                 break;
             }
             case "H": {
                 const y = a.y + 0.5;
                 draw(-overhang, y, W + overhang, y);
+                handle(W / 2, y);
                 break;
             }
             case "D1": {
@@ -971,6 +987,7 @@ function renderSymmetryGuides(
                 const yMax = Math.min(H, W - c);
                 draw(yMin + c - ovhDiag, yMin - ovhDiag,
                      yMax + c + ovhDiag, yMax + ovhDiag);
+                handle((yMin + yMax) / 2 + c, (yMin + yMax) / 2);
                 break;
             }
             case "D2": {
@@ -980,6 +997,7 @@ function renderSymmetryGuides(
                 const yMax = Math.min(H, s);
                 draw(s - yMin + ovhDiag, yMin - ovhDiag,
                      s - yMax - ovhDiag, yMax + ovhDiag);
+                handle(s - (yMin + yMax) / 2, (yMin + yMax) / 2);
                 break;
             }
             case "C": {

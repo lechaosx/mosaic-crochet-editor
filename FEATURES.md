@@ -76,6 +76,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Stamp conflicts and safety-limit failures appear inline in the transform inspector; changing editor state or completing a stamp clears the transient message. — **Agent's choice**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
 - **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
+- Mirror & Repeat exposes editable guide handles and exact axis-position fields without requiring Move; outside that inspector, Move-based dragging remains available. — **Agent's choice**
 - **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
 
 ## Highlights

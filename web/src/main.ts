@@ -55,6 +55,9 @@ function defaultSession(): SessionState {
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const viewport = makeViewport(document.getElementById("canvas") as HTMLCanvasElement);
+function editableAxisTolerance(): number {
+    return Math.max(AXIS_HIT_TOLERANCE, Math.min(1.2, 22 / viewport.view.zoom));
+}
 const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
@@ -94,22 +97,26 @@ type MoveMode = SelectionMoveMode;
 //            mask-only's stamp) so cancel can revert.
 type Gesture =
     | { kind: "paint";
+        guidePickPending: boolean;
         color: 1 | 2;
         prePixels: Uint8Array;
         preFloat: Float | null;
         invertVisited: Set<number> | null;
       }
     | { kind: "select";
+        guidePickPending: boolean;
         mode: SelectMode;
         rect: { startX: number; startY: number; endX: number; endY: number } | null;
       }
     | { kind: "wand";
+        guidePickPending: boolean;
         mode: SelectMode;
         lastCell: { x: number; y: number } | null;
         prePixels: Uint8Array;
         preFloat: Float | null;
       }
     | { kind: "move";
+        guidePickPending: boolean;
         mode: MoveMode;
         drag: { anchorX: number; anchorY: number; startDx: number; startDy: number } | null;
         prePixels: Uint8Array | null;
@@ -335,6 +342,26 @@ function toggleAxisById(id: string) {
     refreshSymmetryUi();
 }
 
+function onAxisPosition(id: string, position: { x?: number; y?: number; c?: number }): Axis | null {
+    const axis = store.state.axes.find(a => a.id === id);
+    if (!axis) return null;
+    const snapped = {
+        x: position.x === undefined ? undefined : snapHalf(position.x),
+        y: position.y === undefined ? undefined : snapHalf(position.y),
+        c: position.c === undefined ? undefined : snapInt(position.c),
+    };
+    const updated = setAxisPosition(store.state.axes, id, snapped).find(a => a.id === id)!;
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    if (axisOffCanvas(updated, W, H)) {
+        ui.setCanvasFeedback("Keep the axis where it can transform at least two cells");
+        return axis;
+    }
+    if (JSON.stringify(updated) !== JSON.stringify(axis)) {
+        store.commit(s => { s.axes = setAxisPosition(s.axes, id, snapped); }, { history: true });
+    }
+    return updated;
+}
+
 function onRepeatInput() {
     const repeat = ui.readRepeatGrid();
     const error = repeatGridError(repeat);
@@ -355,6 +382,7 @@ function onLiveTransformsChange(enabled: boolean) {
 
 function onTransformPopoverToggle(open: boolean) {
     rs.previewRepeatGuides = open;
+    if (!open) viewport.canvas.style.cursor = "";
     render(viewport, ctx, rs, store);
 }
 
@@ -774,6 +802,7 @@ const ui: UIHandle = mountUI({
     onAddAxis:    addAxisOfKind,
     onToggleAxis: toggleAxisById,
     onDeleteAxis: deleteAxisById,
+    onAxisPosition,
     onRepeatInput,
     onRepeatCommit,
     onLiveTransformsChange,
@@ -828,7 +857,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; s.float = clipped; }, { persist: false });
-                gesture = { kind: "move", mode, drag: null, prePixels, preFloat: clipped };
+                gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat: clipped };
                 return;
             } else if (mode === "duplicate" && preFloat) {
                 // Pre-stamp the float into canvas so the duplicate is
@@ -837,13 +866,14 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; }, { persist: false });
             }
-            gesture = { kind: "move", mode, drag: null, prePixels, preFloat };
+            gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat };
             return;
         }
         if (tool === "select") {
             const mode = mods.shift ? "add" : mods.ctrl ? "remove" : selectionMode;
             gesture = {
                 kind: "select",
+                guidePickPending: true,
                 mode,
                 rect: null,
             };
@@ -854,6 +884,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             const mode = mods.shift ? "add" : mods.ctrl ? "remove" : selectionMode;
             gesture = {
                 kind: "wand",
+                guidePickPending: true,
                 mode,
                 lastCell: null,
                 prePixels: store.state.pixels.slice(),
@@ -864,6 +895,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         }
         gesture = {
             kind: "paint",
+            guidePickPending: true,
             color,
             prePixels: store.state.pixels.slice(),
             preFloat:  store.state.float,
@@ -872,18 +904,31 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     },
     onPaintAt:    (cx, cy) => {
         if (!gesture) return;
-        if (gesture.kind !== "repeat-drag" && rs.previewRepeatGuides) {
-            const frac = screenToPatternFrac(
-                viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
-                store.state.pattern, cx, cy,
-            );
-            const handle = pickRepeatHandle(
-                store.state.repeat, frac.x, frac.y,
-                Math.max(0.4, 22 / viewport.view.zoom),
-            );
-            if (handle) {
-                gesture = { kind: "repeat-drag", axis: handle, preRepeat: { ...store.state.repeat } };
-                return;
+        if ("guidePickPending" in gesture && gesture.guidePickPending) {
+            gesture.guidePickPending = false;
+            if (rs.previewRepeatGuides) {
+                const frac = screenToPatternFrac(
+                    viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+                    store.state.pattern, cx, cy,
+                );
+                const handle = pickRepeatHandle(
+                    store.state.repeat, frac.x, frac.y,
+                    Math.max(0.4, 22 / viewport.view.zoom),
+                );
+                if (handle) {
+                    gesture = { kind: "repeat-drag", axis: handle, preRepeat: { ...store.state.repeat } };
+                    return;
+                }
+                if (gesture.kind !== "move") {
+                    const hits = pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance());
+                    if (hits.length > 0) {
+                        viewport.canvas.style.cursor = "grabbing";
+                        gesture = { kind: "axis-drag",
+                            picks: hits.map(a => ({ id: a.id, kind: a.kind })),
+                            preAxes: [...store.state.axes] };
+                        return;
+                    }
+                }
             }
         }
         if (gesture.kind === "repeat-drag") {
@@ -1106,6 +1151,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             // after a position-only drag.
             if (dropped || moved) refreshSymmetryUi();
             rs.axesInDeleteZone = new Set();
+            viewport.canvas.style.cursor = "";
             gesture = null;
             return;
         }
@@ -1154,6 +1200,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             const { preAxes } = gesture;
             gesture = null;
             rs.axesInDeleteZone = new Set();
+            viewport.canvas.style.cursor = "";
             store.commit(s => { s.axes = preAxes; });
             return;
         }
@@ -1168,6 +1215,19 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
     },
     navigate:     () => navigateLatched || navigateMomentary,
+});
+
+viewport.canvas.addEventListener("pointermove", event => {
+    if (event.buttons || !rs.previewRepeatGuides) return;
+    const frac = screenToPatternFrac(
+        viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+        store.state.pattern, event.clientX, event.clientY,
+    );
+    const hits = pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance());
+    viewport.canvas.style.cursor = hits.length > 0 ? "grab" : "";
+});
+viewport.canvas.addEventListener("pointerleave", () => {
+    viewport.canvas.style.cursor = "";
 });
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────

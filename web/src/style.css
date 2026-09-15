@@ -629,7 +629,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
    across every row, regardless of position-string length. */
 .sym-list-row {
   display: grid;
-  grid-template-columns: 1.75em 1fr auto auto;
+  grid-template-columns: 1.75em minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
@@ -645,10 +645,26 @@ input[type="checkbox"] { accent-color: var(--accent); }
   line-height: 1;
 }
 .sym-list-row__pos {
+  min-width: 0;
   color: var(--fg-2);
   font-size: var(--font-sm);
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+.sym-list-row__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+.sym-list-row__fields label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.sym-list-row__fields input {
+  width: 4.5rem;
+  min-height: var(--hit-sm);
 }
 /* Toggle / delete buttons inside the list use a smaller hit target than the
    primary controls to keep rows compact. */

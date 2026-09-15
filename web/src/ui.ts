@@ -55,6 +55,7 @@ export interface UICallbacks {
     onAddAxis:         (k: SymKey) => void;
     onToggleAxis:      (id: string) => void;
     onDeleteAxis:      (id: string) => void;
+    onAxisPosition:    (id: string, position: { x?: number; y?: number; c?: number }) => Axis | null;
     onRepeatInput:     () => void;
     onRepeatCommit:    () => void;
     onLiveTransformsChange: (enabled: boolean) => void;
@@ -474,6 +475,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
             case "D2": return `c=${a.c}`;
         }
     }
+    function axisField(a: Axis, coordinate: "x" | "y" | "c"): number {
+        if (coordinate === "x" && "x" in a) return a.x;
+        if (coordinate === "y" && "y" in a) return a.y;
+        if (coordinate === "c" && "c" in a) return a.c;
+        throw new Error("Axis coordinate does not match its kind.");
+    }
     const KIND_GLYPH: Record<SymKey, string> = { V: "↔", H: "↕", C: "⊕", D1: "╲", D2: "╱" };
     const KIND_NAME: Record<SymKey, string> = {
         V: "vertical",
@@ -495,9 +502,47 @@ export function mountUI(cb: UICallbacks): UIHandle {
             kind.className = "sym-list-row__kind";
             kind.textContent = KIND_GLYPH[a.kind];
 
-            const pos = document.createElement("span");
+            const pos = document.createElement("div");
             pos.className = "sym-list-row__pos";
-            pos.textContent = formatPosition(a);
+            const summary = document.createElement("span");
+            summary.textContent = formatPosition(a);
+            pos.append(summary);
+
+            const fields = document.createElement("div");
+            fields.className = "sym-list-row__fields";
+            const coordinates: ("x" | "y" | "c")[] = a.kind === "C"
+                ? ["x", "y"]
+                : a.kind === "H" ? ["y"] : a.kind === "V" ? ["x"] : ["c"];
+            for (const coordinate of coordinates) {
+                const label = document.createElement("label");
+                label.textContent = coordinate;
+                const input = document.createElement("input");
+                input.type = "number";
+                input.step = coordinate === "c" ? "1" : "0.5";
+                input.value = String(axisField(a, coordinate));
+                input.setAttribute("aria-label", `${KIND_NAME[a.kind][0].toUpperCase()}${KIND_NAME[a.kind].slice(1)} axis ${coordinate} position`);
+                input.addEventListener("change", () => {
+                    const value = input.valueAsNumber;
+                    if (!Number.isFinite(value)) {
+                        input.value = String(axisField(a, coordinate));
+                        return;
+                    }
+                    const updated = cb.onAxisPosition(a.id, { [coordinate]: value });
+                    if (!updated) return;
+                    input.value = String(axisField(updated, coordinate));
+                    summary.textContent = formatPosition(updated);
+                    const updatedDescription = `${KIND_NAME[updated.kind]} axis at ${formatPosition(updated)}`;
+                    const toggle = row.querySelector<HTMLButtonElement>("[data-axis-action='toggle']")!;
+                    const del = row.querySelector<HTMLButtonElement>("[data-axis-action='delete']")!;
+                    toggle.title = `${updated.active ? "Disable" : "Enable"} ${updatedDescription}`;
+                    toggle.setAttribute("aria-label", toggle.title);
+                    del.title = `Delete ${updatedDescription}`;
+                    del.setAttribute("aria-label", del.title);
+                });
+                label.append(input);
+                fields.append(label);
+            }
+            pos.append(fields);
 
             const description = `${KIND_NAME[a.kind]} axis at ${formatPosition(a)}`;
 

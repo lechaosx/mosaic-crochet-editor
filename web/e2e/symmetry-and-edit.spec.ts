@@ -41,6 +41,42 @@ test("dragging the V symmetry guide moves the mirror axis", async ({ page }) => 
     expect(b).toBeLessThan(50);
 });
 
+test("Mirror inspector lets Pencil drag a guide without painting", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: "Add vertical" }).click();
+    const start = await cellCoord(page, 4, 4);
+    const end = await cellCoord(page, 2, 4);
+    const before = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels,
+    );
+
+    await page.mouse.move(start.cx, start.cy);
+    await page.mouse.down();
+    await page.mouse.move(end.cx, end.cy, { steps: 8 });
+    await page.mouse.up();
+
+    await expect(page.getByRole("button", { name: "Pencil" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Disable vertical axis at x=2" })).toBeVisible();
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels,
+    )).toEqual(before);
+});
+
+test("exact symmetry position entry is one undoable edit", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: "Add vertical" }).click();
+    const position = page.getByRole("spinbutton", { name: "Vertical axis x position" });
+    await expect(position).toHaveValue("4");
+
+    await position.fill("2.5");
+    await position.press("Tab");
+    await expect(page.getByRole("button", { name: "Disable vertical axis at x=2.5" })).toBeVisible();
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toBeVisible();
+});
+
 test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();

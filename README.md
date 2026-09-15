@@ -89,7 +89,7 @@ Opening an inspector explicitly moves keyboard focus to its first available cont
 
 New patterns start without active transforms. Open **Symmetry and repeat** and add any of five axis kinds: **↔ Vertical**, **↕ Horizontal**, **⊕ Central**, **╲ Diagonal**, or **╱ Anti-diagonal**. Each axis has its own enable/disable and delete controls, whose hover and accessibility labels identify the axis kind and position. Keyboard focus follows an axis when it is toggled or deleted. You can add multiple axes of the same kind.
 
-Active mirror axes are drawn as dashed guides; central rotation is shown as a dot. With the **Move** tool, drag a guide to reposition it. Vertical, horizontal, and central axes snap to half-cells; diagonals snap to whole cells. Dragging an axis beyond its useful canvas range deletes it. Diagonal axes work on rectangular canvases of any parity.
+Active mirror axes are drawn as dashed guides; central rotation is shown as a dot. While **Symmetry and repeat** is open, guides show handles and can be dragged without switching away from the current drawing tool. Each axis row also has an exact position field. With the inspector closed, the **Move** tool can still drag guides. Vertical, horizontal, and central axes snap to half-cells; diagonals snap to whole cells. Dragging an axis beyond its useful canvas range deletes it. Diagonal axes work on rectangular canvases of any parity.
 
 Active axes compose automatically: for example, vertical and horizontal mirrors together produce the corresponding four-cell orbit without adding a separate central-axis entry.
 

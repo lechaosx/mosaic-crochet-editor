@@ -48,7 +48,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Share the latched choice between Select and Wand, restore Replace after leaving that group, and keep Shift/Ctrl as temporary overrides whose result is visible before the gesture commits.
   - Keep Add usable without an existing selection and explain unavailable Subtract instead of allowing a silent no-op.
   - Verify pointer, touch, and keyboard-accessible controls without changing the established float semantics.
-- [ ] Make symmetry guides directly editable while Mirror & Repeat is open.
+- [x] Make symmetry guides directly editable while Mirror & Repeat is open.
   - Let a guide be selected and dragged without first choosing Move, show the active handle/cursor before contact, and provide an exact position field in its axis row.
   - Keep Move-based dragging and existing shortcuts as accelerators; outside the transform inspector, the active drawing tool continues to own the canvas.
   - Verify snapping, intersecting-guide selection, continuous-edit Undo coalescing, keyboard entry, and deletion.
