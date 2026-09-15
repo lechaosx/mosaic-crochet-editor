@@ -16,7 +16,7 @@ export interface GestureCallbacks {
     onPaintAt:     (clientX: number, clientY: number) => void;
     onPaintEnd:    () => void;     // commit stroke (record history if changed)
     onPaintCancel: () => void;     // discard stroke (revert to pre-stroke pixels)
-    onHover:       (x: number | null, y: number | null) => void;
+    onHover:       (x: number | null, y: number | null, clientX: number | null, clientY: number | null) => void;
     onView:        () => void;     // re-render after view change (pan/zoom)
     navigate:      () => boolean;
 }
@@ -98,9 +98,10 @@ export function mountGestures(
         }
         const p = pointers.get(e.pointerId);
         if (!p) {
+            if (e.pointerType === "touch") return;
             const cp = clientToPattern(e.clientX, e.clientY);
-            if (!cp) { cb.onHover(null, null); return; }
-            cb.onHover(cp.inside ? cp.x : null, cp.inside ? cp.y : null);
+            if (!cp) { cb.onHover(null, null, null, null); return; }
+            cb.onHover(cp.inside ? cp.x : null, cp.inside ? cp.y : null, e.clientX, e.clientY);
             return;
         }
         p.x = e.clientX;
@@ -165,7 +166,7 @@ export function mountGestures(
     canvas.addEventListener("pointerup", release);
     canvas.addEventListener("pointercancel", cancel);
     canvas.addEventListener("pointerleave", e => {
-        if (mode === "idle" && !pointers.has(e.pointerId)) cb.onHover(null, null);
+        if (mode === "idle" && !pointers.has(e.pointerId)) cb.onHover(null, null, null, null);
     });
     canvas.addEventListener("contextmenu", e => e.preventDefault());
 

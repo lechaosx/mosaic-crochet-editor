@@ -31,7 +31,7 @@ test("Overlay explains geometrically unavailable targets", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("o");
     await clickCell(page, 1, 8);
-    await expect(page.locator("#status-feedback")).toHaveText("Overlay unavailable at this cell");
+    await expect(page.locator("#status-feedback")).toHaveText("No inward supporting cell");
 });
 
 test("locked cells explain why paint was rejected", async ({ page }) => {

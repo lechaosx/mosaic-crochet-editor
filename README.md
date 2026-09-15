@@ -72,6 +72,8 @@ Eight tools, grouped in the authoring dock:
 
 With **Apply while drawing** enabled, all five drawing tools respect the configured symmetry and repeat transforms. Turn it off to edit only the source cell while keeping the same transformation ready for selection stamping. The eraser restores each transformed pixel to *its own* natural colour, not the click point's.
 
+Hover with a mouse or pen over a cell before drawing with Pencil, Eraser, Invert, or Overlay. The chart shows the resulting colours and overlay marks with a dashed preview outline; the context strip gives the exact changed-cell count and a short destination list. Unchanged or skipped transform destinations get a dot. Overlay also names the inward supporting cell, or explains why the target cannot hold an overlay. Moving away removes the preview without editing; on touch, the normal press-to-release stroke remains cancelable.
+
 When a selection is active, painting tools clip to its visible marquee: changes inside the float go to the float's pixels; clicks outside the marquee do nothing. The boundary appears as marching ants in a palette-aware accent colour. Holes (transparent cells) behave as outside the selection — never lifted, never affected by paint through the float.
 
 Tap or click the selected-cell count in the context strip to open the Selection card. It provides labelled Copy, Cut, Paste, and Deselect actions alongside their keyboard hints. Deselect places the floating content into the pattern before removing the selection. After Cut or Deselect, the same trigger shows the number of copied cells while the in-memory clipboard remains available.

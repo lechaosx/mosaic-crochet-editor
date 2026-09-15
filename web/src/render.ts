@@ -113,6 +113,7 @@ export interface RendererState {
     // guides at reduced alpha so the user can see "release = gone."
     axesInDeleteZone: Set<string>;
     previewRepeatGuides: boolean;
+    paintPreview: { before: Uint8Array; after: Uint8Array; plan: Int16Array; unchangedTargets: number[] } | null;
     focusPath: { x: number; y: number }[] | null;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
@@ -138,6 +139,7 @@ export function makeRendererState(): RendererState {
         selectionDashOffset:    0,
         axesInDeleteZone:       new Set<string>(),
         previewRepeatGuides:    false,
+        paintPreview:          null,
         focusPath:              null,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
@@ -423,7 +425,8 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     // highlight-symbol pass. `store.plan` is already computed from this
     // buffer (see `computePlan` in store.ts), so ✕ / ! markers track the
     // float live without a per-frame WASM rebuild.
-    const previewPixels = visiblePixels(store.state);
+    const committedPixels = visiblePixels(store.state);
+    const previewPixels = rs.paintPreview?.after ?? committedPixels;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#161618";
@@ -456,7 +459,11 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     ctx.stroke();
 
     renderFocusPath(ctx, view, dpr, rs.focusPath);
-    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, store.plan, m, hlOpacity / 100);
+    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, rs.paintPreview?.plan ?? store.plan, m, hlOpacity / 100);
+    if (rs.paintPreview) renderPaintPreviewOutline(
+        ctx, view, dpr, pattern, rs.paintPreview.before, rs.paintPreview.after,
+        rs.paintPreview.unchangedTargets, rs.contrastingColor,
+    );
     if (rs.previewRepeatGuides) {
         renderSelectionTransformPreview(ctx, view, dpr, pattern, pixels, float, axes, repeat, rs.colors, rs.contrastingColor);
     }
@@ -495,6 +502,53 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
     if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
+}
+
+function renderPaintPreviewOutline(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: PatternState, before: Uint8Array, after: Uint8Array,
+    unchangedTargets: number[], color: string,
+) {
+    const W = pattern.canvasWidth;
+    let count = 0, minX = W, minY = pattern.canvasHeight, maxX = -1, maxY = -1;
+    for (let i = 0; i < before.length; i++) {
+        if (before[i] === after[i]) continue;
+        const x = i % W, y = Math.floor(i / W);
+        count++;
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    for (const i of unchangedTargets) {
+        const x = i % W, y = Math.floor(i / W);
+        minX = Math.min(minX, x); minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+    }
+    if (!count && unchangedTargets.length === 0) return;
+    ctx.save();
+    const px = 2 / (view.zoom * dpr);
+    ctx.lineWidth = px;
+    ctx.strokeStyle = color;
+    ctx.setLineDash([4 * px, 3 * px]);
+    if (count + unchangedTargets.length > 256) {
+        ctx.strokeRect(minX + px / 2, minY + px / 2, maxX - minX + 1 - px, maxY - minY + 1 - px);
+    } else {
+        ctx.beginPath();
+        for (let i = 0; i < before.length; i++) {
+            if (before[i] === after[i]) continue;
+            const x = i % W, y = Math.floor(i / W);
+            ctx.rect(x + px / 2, y + px / 2, 1 - px, 1 - px);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        for (const i of unchangedTargets) {
+            const x = i % W, y = Math.floor(i / W);
+            ctx.beginPath();
+            ctx.arc(x + 0.5, y + 0.5, Math.min(0.15, 5 / (view.zoom * dpr)), 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    ctx.restore();
 }
 
 function renderFocusPath(

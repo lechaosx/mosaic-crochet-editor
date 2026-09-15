@@ -1,5 +1,7 @@
-import { PlanType, lock_invalid_row, lock_invalid_round,
+import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indices,
          overlay_target_available_row, overlay_target_available_round,
+         overlay_inward_cell_row, overlay_inward_cell_round,
+         build_highlight_plan_row, build_highlight_plan_round,
          instruction_start_row, instruction_start_round,
          InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
@@ -141,6 +143,7 @@ type Gesture =
 const AXIS_HIT_TOLERANCE = 0.4;
 
 let gesture: Gesture | null = null;
+let previewCell: { x: number; y: number } | null = null;
 let gestureFeedbackShown = false;
 let ctrlArrowStamped = false;                        // bake happens once per Ctrl-down
 let maskArrowState: { preFloat: Float } | null = null; // non-null while Alt+Arrow is active
@@ -198,7 +201,7 @@ observeCanvasResize(
 );
 
 // Renderer + side-effect channels (Store invokes them on every `commit`).
-store.setRenderer (s => render(viewport, ctx, rs, s));
+store.setRenderer (s => { rs.paintPreview = null; previewCell = null; render(viewport, ctx, rs, s); });
 store.setHistoryFn(s => historySave(s));
 store.setPersistFn(s => {
     ui.setRecoveryStatus(saveToLocalStorage(s) ? "saved" : "failed");
@@ -230,56 +233,64 @@ function selectionCellCount(): number {
 // written back to `float.pixels`. When no float, paint writes to canvas.
 // `g.prePixels` / `g.preFloat` (captured at paintdown) drive cancel revert
 // and the change-detection that decides whether release pushes a snapshot.
-function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "paint" }>) {
+interface PaintOutcome {
+    before: Uint8Array;
+    after: Uint8Array;
+    targets: Uint32Array;
+    floatPixels: Uint8Array | null;
+    reason: string | null;
+    protectedSkipped: boolean;
+}
+
+function overlayInwardCell(pattern: PatternState, x: number, y: number): Int32Array {
+    return pattern.mode === "row"
+        ? overlay_inward_cell_row(pattern.canvasWidth, pattern.canvasHeight, x, y)
+        : overlay_inward_cell_round(
+            pattern.canvasWidth, pattern.canvasHeight,
+            pattern.virtualWidth, pattern.virtualHeight,
+            pattern.offsetX, pattern.offsetY, x, y,
+        );
+}
+
+function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, invertVisited: Set<number> | null): PaintOutcome {
     const s = store.state;
     const { pattern } = s;
-    const { x, y } = screenToPattern(
-        viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, pattern, clientX, clientY,
-    );
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const inCanvas = !outOfBounds(x, y, W, H);
-    const tool = s.activeTool;
-
-    if (tool === "select" || tool === "wand" || tool === "move") return;
-
     const shifted = s.float ? shiftedFloatMask(s) : null;
     const visible = visiblePixels(s);
+    const blocked = (reason: string): PaintOutcome => ({
+        before: visible, after: visible, targets: new Uint32Array(0),
+        floatPixels: null, reason, protectedSkipped: false,
+    });
 
-    // Overlay tool handles gutter clicks specially.
-    if (!inCanvas && tool !== "overlay") return;
-    if (inCanvas && visible[y * W + x] === 0) return;   // hole
-    // When a float is active, the click cell must be inside its shifted
-    // mask (paint clip). Overlay's painted cell is the inward neighbour
-    // of the click, but the click cell itself still has to be in the float.
-    if (inCanvas && shifted && shifted[y * W + x] === 0) {
-        showGestureFeedback("Outside selection · no cells changed");
-        return;
-    }
-    if (tool === "overlay" && g.color === s.primaryColor && !overlayTargetAvailable(pattern, x, y)) {
-        showGestureFeedback("Overlay unavailable at this cell");
-        return;
+    if (!inCanvas && tool !== "overlay") return blocked("Outside pattern");
+    if (inCanvas && visible[y * W + x] === 0) return blocked("Outside pattern");
+    if (inCanvas && shifted && shifted[y * W + x] === 0) return blocked("Outside selection · no cells changed");
+    if (tool === "overlay" && color === s.primaryColor && !overlayTargetAvailable(pattern, x, y)) {
+        return blocked(overlayInwardCell(pattern, x, y).length === 0
+            ? "No inward supporting cell"
+            : "Overlay unavailable at this cell");
     }
 
     const transforms = s.liveTransforms
         ? transformsToFlat(s.axes, s.repeat)
         : new Float64Array(0);
-    const before  = visible;
+    const targets = transformed_target_indices(W, H, x, y, transforms);
     let next = paintOps[tool as PaintTool]({
         visible, pattern, x, y,
-        color: g.color, primary: s.primaryColor,
-        invertVisited: g.invertVisited,
+        color, primary: s.primaryColor,
+        invertVisited,
         transforms, shifted,
     });
-
+    let protectedSkipped = false;
     if (s.lockInvalid) {
         const unlocked = next;
-        next = lockAlwaysInvalid(pattern, before, unlocked);
-        if (!arraysEqual(unlocked, next)) {
-            showGestureFeedback("Protected cell skipped · unlock in Settings");
-        }
+        next = lockAlwaysInvalid(pattern, visible, unlocked);
+        protectedSkipped = !arraysEqual(unlocked, next);
     }
-
-    // Split paint result back into canvas + float.
+    let floatPixels: Uint8Array | null = null;
+    let after = next;
     if (s.float) {
         const f = s.float;
         const newFP = f.pixels.slice();
@@ -291,13 +302,109 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
                 newFP[ly * f.w + lx] = next[cy * W + cx];
             }
         }
-        const newFloat = { ...f, pixels: newFP };
-        store.commit(state => { state.float = newFloat; }, { persist: false });
+        floatPixels = newFP;
+        after = visiblePixels({ ...s, float: { ...f, pixels: newFP } });
+    }
+    return { before: visible, after, targets, floatPixels, reason: null, protectedSkipped };
+}
+
+function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "paint" }>) {
+    const pattern = store.state.pattern;
+    const { x, y } = screenToPattern(
+        viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, pattern, clientX, clientY,
+    );
+    const tool = store.state.activeTool;
+    if (tool === "select" || tool === "wand" || tool === "move") return;
+    const outcome = evaluatePaintAt(tool, g.color, x, y, g.invertVisited);
+    if (outcome.reason) {
+        if (outcome.reason !== "Outside pattern") showGestureFeedback(outcome.reason);
+        return;
+    }
+    if (outcome.protectedSkipped) showGestureFeedback("Protected cell skipped · unlock in Settings");
+    if (outcome.floatPixels) {
+        const pixels = outcome.floatPixels;
+        store.commit(state => { state.float = { ...state.float!, pixels }; }, { persist: false });
     } else {
-        const newPixels = next;
-        store.commit(state => { state.pixels = newPixels; }, { persist: false });
+        const pixels = outcome.after;
+        store.commit(state => { state.pixels = pixels; }, { persist: false });
     }
     updateStatus(store, x, y, hasConfiguredTransforms());
+}
+
+function clearPaintPreview() {
+    previewCell = null;
+    if (!rs.paintPreview) return;
+    rs.paintPreview = null;
+    render(viewport, ctx, rs, store);
+}
+
+function previewPaintAt(x: number | null, y: number | null, clientX: number | null, clientY: number | null) {
+    const tool = store.state.activeTool;
+    if (x === null || y === null || clientX === null || clientY === null
+        || navigateLatched || navigateMomentary || gesture || editBaseline
+        || tool === "fill" || tool === "select" || tool === "wand" || tool === "move") {
+        clearPaintPreview();
+        if (!gesture) ui.setCanvasFeedback(null);
+        return;
+    }
+    if (rs.previewRepeatGuides) {
+        const frac = screenToPatternFrac(
+            viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+            store.state.pattern, clientX, clientY,
+        );
+        if (pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance()).length > 0
+            || pickRepeatHandle(store.state.repeat, frac.x, frac.y, Math.max(0.4, 22 / viewport.view.zoom))) {
+            clearPaintPreview();
+            ui.setCanvasFeedback("Drag guide to reposition");
+            return;
+        }
+    }
+    if (previewCell?.x === x && previewCell.y === y) return;
+    previewCell = { x, y };
+    const p = store.state.pattern;
+    const outcome = evaluatePaintAt(tool, store.state.primaryColor, x, y, tool === "invert" ? new Set() : null);
+    if (outcome.reason) {
+        rs.paintPreview = null;
+        ui.setCanvasFeedback(`Preview · ${outcome.reason}`);
+        render(viewport, ctx, rs, store);
+        return;
+    }
+    const changed: string[] = [];
+    let count = 0;
+    for (let i = 0; i < outcome.before.length; i++) {
+        if (outcome.before[i] === outcome.after[i]) continue;
+        count++;
+        if (changed.length < 4) changed.push(`${i % p.canvasWidth}, ${Math.floor(i / p.canvasWidth)}`);
+    }
+    const unchangedTargets: number[] = [];
+    for (const target of outcome.targets) {
+        let affected = target;
+        if (tool === "overlay") {
+            const inner = overlayInwardCell(p, target % p.canvasWidth, Math.floor(target / p.canvasWidth));
+            affected = inner.length === 2 ? inner[1] * p.canvasWidth + inner[0] : -1;
+        }
+        if (affected < 0 || outcome.before[affected] === outcome.after[affected]) unchangedTargets.push(target);
+    }
+    const support = tool === "overlay" ? overlayInwardCell(p, x, y) : null;
+    const detail = tool === "overlay" && support?.length === 2
+        ? ` · support ${support[0]}, ${support[1]}` : "";
+    const locations = count > 0 ? ` · ${changed.join(" · ")}${count > 4 ? ` · ${count - 4} more` : ""}` : "";
+    const protectedNote = outcome.protectedSkipped ? " · protected destination skipped" : "";
+    const unchangedNote = unchangedTargets.length
+        ? ` · ${unchangedTargets.length} destination${unchangedTargets.length === 1 ? "" : "s"} unchanged or skipped` : "";
+    ui.setCanvasFeedback(`Preview · ${count ? `${count} cell${count === 1 ? "" : "s"} will change` : "No cells will change"}${detail}${locations}${unchangedNote}${protectedNote}`);
+    rs.paintPreview = count === 0 && unchangedTargets.length === 0 ? null : {
+        before: outcome.before,
+        after: outcome.after,
+        unchangedTargets,
+        plan: count === 0 ? store.plan : p.mode === "row"
+            ? build_highlight_plan_row(outcome.after, p.canvasWidth, p.canvasHeight)
+            : build_highlight_plan_round(
+                outcome.after, p.canvasWidth, p.canvasHeight,
+                p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds,
+            ),
+    };
+    render(viewport, ctx, rs, store);
 }
 
 function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
@@ -377,10 +484,12 @@ function onRepeatCommit() {
 }
 
 function onLiveTransformsChange(enabled: boolean) {
+    clearPaintPreview();
     store.commit(s => { s.liveTransforms = enabled; }, { recompute: false, render: false });
 }
 
 function onTransformPopoverToggle(open: boolean) {
+    clearPaintPreview();
     rs.previewRepeatGuides = open;
     if (!open) viewport.canvas.style.cursor = "";
     render(viewport, ctx, rs, store);
@@ -401,6 +510,7 @@ function onReplicateSelection() {
 // Switching tools keeps any active float alive — paint tools clip to its
 // shifted mask, so the selection survives across tool changes.
 function setTool(t: Tool) {
+    clearPaintPreview();
     const wasSelectionTool = store.state.activeTool === "select" || store.state.activeTool === "wand";
     const isSelectionTool = t === "select" || t === "wand";
     if (wasSelectionTool && !isSelectionTool) selectionMode = "replace";
@@ -437,6 +547,7 @@ function setSelectionMoveMode(mode: SelectionMoveMode) {
     ui.setSelectionState(selectionCellCount(), clipboardCellCount(), mode);
 }
 function setPrimary(slot: 1 | 2) {
+    clearPaintPreview();
     store.commit(s => { s.primaryColor = slot; }, { recompute: false, render: false });
     ui.setPrimary(slot);
 }
@@ -473,6 +584,7 @@ function onLabelsToggle() {
     store.commit(s => { s.labelsVisible = v; }, { recompute: false });
 }
 function onLockInvalidToggle() {
+    clearPaintPreview();
     const v = (document.getElementById("lock-invalid") as HTMLInputElement).checked;
     store.commit(s => { s.lockInvalid = v; }, { recompute: false, render: false });
 }
@@ -835,6 +947,7 @@ const clientToPattern = (cx: number, cy: number) => {
 mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
+        clearPaintPreview();
         if (editBaseline) {
             gesture = null;
             return;
@@ -1209,7 +1322,10 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         gesture = null;
         store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
     },
-    onHover:      (x, y) => updateStatus(store, x, y, hasConfiguredTransforms()),
+    onHover:      (x, y, clientX, clientY) => {
+        updateStatus(store, x, y, hasConfiguredTransforms());
+        previewPaintAt(x, y, clientX, clientY);
+    },
     onView:       () => {
         render(viewport, ctx, rs, store);
         ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);

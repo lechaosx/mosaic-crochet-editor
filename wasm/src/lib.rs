@@ -335,6 +335,23 @@ mod instruction_session_tests {
     }
 }
 
+#[cfg(test)]
+mod overlay_preview_tests {
+    use super::*;
+
+    #[test]
+    fn row_support_exists_for_overlay_but_not_foundation() {
+        assert_eq!(overlay_inward_cell_row(9, 9, 2, 1), vec![2, 2]);
+        assert!(overlay_inward_cell_row(9, 9, 2, 8).is_empty());
+    }
+
+    #[test]
+    fn round_support_follows_the_nearest_side_and_rejects_diagonal_corners() {
+        assert_eq!(overlay_inward_cell_round(9, 9, 9, 9, 0, 0, 0, 2), vec![1, 2]);
+        assert!(overlay_inward_cell_round(9, 9, 9, 9, 0, 0, 1, 1).is_empty());
+    }
+}
+
 #[wasm_bindgen]
 pub fn initialize_row_pattern(width: i32, height: i32) -> Vec<u8> {
     let mut grid = vec![0u8; (width * height) as usize];
@@ -590,6 +607,12 @@ pub fn overlay_target_available_row(width: i32, height: i32, x: i32, y: i32) -> 
 }
 
 #[wasm_bindgen]
+pub fn overlay_inward_cell_row(width: i32, height: i32, x: i32, y: i32) -> Vec<i32> {
+    common::inward_cell_row(IVec2::new(width, height), IVec2::new(x, y))
+        .map_or_else(Vec::new, |cell| vec![cell.x, cell.y])
+}
+
+#[wasm_bindgen]
 pub fn clear_overlay_row(
     pixels: &[u8],
     width: i32,
@@ -649,6 +672,26 @@ pub fn overlay_target_available_round(
         rounds,
         IVec2::new(x, y),
     )
+}
+
+#[wasm_bindgen]
+pub fn overlay_inward_cell_round(
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    x: i32,
+    y: i32,
+) -> Vec<i32> {
+    common::inward_cell_round(
+        IVec2::new(canvas_width, canvas_height),
+        IVec2::new(virtual_width, virtual_height),
+        IVec2::new(offset_x, offset_y),
+        IVec2::new(x, y),
+    )
+    .map_or_else(Vec::new, |cell| vec![cell.x, cell.y])
 }
 
 #[wasm_bindgen]

@@ -52,7 +52,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Let a guide be selected and dragged without first choosing Move, show the active handle/cursor before contact, and provide an exact position field in its axis row.
   - Keep Move-based dragging and existing shortcuts as accelerators; outside the transform inspector, the active drawing tool continues to own the canvas.
   - Verify snapping, intersecting-guide selection, continuous-edit Undo coalescing, keyboard entry, and deletion.
-- [ ] Preview exact single-cell drawing outcomes before pointer or pen contact.
+- [x] Preview exact single-cell drawing outcomes before pointer or pen contact.
   - Cover Pencil, Eraser, Invert, and Overlay, including every live mirror/repeat destination and the Overlay target's inward supporting cell or invalid reason.
   - Use the same target evaluation as commit, simplify very dense transformed previews without reporting approximate results, and leave touch behavior cancelable at press-to-release boundaries.
   - Defer Fill/Wand region-hover and touch-retarget previews until the smaller preview model proves useful.
