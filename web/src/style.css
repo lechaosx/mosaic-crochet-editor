@@ -17,8 +17,8 @@
   --font-base: 0.875rem;
   --font-lg: 1.0625rem;
 
-  --hit:    max(36px, 2.25rem);
-  --hit-sm: max(36px, 2.25rem);
+  --hit:    36px;
+  --hit-sm: 36px;
 
   --bg-0: #161618;
   --bg-1: #1f1f22;
@@ -46,8 +46,8 @@
 
 @media (any-pointer: coarse), (max-width: 48rem) {
   :root {
-    --hit: max(44px, 2.25rem);
-    --hit-sm: max(44px, 2.25rem);
+    --hit: 44px;
+    --hit-sm: 44px;
   }
 }
 
@@ -251,7 +251,7 @@ input  { font: inherit; color: inherit; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: var(--hit);
+  min-height: var(--hit);
   min-width: var(--hit);
   padding: 0 var(--space-3);
   background: var(--bg-3);
@@ -335,7 +335,7 @@ input  { font: inherit; color: inherit; }
    Inputs
    ────────────────────────────────────────────────────────────────────────── */
 input[type="number"] {
-  height: var(--hit-sm);
+  min-height: var(--hit-sm);
   padding: 0 var(--space-2);
   background: var(--bg-2);
   color: var(--fg-1);
@@ -373,8 +373,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
    ────────────────────────────────────────────────────────────────────────── */
 .swatch {
   position: relative;
-  width: var(--hit);
-  height: var(--hit);
+  width: max(var(--hit), 2.25rem);
+  height: max(var(--hit), 2.25rem);
   flex-shrink: 0;
   border: 2px solid var(--bg-4);
   border-radius: var(--radius-1);
@@ -416,7 +416,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   border-color: var(--fg-0);
   box-shadow: 0 0 0 2px var(--accent);
 }
-.swatch--small { width: var(--hit-sm); height: var(--hit-sm); }
+.swatch--small { width: max(var(--hit-sm), 2.25rem); height: max(var(--hit-sm), 2.25rem); }
 
 /* ──────────────────────────────────────────────────────────────────────────
    Canvas area & status
@@ -470,7 +470,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   display: grid;
   place-items: center;
   min-width: 3.5rem;
-  height: var(--hit);
+  min-height: var(--hit);
   padding-inline: var(--space-1);
   color: var(--fg-1);
   background: var(--bg-2);

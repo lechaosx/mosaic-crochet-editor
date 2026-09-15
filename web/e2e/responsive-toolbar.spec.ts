@@ -138,6 +138,8 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     });
     await expectTargetsAtLeast(page, 44);
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(await page.locator(".canvas-area").evaluate(el => el.clientHeight)).toBeGreaterThan(0);
+    expect(await page.locator(".canvas-controls").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
 test("phone contextual and Settings controls keep 44px targets", async ({ page }) => {
