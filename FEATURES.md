@@ -163,6 +163,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - An actionable selection count opens a labelled Selection card on every input type. It exposes Move content, Duplicate content, Move selection area, Copy, Cut, Paste, and Deselect using the existing float semantics; after the selection is removed, a clipboard count keeps Paste discoverable. Move outcomes are temporary UI state and reset to Move content after leaving Move. — **Agent's choice**
 - The context strip reports why a canvas gesture was rejected when painting outside the selection, starting Move without or outside a selection, choosing a geometrically unavailable Overlay target, or editing a protected cell. Repeated rejection within one gesture is coalesced into one polite status announcement. — **Agent's choice**
 - Mouse and pen hover preview the exact one-cell Pencil, Eraser, Invert, or Overlay result before contact, including live transform destinations, no-op destinations, overlay support, and rejected placement reasons; dense previews retain exact counts while simplifying outlines. — **Agent's choice**
+- Authoring tools, Mirror & Repeat, and Navigate use a consistent yarn-neutral line-icon family; accessible names and shortcuts remain stable, and the active tool has a non-colour underline. — **Agent's choice**
 - Design and Instructions expose their rendered canvases as distinctly named chart images; labelled controls and context remain the operable interface. — **Agent's choice**
 
 ## Workspace shell

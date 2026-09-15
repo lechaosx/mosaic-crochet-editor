@@ -281,6 +281,30 @@ input  { font: inherit; color: inherit; }
   line-height: 1;
 }
 
+.icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; pointer-events: none; }
+.tool-icon {
+  width: min(1.35rem, calc(var(--hit) - 8px));
+  height: min(1.35rem, calc(var(--hit) - 8px));
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.authoring-dock .btn--icon[aria-pressed="true"], #view-navigate[aria-pressed="true"] {
+  position: relative;
+}
+.authoring-dock .btn--icon[aria-pressed="true"]::after, #view-navigate[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  width: 45%;
+  height: 2px;
+  background: currentColor;
+}
+
 .btn--ghost {
   background: transparent;
   border-color: transparent;

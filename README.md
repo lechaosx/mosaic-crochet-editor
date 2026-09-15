@@ -61,6 +61,8 @@ Canvas dimensions may contain up to 16,777,216 cells total, with either axis up 
 
 Eight tools, grouped in the authoring dock:
 
+The authoring tools, Mirror & Repeat, and Navigate use the same monochrome line-icon style. Tool names remain available as button labels for assistive technology and as hover descriptions; the selected tool also has a small underline, so its state does not rely on colour alone.
+
 - **Pencil** — paint the active colour.
 - **Fill** — flood-fill a connected region (stops at the selection boundary when a selection is active).
 - **Eraser** — left click restores pixels to the underlying alternating colour; right click paints the *opposite* (the exact inverse).

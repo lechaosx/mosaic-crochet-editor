@@ -56,7 +56,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Cover Pencil, Eraser, Invert, and Overlay, including every live mirror/repeat destination and the Overlay target's inward supporting cell or invalid reason.
   - Use the same target evaluation as commit, simplify very dense transformed previews without reporting approximate results, and leave touch behavior cancelable at press-to-release boundaries.
   - Defer Fill/Wand region-hover and touch-retarget previews until the smaller preview model proves useful.
-- [ ] Replace emoji and mixed-glyph tool artwork with one coherent, yarn-neutral icon set.
+- [x] Replace emoji and mixed-glyph tool artwork with one coherent, yarn-neutral icon set.
   - Preserve tool names, order, shortcuts, target sizes, non-colour active states, and text alternatives.
   - Verify icons remain legible at compact and increased-text layouts and in forced-colour mode; do not test subjective pixel styling through source-text assertions.
 - [ ] Separate stitch-guidance visibility from placement prevention.

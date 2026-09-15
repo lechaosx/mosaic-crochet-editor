@@ -9,6 +9,38 @@
   <link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-pencil" viewBox="0 0 24 24">
+      <path d="M4 20l4.5-1.1L19 8.4a2 2 0 0 0-2.8-2.8L5.7 16.1 4 20Z"/><path d="m14.8 7 2.8 2.8"/>
+    </symbol>
+    <symbol id="icon-fill" viewBox="0 0 24 24">
+      <path d="M5 7h14l-2 10H7L5 7Z"/><path d="M4 7h16M8 7V4m8 3V4"/><path d="M20 17c0 1.2-1 2-1 2.8a1 1 0 0 0 2 0c0-.8-1-1.6-1-2.8Z"/>
+    </symbol>
+    <symbol id="icon-eraser" viewBox="0 0 24 24">
+      <path d="m5 15 8-9 7 6-7 8H9l-4-5Z"/><path d="m9 11 7 6M13 20h8"/>
+    </symbol>
+    <symbol id="icon-invert" viewBox="0 0 24 24">
+      <path d="M4 7h16m-4-3 4 3-4 3M20 17H4m4-3-4 3 4 3"/>
+    </symbol>
+    <symbol id="icon-overlay" viewBox="0 0 24 24">
+      <rect x="4.5" y="4.5" width="15" height="15" rx="1"/><path d="m8 8 8 8m0-8-8 8"/>
+    </symbol>
+    <symbol id="icon-select" viewBox="0 0 24 24">
+      <rect x="4.5" y="5" width="15" height="14" rx="1" stroke-dasharray="3 2"/>
+    </symbol>
+    <symbol id="icon-wand" viewBox="0 0 24 24">
+      <path d="M5 19 15 9m-2-2 4 4M17 3v3m-1.5-1.5h3M20 11v3m-1.5-1.5h3"/>
+    </symbol>
+    <symbol id="icon-move" viewBox="0 0 24 24">
+      <path d="M12 3v18M3 12h18m-12-6 3-3 3 3m-6 12 3 3 3-3M6 9l-3 3 3 3m12-6 3 3-3 3"/>
+    </symbol>
+    <symbol id="icon-transform" viewBox="0 0 24 24">
+      <path d="M12 3v18"/><rect x="3" y="8" width="6" height="8" rx="1"/><rect x="15" y="8" width="6" height="8" rx="1"/><path d="M6 5h3m6 14h3"/>
+    </symbol>
+    <symbol id="icon-navigate" viewBox="0 0 24 24">
+      <path d="M7 13V7a1.5 1.5 0 0 1 3 0v4-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v5-3a1.5 1.5 0 0 1 3 0v5c0 5-2.5 7-6.5 7H11c-2 0-3.5-1.1-4.5-2.7L4 13a1.5 1.5 0 0 1 2.4-1.8L9 14"/>
+    </symbol>
+  </svg>
   <header class="document-bar" id="document-bar">
       <div class="document-actions g-file">
         <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions">Pattern</button>
@@ -37,24 +69,24 @@
     <nav class="authoring-dock" id="authoring-dock" aria-label="Authoring tools">
       <div class="dock-group g-paint" role="group" aria-label="Colour tools">
         <span class="dock-group-label" aria-hidden="true">Colour</span>
-        <button class="btn btn--icon" id="tool-pencil" title="Pencil — set finished-square colour (P)" aria-label="Pencil">✏️</button>
-        <button class="btn btn--icon" id="tool-fill"   title="Fill a finished-colour region (F)" aria-label="Fill">🪣</button>
-        <button class="btn btn--icon" id="tool-eraser" title="Restore natural row or round colour (E); right-click adds overlay" aria-label="Eraser">🧹</button>
-        <button class="btn btn--icon" id="tool-invert" title="Invert finished-square colours (I)" aria-label="Invert">⇋</button>
+        <button class="btn btn--icon" id="tool-pencil" title="Pencil — set finished-square colour (P)" aria-label="Pencil"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-pencil"/></svg></button>
+        <button class="btn btn--icon" id="tool-fill"   title="Fill a finished-colour region (F)" aria-label="Fill"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-fill"/></svg></button>
+        <button class="btn btn--icon" id="tool-eraser" title="Restore natural row or round colour (E); right-click adds overlay" aria-label="Eraser"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-eraser"/></svg></button>
+        <button class="btn btn--icon" id="tool-invert" title="Invert finished-square colours (I)" aria-label="Invert"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-invert"/></svg></button>
       </div>
 
       <div class="dock-group g-overlay" role="group" aria-label="Overlay tools">
         <span class="dock-group-label" aria-hidden="true">Overlay</span>
-        <button class="btn btn--icon" id="tool-overlay" title="Place a chart-required overlay (O); right-click removes it" aria-label="Overlay">✕</button>
+        <button class="btn btn--icon" id="tool-overlay" title="Place a chart-required overlay (O); right-click removes it" aria-label="Overlay"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-overlay"/></svg></button>
       </div>
 
       <div class="dock-group g-transform" role="group" aria-label="Arrange tools">
         <span class="dock-group-label" aria-hidden="true">Arrange</span>
-        <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select">▭</button>
-        <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand">✨</button>
-        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move">✥</button>
+        <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-select"/></svg></button>
+        <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
+        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
         <button class="btn" id="move-mask" title="Move the selection mask without moving its content" aria-label="Mask move" aria-pressed="false">Mask</button>
-        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Symmetry and repeat: no transforms configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured">⊕</button>
+        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Symmetry and repeat: no transforms configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
       </div>
 
       <div class="dock-group g-colors" role="group" aria-label="Yarns">
@@ -77,7 +109,7 @@
     <main class="canvas-area">
       <canvas id="canvas" role="img" aria-label="Editable pattern chart">Editable pattern chart. Use the authoring tools and canvas context to edit it.</canvas>
       <div class="canvas-controls" role="group" aria-label="Canvas view">
-        <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate">✋</button>
+        <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
         <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>
         <div class="canvas-control-group">
           <button class="btn btn--icon" id="view-zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
