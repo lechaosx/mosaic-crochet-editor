@@ -41,7 +41,7 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 ## Using the app
 
-The workspace separates document commands from authoring controls. On wide screens, tools occupy a left rail and an opened inspector takes a right column beside the canvas. On narrower screens, the same tool groups move below the canvas and the same inspector becomes a non-modal bottom sheet. Pattern, Selection, Mirror & Repeat, and Settings share that inspector; its close button dismisses the current section. At phone widths, lower-frequency document commands and Settings move into **More**.
+The workspace separates document commands from authoring controls. On wide screens, tools occupy a left rail and an opened inspector takes a right column beside the canvas. On narrower screens, the same tool groups move below the canvas and the same inspector becomes a non-modal bottom sheet. Pattern, Selection, Mirror & Repeat, and Settings share that inspector; its close button dismisses the current section. At phone widths, lower-frequency document commands and Settings move into **More**. Controls retain their pointer or touch minimum size and grow when the browser's text size is increased.
 
 ### Patterns
 

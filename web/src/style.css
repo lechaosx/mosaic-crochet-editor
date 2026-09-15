@@ -17,8 +17,8 @@
   --font-base: 0.875rem;
   --font-lg: 1.0625rem;
 
-  --hit:    36px;
-  --hit-sm: 36px;
+  --hit:    max(36px, 2.25rem);
+  --hit-sm: max(36px, 2.25rem);
 
   --bg-0: #161618;
   --bg-1: #1f1f22;
@@ -46,8 +46,8 @@
 
 @media (any-pointer: coarse), (max-width: 48rem) {
   :root {
-    --hit: 44px;
-    --hit-sm: 44px;
+    --hit: max(44px, 2.25rem);
+    --hit-sm: max(44px, 2.25rem);
   }
 }
 

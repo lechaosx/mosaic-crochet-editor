@@ -160,6 +160,29 @@ test("phone contextual and Settings controls keep 44px targets", async ({ page }
     }
 });
 
+test("labelled controls grow instead of clipping at doubled text size", async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await bootApp(page);
+    await page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%";
+        window.dispatchEvent(new Event("resize"));
+    });
+
+    for (const [name, control] of [
+        ["Pattern", page.locator("#btn-edit")],
+        ["Save", page.locator("#btn-save")],
+        ["Fit", page.locator("#view-fit")],
+    ] as const) {
+        await expect(control).toBeVisible();
+        expect(await control.evaluate(el => el.scrollHeight <= el.clientHeight), name).toBe(true);
+    }
+    expect(await page.locator("#swatch-a").evaluate(swatch => {
+        const label = swatch.querySelector(".swatch-label")!.getBoundingClientRect();
+        const check = swatch.querySelector(".swatch-check")!.getBoundingClientRect();
+        return label.left >= check.right || label.top >= check.bottom;
+    }), "Yarn A label and check").toBe(true);
+});
+
 test("constrained layouts place the authoring dock below the canvas and use an inspector sheet", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await bootApp(page);
