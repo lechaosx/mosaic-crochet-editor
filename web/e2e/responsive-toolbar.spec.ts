@@ -140,6 +140,26 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
+test("phone contextual and Settings controls keep 44px targets", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await bootApp(page);
+    await page.keyboard.press("Control+a");
+    const selection = await page.locator("#status-selection").boundingBox();
+    expect(selection!.height).toBeGreaterThanOrEqual(44);
+
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+    for (const target of [
+        page.locator("#hl-opacity"),
+        page.locator("#invalid-intensity"),
+        page.locator("label:has(#labels-on)"),
+        page.locator("label:has(#lock-invalid)"),
+    ]) {
+        const box = await target.boundingBox();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+});
+
 test("constrained layouts place the authoring dock below the canvas and use an inspector sheet", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await bootApp(page);
