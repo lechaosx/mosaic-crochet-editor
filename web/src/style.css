@@ -770,13 +770,15 @@ input[type="checkbox"] { accent-color: var(--accent); }
   gap: var(--space-3);
 }
 
-.instructions-header { justify-content: space-between; }
+.instructions-header { justify-content: space-between; flex-wrap: wrap; }
+.instructions-options { flex-wrap: wrap; }
 .instructions-header h1 { margin: 0; color: var(--fg-0); font-size: var(--font-lg); }
 .instructions-kicker { color: var(--accent); font-size: var(--font-sm); }
 .instructions-intro { margin: 0; max-width: 52rem; color: var(--fg-2); }
 
 .instructions-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
   border-bottom: var(--border);
 }
@@ -884,6 +886,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .instructions-sequence-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-2);

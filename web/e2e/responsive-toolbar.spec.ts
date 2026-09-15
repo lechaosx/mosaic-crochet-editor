@@ -206,6 +206,24 @@ test("short landscape keeps canvas and scrollable tools at doubled text size", a
     }
 });
 
+test("Instructions reflows without horizontal scrolling at doubled text size", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await bootApp(page);
+    await page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%";
+        window.dispatchEvent(new Event("resize"));
+    });
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Instructions" }).click();
+
+    const workspace = page.locator("#instructions-workspace");
+    await expect(workspace).toBeVisible();
+    expect(await workspace.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await expect(page.getByRole("button", { name: "Back to Design" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Text" })).toBeVisible();
+});
+
 test("constrained layouts place the authoring dock below the canvas and use an inspector sheet", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await bootApp(page);
