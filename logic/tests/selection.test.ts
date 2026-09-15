@@ -5,7 +5,7 @@
 
 import { describe, test, expect, vi } from "vitest";
 import {
-    liftCells, cutCells, rectMask, shiftedFloatMask, anchorIntoCanvas,
+    liftCells, cutCells, rectMask, shiftedFloatMask, previewSelectRectMask, anchorIntoCanvas,
     applySelectionMod, commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
     deleteFloat, matchedCutMask, clipFloatToCanvas,
 } from "../src/selection";
@@ -78,6 +78,26 @@ describe("matchedCutMask", () => {
         const expected = new Uint8Array(30);
         for (const i of [8, 10, 15, 16]) expected[i] = 1;
         expect(mask).toEqual(expected);
+    });
+});
+
+describe("previewSelectRectMask", () => {
+    test("matches the resulting sparse membership for replace, add, and remove", () => {
+        for (const [mode, x, expected] of [
+            ["replace", 2, [0, 0, 1, 0]],
+            ["add", 2, [1, 0, 1, 0]],
+            ["remove", 0, [0, 0, 0, 0]],
+        ] as const) {
+            const selected = new Store(rowSession(4, 1, {
+                pixels: new Uint8Array([1, 1, 1, 1]),
+            }));
+            commitSelectRect(selected, 0, 0, 0, 0, "replace");
+            const preview = previewSelectRectMask(selected.state, x, 0, x, 0, mode);
+            const committed = new Store(structuredClone(selected.state));
+            commitSelectRect(committed, x, 0, x, 0, mode);
+            expect([...preview]).toEqual(expected);
+            expect(preview).toEqual(shiftedFloatMask(committed.state));
+        }
     });
 });
 

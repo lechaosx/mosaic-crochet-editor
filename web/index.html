@@ -95,6 +95,11 @@
         <span id="status-yarn"></span>
         <span id="status-coordinates" hidden></span>
         <span id="status-feedback" class="status-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+        <div id="selection-mode-controls" class="selection-mode-controls" role="group" aria-label="Selection mode" hidden>
+          <button class="btn" id="selection-replace" type="button" aria-pressed="true" title="Replace the current selection">Replace</button>
+          <button class="btn" id="selection-add" type="button" aria-pressed="false" title="Add cells to the current selection">Add</button>
+          <button class="btn" id="selection-subtract" type="button" aria-pressed="false" aria-disabled="true" title="Subtract cells from the current selection">Subtract</button>
+        </div>
         <button id="status-selection" class="status-action" type="button" aria-controls="inspector-host" aria-expanded="false" title="Open selection actions" hidden></button>
         <span id="status-overlays"></span>
         <span id="status-invalid" hidden></span>

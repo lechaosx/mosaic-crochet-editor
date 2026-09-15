@@ -142,6 +142,23 @@ export function shiftedFloatMask(s: SessionState): Uint8Array {
     return out;
 }
 
+export function previewSelectRectMask(
+    state: SessionState,
+    x1: number, y1: number, x2: number, y2: number,
+    mode: SelectMode,
+): Uint8Array {
+    const { canvasWidth: W, canvasHeight: H } = state.pattern;
+    const visible = visiblePixels(state);
+    const region = rectMask(visible, W, H, x1, y1, x2, y2);
+    if (mode === "replace") return region;
+    const current = shiftedFloatMask(state);
+    for (let i = 0; i < current.length; i++) {
+        if (visible[i] === 0) current[i] = 0;
+        else if (region[i]) current[i] = mode === "add" ? 1 : 0;
+    }
+    return current;
+}
+
 // Bake the float into the canvas; return pixels with float stamped + float=null.
 export function anchorIntoCanvas(s: SessionState): { pixels: Uint8Array; float: null } {
     return { pixels: visiblePixels(s), float: null };

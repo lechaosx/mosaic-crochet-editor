@@ -99,15 +99,11 @@ export interface RendererState {
     // Third palette colour for the ! invalid marker, chosen at render time
     // to contrast nicely with both user colours. See `chooseContrastingColor`.
     contrastingColor: string;
-    // During a replace-mode select drag, the existing float outline is
-    // hidden (the drag is about to drop it). For add/remove modes it stays
-    // visible so the user can see what they're modifying.
+    // A selection drag shows its resulting membership, not the old marquee.
     hideCommittedSelection: boolean;
-    // Full unclamped drag rectangle (pattern coords, inclusive). Rendered as
-    // a marching-ants outline during a select drag — same style as the
-    // float marquee. Shows the user the full sweep even when it crosses the
-    // canvas border. The actual committed lift (clipped to canvas, holes
-    // excluded) only appears after release.
+    selectPreviewMask: Uint8Array | null;
+    // The unclamped gesture footprint remains visible beside the exact
+    // membership preview, including when the drag crosses the canvas edge.
     dragRect: { x1: number; y1: number; x2: number; y2: number } | null;
     // Marching-ants phase. Animated in `frame` while any float (committed
     // or drag preview) is on-screen; used as `lineDashOffset` for the outline.
@@ -137,6 +133,7 @@ export function makeRendererState(): RendererState {
         colors:         [null, "#000000", "#ffffff"],
         contrastingColor:     "hsl(0, 70%, 50%)",
         hideCommittedSelection: false,
+        selectPreviewMask:      null,
         dragRect:               null,
         selectionDashOffset:    0,
         axesInDeleteZone:       new Set<string>(),
@@ -484,7 +481,15 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         }
         renderSelection(ctx, view, dpr, pattern, shifted, rs.contrastingColor, dashOffsetSnapped);
     }
-    if (rs.dragRect) renderDragRect(ctx, view, dpr, rs.dragRect, rs.contrastingColor, dashOffsetSnapped);
+    if (rs.selectPreviewMask) {
+        renderSelection(ctx, view, dpr, pattern, rs.selectPreviewMask, rs.contrastingColor, dashOffsetSnapped);
+    }
+    if (rs.dragRect) {
+        ctx.save();
+        ctx.globalAlpha = rs.selectPreviewMask ? 0.45 : 1;
+        renderDragRect(ctx, view, dpr, rs.dragRect, rs.contrastingColor, dashOffsetSnapped);
+        ctx.restore();
+    }
     if (labelsVisible) {
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);

@@ -58,6 +58,59 @@ test("one wand sweep creates one undoable selection edit", async ({ page }) => {
     }
 });
 
+test("visible Select and Wand modes latch within the group and reset after leaving", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    const modes = page.getByRole("group", { name: "Selection mode" });
+    await expect(modes).toBeVisible();
+    await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
+    await expect(modes.getByRole("button", { name: "Subtract" })).toHaveAttribute("aria-disabled", "true");
+    await modes.getByRole("button", { name: "Add" }).click();
+    await expect(modes.getByRole("button", { name: "Add" })).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "Magic wand" }).click();
+    await expect(modes.getByRole("button", { name: "Add" })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await expect(modes).toBeHidden();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("visible Add and Subtract change the lifted selection without modifiers", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    const modes = page.getByRole("group", { name: "Selection mode" });
+    await clickCell(page, 1, 1);
+    await modes.getByRole("button", { name: "Add" }).click();
+    await clickCell(page, 3, 1);
+    await expect(page.locator("#status-selection")).toHaveText("2 selected");
+    await modes.getByRole("button", { name: "Subtract" }).click();
+    await clickCell(page, 1, 1);
+    await expect(page.locator("#status-selection")).toHaveText("1 selected");
+});
+
+test("Shift temporarily overrides visible Subtract and restores its latched state", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    const modes = page.getByRole("group", { name: "Selection mode" });
+    await clickCell(page, 1, 1);
+    await modes.getByRole("button", { name: "Subtract" }).click();
+    await clickCell(page, 3, 1, { modifiers: ["Shift"] });
+    await expect(page.locator("#status-selection")).toHaveText("2 selected");
+    await expect(modes.getByRole("button", { name: "Subtract" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Subtract resets when its final selected cell is removed", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    const modes = page.getByRole("group", { name: "Selection mode" });
+    await clickCell(page, 1, 1);
+    await modes.getByRole("button", { name: "Subtract" }).click();
+    await clickCell(page, 1, 1);
+    await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
+    await expect(modes.getByRole("button", { name: "Subtract" })).toHaveAttribute("aria-disabled", "true");
+});
+
 // The Ctrl+wand-click "remove" semantic is reliably covered at the
 // state level in `tests/interactions.test.ts` (wand-add-then-remove
 // chain). E2E coverage for that variant ran into the alternating-row

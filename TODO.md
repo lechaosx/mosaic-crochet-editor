@@ -44,7 +44,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Rename `Inner W` and `Inner H` to `Centre opening width` and `Centre opening height`, and replace `Wipe` with `Start with a blank pattern`.
   - Show resulting dimensions plus preserved, added, and removed cell counts. When geometry changes, label the action `Start with a blank row/centre-out pattern` instead of presenting an ordinary Apply.
   - Verify same-geometry preservation, deliberate blanking, invalid last-valid previews, geometry changes, Cancel, and one-step Undo.
-- [ ] Expose Replace, Add, and Subtract as visible Select/Wand modes.
+- [x] Expose Replace, Add, and Subtract as visible Select/Wand modes.
   - Share the latched choice between Select and Wand, restore Replace after leaving that group, and keep Shift/Ctrl as temporary overrides whose result is visible before the gesture commits.
   - Keep Add usable without an existing selection and explain unavailable Subtract instead of allowing a silent no-op.
   - Verify pointer, touch, and keyboard-accessible controls without changing the established float semantics.

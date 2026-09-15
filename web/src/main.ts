@@ -15,9 +15,10 @@ import { addAxis, removeAxis, toggleAxisActive,
          axisOffCanvas } from "@mosaic/logic/symmetry";
 import { defaultRepeatGrid, repeatGridError, transformsToFlat } from "@mosaic/logic/repeat";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
-import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
+import { mountUI, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit } from "./ui";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
+         previewSelectRectMask,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
@@ -64,6 +65,7 @@ const instructionsRs = makeRendererState();
 let instructionsPreviewStore: Store | null = null;
 let instructionsOpen = false;
 let selectionMoveMode: SelectionMoveMode = "move";
+let selectionMode: SelectionMode = "replace";
 let navigateLatched = false;
 let navigateMomentary = false;
 
@@ -157,21 +159,24 @@ function overlayTargetAvailable(pattern: PatternState, x: number, y: number): bo
         );
 }
 
-// Sync the renderer's drag-preview state. During a replace-mode select
-// drag the existing float outline is hidden; for add/remove modes it
-// stays visible.
 function syncSelectPreview() {
     const g = gesture?.kind === "select" ? gesture : null;
     if (!g || !g.rect) {
         rs.hideCommittedSelection = false;
         rs.dragRect               = null;
+        rs.selectPreviewMask      = null;
         return;
     }
-    rs.hideCommittedSelection = g.mode === "replace";
+    rs.hideCommittedSelection = true;
     rs.dragRect = {
         x1: g.rect.startX, y1: g.rect.startY,
         x2: g.rect.endX,   y2: g.rect.endY,
     };
+    rs.selectPreviewMask = previewSelectRectMask(
+        store.state,
+        g.rect.startX, g.rect.startY, g.rect.endX, g.rect.endY,
+        g.mode,
+    );
 }
 
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, () => render(viewport, ctx, rs, store));
@@ -199,11 +204,13 @@ store.addObserver(s => ui.setViewState(
 ));
 store.addObserver(s => updateStatus(s, null, null, hasConfiguredTransforms()));
 store.addObserver(s => {
+    if (!s.state.float && selectionMode === "remove") selectionMode = "replace";
     ui.setTransformState(
         Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveTransforms,
     );
     ui.setTransformError(null);
     ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
+    ui.setSelectionMode(s.state.activeTool, selectionMode, Boolean(s.state.float));
 });
 
 function selectionCellCount(): number {
@@ -366,6 +373,9 @@ function onReplicateSelection() {
 // Switching tools keeps any active float alive — paint tools clip to its
 // shifted mask, so the selection survives across tool changes.
 function setTool(t: Tool) {
+    const wasSelectionTool = store.state.activeTool === "select" || store.state.activeTool === "wand";
+    const isSelectionTool = t === "select" || t === "wand";
+    if (wasSelectionTool && !isSelectionTool) selectionMode = "replace";
     if (navigateLatched) {
         navigateLatched = false;
         ui.setViewState(viewport.view.zoom, store.state.rotation, navigateMomentary);
@@ -373,11 +383,21 @@ function setTool(t: Tool) {
     ui.setCanvasFeedback(null);
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
+    ui.setSelectionMode(t, selectionMode, Boolean(store.state.float));
     if (t !== "move" && selectionMoveMode !== "move") {
         selectionMoveMode = "move";
         ui.setMaskMove(false);
         ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
     }
+}
+function setSelectionMode(mode: SelectionMode) {
+    if (mode === "remove" && !store.state.float) {
+        ui.setCanvasFeedback("Select cells before subtracting");
+        return;
+    }
+    selectionMode = mode;
+    ui.setCanvasFeedback(null);
+    ui.setSelectionMode(store.state.activeTool, mode, Boolean(store.state.float));
 }
 function toggleMaskMove() {
     setSelectionMoveMode(selectionMoveMode === "mask-only" ? "move" : "mask-only");
@@ -742,6 +762,7 @@ const ui: UIHandle = mountUI({
     onTool: setTool,
     onMaskMove: toggleMaskMove,
     onSelectionMoveMode: setSelectionMoveMode,
+    onSelectionMode: setSelectionMode,
     onSelectionCopy: onCopy,
     onSelectionCut: onCut,
     onSelectionPaste: onPaste,
@@ -820,21 +841,25 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             return;
         }
         if (tool === "select") {
+            const mode = mods.shift ? "add" : mods.ctrl ? "remove" : selectionMode;
             gesture = {
                 kind: "select",
-                mode: mods.shift ? "add" : mods.ctrl ? "remove" : "replace",
+                mode,
                 rect: null,
             };
+            ui.setCanvasFeedback(`${mode === "remove" ? "Subtract" : mode === "add" ? "Add" : "Replace"} selection · drag to preview`);
             return;
         }
         if (tool === "wand") {
+            const mode = mods.shift ? "add" : mods.ctrl ? "remove" : selectionMode;
             gesture = {
                 kind: "wand",
-                mode: mods.shift ? "add" : mods.ctrl ? "remove" : "replace",
+                mode,
                 lastCell: null,
                 prePixels: store.state.pixels.slice(),
                 preFloat:  store.state.float,
             };
+            ui.setCanvasFeedback(`${mode === "remove" ? "Subtract" : mode === "add" ? "Add" : "Replace"} selection · release to commit`);
             return;
         }
         gesture = {
@@ -1301,6 +1326,7 @@ ui.setTransformState(
     Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveTransforms,
 );
 ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
+ui.setSelectionMode(store.state.activeTool, selectionMode, Boolean(store.state.float));
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
 ui.setRecoveryStatus(saved ? "recovered" : "saved");

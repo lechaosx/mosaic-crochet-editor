@@ -1,7 +1,9 @@
 import { Tool, SymKey, PatternState, Axis, RepeatGrid } from "@mosaic/logic/types";
+import type { SelectMode } from "@mosaic/logic/selection";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 
 export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
+export type SelectionMode = SelectMode;
 
 // ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
@@ -41,6 +43,7 @@ export interface UICallbacks {
     onTool:            (t: Tool) => void;
     onMaskMove:        () => void;
     onSelectionMoveMode: (mode: SelectionMoveMode) => void;
+    onSelectionMode:     (mode: SelectionMode) => void;
     onSelectionCopy:     () => void;
     onSelectionCut:      () => void;
     onSelectionPaste:    () => void;
@@ -81,6 +84,7 @@ export interface UIHandle {
     setTool:            (t: Tool) => void;
     setMaskMove:        (active: boolean) => void;
     setSelectionState:  (selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) => void;
+    setSelectionMode:   (tool: Tool, mode: SelectionMode, hasSelection: boolean) => void;
     setCanvasFeedback:  (message: string | null) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
@@ -238,6 +242,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     /* ── Selection card ──────────────────────────────────────────────── */
     const selectionTrigger = el<HTMLButtonElement>("status-selection");
+    const selectionModeControls = el("selection-mode-controls");
+    const selectionModeButtons: Record<SelectionMode, HTMLButtonElement> = {
+        replace: el("selection-replace"),
+        add: el("selection-add"),
+        remove: el("selection-subtract"),
+    };
     const selectionTitle = el("selection-card-title");
     const selectionClipboard = el("selection-card-clipboard");
     const selectionModes = el("selection-modes");
@@ -261,6 +271,19 @@ export function mountUI(cb: UICallbacks): UIHandle {
             focusFirstInspectorControl("selection");
         }
     });
+    (Object.keys(selectionModeButtons) as SelectionMode[]).forEach(mode =>
+        selectionModeButtons[mode].addEventListener("click", () => cb.onSelectionMode(mode))
+    );
+    function setSelectionMode(tool: Tool, mode: SelectionMode, hasSelection: boolean) {
+        selectionModeControls.hidden = tool !== "select" && tool !== "wand";
+        for (const key of Object.keys(selectionModeButtons) as SelectionMode[]) {
+            const button = selectionModeButtons[key];
+            const active = key === mode;
+            button.classList.toggle("btn--active", active);
+            button.setAttribute("aria-pressed", String(active));
+            if (key === "remove") button.setAttribute("aria-disabled", String(!hasSelection));
+        }
+    }
     (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(mode =>
         modeButtons[mode].addEventListener("click", () => {
             cb.onSelectionMoveMode(mode);
@@ -1042,7 +1065,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setMaskMove, setSelectionState, setCanvasFeedback, setPrimary, setColors, setAxes,
+        setTool, setMaskMove, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
         setHistory, setRecoveryStatus, setDocumentError, setViewState, setEditError, setEditSummary,

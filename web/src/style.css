@@ -562,6 +562,18 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .status-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .status-feedback { color: var(--fg-0); }
 
+.selection-mode-controls:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  pointer-events: auto;
+}
+.selection-mode-controls .btn {
+  min-height: var(--hit-sm);
+  padding-inline: var(--space-2);
+}
+.selection-mode-controls [aria-disabled="true"] { opacity: 0.55; }
+
 .selection-card-header {
   display: flex;
   align-items: baseline;
