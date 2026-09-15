@@ -132,11 +132,12 @@ input  { font: inherit; color: inherit; }
   flex: 1 1 0;
   min-height: 0;
   display: grid;
-  grid-template: minmax(0, 1fr) auto / minmax(0, 1fr);
+  grid-template: minmax(0, 1fr) fit-content(45%) / minmax(0, 1fr);
 }
 
 .authoring-dock {
   grid-row: 2;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -145,6 +146,7 @@ input  { font: inherit; color: inherit; }
   padding: var(--space-2) var(--space-3) max(var(--space-2), env(safe-area-inset-bottom));
   background: var(--bg-1);
   border-top: var(--border);
+  overflow-y: auto;
   z-index: 10;
 }
 
@@ -156,6 +158,8 @@ input  { font: inherit; color: inherit; }
   width: 100%;
   flex-wrap: wrap;
 }
+.document-bar--compact .btn { padding-inline: var(--space-2); }
+.document-bar--compact .document-status { padding-inline: 0; }
 .document-bar--compact .g-hlrot:empty { display: none; }
 
 .inspector-host {
