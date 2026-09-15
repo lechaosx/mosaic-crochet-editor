@@ -15,155 +15,85 @@ Current implementation status and remaining work. Shipped product decisions live
 
 ## UX/UI redesign
 
-Status: implementation in progress. Follow only the authoritative sequence below. The longer brainstorming inventory is retained so later work does not accidentally preclude useful ideas, but it is not an implementation specification.
+Stages 0–5 of the audited implementation sequence are complete. The next sequence below selects improvements that make existing workflows clearer before adding another major subsystem. The longer brainstorming inventory remains design input, not an implementation specification.
 
-Review artifact: [independent plan audit](doc/ux-plan-audit.md).
+Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product and technical constraints live in [FEATURES.md](FEATURES.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
 
-### Governing product boundary
+### Completed groundwork
 
-- The editor models chart information while the user supplies their crochet technique.
-- Generated Instructions are a chart-derived work sequence and chart companion, not a complete standalone crochet pattern.
-- Do not infer or prescribe foundations, turning, cutting, carrying, joining, finishing, or how an overlay is made.
-- Keep `sc` for single crochet, `ch` for chain, and app-specific `oc` for a chart-required overlay operation. Define `oc` in every generated legend without assigning it a stitch recipe.
-- In row patterns, treat the bottom edge as a foundation outside the generated work sequence and number the first worked row above it Row 1. Associate a visible overlay instruction with the row in which the overlay is worked, regardless of which supporting cell stores it internally.
-- In centre-out patterns, treat the innermost visible band as Round 1 and number successive bands outward. Centre setup or foundation is outside the generated work sequence. Associate a visible overlay instruction with the round in which the overlay is worked, regardless of its internal supporting-cell representation.
-- Treat each diagonal centre-out corner pixel as a complete `(sc, ch, sc)` group that cannot itself be an overlay. Neighbouring pixels retain normal Overlay behavior, including when their instructions are grouped beside a corner.
-- Use a fixed yarn phase: the row foundation is Yarn A, Row 1 is Yarn B, and subsequent rows alternate; centre-out Round 1 is Yarn A and subsequent rounds alternate outward. Yarn A/B are logical chart slots whose colours can be edited or swapped. Instructions identify the yarn for each row or round without prescribing transitions or carrying.
-- Treat Full, Half, and Quarter as authored extents only: Full contains the complete centre-out chart, Half its canonical bottom half, and Quarter its canonical bottom-left quarter. They do not imply mirroring, rotation, symmetry, or repetition. `As authored` Instructions cover exactly the stored extent while retaining round identities; any larger result requires a separately selected composition.
-- Do not infer instruction traversal from a global handedness mode. Row traversal explicitly selects a left/right origin and same/alternating direction; centre-out traversal selects a semantic corner or side midpoint, clockwise/counter-clockwise direction, and same/alternating direction. One origin maps across all rounds, with both central cells offered for an even-length side. These settings order chart work only and do not prescribe transitions or change chart appearance.
-- Keep handed placement of Live controls as a local interface preference independent of traversal and `.mcw` chart data.
-- Classify validation by derivability, not convention. A Blocker means the selected output cannot be translated into an unambiguous `sc`/`ch`/`oc` sequence matching the chart; examples include an overlay requiring work outside the output extent, a lossy or ambiguous composition, and an unavailable traversal origin. A Warning identifies a deterministic result worth reviewing, such as difficult-to-distinguish yarn colours. Do not warn merely because valid work is unusual.
-- Keep Instructions Overview available with blockers and link each one to its chart location. Prevent Live from starting, but keep compressed Text available as a clearly labelled draft with every unresolved position marked explicitly rather than silently emitted as `sc`.
-- Keep the product name Mosaic Crochet Editor and call its pattern geometries Rows and Centre-out. Describe the model as an alternating-yarn mosaic chart with derived overlay positions; do not claim complete compatibility with every named inset or overlay technique. Keep Overlay as the tool and `oc` as the app-defined operation whose physical method the user supplies.
+| Stage | Result |
+|---|---|
+| 0 — Correctness before redesign | Gesture cancellation, persistence boundaries, Wand history, and native control semantics shipped |
+| 1 — Existing-workspace usability | Adaptive targets, active context, touch selection actions, blocked-action feedback, and Yarn A/B shipped |
+| 2 — Transactions and adaptive shell | Versioned codecs/recovery, Pattern Apply/Cancel, adaptive workspace, view controls, and recovery status shipped |
+| 3 — Structured chart companion | Typed work sequence, compression structure, Instructions Text, and Overview shipped |
+| 4 — Product prototypes | Tool grouping, transform evaluator, row/round Live, and quarter-output composition prototypes completed |
+| 5 — Traversal prototype | Semantic row and centre-out traversal geometry completed; UI and persistence remain validation-gated |
 
 ### Delivery rules
 
-- Each unchecked checkbox below is one intended commit unless it explicitly says it is a product gate rather than implementation.
-- Every commit leaves the current editor usable and preserves unrelated shipped workflows.
-- Use red → green tests for behavior: Rust for chart geometry/export, Vitest for state and serialization, and Playwright for user interaction.
-- Update README and FEATURES with user-visible behavior and ARCHITECTURE with state, serialization, or module-boundary changes in the same commit.
-- Run the smallest relevant test during development and `bun run test` before completing each stage.
-- Do not introduce persisted state for a prototype. Add durable state only after the corresponding product gate passes.
+- Work in order. Each unchecked implementation checkbox is one intended commit; a checkbox labelled Product gate records evidence rather than code.
+- Preserve the current chart dialect, `.mcw` compatibility, and the distinction between authored data, workspace tools, browser recovery, project history, and Live progress.
+- Start behavioral work with a failing test at the appropriate Rust, Vitest, or Playwright layer. Update README and FEATURES for user-visible behavior and ARCHITECTURE for technical decisions in the same commit.
+- Run the smallest relevant checks during development and `bun run test` before completing each stage.
+- Stop after each stage and reassess value. Do not promote later brainstorming merely because it is already described.
 
-### Stage 0 — Correctness before redesign
+### Stage 6 — Clarify the workflows already in use
 
-- [x] Pin row, foundation, and visible-overlay export semantics with failing Rust fixtures.
-  - Build minimal patterns containing one visible overlay and assert which rendered chart row/round owns the emitted `oc`.
-  - Assert that the bottom edge is an unnumbered foundation outside the generated sequence and that the next row is visible and exported as Row 1.
-  - Assert that the innermost centre-out band is visible and exported as Round 1, with no generated centre setup or foundation.
-  - Assert that a diagonal centre-out corner pixel emits `(sc, ch, sc)` without restricting Overlay behavior on neighbouring pixels.
-  - Implement only the corrections demonstrated by those fixtures.
-- [x] Make pointer cancellation restore the complete gesture start state.
-  - Add a failing Playwright test for `pointercancel`, including cancellation caused by a second touch starting navigation.
-  - Route cancellation through the existing cancel callback rather than the commit path.
-- [x] Persist continuous canvas edits once at the completed gesture boundary.
-  - Add a failing test proving recovery is not rewritten during pointer movement and is current after release.
-  - Keep live rendering during the stroke and perform one persistence write after commit.
-- [x] Make one Wand sweep one undoable edit.
-  - Add a failing unit/E2E test covering multiple visited regions followed by one Undo.
-  - Remove intermediate history entries without changing selection results.
-- [x] Restore native keyboard semantics for existing toggles and selected controls.
-  - Replace `display: none` input hiding with an accessible visually-hidden treatment and expose active tool/yarn state programmatically.
-  - Verify keyboard activation, focus visibility, accessible name, role, and state before changing the shell.
+- [ ] Make Pattern changes describe their result before Apply.
+  - Rename `Inner W` and `Inner H` to `Centre opening width` and `Centre opening height`, and replace `Wipe` with `Start with a blank pattern`.
+  - Show resulting dimensions plus preserved, added, and removed cell counts. When geometry changes, label the action `Start with a blank row/centre-out pattern` instead of presenting an ordinary Apply.
+  - Verify same-geometry preservation, deliberate blanking, invalid last-valid previews, geometry changes, Cancel, and one-step Undo.
+- [ ] Expose Replace, Add, and Subtract as visible Select/Wand modes.
+  - Share the latched choice between Select and Wand, restore Replace after leaving that group, and keep Shift/Ctrl as temporary overrides whose result is visible before the gesture commits.
+  - Keep Add usable without an existing selection and explain unavailable Subtract instead of allowing a silent no-op.
+  - Verify pointer, touch, and keyboard-accessible controls without changing the established float semantics.
+- [ ] Make symmetry guides directly editable while Mirror & Repeat is open.
+  - Let a guide be selected and dragged without first choosing Move, show the active handle/cursor before contact, and provide an exact position field in its axis row.
+  - Keep Move-based dragging and existing shortcuts as accelerators; outside the transform inspector, the active drawing tool continues to own the canvas.
+  - Verify snapping, intersecting-guide selection, continuous-edit Undo coalescing, keyboard entry, and deletion.
+- [ ] Preview exact single-cell drawing outcomes before pointer or pen contact.
+  - Cover Pencil, Eraser, Invert, and Overlay, including every live mirror/repeat destination and the Overlay target's inward supporting cell or invalid reason.
+  - Use the same target evaluation as commit, simplify very dense transformed previews without reporting approximate results, and leave touch behavior cancelable at press-to-release boundaries.
+  - Defer Fill/Wand region-hover and touch-retarget previews until the smaller preview model proves useful.
+- [ ] Replace emoji and mixed-glyph tool artwork with one coherent, yarn-neutral icon set.
+  - Preserve tool names, order, shortcuts, target sizes, non-colour active states, and text alternatives.
+  - Verify icons remain legible at compact and increased-text layouts and in forced-colour mode; do not test subjective pixel styling through source-text assertions.
+- [ ] Separate stitch-guidance visibility from placement prevention.
+  - Present `Show stitch guidance` and `Prevent impossible overlay placements` as independent controls with concise descriptions; preserve existing saved behavior during migration.
+  - Verify hiding guidance changes presentation only, while prevention continues to block only the existing protected edits and never blocks a corrective edit.
 
-### Stage 1 — High-value improvements to the existing workspace
+### Stage 7 — Close access and first-use gaps
 
-- [x] Replace dynamic control shrinking with adaptive minimum targets: 36 × 36 CSS pixels on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact.
-  - Keep all eight shipped tools reachable and move only lower-frequency commands into a simple More surface.
-  - Verify 360 px, phone touch, tablet portrait/landscape, desktop, and increased text size without multiplying the entire E2E suite across every viewport.
-- [x] Add concise, non-duplicated active context.
-  - Surface active tool, active Yarn A/B, coordinates, selection count, current transform live/paused state, and existing invalid-overlay count near their owning controls.
-  - Avoid introducing the future blocker/warning taxonomy until concrete blocking cases exist.
-- [x] Expose existing selection and clipboard operations to touch without changing their outcomes.
-  - Provide Move, Duplicate, Move selection area, Copy, Cut, Paste, and Deselect with text labels and shortcut hints.
-  - Keep the current Delete behavior labelled conservatively until its unusual conditional semantics are separately redesigned and tested.
-- [x] Explain existing blocked/no-op canvas actions contextually.
-  - Cover painting outside a selection, protected cells, invalid Overlay targets, and unavailable Move.
-  - Coalesce feedback within one gesture and keep hover-only explanations supplementary.
-- [x] Rename primary/secondary colours to Yarn A/B and add colour-independent active state plus visible Edit and Swap actions.
-  - Preserve current pixel semantics and file compatibility.
-  - Defer labels, similarity analysis, and persistent accessibility preferences until Instructions consumes them.
+- [ ] Add one logical keyboard cell cursor to the canvas.
+  - Arrow keys move it, Space applies the active tool, and the context strip exposes coordinates, yarn, overlay, and validity without creating a DOM element per cell.
+  - Scope canvas shortcuts to canvas focus, keep form-field keys native, announce deliberate cursor movement to assistive technology, and preserve the existing Move nudge behavior.
+  - Verify inspection and drawing across Rows and Centre-out, including holes and blocked cells.
+- [ ] Add a lightweight fresh-session start surface over the existing session model.
+  - Offer Row pattern, Centre-out pattern, Open `.mcw`, and Try an example only when no meaningful browser recovery exists. Route creation into the existing Pattern transaction and restore returning users directly.
+  - Bundle one small editable example that demonstrates Colour, Overlay, Mirror & Repeat, and Instructions without adding a tutorial carousel or nullable-document architecture.
+  - Verify untouched loads, intentionally created blank patterns, legacy recovery, canceled creation/open, and compact layouts.
 
-### Stage 2 — Stable transactions, state ownership, and adaptive shell
+### Stage 8 — Validate before extending Instructions
 
-- [x] Extract pure `.mcw` encode/decode and add compatibility fixtures before extending the schema.
-  - Cover v1/v2 round trips, malformed/future data, and failure without replacement of the active session.
-  - Document ownership separately for authored document, editor workspace, local recovery, editor undo, display preferences, and future Live progress.
-- [x] Add versioned migration boundaries for browser recovery and editor undo before adding new fields.
-  - Avoid embedding large retained transform-source masks in every history snapshot.
-- [x] Implement explicit Pattern Apply/Cancel as a narrow vertical slice.
-  - Add failing E2E coverage for outside interaction, Escape/Cancel restoration, invalid-field last-valid preview, and one history entry on Apply.
-  - Defer resize handles, new preservation anchors, diagrams, output links, and Live/transform reconciliation.
-- [x] Build the first adaptive shell with a document bar, existing tools, canvas, compact status, and one open/closed inspector host.
-  - Separate document actions from authoring tools: use a document bar, tool rail, pinned inspector, and status area on wide layouts; use a compact app bar, bottom or side authoring dock, and inspector sheet when space is constrained.
-  - Recompose the same named and ordered controls rather than creating separate desktop and touch interfaces.
-  - Treat the current three-row phone toolbar as a safe intermediate state, not the final compact composition.
-  - Keep inspector content independent of pinned/drawer placement.
-  - Defer Peek/Half/Full detents, resizable pinning, automatic pan restoration, posture memory, and the full system-Back stack.
-- [x] Add explicit Fit, zoom, Rotate view left/right, Reset view rotation, and Navigate controls without changing rotation pivot semantics.
-  - Retain existing wheel, pinch, and middle-button navigation.
-  - Add Space-drag only as a tested momentary Navigate override.
-- [x] Make local-recovery failure visible and distinguish browser recovery from `.mcw` saving.
-  - Defer persistent file-handle freshness, last-download history, and replacement guards until serialization ownership is proven.
+- [ ] Product gate: observe the shipped Overview and row/round Live loop in real crochet sessions.
+  - Record whether row/round Done and Back are sufficiently low-click, where users lose their place, and whether the finished chart plus focused current path is honest enough without reconstructed physical WIP.
+  - Decide separately whether compression-tree tracking or chart-derived WIP earns its substantially higher implementation cost.
+- [ ] Product gate: validate row origins and centre-out corner/side-midpoint terminology with crocheters.
+  - Test left/right row origins, clockwise/counter-clockwise rounds, both even-side midpoint choices, and same/alternating schedules without implying turning, joining, cutting, or carrying.
+- [ ] If the traversal gate passes, expose and persist explicit traversal in Instructions.
+  - Make Overview, Live, and Text consume the same ordered walk; preview its path on the chart and mark an incompatible semantic origin as needing adjustment rather than silently relocating it.
+  - Version `.mcw`, recovery, and history deliberately because traversal affects generated output.
+- [ ] If the basic Live gate passes, add boundary-level `Start Live here` and `Crochet again`.
+  - Starting later treats the preceding row/round prefix as complete in one reversible progress boundary. Restarting clears only local Live progress after confirmation.
+  - Do not add stitch-by-stitch advancement, preview cursors, Focus mode, Wake Lock, or edit reconciliation in this slice.
 
-### Stage 3 — Structured chart companion
+### Not in this sequence
 
-- [x] Product gate: define the supported [chart dialect and terminology](doc/chart-dialect.md) with representative row and centre-out fixtures.
-  - Apply the agreed Rows/Centre-out terminology and retain the foundation, row/round identity, corner-pixel, yarn-phase, authored-extent, explicit-traversal, and derivability-based validation contracts.
-  - Preserve current traversal first, then add the agreed explicit controls only after the structured path exists. Do not implement output composition before this gate passes.
-- [x] Expose a typed, flat chart work sequence from Rust while preserving current text byte-for-byte.
-  - Include stable row/round identity, worked coordinate, supporting/parent coordinate, yarn, and `sc`/`oc`/`ch` kind.
-  - Verify flattened coordinate and stitch parity with corrected exporter fixtures.
-- [x] Expose compression structure as a renderer-independent result.
-  - Keep arbitrary compression groups separate from domain-semantic rows, rounds, sides, or authored repeats.
-  - Verify the existing text renderer remains byte-for-byte compatible.
-- [x] Replace the export modal with an Instructions Text peer workspace.
-  - Show the exact Copy/Download text, preserve Design state across switching, and provide a defined notation legend.
-  - Do not add Live, composition, WIP reconstruction, or traversal editing in this commit.
-- [x] Add a minimal Overview using the finished chart and structured row/round list.
-  - Selecting a line focuses the corresponding path without changing data or introducing progress.
-  - Keep Overview inspectable with blockers; link issues to the chart, prevent Live from starting, and expose Text as a labelled draft with explicit unresolved positions.
-
-### Stage 4 — Product prototypes and decision gates
-
-- [x] Prototype Colour Design versus Stitch Placement with concrete tasks and tool outcomes.
-  - Test whether two persistent strategies are understood or whether explicit tool names/groups are sufficient.
-  - Do not add strategy state, persistence, or strategy-sensitive transforms until behavior is unambiguous and validated.
-  - Prototype conclusion: retain both workflows as explicit Colour, Overlay, and Arrange tool groups; defer global strategy state.
-- [x] Prototype transform improvements against real sparse motifs without changing saved transform semantics.
-  - [x] First add exact selection previews and direct repeat-distance manipulation to the current axes/repeat model.
-  - [x] Test mask packing, directional counts, spacing, stagger offsets, combined-grid collisions, and inverse source mapping in a pure evaluator.
-  - [x] Add exact quarter-turn repeat and signed-parity alternate mirrored addressing to the pure evaluator.
-  - Existing multiple Central axes remain untouched; replacing them still requires a lossless migration.
-  - Prototype conclusion: the source-mapped Source → Around centre → Grid model is coherent; runtime integration remains incremental and must preserve current saved semantics.
-- [x] Prototype Live as row/round-level progress only.
-  - Use the finished chart, current-row/round focus, current yarn, Done, Back, and exact local resume against a frozen structured plan.
-  - Validate during real crochet sessions before adding run/stitch tracking or chart-derived WIP rendering.
-  - Prototype conclusion: row/round boundaries provide a usable low-click baseline; richer compression-tree stepping and WIP rendering remain deferred until crochet-session feedback justifies them.
-- [x] Prototype one deterministic composed-output preset in pure chart geometry.
-  - Start with As authored plus one applicable Mirror-to-full or Rotate-to-full case.
-  - Validate shared corners, yarn phase, paths, and source mapping before adding project state or Source/Output workspaces.
-  - Prototype conclusion: distortion-free Rotate-quarter-to-full is coherent for square centre-out quarters; matching midpoint claims may be shared, differing claims are seam conflicts, and other geometries remain unavailable pending explicit presets.
-
-### Stage 5 — Explicit traversal product gate
-
-- [x] Prototype semantic row and round traversal in core geometry without changing current Instructions.
-  - Rows support a left/right origin with same or alternating direction.
-  - Centre-out supports four corner groups and each side's midpoint, clockwise/counter-clockwise, with same or alternating direction. Even-length sides expose both adjacent midpoint stitches; odd-length sides expose one.
-  - Keep one semantic origin across rounds, preserve complete corner groups at sequence boundaries, and detect origins outside an authored extent.
-  - Prototype conclusion: the semantic model produces complete, duplicate-free paths and maps consistently across rounds; persist and expose it only after crocheter testing confirms the origin names and direction affordances.
-
-### Explicit deferrals and architectural guardrails
-
-- Defer recursive compression tracking, two Live cursors, preview-ahead WIP, edit reconciliation, midway starts, Focus mode, Wake Lock, Crochet again, and Print until the basic Live loop proves useful.
-- Defer physical-WIP reconstruction; retain a finished chart with current-work masking as the default prototype.
-- Defer persisted side-midpoint round starts and alternating-round traversal until crocheter testing validates the core traversal prototype.
-- Defer three-detent sheets, resizable inspector persistence, automatic occlusion panning, semantic zoom, overview navigator, and full browser-Back unwinding. Keep inspector content and render layers separable so these remain possible.
-- Defer persistent clipboard, exhaustive Help/coach-mark infrastructure, pen-specific eraser behavior, filename association, and multi-theme visual polish.
-- Do not retain source-less transform recipes across New/Open initially. Do not replace multiple Central axes or change clipping/collision rules without an explicit product decision and property tests.
-- Keep output composition and authoring transforms separate if composition passes its gate; neither should be inferred from Full/Half/Quarter source extent.
-- Use one valid committed transform recipe while invalid edits remain local drafts instead of adding separate requested/effective/suspended live states initially.
-- Do not add a nullable-document architecture for onboarding. Prototype a welcome surface over the existing session and suppress untouched recovery persistence instead.
+- Runtime replacement of the current mirror/repeat model, inverse editing through generated instances, and output composition remain separate high-risk projects despite their successful pure prototypes.
+- Recursive Live compression tracking, reconstructed physical WIP, dual progress cursors, edit reconciliation, Focus mode, Wake Lock, and Print remain dependent on crochet-session evidence.
+- Multi-detent sheets, resizable inspector persistence, semantic zoom, overview navigator, exhaustive Help/coach marks, persistent clipboard, filename association, pen hardware specialization, and multi-theme polish remain lower priority.
+- Preserve room for these ideas through existing module and state boundaries; do not add speculative state or abstraction for them.
 
 <details>
 <summary>Brainstorming inventory and superseded drafts (non-authoritative)</summary>
