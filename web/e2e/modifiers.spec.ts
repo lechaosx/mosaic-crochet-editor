@@ -210,6 +210,7 @@ test("Ctrl+Arrow bakes position into canvas on each new Ctrl press", async ({ pa
     await clickCell(page, 1, 1);
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);
+    await page.keyboard.press("m");
     // First Ctrl press: bake at (1,1), float moves to (2,1)
     await page.keyboard.down("Control");
     await page.keyboard.press("ArrowRight");

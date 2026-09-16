@@ -54,11 +54,12 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - **Keyboard shortcuts summary**:
   - `Ctrl+A` — lift all paintable cells into float. `Ctrl+Shift+A` / `Esc` — anchor and clear.
   - `Delete` — same all-or-nothing matching as `Ctrl+X` (see above), but re-lifts the result so the selection stays active. Pressing Delete twice always clears both float and canvas: first press makes float match canvas; second press (all match) clears canvas to baseline and re-lifts.
-  - **Arrow** — nudge float (content + position) ±1 cell. **Shift+Arrow** — ±5 cells.
-  - **Ctrl+Arrow** — bake the float's current position into canvas once (first press per Ctrl-down), then move the float **with its content intact** ±1 cell. **Ctrl+Shift+Arrow** — same but ±5 cells. Stamp resets when Ctrl is released.
-  - **Alt+Arrow** — mask-only: stamp content into canvas once (first press per Alt-down), then move the marquee ±1 cell (float pixels mirror canvas at the new position so the marquee shape stays visible). On Alt release the canvas at the final position is re-lifted into the float. Clamped to canvas bounds; if the float is entirely off-canvas when Alt is pressed, it is destroyed instead of jumping. **Alt+Shift+Arrow** — same but ±5 cells.
+  - On the focused canvas, **Arrow** moves a single logical-cell inspection cursor and **Space** applies the active drawing, Select, or Wand tool. Space-drag remains momentary Navigate.
+  - With Move active, **Arrow** nudges the float (content + position) ±1 cell. **Shift+Arrow** — ±5 cells.
+  - With Move active, **Ctrl+Arrow** bakes the float's current position into canvas once (first press per Ctrl-down), then moves the float **with its content intact** ±1 cell. **Ctrl+Shift+Arrow** — same but ±5 cells. Stamp resets when Ctrl is released.
+  - With Move active, **Alt+Arrow** is mask-only: stamp content into canvas once (first press per Alt-down), then move the marquee ±1 cell (float pixels mirror canvas at the new position so the marquee shape stays visible). On Alt release the canvas at the final position is re-lifted into the float. Clamped to canvas bounds; if the float is entirely off-canvas when Alt is pressed, it is destroyed instead of jumping. **Alt+Shift+Arrow** — same but ±5 cells.
   - Holding any arrow key produces one undo entry for the entire held sequence.
-  — **your decision**
+  — **your decision** (selection shortcut outcomes); **Agent's choice** (canvas cursor and Move scoping)
 
 ## Symmetry and repeat
 
@@ -165,6 +166,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - The context strip reports why a canvas gesture was rejected when painting outside the selection, starting Move without or outside a selection, choosing a geometrically unavailable Overlay target, or editing a protected cell. Repeated rejection within one gesture is coalesced into one polite status announcement. — **Agent's choice**
 - Mouse and pen hover preview the exact one-cell Pencil, Eraser, Invert, or Overlay result before contact, including live transform destinations, no-op destinations, overlay support, and rejected placement reasons; dense previews retain exact counts while simplifying outlines. — **Agent's choice**
 - Authoring tools, Mirror & Repeat, and Navigate use a consistent yarn-neutral line-icon family; accessible names and shortcuts remain stable, and the active tool has a non-colour underline. — **Agent's choice**
+- The focusable Design canvas has one strongly outlined logical-cell cursor rather than per-cell DOM controls. Arrow inspection announces coordinate, cell yarn, overlay state, and placement availability; Space applies the active tool, while selection nudges are scoped to Move and form controls retain native keys. — **Agent's choice**
 - Design and Instructions expose their rendered canvases as distinctly named chart images; labelled controls and context remain the operable interface. — **Agent's choice**
 
 ## Workspace shell

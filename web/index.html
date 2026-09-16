@@ -107,7 +107,8 @@
     </nav>
 
     <main class="canvas-area">
-      <canvas id="canvas" role="img" aria-label="Editable pattern chart">Editable pattern chart. Use the authoring tools and canvas context to edit it.</canvas>
+      <canvas id="canvas" role="img" aria-label="Editable pattern chart" aria-describedby="canvas-cell-status" tabindex="0">Editable pattern chart. Use the authoring tools and canvas context to edit it.</canvas>
+      <span id="canvas-cell-status" class="visually-hidden" role="status" aria-label="Keyboard cell" aria-live="polite" aria-atomic="true"></span>
       <div class="canvas-controls" role="group" aria-label="Canvas view">
         <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
         <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>

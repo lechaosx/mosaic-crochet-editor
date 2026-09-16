@@ -30,6 +30,7 @@ test("Ctrl+C does not stamp the float into the canvas", async ({ page }) => {
     // Copy. Old behaviour stamped the float content back into canvas[0,1].
     await page.keyboard.press("Control+c");
     // Move the float right to reveal the underlying canvas cell (0,1).
+    await page.keyboard.press("m");
     await page.keyboard.press("ArrowRight");
     const c = await cellCoord(page, 0, 1);
     const [r] = await pixelRGB(page, c.cx, c.cy);
@@ -45,6 +46,7 @@ test("Ctrl+X does not clear canvas where content differs from the float", async 
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);
     // Move float right × 2 → float at (3,1). float=B, canvas[3,1]=A → mismatch.
+    await page.keyboard.press("m");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
     // Ctrl+X: float(B) ≠ canvas(A) → must NOT clear (3,1).
@@ -59,6 +61,7 @@ test("Delete does not clear canvas where content differs from the float", async 
     await clickCell(page, 3, 1);   // canvas[3,1] = A
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);   // float = B
+    await page.keyboard.press("m");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");   // float → (3,1); float=B, canvas=A
     await page.keyboard.press("Delete");

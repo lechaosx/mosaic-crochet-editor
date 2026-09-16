@@ -65,7 +65,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 
 ### Stage 7 — Close access and first-use gaps
 
-- [ ] Add one logical keyboard cell cursor to the canvas.
+- [x] Add one logical keyboard cell cursor to the canvas.
   - Arrow keys move it, Space applies the active tool, and the context strip exposes coordinates, yarn, overlay, and validity without creating a DOM element per cell.
   - Scope canvas shortcuts to canvas focus, keep form-field keys native, announce deliberate cursor movement to assistive technology, and preserve the existing Move nudge behavior.
   - Verify inspection and drawing across Rows and Centre-out, including holes and blocked cells.

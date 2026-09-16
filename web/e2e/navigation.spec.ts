@@ -84,6 +84,7 @@ test("Space-drag is momentary Navigate and middle-drag still pans", async ({ pag
     const history = await historyLength(page);
     const beforeSpace = await matrix(page);
 
+    await page.getByRole("img", { name: "Editable pattern chart" }).focus();
     await page.keyboard.down("Space");
     await expect(navigate).toHaveAttribute("aria-pressed", "true");
     await dragCanvas(page);

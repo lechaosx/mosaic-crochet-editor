@@ -117,6 +117,8 @@ When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (re
 
 Latched and momentary Navigate state lives in `main.ts`; `gesture.ts` receives only a predicate and keeps an in-progress pan independent of later key release. `zoomAt` is shared render-layer view math, used by gestures with a pointer anchor and by zoom buttons with the canvas centre. — **Agent's choice**
 
+The keyboard cell is one coordinate in `main.ts` and one `RendererState.keyboardCursor` outline, not a DOM grid. Canvas-focused Arrow updates that coordinate and an off-screen live status; Space release uses the same paint evaluator as pointer input or the existing selection commits. If a pointer drag begins while Space is held, the pending keyboard application is canceled and the gesture remains momentary Navigate. — **Agent's choice**
+
 ### UI layer
 - `ui.ts` exposes `mountUI(callbacks): UIHandle`. Callbacks fire from DOM events; setters on the handle push state back into the DOM. No reactive framework. — **Agent's choice**
 - Styled radios and checkboxes use a visually-hidden focusable input rather than `display: none`; their label or track renders the focus indicator. Tool and yarn setters update `aria-pressed` with the visual active class. — **Agent's choice**

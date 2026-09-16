@@ -151,7 +151,7 @@ Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts an
 
 Toolbar tools and yarn swatches expose their selected state to assistive technology. Yarn swatches respond to Enter and Space. Pattern geometry and authored extent are named radio groups, and their choices and switches remain native controls that use the standard arrow and Space keys.
 
-The rendered Design canvas is exposed as **Editable pattern chart**, while the Instructions canvas is exposed as **Finished chart preview**. Authoring actions and current state remain available through the labelled tools and canvas context strip.
+The rendered Design canvas is exposed as **Editable pattern chart**, while the Instructions canvas is exposed as **Finished chart preview**. Focus the Design canvas to show one outlined logical-cell cursor. Arrow keys inspect cells—including centre-out holes—and announce coordinates, yarn, overlay, and placement availability; Space applies the active drawing or single-cell selection tool. Hold Space and drag to pan without applying the tool. With Move active, Arrow and Shift+Arrow retain their one- and five-cell selection nudges. Form controls keep their native keys.
 
 | Action | Key |
 |---|---|
@@ -163,9 +163,10 @@ The rendered Design canvas is exposed as **Editable pattern chart**, while the I
 | Select Yarn A / Yarn B | **1** / **2** |
 | Select all paintable cells / Deselect / Clear selection | **Ctrl+A** / **Ctrl+Shift+A** / **Esc** |
 | Delete selection content (keeps selection active) | **Delete** |
-| Nudge float / Nudge ×5 | **Arrow** / **Shift+Arrow** |
-| Bake position into canvas, nudge float | **Ctrl+Arrow** / **Ctrl+Shift+Arrow** |
-| Mask-only nudge (stamp + move marquee, re-lifts on release) | **Alt+Arrow** / **Alt+Shift+Arrow** |
+| Inspect canvas cell / apply active tool | **Arrow** / **Space** while canvas is focused |
+| Nudge float / Nudge ×5 | **Arrow** / **Shift+Arrow** with Move active |
+| Bake position into canvas, nudge float | **Ctrl+Arrow** / **Ctrl+Shift+Arrow** with Move active |
+| Mask-only nudge (stamp + move marquee, re-lifts on release) | **Alt+Arrow** / **Alt+Shift+Arrow** with Move active |
 | Copy selection / Cut to clipboard / Paste as a free float | **Ctrl+C** / **Ctrl+X** / **Ctrl+V** |
 | Undo / Redo | **Ctrl+Z** / **Ctrl+Y** (or **Ctrl+Shift+Z**) |
 

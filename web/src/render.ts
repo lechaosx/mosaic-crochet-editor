@@ -115,6 +115,7 @@ export interface RendererState {
     previewRepeatGuides: boolean;
     paintPreview: { before: Uint8Array; after: Uint8Array; plan: Int16Array; unchangedTargets: number[] } | null;
     focusPath: { x: number; y: number }[] | null;
+    keyboardCursor: { x: number; y: number } | null;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
 }
@@ -141,6 +142,7 @@ export function makeRendererState(): RendererState {
         previewRepeatGuides:    false,
         paintPreview:          null,
         focusPath:              null,
+        keyboardCursor:        null,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
     };
@@ -502,7 +504,24 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
+    if (rs.keyboardCursor) renderKeyboardCursor(ctx, view, dpr, rs.keyboardCursor, rs.contrastingColor);
     if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
+}
+
+function renderKeyboardCursor(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    cell: { x: number; y: number }, color: string,
+) {
+    const px = 1 / (view.zoom * dpr);
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.9)";
+    ctx.lineWidth = 5 * px;
+    ctx.strokeRect(cell.x + 2.5 * px, cell.y + 2.5 * px, 1 - 5 * px, 1 - 5 * px);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3 * px;
+    ctx.strokeRect(cell.x + 2.5 * px, cell.y + 2.5 * px, 1 - 5 * px, 1 - 5 * px);
+    ctx.restore();
 }
 
 function renderPaintPreviewOutline(

@@ -123,6 +123,8 @@ test("Stamp transformed copies applies symmetry and keeps the source selected", 
     const mirrored = await cellCoord(page, 8, 1);
     expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
 
+    await page.keyboard.press("m");
+    await page.getByRole("img", { name: "Editable pattern chart" }).focus();
     await page.keyboard.press("ArrowRight");
     const oldSource = await cellCoord(page, 0, 1);
     const movedSource = await cellCoord(page, 1, 1);
@@ -208,6 +210,8 @@ test("configured transforms can stamp a selection while live drawing is off", as
         const point = await cellCoord(page, x, 1);
         expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
     }
+    await page.keyboard.press("m");
+    await page.getByRole("img", { name: "Editable pattern chart" }).focus();
     await page.keyboard.press("ArrowRight");
     const movedSource = await cellCoord(page, 1, 1);
     expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
@@ -242,6 +246,8 @@ test("Stamp transformed copies applies repeat and keeps the source selected", as
         const point = await cellCoord(page, x, 1);
         expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
     }
+    await page.keyboard.press("m");
+    await page.getByRole("img", { name: "Editable pattern chart" }).focus();
     await page.keyboard.press("ArrowRight");
     const oldSource = await cellCoord(page, 4, 1);
     const movedSource = await cellCoord(page, 5, 1);

@@ -1,4 +1,4 @@
-import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indices,
+import { PlanType, PlanDir, lock_invalid_row, lock_invalid_round, transformed_target_indices,
          overlay_target_available_row, overlay_target_available_round,
          overlay_inward_cell_row, overlay_inward_cell_round,
          build_highlight_plan_row, build_highlight_plan_round,
@@ -74,6 +74,8 @@ let selectionMoveMode: SelectionMoveMode = "move";
 let selectionMode: SelectionMode = "replace";
 let navigateLatched = false;
 let navigateMomentary = false;
+let canvasSpacePending = false;
+let canvasSpaceNavigated = false;
 
 // Move-tool drag mode, chosen at paintdown from the UI mode and modifiers:
 //   "move"      → no modifier; drag repositions the float, release records.
@@ -145,6 +147,7 @@ const AXIS_HIT_TOLERANCE = 0.4;
 
 let gesture: Gesture | null = null;
 let previewCell: { x: number; y: number } | null = null;
+let keyboardCell: { x: number; y: number } | null = null;
 let gestureFeedbackShown = false;
 let ctrlArrowStamped = false;                        // bake happens once per Ctrl-down
 let maskArrowState: { preFloat: Float } | null = null; // non-null while Alt+Arrow is active
@@ -329,6 +332,77 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         const pixels = outcome.after;
         store.commit(state => { state.pixels = pixels; }, { persist: false });
     }
+    updateStatus(store, x, y, hasConfiguredTransforms());
+}
+
+function clampKeyboardCell(cell: { x: number; y: number }): { x: number; y: number } {
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    return {
+        x: Math.max(0, Math.min(W - 1, cell.x)),
+        y: Math.max(0, Math.min(H - 1, cell.y)),
+    };
+}
+
+function keyboardCellDescription(cell: { x: number; y: number }): string {
+    const s = store.state;
+    const { canvasWidth: W } = s.pattern;
+    const pixel = visiblePixels(s)[cell.y * W + cell.x];
+    if (pixel === 0) return `Cell ${cell.x}, ${cell.y} · outside pattern`;
+    let marker = "no stitch marker";
+    const directions: Record<number, [number, number]> = {
+        [PlanDir.Up]: [0, -1], [PlanDir.Down]: [0, 1],
+        [PlanDir.Left]: [-1, 0], [PlanDir.Right]: [1, 0],
+    };
+    for (let i = 0; i < store.plan.length; i += 4) {
+        const [dx, dy] = directions[store.plan[i + 1]];
+        if (store.plan[i + 2] + dx !== cell.x || store.plan[i + 3] + dy !== cell.y) continue;
+        marker = store.plan[i] === PlanType.Valid ? "valid overlay" : "invalid overlay warning";
+        if (marker === "valid overlay") break;
+    }
+    const placement = overlayTargetAvailable(s.pattern, cell.x, cell.y)
+        ? "overlay placement available" : "overlay placement unavailable";
+    return `Cell ${cell.x}, ${cell.y} · Yarn ${pixel === 1 ? "A" : "B"} · ${placement} · ${marker}`;
+}
+
+function showKeyboardCell(cell: { x: number; y: number }, announce = true) {
+    keyboardCell = clampKeyboardCell(cell);
+    rs.keyboardCursor = keyboardCell;
+    updateStatus(store, keyboardCell.x, keyboardCell.y, hasConfiguredTransforms());
+    if (announce) document.getElementById("canvas-cell-status")!.textContent = keyboardCellDescription(keyboardCell);
+    render(viewport, ctx, rs, store);
+}
+
+function applyKeyboardTool() {
+    if (!keyboardCell) return;
+    const { x, y } = keyboardCell;
+    const tool = store.state.activeTool;
+    if (tool === "select") {
+        commitSelectRect(store, x, y, x, y, selectionMode);
+    } else if (tool === "wand") {
+        commitWandAt(store, x, y, selectionMode);
+    } else if (tool === "move") {
+        ui.setCanvasFeedback(store.state.float
+            ? "Use Arrow keys to move the selection" : "Select cells before using Move");
+    } else {
+        const outcome = evaluatePaintAt(tool, store.state.primaryColor, x, y, tool === "invert" ? new Set() : null);
+        if (outcome.reason) {
+            ui.setCanvasFeedback(outcome.reason);
+        } else {
+            if (outcome.protectedSkipped) {
+                ui.setCanvasFeedback("Protected cell skipped · unlock in Settings");
+            }
+            if (arraysEqual(outcome.before, outcome.after)) {
+                if (!outcome.protectedSkipped) ui.setCanvasFeedback("No cells changed");
+            } else if (outcome.floatPixels) {
+                const pixels = outcome.floatPixels;
+                store.commit(state => { state.float = { ...state.float!, pixels }; }, { history: true });
+            } else {
+                const pixels = outcome.after;
+                store.commit(state => { state.pixels = pixels; }, { history: true });
+            }
+        }
+    }
+    document.getElementById("canvas-cell-status")!.textContent = keyboardCellDescription(keyboardCell);
     updateStatus(store, x, y, hasConfiguredTransforms());
 }
 
@@ -1351,13 +1425,45 @@ viewport.canvas.addEventListener("pointermove", event => {
 viewport.canvas.addEventListener("pointerleave", () => {
     viewport.canvas.style.cursor = "";
 });
+viewport.canvas.addEventListener("focus", () => {
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    showKeyboardCell(keyboardCell ?? { x: Math.floor(W / 2), y: Math.floor(H / 2) });
+});
+viewport.canvas.addEventListener("blur", () => {
+    rs.keyboardCursor = null;
+    updateStatus(store, null, null, hasConfiguredTransforms());
+    render(viewport, ctx, rs, store);
+});
+viewport.canvas.addEventListener("pointerdown", event => {
+    viewport.canvas.focus({ preventScroll: true });
+    if (canvasSpacePending) {
+        canvasSpaceNavigated = true;
+        return;
+    }
+    const cell = screenToPattern(
+        viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
+        store.state.pattern, event.clientX, event.clientY,
+    );
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    if (!outOfBounds(cell.x, cell.y, W, H)) showKeyboardCell(cell, false);
+});
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────
 document.addEventListener("keydown", e => {
     const t = e.target as HTMLElement;
-    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
     if (instructionsOpen) return;
-    if (e.code === "Space" && (t === document.body || t === viewport.canvas)) {
+    if (e.code === "Space" && t === viewport.canvas) {
+        e.preventDefault();
+        if (!e.repeat) {
+            canvasSpacePending = true;
+            canvasSpaceNavigated = false;
+            navigateMomentary = true;
+            ui.setViewState(viewport.view.zoom, store.state.rotation, true);
+        }
+        return;
+    }
+    if (e.code === "Space" && t === document.body) {
         e.preventDefault();
         if (!e.repeat) {
             navigateMomentary = true;
@@ -1373,7 +1479,8 @@ document.addEventListener("keydown", e => {
         else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); onCopy(); }
         else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); cutFloat(store); }
         else if (e.key === "v" && !e.shiftKey) { e.preventDefault(); onPaste(); }
-        else if (e.key.startsWith("Arrow") && store.state.float) {
+        else if (e.key.startsWith("Arrow") && t === viewport.canvas
+            && store.state.activeTool === "move" && store.state.float) {
             e.preventDefault();
             const step = e.shiftKey ? 5 : 1;
             const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
@@ -1390,7 +1497,8 @@ document.addEventListener("keydown", e => {
         return;
     }
     if (e.altKey) {
-        if (e.key.startsWith("Arrow") && store.state.float) {
+        if (e.key.startsWith("Arrow") && t === viewport.canvas
+            && store.state.activeTool === "move" && store.state.float) {
             e.preventDefault();
             const step = e.shiftKey ? 5 : 1;
             const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
@@ -1434,8 +1542,18 @@ document.addEventListener("keydown", e => {
         return;
     }
     if (e.key.startsWith("Arrow")) {
-        if (!store.state.float) return;
+        if (t !== viewport.canvas) return;
         e.preventDefault();
+        if (store.state.activeTool !== "move" || !store.state.float) {
+            const cell = keyboardCell ?? {
+                x: Math.floor(store.state.pattern.canvasWidth / 2),
+                y: Math.floor(store.state.pattern.canvasHeight / 2),
+            };
+            const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+            const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
+            showKeyboardCell({ x: cell.x + dx, y: cell.y + dy });
+            return;
+        }
         const step = e.shiftKey ? 5 : 1;
         const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
         const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
@@ -1466,6 +1584,9 @@ document.addEventListener("keydown", e => {
 
 document.addEventListener("keyup", e => {
     if (e.code === "Space") {
+        if (canvasSpacePending && !canvasSpaceNavigated) applyKeyboardTool();
+        canvasSpacePending = false;
+        canvasSpaceNavigated = false;
         navigateMomentary = false;
         ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched);
     } else if (e.key === "Alt") {

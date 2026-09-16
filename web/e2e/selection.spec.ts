@@ -91,6 +91,7 @@ test("Delete clears content and keeps selection active with baseline content", a
     const c = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, c.cx, c.cy)).not.toEqual([0, 0, 0]);
     // Selection still active — move it to verify the float exists
+    await page.keyboard.press("m");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Escape");
     // After anchoring the moved baseline-content float, (1,1) should have baseline (B)
@@ -98,12 +99,13 @@ test("Delete clears content and keeps selection active with baseline content", a
     expect(await pixelRGB(page, dst.cx, dst.cy)).not.toEqual([0, 0, 0]);
 });
 
-test("Arrow keys nudge float by 1 cell per press", async ({ page }) => {
+test("Move Arrow keys nudge float by 1 cell per press", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);   // paint A at (0,1)
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);   // select
+    await page.keyboard.press("m");
     // Nudge right once, then anchor with Esc.
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Escape");
@@ -112,12 +114,13 @@ test("Arrow keys nudge float by 1 cell per press", async ({ page }) => {
     expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);
 });
 
-test("Shift+Arrow nudges float by 5 cells", async ({ page }) => {
+test("Move Shift+Arrow nudges float by 5 cells", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);   // paint A at (0,1)
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);   // select
+    await page.keyboard.press("m");
     // Shift+ArrowRight = 5 cells.
     await page.keyboard.press("Shift+ArrowRight");
     await page.keyboard.press("Escape");
@@ -125,12 +128,13 @@ test("Shift+Arrow nudges float by 5 cells", async ({ page }) => {
     expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);
 });
 
-test("Ctrl+Arrow bakes current position into canvas and moves float with content", async ({ page }) => {
+test("Move Ctrl+Arrow bakes current position into canvas and moves float with content", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 2, 1);   // paint A at (2,1)
     await page.keyboard.press("s");
     await clickCell(page, 2, 1);   // select it
+    await page.keyboard.press("m");
     await page.keyboard.down("Control");
     await page.keyboard.press("ArrowRight");   // bake at (2,1), move float to (3,1)
     await page.keyboard.up("Control");
@@ -143,12 +147,13 @@ test("Ctrl+Arrow bakes current position into canvas and moves float with content
     expect(await pixelRGB(page, dst.cx, dst.cy)).toEqual([0, 0, 0]);   // float anchored with content
 });
 
-test("Ctrl+Arrow bakes only on the first Arrow while Ctrl is held", async ({ page }) => {
+test("Move Ctrl+Arrow bakes only on the first Arrow while Ctrl is held", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 2, 1);
     await page.keyboard.press("s");
     await clickCell(page, 2, 1);
+    await page.keyboard.press("m");
     await page.keyboard.down("Control");
     await page.keyboard.press("ArrowRight");   // bakes at (2,1), moves to (3,1)
     await page.keyboard.press("ArrowRight");   // no new bake, moves to (4,1)
@@ -165,12 +170,13 @@ test("Ctrl+Arrow bakes only on the first Arrow while Ctrl is held", async ({ pag
     expect(await pixelRGB(page, c3.cx, c3.cy)).not.toEqual([0, 0, 0]);
 });
 
-test("Ctrl+Shift+Arrow bakes once then moves float 5 cells", async ({ page }) => {
+test("Move Ctrl+Shift+Arrow bakes once then moves float 5 cells", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);
+    await page.keyboard.press("m");
     await page.keyboard.down("Control");
     await page.keyboard.down("Shift");
     await page.keyboard.press("ArrowRight");   // bake at (0,1), move float 5 cells to (5,1)
@@ -189,6 +195,7 @@ test("Alt+Arrow stamps content, moves marquee, then re-lifts on Alt release", as
     await clickCell(page, 2, 1);   // paint A at (2,1)
     await page.keyboard.press("s");
     await clickCell(page, 2, 1);   // select
+    await page.keyboard.press("m");
     // Hold Alt and press Arrow — stamps at (2,1), moves marquee to (3,1)
     await page.keyboard.down("Alt");
     await page.keyboard.press("ArrowRight");
@@ -259,6 +266,7 @@ test("Mask move toggle enables modifier-free mask-only drag and resets on tool c
     await clickCell(page, 1, 1);
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);
+    await page.keyboard.press("m");
 
     const maskMove = page.getByRole("button", { name: "Mask move" });
     await maskMove.click();
@@ -332,6 +340,7 @@ test("Alt+Arrow destroys float when it is entirely outside the canvas", async ({
     // Lift (1,1) — baseline B — then move it left until fully off-canvas (x = -4).
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);
+    await page.keyboard.press("m");
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
     // Alt+ArrowRight: without fix the float jumps to (0,1) and re-lifts the A there.
     // With fix it is destroyed immediately (no float, no jump).
@@ -353,6 +362,7 @@ test("Alt+Arrow clips float to in-bounds cells — does not jump or expand selec
     await bootApp(page);
     await page.keyboard.press("s");
     await dragCells(page, 6, 0, 8, 0);      // lift 3 cells in row 0 (baseline A)
+    await page.keyboard.press("m");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight"); // float now at x=8, covering (8,0),(9,0),(10,0)
     await page.keyboard.down("Alt");
@@ -373,6 +383,7 @@ test("Alt+Arrow is clamped to canvas bounds — float is not lost when pressing 
     await clickCell(page, 0, 1);   // paint A at left edge (0,1)
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);   // lift it — float = A at (0,1)
+    await page.keyboard.press("m");
     // Alt+ArrowLeft: float is at x=0; trying to move to x=-1 must be clamped.
     await page.keyboard.down("Alt");
     await page.keyboard.press("ArrowLeft");
@@ -410,6 +421,7 @@ test("Alt+Arrow re-lifts at new position on Alt release", async ({ page }) => {
     await clickCell(page, 3, 0, { button: "right" });   // paint B at destination (3,0)
     await page.keyboard.press("s");
     await clickCell(page, 2, 0);   // select (2,0)
+    await page.keyboard.press("m");
     await page.keyboard.down("Alt");
     await page.keyboard.press("ArrowRight");   // stamp (2,0), marquee → (3,0)
     await page.keyboard.up("Alt");             // re-lift from (3,0), cuts canvas[3,0] to A
