@@ -255,7 +255,7 @@ input  { font: inherit; color: inherit; }
     border-left: var(--border);
     border-radius: 0;
     box-shadow: none;
-    z-index: auto;
+    z-index: 20;
   }
 }
 
@@ -504,6 +504,53 @@ input[type="checkbox"] { accent-color: var(--accent); }
   display: flex;
   gap: var(--space-1);
 }
+
+.start-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  padding: var(--space-3);
+  overflow: auto;
+  background: rgba(22, 22, 24, 0.88);
+  backdrop-filter: blur(0.35rem);
+  -webkit-backdrop-filter: blur(0.35rem);
+}
+
+.start-card {
+  width: min(30rem, 100%);
+  display: grid;
+  gap: var(--space-4);
+  padding: clamp(var(--space-3), 4vw, var(--space-5));
+  color: var(--fg-1);
+  background: var(--bg-2);
+  border: var(--border);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-2);
+}
+
+.start-card h1 {
+  color: var(--fg-0);
+  font-size: clamp(var(--font-lg), 5vw, 1.5rem);
+}
+
+.start-card p { margin-top: var(--space-2); }
+
+.start-kicker {
+  color: var(--fg-2);
+  font-size: var(--font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.start-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.start-actions .btn { white-space: normal; }
 
 #view-zoom-value {
   display: grid;

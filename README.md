@@ -43,6 +43,8 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 The workspace separates document commands from authoring controls. On wide screens, tools occupy a left rail and an opened inspector takes a right column beside the canvas. On narrower screens, the same tool groups move below the canvas and the same inspector becomes a non-modal bottom sheet. Pattern, Selection, Mirror & Repeat, and Settings share that inspector; its close button dismisses the current section. At phone widths, lower-frequency document commands and Settings move into **More**. Controls retain their pointer or touch minimum size and grow when the browser's text size is increased; on short screens, the authoring dock scrolls instead of collapsing the canvas.
 
+With no browser recovery, the app opens on **Start a pattern**. Choose **Row pattern** or **Centre-out pattern** to configure a blank chart in the normal Pattern inspector, **Open .mcw** to load an editable file, or **Try an example** to explore Colour, Overlay, Mirror & Repeat, and Instructions in a small editable chart. Canceling Pattern or the file picker returns to the start choices. Once a blank pattern is applied, an example is chosen, or a file is loaded, browser recovery resumes and later visits open directly in the editor.
+
 ### Patterns
 
 Click **Pattern** to open the dimensions inspector. Two modes:

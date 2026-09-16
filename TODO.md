@@ -69,7 +69,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Arrow keys move it, Space applies the active tool, and the context strip exposes coordinates, yarn, overlay, and validity without creating a DOM element per cell.
   - Scope canvas shortcuts to canvas focus, keep form-field keys native, announce deliberate cursor movement to assistive technology, and preserve the existing Move nudge behavior.
   - Verify inspection and drawing across Rows and Centre-out, including holes and blocked cells.
-- [ ] Add a lightweight fresh-session start surface over the existing session model.
+- [x] Add a lightweight fresh-session start surface over the existing session model.
   - Offer Row pattern, Centre-out pattern, Open `.mcw`, and Try an example only when no meaningful browser recovery exists. Route creation into the existing Pattern transaction and restore returning users directly.
   - Bundle one small editable example that demonstrates Colour, Overlay, Mirror & Repeat, and Instructions without adding a tutorial carousel or nullable-document architecture.
   - Verify untouched loads, intentionally created blank patterns, legacy recovery, canceled creation/open, and compact layouts.

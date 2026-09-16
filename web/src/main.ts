@@ -2,6 +2,7 @@ import { PlanType, PlanDir, lock_invalid_row, lock_invalid_round, transformed_ta
          overlay_target_available_row, overlay_target_available_round,
          overlay_inward_cell_row, overlay_inward_cell_round,
          build_highlight_plan_row, build_highlight_plan_round,
+         initialize_row_pattern,
          instruction_start_row, instruction_start_round,
          InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
@@ -56,6 +57,39 @@ function defaultSession(): SessionState {
     };
 }
 
+function exampleSession(): SessionState {
+    const pattern: PatternState = { mode: "row", canvasWidth: 9, canvasHeight: 9 };
+    const axes = addAxis([], "V", pattern.canvasWidth, pattern.canvasHeight);
+    const repeat = {
+        enabled: true,
+        tileWidth: 3,
+        tileHeight: 9,
+        copiesX: 1,
+        copiesY: 0,
+    };
+    let pixels: Uint8Array = initialize_row_pattern(pattern.canvasWidth, pattern.canvasHeight).slice();
+    for (const x of [1, 4, 7]) {
+        const index = pattern.canvasWidth + x;
+        pixels[index] = pixels[index] === 1 ? 2 : 1;
+    }
+    for (const x of [2, 4, 6]) {
+        pixels = paintOps.overlay({
+            visible: pixels, pattern, x, y: 2,
+            color: 1, primary: 1, invertVisited: null,
+            transforms: new Float64Array(0), shifted: null,
+        });
+    }
+    return {
+        ...defaultSession(),
+        pattern,
+        pixels,
+        colorA: "#264653",
+        colorB: "#f4a261",
+        axes,
+        repeat,
+    };
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const viewport = makeViewport(document.getElementById("canvas") as HTMLCanvasElement);
 function editableAxisTolerance(): number {
@@ -65,6 +99,13 @@ const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
+const startSurface = document.getElementById("start-surface") as HTMLElement;
+let freshStartVisible = saved === null;
+
+function hideFreshStart() {
+    freshStartVisible = false;
+    startSurface.hidden = true;
+}
 const instructionsViewport = makeViewport(document.getElementById("instructions-canvas") as HTMLCanvasElement);
 const instructionsCtx = instructionsViewport.canvas.getContext("2d", { alpha: false })!;
 const instructionsRs = makeRendererState();
@@ -770,6 +811,7 @@ function onEditApply() {
     if (!editBaseline) return;
     editBaseline = null;
     store.commit(() => {}, { recompute: false, render: false, history: true });
+    if (freshStartVisible) hideFreshStart();
 }
 function onEditCancel() {
     if (!editBaseline) return;
@@ -784,7 +826,7 @@ function onEditCancel() {
         pattern: baseline.pattern,
         pixels: baseline.pixels,
         float: baseline.float,
-    }, { persist: true });
+    }, { persist: !freshStartVisible });
     refreshSymmetryUi();
 }
 
@@ -848,6 +890,7 @@ async function onLoad() {
           colorA: loaded.colorA, colorB: loaded.colorB, float: null },
         { history: true, persist: true },
     );
+    if (freshStartVisible) hideFreshStart();
     (document.getElementById("color-a") as HTMLInputElement).value = loaded.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = loaded.colorB;
     ui.setColors(loaded.colorA, loaded.colorB);
@@ -1014,6 +1057,37 @@ const ui: UIHandle = mountUI({
     onEditOpen, onEditChange, onEditApply, onEditCancel,
     onSave, onLoad, onInstructions,
 });
+
+function beginFreshPattern(mode: "row" | "round") {
+    (document.getElementById("btn-edit") as HTMLButtonElement).click();
+    const radio = document.querySelector<HTMLInputElement>(`[name="edit-mode"][value="${mode}"]`)!;
+    if (!radio.checked) radio.click();
+}
+
+function useExample() {
+    const example = exampleSession();
+    fitToView(
+        viewport.canvas, viewport.view, example.pattern, example.rotation,
+        example.labelsVisible,
+    );
+    historyReset(example);
+    store.replace(example, { persist: true });
+    syncDomInputs(example);
+    ui.setTool(example.activeTool);
+    ui.setPrimary(example.primaryColor);
+    ui.setColors(example.colorA, example.colorB);
+    ui.setRepeatGrid(example.repeat);
+    ui.syncEditInputs(example.pattern);
+    refreshSymmetryUi();
+    hideFreshStart();
+}
+
+document.getElementById("start-row")!.addEventListener("click", () => beginFreshPattern("row"));
+document.getElementById("start-round")!.addEventListener("click", () => beginFreshPattern("round"));
+document.getElementById("start-open")!.addEventListener("click", () => {
+    (document.getElementById("btn-load") as HTMLButtonElement).click();
+});
+document.getElementById("start-example")!.addEventListener("click", useExample);
 
 const clientToPattern = (cx: number, cy: number) => {
     const pattern = store.state.pattern;
@@ -1649,9 +1723,11 @@ if (saved) {
         viewport.canvas, viewport.view, pattern, store.state.rotation,
         store.state.labelsVisible,
     );
-    store.commit(s => { s.pattern = pattern; s.pixels = pixels; });
+    store.commit(s => { s.pattern = pattern; s.pixels = pixels; }, { persist: false });
     refreshSymmetryUi();
     historyReset(store.state);
     ui.setHistory(canUndo(), canRedo());
+    startSurface.hidden = false;
+    (document.getElementById("start-row") as HTMLButtonElement).focus();
 }
 ui.setViewState(viewport.view.zoom, store.state.rotation, false);
