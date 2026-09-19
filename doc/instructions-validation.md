@@ -27,10 +27,10 @@ Record a participant's existing practice rather than treating it as the expected
 
 ## Test material
 
-Prepare two editable `.mcw` fixtures and the yarn needed to work them:
+Use the two editable fixtures below and prepare the yarn needed to work them:
 
-- **Rows:** five worked rows after the foundation, 9–13 positions wide, with ordinary `sc`, isolated `oc`, and one repeated sequence. The motif must be asymmetric so a reversed row is visible.
-- **Centre-out:** four complete rounds with ordinary corners, an overlay adjacent to a corner, and at least one side whose two middle positions can be distinguished. Keep the fixture small enough to complete during one session.
+- [Rows fixture](validation-fixtures/rows-live.mcw): five worked rows after the foundation, 11 positions wide, with ordinary `sc`, isolated `oc`, repeated sequences, and an asymmetric motif so a reversed row is visible.
+- [Centre-out fixture](validation-fixtures/centre-out-live.mcw): four complete rounds on an even 10 × 10 chart, with ordinary corners, overlays adjacent to corners, and two distinguishable middle positions on every side.
 
 Use strong yarn contrast and label the physical yarns A and B. Do not teach a foundation, overlay stitch recipe, yarn-change method, join, or finishing method; participants use their own.
 
