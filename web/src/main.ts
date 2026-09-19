@@ -12,7 +12,7 @@ import { makeViewport, makeRendererState, observeCanvasResize,
          pickRepeatHandle, RepeatHandleAxis } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
-import { historySave, historyReset, historyEnsureInitialized,
+import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
 import { addAxis, removeAxis, toggleAxisActive,
          pickAxesAt, setAxisPosition, snapHalf, snapInt,
@@ -250,7 +250,12 @@ store.setRenderer(s => {
     }
     renderCanvas();
 });
-store.setHistoryFn(s => historySave(s));
+let patternHistorySession = false;
+let savingPatternHistory = false;
+store.setHistoryFn(s => {
+    if (!savingPatternHistory) patternHistorySession = false;
+    historySave(s);
+});
 store.setPersistFn(s => {
     ui.setRecoveryStatus(saveToLocalStorage(s) ? "saved" : "failed");
 });
@@ -755,34 +760,26 @@ function onDeselect() {
     deselect(store);
 }
 
-// ── Pattern (Edit) popover ──────────────────────────────────────────────────
+// ── Pattern inspector ───────────────────────────────────────────────────────
 let editBaseline: { pattern: PatternState; pixels: Uint8Array; float: Float | null } | null = null;
 
 function onEditOpen() {
+    editBaseline = null;
+    ui.syncEditInputs(store.state.pattern);
+    const source = { pattern: store.state.pattern, pixels: visiblePixels(store.state) };
+    const summary = patternChangeSummary(readEditSettings(), source, source);
+    ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
+}
+function captureEditBaseline() {
     editBaseline = {
         pattern: store.state.pattern,
         pixels: store.state.pixels.slice(),
         float: store.state.float ? { ...store.state.float, pixels: store.state.float.pixels.slice() } : null,
     };
-    ui.syncEditInputs(store.state.pattern);
-    const source = {
-        pattern: editBaseline.pattern,
-        pixels: editBaseline.float
-            ? visiblePixels({ ...store.state, pattern: editBaseline.pattern,
-                pixels: editBaseline.pixels, float: editBaseline.float })
-            : editBaseline.pixels,
-    };
-    const summary = patternChangeSummary(readEditSettings(), source, source);
-    ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
 }
-function onEditChange() {
-    // Re-derive the preview from the transaction baseline each tick so
-    // reducing then restoring a value (e.g. rounds 1 → 20) brings the
-    // original cells back. If the baseline carried a float, bake it into the
-    // source pixels — otherwise the resize would silently drop the
-    // float's content along with the geometry-invalid mask.
-    const baseline = editBaseline;
-    if (!baseline) throw new Error("Pattern edit changed without an opening state.");
+function onEditChange(): boolean {
+    if (!editBaseline) captureEditBaseline();
+    const baseline = editBaseline!;
     const source: { pattern: PatternState; pixels: Uint8Array } = baseline.float
         ? { pattern: baseline.pattern,
             pixels: visiblePixels({ ...store.state, pattern: baseline.pattern,
@@ -793,7 +790,7 @@ function onEditChange() {
         edited = applyEditSettings(source);
     } catch (error) {
         ui.setEditError(error instanceof Error ? error.message : "Invalid pattern dimensions.");
-        return;
+        return false;
     }
     ui.setEditError(null);
     const { pattern, pixels } = edited;
@@ -810,14 +807,37 @@ function onEditChange() {
         s.float    = null;
     }, { persist: false });
     refreshSymmetryUi();
+    return true;
 }
-function onEditApply() {
+function onEditCommit() {
     if (!editBaseline) return;
+    const baseline = editBaseline;
     editBaseline = null;
-    store.commit(() => {}, { recompute: false, render: false, history: true });
-    if (freshStartVisible) hideFreshStart();
+    const changed = JSON.stringify(baseline.pattern) !== JSON.stringify(store.state.pattern)
+        || !arraysEqual(baseline.pixels, store.state.pixels)
+        || baseline.float?.x !== store.state.float?.x
+        || baseline.float?.y !== store.state.float?.y
+        || baseline.float?.w !== store.state.float?.w
+        || baseline.float?.h !== store.state.float?.h
+        || (baseline.float === null) !== (store.state.float === null)
+        || (baseline.float !== null && store.state.float !== null
+            && !arraysEqual(baseline.float.pixels, store.state.float.pixels));
+    if (changed && patternHistorySession) {
+        store.commit(() => {}, { recompute: false, render: false });
+        patternHistorySession = historyReplaceCurrent(store.state);
+        ui.setHistory(canUndo(), canRedo());
+    } else if (changed) {
+        savingPatternHistory = true;
+        try {
+            store.commit(() => {}, { recompute: false, render: false, history: true });
+        } finally {
+            savingPatternHistory = false;
+        }
+        patternHistorySession = true;
+    }
+    ui.syncEditInputs(store.state.pattern);
 }
-function onEditCancel() {
+function onEditRevert() {
     if (!editBaseline) return;
     const baseline = editBaseline;
     editBaseline = null;
@@ -830,7 +850,8 @@ function onEditCancel() {
         pattern: baseline.pattern,
         pixels: baseline.pixels,
         float: baseline.float,
-    }, { persist: !freshStartVisible });
+    }, { persist: false });
+    ui.syncEditInputs(baseline.pattern);
     refreshSymmetryUi();
 }
 
@@ -856,8 +877,16 @@ function applyRestored(r: Restored) {
     ui.syncEditInputs(r.pattern);
     refreshSymmetryUi();
 }
-function undo() { const r = historyUndo(); if (r) applyRestored(r); }
-function redo() { const r = historyRedo(); if (r) applyRestored(r); }
+function undo() {
+    patternHistorySession = false;
+    const r = historyUndo();
+    if (r) applyRestored(r);
+}
+function redo() {
+    patternHistorySession = false;
+    const r = historyRedo();
+    if (r) applyRestored(r);
+}
 
 // ── Save / load ──────────────────────────────────────────────────────────────
 async function onSave() {
@@ -1069,14 +1098,21 @@ const ui: UIHandle = mountUI({
     onFit: fitPattern,
     onZoom: zoomView,
     onNavigate: toggleNavigate,
-    onEditOpen, onEditChange, onEditApply, onEditCancel,
+    onEditOpen, onEditChange, onEditCommit, onEditRevert,
     onSave, onLoad, onInstructions,
 });
 
 function beginFreshPattern(mode: "row" | "round") {
+    const creating = freshStartVisible;
     (document.getElementById("btn-edit") as HTMLButtonElement).click();
     const radio = document.querySelector<HTMLInputElement>(`[name="edit-mode"][value="${mode}"]`)!;
     if (!radio.checked) radio.click();
+    if (!creating) return;
+    historyReset(store.state);
+    patternHistorySession = false;
+    store.commit(() => {}, { recompute: false, render: false });
+    ui.setHistory(false, false);
+    hideFreshStart();
 }
 
 function useExample() {

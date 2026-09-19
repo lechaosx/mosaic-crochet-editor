@@ -10,7 +10,7 @@ This map covers the workflows represented by the current interface. The linked e
 
 ## Design
 
-- As a designer, I can choose row or centre-out geometry, preview resize consequences, and either apply one undoable change or cancel it. ([interactions.spec.ts](../web/e2e/interactions.spec.ts))
+- As a designer, I can preview Pattern resize consequences, close and reopen the modeless panel without changing history, and undo or redo all uninterrupted Pattern adjustments as one exact before-and-after state. ([interactions.spec.ts](../web/e2e/interactions.spec.ts))
 - As a designer, I can draw finished-square colours, restore natural colours, invert cells, fill regions, and use either yarn without the chart confusing colour with stitch technique. ([paint.spec.ts](../web/e2e/paint.spec.ts), [paint-preview.spec.ts](../web/e2e/paint-preview.spec.ts))
 - As a designer, I can place or remove overlay guidance and understand unavailable or protected placements before or after acting. ([guidance-and-prevention.spec.ts](../web/e2e/guidance-and-prevention.spec.ts), [canvas-feedback.spec.ts](../web/e2e/canvas-feedback.spec.ts))
 - As a designer, I can select by rectangle or connected region, visibly add to or subtract from that selection, and move, duplicate, mask-move, copy, cut, paste, or deselect it. ([selection.spec.ts](../web/e2e/selection.spec.ts), [wand-modifiers.spec.ts](../web/e2e/wand-modifiers.spec.ts), [clipboard.spec.ts](../web/e2e/clipboard.spec.ts))
@@ -43,4 +43,3 @@ Every visible control must serve one of the stories above in its current workspa
 | Canvas controls | Navigate, Fit, zoom, and rotation | Fit, zoom, and rotation; direct canvas gestures already navigate |
 | Canvas status | Tool, yarn, coordinates, selection, overlay, and transform context | Omitted; current-line and progress context live in the Crochet panel |
 | Inspector | Pattern, Selection, Mirror & Repeat, and Settings | Opened through a global authoring command only after returning to Design |
-

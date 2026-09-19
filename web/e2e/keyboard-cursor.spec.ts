@@ -25,7 +25,7 @@ test("keyboard cursor can inspect a centre-out hole", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
-    await page.locator("#edit-apply").click();
+    await page.keyboard.press("Escape");
 
     const canvas = page.getByRole("img", { name: "Editable pattern chart" });
     await canvas.focus();

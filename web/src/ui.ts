@@ -74,9 +74,9 @@ export interface UICallbacks {
     onZoom:            (factor: number) => void;
     onNavigate:        () => void;
     onEditOpen:        () => void;
-    onEditChange:      () => void;
-    onEditApply:       () => void;
-    onEditCancel:      () => void;
+    onEditChange:      () => boolean;
+    onEditCommit:      () => void;
+    onEditRevert:      () => void;
     onSave:            () => void;
     onLoad:            () => void;
     onInstructions:    () => void;
@@ -103,7 +103,6 @@ export interface UIHandle {
     setEditError:       (message: string | null) => void;
     setEditSummary:     (width: number, height: number, preserved: number, added: number, removed: number) => void;
     syncEditInputs:     (s: PatternState) => void;
-    closeEdit:          () => void;
     openInstructions:   () => InstructionsView;
 }
 
@@ -158,10 +157,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
     };
     let activeInspector: InspectorPanel | null = null;
     let closeInstructionsWorkspace: ((restoreFocus: boolean) => void) | null = null;
+    let finishPatternEdit = () => {};
     const enterDesignForCommand = () => closeInstructionsWorkspace?.(false);
 
     const workspaceShell = document.querySelector<HTMLElement>(".workspace")!;
     const canvasShell = document.querySelector<HTMLElement>(".canvas-area")!;
+    const canvas = el("canvas");
     const authoringPanel = el("authoring-dock");
     const crochetPanel = el("instructions-workspace");
     const syncCanvasChromeInsets = () => {
@@ -192,7 +193,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     function openInspector(panel: InspectorPanel, title: string) {
-        if (activeInspector === "pattern" && panel !== "pattern") return;
+        if (activeInspector === "pattern" && panel !== "pattern") finishPatternEdit();
         if (activeInspector === "transforms" && panel !== "transforms") {
             cb.onTransformPopoverToggle(false);
         }
@@ -204,6 +205,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             inspectorTriggers[key].setAttribute("aria-expanded", String(key === panel));
         });
         if (panel === "transforms") cb.onTransformPopoverToggle(true);
+        syncCanvasChromeInsets();
         queueCanvasChromeSync();
     }
 
@@ -214,9 +216,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         Array.from(controls).find(control => control.getClientRects().length > 0)?.focus();
     }
 
-    function closeInspector(commitPattern = false) {
+    function closeInspector() {
         const panel = activeInspector;
-        if (activeInspector === "pattern" && !commitPattern) cb.onEditCancel();
+        if (activeInspector === "pattern") finishPatternEdit();
         if (activeInspector === "transforms") cb.onTransformPopoverToggle(false);
         inspectorHost.hidden = true;
         (Object.keys(inspectorPanels) as InspectorPanel[]).forEach(key => {
@@ -224,6 +226,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             inspectorTriggers[key].setAttribute("aria-expanded", "false");
         });
         activeInspector = null;
+        syncCanvasChromeInsets();
         queueCanvasChromeSync();
 
         const trigger = panel === null ? null : inspectorTriggers[panel];
@@ -237,9 +240,16 @@ export function mountUI(cb: UICallbacks): UIHandle {
         target?.focus();
     }
 
-    el("inspector-close").addEventListener("click", () => closeInspector());
+    const inspectorClose = el("inspector-close");
+    inspectorClose.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        closeInspector();
+    });
+    inspectorClose.addEventListener("click", () => {
+        if (activeInspector !== null) closeInspector();
+    });
     document.addEventListener("keydown", event => {
-        if (event.key !== "Escape" || activeInspector === null || activeInspector === "pattern") return;
+        if (event.key !== "Escape" || activeInspector === null) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         closeInspector();
@@ -708,100 +718,72 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const editWidget = el("edit-pattern-widget");
     const btnEdit    = el<HTMLButtonElement>("btn-edit");
     const editError  = el("edit-error");
-    const editApply  = el<HTMLButtonElement>("edit-apply");
-    const editCancel = el<HTMLButtonElement>("edit-cancel");
     const editSummary = el("edit-summary");
-    const canvas     = el("canvas");
+    let editValid = true;
+    let editPreviewActive = false;
+    let skipPatternChange = false;
 
     function setEditError(message: string | null) {
         editError.textContent = message ?? "";
         editError.hidden = message === null;
-        editApply.disabled = message !== null;
+        editValid = message === null;
     }
 
-    function setEditSummary(width: number, height: number, preserved: number, added: number, removed: number) {
-        editSummary.textContent = `${width} × ${height} cells · ${preserved} preserved · ${added} added · ${removed} removed`;
+    function setEditSummary(width: number, height: number, _preserved: number, added: number, removed: number) {
+        const changes = [
+            added > 0 ? `${added} cell${added === 1 ? "" : "s"} added` : null,
+            removed > 0 ? `${removed} cell${removed === 1 ? "" : "s"} removed` : null,
+        ].filter((change): change is string => change !== null);
+        editSummary.textContent = changes.length > 0
+            ? `${width} × ${height} cells · ${changes.join(" · ")}`
+            : "";
+        editSummary.hidden = changes.length === 0;
     }
 
-    function closeEdit() {
-        closeInspector(true);
-    }
-
+    finishPatternEdit = () => {
+        if (!editPreviewActive) return;
+        skipPatternChange = true;
+        queueMicrotask(() => { skipPatternChange = false; });
+        if (editValid) cb.onEditCommit();
+        else cb.onEditRevert();
+        editPreviewActive = false;
+    };
     btnEdit.addEventListener("click", e => {
         e.preventDefault();
         enterDesignForCommand();
-        if (isInspectorOpen("pattern")) return;
+        if (isInspectorOpen("pattern")) {
+            closeInspector();
+            return;
+        }
         openInspector("pattern", "Pattern");
         cb.onEditOpen();
         focusFirstInspectorControl("pattern");
     });
 
-    editApply.addEventListener("click", () => {
-        cb.onEditApply();
-        closeEdit();
-    });
-    editCancel.addEventListener("click", () => {
-        cb.onEditCancel();
-        closeEdit();
-    });
-
-    editWidget.addEventListener("keydown", e => {
-        if (e.key === "Escape") {
-            e.preventDefault();
-            cb.onEditCancel();
-            closeEdit();
-        }
-        e.stopPropagation();
-    });
-
-    const blockOutsideEdit = (e: Event) => {
+    document.addEventListener("pointerdown", e => {
         if (!isInspectorOpen("pattern") || editWidget.contains(e.target as Node)) return;
         if ((e.target as Element).closest?.("#inspector-close")) return;
-        if (e.target === canvas) return;
-        e.preventDefault();
-        e.stopImmediatePropagation();
-    };
-    document.addEventListener("pointerdown", blockOutsideEdit, true);
-    document.addEventListener("click", blockOutsideEdit, true);
-    document.addEventListener("keydown", e => {
-        if (!isInspectorOpen("pattern") || editWidget.contains(e.target as Node)) return;
-        if (e.key === "Escape") {
-            cb.onEditCancel();
-            closeEdit();
-        }
-        e.preventDefault();
-        e.stopImmediatePropagation();
+        finishPatternEdit();
     }, true);
 
     let editOpenState: PatternState | null = null;
 
-    // "Wipe" is forced ON (visibly checked, disabled) only for mode switches —
-    // row ↔ round can't preserve content. Inner-dim and rounds changes within
-    // the same mode are handled by the round-mode corner/strip transfer (see
-    // `preserveRound` in pattern.ts) and need no force.
-    //
-    // When force kicks in we stash the user's actual preference on the
-    // element's dataset and tick the checkbox so the disabled state
-    // communicates *which way* it's forced. When force lifts, restore the
-    // stashed preference. The user's choice is never lost, just suppressed.
+    // Row and centre-out cells have no stable coordinate mapping, so a mode
+    // change uses the same natural-colour reset as the explicit reset action.
     function refreshWipeAvailability() {
         if (!editOpenState) return;
         const newMode = radioValue("edit-mode");
         const force = newMode !== editOpenState.mode;
         const wipeEl = el<HTMLInputElement>("edit-wipe");
-        if (force) {
-            if (wipeEl.dataset.userPref === undefined) {
-                wipeEl.dataset.userPref = wipeEl.checked ? "1" : "0";
-            }
-            wipeEl.checked = true;
-        } else if (wipeEl.dataset.userPref !== undefined) {
-            wipeEl.checked = wipeEl.dataset.userPref === "1";
-            delete wipeEl.dataset.userPref;
-        }
+        if (force) wipeEl.checked = true;
         wipeEl.disabled = force;
-        editApply.textContent = force
-            ? `Start with a blank ${newMode === "row" ? "row" : "centre-out"} pattern`
-            : "Apply";
+    }
+
+    function applyAndCommitPatternEdit() {
+        editPreviewActive = true;
+        if (cb.onEditChange()) cb.onEditCommit();
+        else cb.onEditRevert();
+        editPreviewActive = false;
     }
 
     document.querySelectorAll<HTMLInputElement>('[name="edit-mode"]').forEach(radio => {
@@ -810,12 +792,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
             el("edit-row-controls")  .hidden = mode !== "row";
             el("edit-round-controls").hidden = mode !== "round";
             refreshWipeAvailability();
-            if (isInspectorOpen("pattern")) cb.onEditChange();
+            if (isInspectorOpen("pattern")) applyAndCommitPatternEdit();
         });
     });
     document.querySelectorAll<HTMLInputElement>('[name="edit-submode"]').forEach(radio => {
         radio.addEventListener("change", () => {
-            if (isInspectorOpen("pattern")) cb.onEditChange();
+            if (isInspectorOpen("pattern")) applyAndCommitPatternEdit();
         });
     });
     const EDIT_INPUTS: { id: string; min: number }[] = [
@@ -826,18 +808,30 @@ export function mountUI(cb: UICallbacks): UIHandle {
         { id: "edit-rounds",       min: 1 },
     ];
     EDIT_INPUTS.forEach(({ id, min }) => {
-        const apply = () => {
+        const preview = () => {
             refreshWipeAvailability();
-            if (isInspectorOpen("pattern")) cb.onEditChange();
+            if (isInspectorOpen("pattern")) {
+                editPreviewActive = true;
+                cb.onEditChange();
+            }
         };
-        el(id).addEventListener("input", apply);
+        el(id).addEventListener("input", preview);
         el(id).addEventListener("change", () => {
+            if (skipPatternChange) {
+                skipPatternChange = false;
+                return;
+            }
             clampInputDisplay(id, min);
-            apply();
+            refreshWipeAvailability();
+            if (isInspectorOpen("pattern")) applyAndCommitPatternEdit();
         });
     });
-    el<HTMLInputElement>("edit-wipe").addEventListener("change", () => {
-        if (isInspectorOpen("pattern")) cb.onEditChange();
+    el("edit-reset").addEventListener("click", () => {
+        const wipeEl = el<HTMLInputElement>("edit-wipe");
+        wipeEl.checked = true;
+        if (isInspectorOpen("pattern")) applyAndCommitPatternEdit();
+        wipeEl.checked = false;
+        refreshWipeAvailability();
     });
 
     function syncEditInputs(s: PatternState) {
@@ -860,13 +854,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
             el<HTMLInputElement>("edit-inner-height").value = String(innerH);
             el<HTMLInputElement>("edit-rounds")      .value = String(s.rounds);
         }
-        // Each fresh Pattern open resets the user preference to "preserve"
-        // (i.e. Wipe unchecked) and drops any stashed force-state from the
-        // previous open.
+        // Every committed change starts the next field from preservation.
         const wipeEl = el<HTMLInputElement>("edit-wipe");
-        delete wipeEl.dataset.userPref;
         wipeEl.checked = false;
         refreshWipeAvailability();
+        setEditSummary(s.canvasWidth, s.canvasHeight, s.canvasWidth * s.canvasHeight, 0, 0);
     }
 
     /* ── Crochet workspace ──────────────────────────────────────────── */
@@ -1100,7 +1092,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
         setHistory, setRecoveryStatus, setDocumentError, setViewState, setEditError, setEditSummary,
-        syncEditInputs, closeEdit,
+        syncEditInputs,
         openInstructions,
     };
 }

@@ -1,4 +1,4 @@
-// Symmetry toggles + Edit popover resize.
+// Symmetry toggles + Pattern inspector resize.
 import { test, expect } from "@playwright/test";
 import { bootApp, clickCell, dragCells, cellCoord, pixelRGB } from "./_helpers";
 
@@ -347,7 +347,7 @@ test("dragging an axis far off the canvas deletes it", async ({ page }) => {
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
-test("Edit popover changes the canvas dimensions", async ({ page }) => {
+test("Pattern inspector changes the canvas dimensions", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-edit").click();
     const widthInput  = page.locator("#edit-width");
@@ -356,14 +356,15 @@ test("Edit popover changes the canvas dimensions", async ({ page }) => {
     await widthInput.dispatchEvent("input");
     await heightInput.fill("5");
     await heightInput.dispatchEvent("input");
-    await page.locator("#edit-apply").click();
+    await heightInput.press("Tab");
+    await page.keyboard.press("Escape");
     // The matrix hook updates each render; cell (4, 4) of a 5×5 canvas is
     // now valid where (4, 4) of 9×9 was already. We just smoke that the
     // app didn't blow up.
     await expect(page.locator("#canvas")).toBeVisible();
 });
 
-test("Edit popover rejects a canvas above the safety ceiling", async ({ page }) => {
+test("Pattern inspector rejects a canvas above the safety ceiling", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-edit").click();
     await page.locator("#edit-width").fill("4097");

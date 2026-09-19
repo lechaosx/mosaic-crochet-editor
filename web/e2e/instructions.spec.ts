@@ -268,7 +268,6 @@ test("Crochet completes and reopens a Centre-out round as one boundary", async (
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByLabel("Rounds").fill("1");
-    await page.getByRole("button", { name: "Start with a blank centre-out pattern" }).click();
 
     await page.getByRole("button", { name: "Crochet" }).click();
     await expect(page.locator('.instructions-unit[aria-label="Round 1, Yarn A"]')).toHaveAttribute("aria-current", "step");

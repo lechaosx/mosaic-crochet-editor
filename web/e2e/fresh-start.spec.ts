@@ -5,7 +5,7 @@ async function bootFresh(page: import("@playwright/test").Page) {
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
 }
 
-test("fresh load offers starts without creating recovery and canceled creation returns", async ({ page }) => {
+test("fresh load offers starts and choosing a pattern enters its modeless editor", async ({ page }) => {
     await bootFresh(page);
 
     const start = page.getByRole("region", { name: "Start a pattern" });
@@ -18,10 +18,9 @@ test("fresh load offers starts without creating recovery and canceled creation r
 
     await page.getByRole("button", { name: "Centre-out pattern" }).click();
     await expect(page.getByRole("radio", { name: "Centre-out" })).toBeChecked();
-    await page.getByRole("button", { name: "Cancel" }).click();
-
-    await expect(start).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBeNull();
+    await expect(start).toBeHidden();
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
 });
 
 test("canceling the fresh-start file picker keeps the choices available", async ({ page }) => {
@@ -65,10 +64,9 @@ test("opening an mcw file from the fresh choices enters the editor", async ({ pa
     expect(recovery.document.state.canvasWidth).toBe(3);
 });
 
-test("applying an intentionally blank pattern restores directly on return", async ({ page }) => {
+test("choosing an intentionally blank pattern restores directly on return", async ({ page }) => {
     await bootFresh(page);
     await page.getByRole("button", { name: "Row pattern" }).click();
-    await page.getByRole("button", { name: "Apply" }).click();
 
     await expect(page.locator("#start-surface")).toBeHidden();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();

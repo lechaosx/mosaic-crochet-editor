@@ -1,5 +1,5 @@
 // True-UX cross-feature interactions: ones that exercise the boot path,
-// explicit Pattern transactions, or the file-picker shim.
+// Pattern panel behavior or the file-picker shim.
 // State-level interaction tests (canvas resize, paste over float, etc.)
 // live in `tests/interactions.test.ts` — faster, more reliable.
 
@@ -17,17 +17,21 @@ async function recoveryWidth(page: import("@playwright/test").Page): Promise<num
     return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.state.canvasWidth);
 }
 
-test("Pattern stays open and blocks an outside canvas edit", async ({ page }) => {
+test("Pattern remains modeless across canvas authoring and inspector changes", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-edit").click();
     await page.locator("#edit-width").fill("5");
-    await page.locator("#edit-width").dispatchEvent("input");
+    await page.locator("#edit-width").press("Tab");
     const cell = await cellCoord(page, 0, 1);
 
     await page.mouse.click(cell.cx, cell.cy);
 
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
-    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(B);
+    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.locator("#edit-pattern-widget")).toBeHidden();
+    await expect(page.locator("#hl-popover")).toBeVisible();
 });
 
 test("Pattern keeps canvas zoom available", async ({ page }) => {
@@ -54,32 +58,71 @@ test("Pattern keeps canvas zoom available", async ({ page }) => {
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 });
 
-test("Pattern Cancel restores the opening state without history", async ({ page }) => {
+test("a Pattern session collapses into one undoable before-and-after state", async ({ page }) => {
     await bootApp(page);
     const before = await historyLength(page);
     await page.locator("#btn-edit").click();
     await page.locator("#edit-width").fill("5");
-    await page.locator("#edit-width").dispatchEvent("input");
+    await page.locator("#edit-width").fill("6");
+    await page.locator("#edit-width").press("Tab");
+    await page.locator("#btn-edit").click();
+    await page.locator("#btn-edit").click();
+    await page.locator("#edit-height").fill("7");
+    await page.locator("#edit-height").press("Tab");
+    await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
+    await page.locator('label:has(input[name="edit-mode"][value="row"])').click();
 
-    await page.locator("#edit-cancel").click();
-
-    await expect(page.locator("#edit-pattern-widget")).toBeHidden();
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    expect(await recoveryWidth(page)).toBe(6);
+    expect(await historyLength(page)).toBe(before + 1);
+    await page.getByRole("button", { name: "Undo" }).click();
     expect(await recoveryWidth(page)).toBe(9);
+    await expect(page.locator("#edit-height")).toHaveValue("9");
+    await page.getByRole("button", { name: "Redo" }).click();
+    expect(await recoveryWidth(page)).toBe(6);
+    await expect(page.locator("#edit-height")).toHaveValue("7");
+});
+
+test("opening and closing Pattern without changes adds no undo step", async ({ page }) => {
+    await bootApp(page);
+    const before = await historyLength(page);
+
+    await page.locator("#btn-edit").click();
+    await page.locator("#btn-edit").click();
+
     expect(await historyLength(page)).toBe(before);
 });
 
-test("Escape cancels Pattern and restores the opening state", async ({ page }) => {
+test("a Pattern session that returns to its baseline leaves no history entry", async ({ page }) => {
+    await bootApp(page);
+    const before = await historyLength(page);
+    await page.locator("#btn-edit").click();
+    const width = page.locator("#edit-width");
+    await width.fill("10");
+    await width.press("Tab");
+    await width.fill("9");
+    await width.press("Tab");
+    expect(await historyLength(page)).toBe(before);
+
+    await width.fill("8");
+    await width.press("Tab");
+    expect(await historyLength(page)).toBe(before + 1);
+    await page.getByRole("button", { name: "Undo" }).click();
+    expect(await recoveryWidth(page)).toBe(9);
+});
+
+test("Escape closes Pattern without reverting committed changes", async ({ page }) => {
     await bootApp(page);
     const before = await historyLength(page);
     await page.locator("#btn-edit").click();
     await page.locator("#edit-width").fill("5");
-    await page.locator("#edit-width").dispatchEvent("input");
+    await page.locator("#edit-width").press("Tab");
 
     await page.keyboard.press("Escape");
 
     await expect(page.locator("#edit-pattern-widget")).toBeHidden();
-    expect(await recoveryWidth(page)).toBe(9);
-    expect(await historyLength(page)).toBe(before);
+    expect(await recoveryWidth(page)).toBe(5);
+    expect(await historyLength(page)).toBe(before + 1);
 });
 
 test("invalid Pattern input retains the last valid preview", async ({ page }) => {
@@ -97,46 +140,48 @@ test("invalid Pattern input retains the last valid preview", async ({ page }) =>
     await width.dispatchEvent("input");
 
     await expect(page.locator("#edit-error")).toBeVisible();
-    await expect(page.locator("#edit-apply")).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Cancel" })).toHaveCount(0);
     expect(await pixelRGB(page, lastCell.cx, lastCell.cy)).toEqual(validPreview);
     expect(await pixelRGB(page, outside.cx, outside.cy)).toEqual(validOutside);
 });
 
-test("Pattern Apply creates one history entry", async ({ page }) => {
-    await bootApp(page);
-    const before = await historyLength(page);
-    await page.locator("#btn-edit").click();
-    await page.locator("#edit-width").fill("6");
-    await page.locator("#edit-width").dispatchEvent("input");
-
-    await page.locator("#edit-apply").click();
-
-    await expect(page.locator("#edit-pattern-widget")).toBeHidden();
-    expect(await recoveryWidth(page)).toBe(6);
-    expect(await historyLength(page)).toBe(before + 1);
-    await page.keyboard.press("Control+z");
-    expect(await recoveryWidth(page)).toBe(9);
-});
-
-test("Pattern describes resize and geometry-change consequences", async ({ page }) => {
+test("Pattern presents direct properties with contextual resize feedback", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
 
     await expect(page.getByLabel("Centre opening width")).toBeAttached();
     await expect(page.getByLabel("Centre opening height")).toBeAttached();
-    await expect(page.getByText("Start with a blank pattern", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reset pattern colours" })).toBeVisible();
+    await expect(page.locator("#edit-summary")).toBeHidden();
 
     await page.locator("#edit-width").fill("10");
     await page.locator("#edit-width").dispatchEvent("input");
     await expect(page.locator("#edit-summary")).toHaveText(
-        "10 × 9 cells · 81 preserved · 9 added · 0 removed",
+        "10 × 9 cells · 9 cells added",
     );
-    await expect(page.locator("#edit-apply")).toHaveText("Apply");
+    await page.locator("#edit-width").press("Tab");
+    await expect(page.locator("#edit-summary")).toBeHidden();
 
     await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
-    await expect(page.locator("#edit-apply")).toHaveText("Start with a blank centre-out pattern");
-    await expect(page.locator("#edit-summary")).toContainText("0 preserved");
-    await expect(page.locator("#edit-summary")).toContainText("81 removed");
+    await expect(page.locator("#edit-summary")).toBeHidden();
+});
+
+test("Reset pattern colours is immediate and undoable", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 0, 1);
+    const cell = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
+    const beforeReset = await historyLength(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+
+    await page.getByRole("button", { name: "Reset pattern colours" }).click();
+
+    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(B);
+    expect(await historyLength(page)).toBe(beforeReset + 1);
+    await page.getByRole("button", { name: "Undo" }).click();
+    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 });
 
 test("save with active float doesn't drop the selection", async ({ page }) => {

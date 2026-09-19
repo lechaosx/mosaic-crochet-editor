@@ -114,7 +114,7 @@ export async function bootApp(page: Page) {
     await page.waitForFunction(() => !!window.__test_matrix__);
     if (await page.locator("#start-surface").isVisible()) {
         await page.locator("#start-row").evaluate((button: HTMLButtonElement) => button.click());
-        await page.locator("#edit-apply").evaluate((button: HTMLButtonElement) => button.click());
         await page.locator("#start-surface").waitFor({ state: "hidden" });
+        await page.keyboard.press("Escape");
     }
 }

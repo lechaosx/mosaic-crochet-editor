@@ -107,23 +107,44 @@ function snapshotFrom(s: Readonly<SessionState>): Snapshot {
     };
 }
 
+function snapshotsEqual(a: Snapshot, b: Snapshot): boolean {
+    return a.document.pixels === b.document.pixels
+        && JSON.stringify(a.selection) === JSON.stringify(b.selection)
+        && JSON.stringify(a.transforms) === JSON.stringify(b.transforms)
+        && a.document.colorA === b.document.colorA
+        && a.document.colorB === b.document.colorB
+        && JSON.stringify(a.document.state) === JSON.stringify(b.document.state);
+}
+
 export function historySave(s: Readonly<SessionState>) {
     const h    = read() ?? { version: HISTORY_VERSION, snapshots: [], index: -1 };
     const snap = snapshotFrom(s);
     const head = h.index >= 0 ? h.snapshots[h.index] : null;
-    if (head && head.document.pixels === snap.document.pixels
-            && JSON.stringify(head.selection) === JSON.stringify(snap.selection)
-            && JSON.stringify(head.transforms) === JSON.stringify(snap.transforms)
-            && head.document.colorA === snap.document.colorA
-            && head.document.colorB === snap.document.colorB
-            && JSON.stringify(head.document.state) === JSON.stringify(snap.document.state)) {
-        return;
-    }
+    if (head && snapshotsEqual(head, snap)) return;
     h.snapshots.splice(h.index + 1);
     h.snapshots.push(snap);
     if (h.snapshots.length > MAX) h.snapshots.shift();
     h.index = h.snapshots.length - 1;
     write(h);
+}
+
+export function historyReplaceCurrent(s: Readonly<SessionState>): boolean {
+    const h = read();
+    if (!h || h.index < 0) {
+        historyReset(s);
+        return false;
+    }
+    h.snapshots.splice(h.index + 1);
+    const snap = snapshotFrom(s);
+    if (h.index > 0 && snapshotsEqual(h.snapshots[h.index - 1], snap)) {
+        h.snapshots.splice(h.index, 1);
+        h.index--;
+        write(h);
+        return false;
+    }
+    h.snapshots[h.index] = snap;
+    write(h);
+    return true;
 }
 
 export function historyReset(s: Readonly<SessionState>) {

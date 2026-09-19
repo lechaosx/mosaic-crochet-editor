@@ -3,7 +3,7 @@
 
 import { describe, test, expect, beforeEach } from "vitest";
 import {
-    historySave, historyReset, historyEnsureInitialized,
+    historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
     historyUndo, historyRedo, canUndo, canRedo, historyPeek,
 } from "../src/history";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
@@ -31,6 +31,29 @@ describe("historySave / historyReset", () => {
         historyReset(s);
         historySave(s);   // identical state
         expect(canUndo()).toBe(false);
+    });
+
+    test("replace current updates an edit's redo state without losing its undo baseline", () => {
+        const baseline = rowSession(3, 3);
+        historyReset(baseline);
+        historySave(rowSession(4, 3));
+
+        historyReplaceCurrent(rowSession(4, 5));
+
+        expect(historyUndo()!.pattern).toEqual(baseline.pattern);
+        expect(historyRedo()!.pattern.canvasWidth).toBe(4);
+        expect(historyPeek()!.pattern.canvasHeight).toBe(5);
+    });
+
+    test("replace current removes a coalesced edit that returned to its baseline", () => {
+        const baseline = rowSession(3, 3);
+        historyReset(baseline);
+        historySave(rowSession(4, 3));
+
+        expect(historyReplaceCurrent(baseline)).toBe(false);
+
+        expect(canUndo()).toBe(false);
+        expect(historyPeek()!.pattern).toEqual(baseline.pattern);
     });
 
     test("float changes are part of the dedupe key — pushing a float pushes a snapshot", () => {

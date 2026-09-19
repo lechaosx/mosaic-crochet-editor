@@ -273,7 +273,7 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
 
     await page.getByRole("button", { name: "Pattern" }).click();
     await expectHoverLabels("Pattern inspector");
-    await page.getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "Close inspector" }).click();
 
     await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
     await page.getByRole("button", { name: "Add vertical" }).click();

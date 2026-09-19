@@ -352,16 +352,9 @@
 
     <div id="edit-error" class="warning" role="alert" hidden></div>
 
-    <label class="toggle" title="When on, the new dimensions get a fresh pattern with natural colours. Forced on when switching between Rows and Centre-out.">
-      <input type="checkbox" id="edit-wipe">
-      <span class="toggle-track"></span>
-      Start with a blank pattern
-    </label>
-    <p id="edit-summary" class="pattern-summary" role="status"></p>
-    <div class="pattern-actions">
-      <button class="btn" id="edit-cancel" type="button" title="Discard Pattern changes (Escape)">Cancel</button>
-      <button class="btn" id="edit-apply" type="button" title="Apply Pattern changes">Apply</button>
-    </div>
+    <input type="checkbox" id="edit-wipe" hidden>
+    <button class="btn" id="edit-reset" type="button" title="Replace every cell with its natural row or round colour">Reset pattern colours</button>
+    <p id="edit-summary" class="pattern-summary" role="status" hidden></p>
   </section>
       </div>
     </aside>

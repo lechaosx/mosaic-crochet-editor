@@ -92,7 +92,7 @@ test("Fit keeps rotated half-round numbers inside a phone canvas", async ({ page
     await page.locator("#btn-edit").click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Half", { exact: true }).click();
-    await page.locator("#edit-apply").click();
+    await page.keyboard.press("Escape");
     await page.setViewportSize({ width: 360, height: 740 });
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(300);
@@ -282,7 +282,6 @@ test("inspector controls keep their state while the same host recomposes", async
     await bootApp(page);
 
     await page.getByRole("button", { name: "Pattern" }).click();
-    const originalWidth = await page.locator("#edit-width").inputValue();
     await page.locator("#edit-width").fill("20");
     await expect(page.locator("#inspector-title")).toHaveText("Pattern");
 
@@ -295,5 +294,5 @@ test("inspector controls keep their state while the same host recomposes", async
     await page.getByRole("button", { name: "Close inspector" }).click();
     await expect(page.locator("#inspector-host")).toBeHidden();
     await page.getByRole("button", { name: "Pattern" }).click();
-    await expect(page.locator("#edit-width")).toHaveValue(originalWidth);
+    await expect(page.locator("#edit-width")).toHaveValue("20");
 });

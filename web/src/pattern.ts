@@ -1,4 +1,4 @@
-// DOM adapter for the Edit popover — reads inputs and delegates to the pure
+// DOM adapter for the Pattern inspector — reads inputs and delegates to the pure
 // applyEditSettings in @mosaic/logic/pattern.
 import { applyEditSettings as applyEditSettingsLogic, EditSettings } from "@mosaic/logic/pattern";
 import { PatternState } from "@mosaic/logic/types";

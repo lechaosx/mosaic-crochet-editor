@@ -25,7 +25,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 |---|---|
 | 0 — Correctness before redesign | Gesture cancellation, persistence boundaries, Wand history, and native control semantics shipped |
 | 1 — Existing-workspace usability | Adaptive targets, active context, touch selection actions, blocked-action feedback, and Yarn A/B shipped |
-| 2 — Transactions and adaptive shell | Versioned codecs/recovery, Pattern Apply/Cancel, adaptive workspace, view controls, and recovery status shipped |
+| 2 — Transactions and adaptive shell | Versioned codecs/recovery, reversible Pattern previews, adaptive workspace, view controls, and recovery status shipped |
 | 3 — Structured chart companion | Typed work sequence and compression structure shipped |
 | 4 — Product prototypes | Tool grouping, transform evaluator, row/round progress, and quarter-output composition prototypes completed |
 | 5 — Traversal prototype | Semantic row and centre-out traversal geometry completed; UI and persistence remain validation-gated |
@@ -40,10 +40,11 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 
 ### Stage 6 — Clarify the workflows already in use
 
-- [x] Make Pattern changes describe their result before Apply.
-  - Rename `Inner W` and `Inner H` to `Centre opening width` and `Centre opening height`, and replace `Wipe` with `Start with a blank pattern`.
-  - Show resulting dimensions plus preserved, added, and removed cell counts. When geometry changes, label the action `Start with a blank row/centre-out pattern` instead of presenting an ordinary Apply.
-  - Verify same-geometry preservation, deliberate blanking, invalid last-valid previews, geometry changes, Cancel, and one-step Undo.
+- [x] Make Pattern geometry direct and understandable.
+  - Rename `Inner W` and `Inner H` to `Centre opening width` and `Centre opening height`, and replace the one-shot `Wipe` toggle with `Reset pattern colours`.
+  - Show contextual resulting dimensions and added/removed counts only while a field is active. Coalesce uninterrupted Pattern adjustments into one exact Undo/Redo state across panel close and reopen.
+  - Verify same-geometry preservation, deliberate reset, invalid last-valid previews, modeless authoring, geometry changes, inert panel dismissal, and exact Undo/Redo restoration.
+- [ ] Product gate — Decide whether `Reset pattern colours` belongs to the current coalesced Pattern history state or should create a separate undo boundary.
 - [x] Expose Replace, Add, and Subtract as visible Select/Wand modes.
   - Share the latched choice between Select and Wand, restore Replace after leaving that group, and keep Shift/Ctrl as temporary overrides whose result is visible before the gesture commits.
   - Keep Add usable without an existing selection and explain unavailable Subtract instead of allowing a silent no-op.
@@ -70,9 +71,9 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Scope canvas shortcuts to canvas focus, keep form-field keys native, announce deliberate cursor movement to assistive technology, and preserve the existing Move nudge behavior.
   - Verify inspection and drawing across Rows and Centre-out, including holes and blocked cells.
 - [x] Add a lightweight fresh-session start surface over the existing session model.
-  - Offer Row pattern, Centre-out pattern, Open `.mcw`, and Try an example only when no meaningful browser recovery exists. Route creation into the existing Pattern transaction and restore returning users directly.
+  - Offer Row pattern, Centre-out pattern, Open `.mcw`, and Try an example only when no meaningful browser recovery exists. Route creation into the existing Pattern inspector and restore returning users directly.
   - Bundle one small editable example that demonstrates Colour, Overlay, Mirror & Repeat, and Instructions without adding a tutorial carousel or nullable-document architecture.
-  - Verify untouched loads, intentionally created blank patterns, legacy recovery, canceled creation/open, and compact layouts.
+  - Verify untouched loads, intentionally created blank patterns, legacy recovery, canceled file opening, and compact layouts.
 
 ### Stage 8 — Make Crochet a trustworthy view of the work
 
