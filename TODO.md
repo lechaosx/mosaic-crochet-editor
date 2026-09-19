@@ -76,6 +76,8 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 
 ### Stage 8 — Validate before extending Instructions
 
+Session script, evidence tables, and gate criteria: [Instructions validation protocol](doc/instructions-validation.md).
+
 - [ ] Product gate: observe the shipped Overview and row/round Live loop in real crochet sessions.
   - Record whether row/round Done and Back are sufficiently low-click, where users lose their place, and whether the finished chart plus focused current path is honest enough without reconstructed physical WIP.
   - Decide separately whether compression-tree tracking or chart-derived WIP earns its substantially higher implementation cost.
