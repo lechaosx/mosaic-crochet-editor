@@ -4,6 +4,7 @@ import { PlanType, PlanDir, lock_invalid_row, lock_invalid_round, transformed_ta
          build_highlight_plan_row, build_highlight_plan_round,
          initialize_row_pattern,
          instruction_start_row, instruction_start_round,
+         instruction_wip_row, instruction_wip_round,
          InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
@@ -953,6 +954,26 @@ async function onInstructions() {
     dlg.onIssueFocus((issue) => {
         rs.focusPath = [{ x: issue.x, y: issue.y }];
         if (instructionsPreviewStore) renderCanvas();
+    });
+    dlg.onLivePreview((completedUnits) => {
+        if (!instructionsPreviewStore) return;
+        const { pattern } = store.state;
+        const { canvasWidth: W, canvasHeight: H } = pattern;
+        const pixels = completedUnits === null
+            ? exportPixels
+            : pattern.mode === "row"
+                ? instruction_wip_row(exportPixels, W, H, completedUnits)
+                : instruction_wip_round(
+                    exportPixels, W, H,
+                    pattern.virtualWidth, pattern.virtualHeight,
+                    pattern.offsetX, pattern.offsetY, pattern.rounds,
+                    completedUnits,
+                );
+        instructionsPreviewStore.commit(
+            preview => { preview.pixels = pixels; },
+            { render: false, persist: false },
+        );
+        renderCanvas();
     });
 
     const startSession = (alt: boolean) => {

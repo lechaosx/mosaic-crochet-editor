@@ -301,6 +301,48 @@ pub fn instruction_start_round(
     }
 }
 
+#[wasm_bindgen]
+pub fn instruction_wip_row(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    completed_units: usize,
+) -> Vec<u8> {
+    export::row_wip_pixels(
+        &to_array2(pixels, width, height),
+        IVec2::new(width, height),
+        completed_units,
+    )
+    .iter()
+    .copied()
+    .collect()
+}
+
+#[wasm_bindgen]
+pub fn instruction_wip_round(
+    pixels: &[u8],
+    canvas_width: i32,
+    canvas_height: i32,
+    virtual_width: i32,
+    virtual_height: i32,
+    offset_x: i32,
+    offset_y: i32,
+    rounds: i32,
+    completed_units: usize,
+) -> Vec<u8> {
+    export::round_wip_pixels(
+        &to_array2(pixels, canvas_width, canvas_height),
+        IVec2::new(canvas_width, canvas_height),
+        IVec2::new(virtual_width, virtual_height),
+        IVec2::new(offset_x, offset_y),
+        rounds,
+        completed_units,
+    )
+    .iter()
+    .copied()
+    .collect()
+}
+
 #[cfg(test)]
 mod instruction_session_tests {
     use super::*;
@@ -332,6 +374,26 @@ mod instruction_session_tests {
         assert!(unit.text().starts_with("Round 1:"));
         assert_eq!(unit.worked_coords().len() % 2, 0);
         assert!(!unit.worked_coords().is_empty());
+    }
+
+    #[test]
+    fn row_wip_binding_returns_the_completed_prefix() {
+        let mut pixels = initialize_row_pattern(3, 3);
+        pixels[2 * 3 + 1] = common::opposite_color(pixels[2 * 3 + 1]);
+
+        assert_eq!(
+            instruction_wip_row(&pixels, 3, 3, 1),
+            vec![0, 0, 0, 2, 2, 2, 1, 2, 1],
+        );
+    }
+
+    #[test]
+    fn round_wip_binding_returns_no_authored_cells_before_round_one() {
+        let pixels = initialize_round_pattern(7, 7, 7, 7, 0, 0, 3);
+
+        assert!(instruction_wip_round(&pixels, 7, 7, 7, 7, 0, 0, 3, 0)
+            .iter()
+            .all(|pixel| *pixel == common::COLOR_TRANSPARENT));
     }
 }
 

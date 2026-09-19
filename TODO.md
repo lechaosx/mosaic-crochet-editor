@@ -82,7 +82,7 @@ Session script, evidence tables, and gate criteria: [Instructions validation pro
   - Move the same chart viewport between Design, Overview, and Live while changing the surrounding controls and disabling authoring outside Design.
   - Preserve pan, zoom, and rotation across workspace changes; Overview renders the finished chart and Live renders the progress state.
   - Verify there is only one canvas, its view state survives every workspace switch, and pointer/keyboard authoring cannot mutate the pattern from Instructions.
-- [ ] Derive Live's chart from the confirmed crochet-work prefix.
+- [x] Derive Live's chart from the confirmed crochet-work prefix.
   - Render completed work as solid, the current unit as a distinct pending preview, and future work as absent. Future overlay contributions must not appear before their instruction completes.
   - Keep whole-row/whole-round Done and Back as the initial progress boundary and keep the finished chart available in Overview.
   - Verify row and centre-out sequences at zero, intermediate, backward, and complete progress boundaries, including overlays whose supporting cell is already visible.

@@ -234,6 +234,9 @@ pub fn compute_row_highlights(size: IVec2, pixels: &Array2<u8>, highlights: &mut
         let color_index = get_color_index(size.y - 1 - y);
         for x in 0..size.x {
             let [xi, yi] = [x as usize, y as usize];
+            if pixels[[yi, xi]] == COLOR_TRANSPARENT {
+                continue;
+            }
             if color_index == pixels[[yi, xi]] {
                 continue;
             }
@@ -278,6 +281,9 @@ pub fn compute_round_highlights(
 
             let color_index = get_color_index(rounds - 1 - round_from_edge);
             let [xi, yi] = [x as usize, y as usize];
+            if pixels[[yi, xi]] == COLOR_TRANSPARENT {
+                continue;
+            }
             if color_index == pixels[[yi, xi]] {
                 continue;
             }
@@ -862,6 +868,13 @@ mod tests {
     }
 
     #[test]
+    fn plan_row_ignores_temporarily_absent_cells() {
+        let pixels = Array2::zeros((4, 4));
+        let plan = build_highlight_plan_row(v(4, 4), &pixels);
+        assert!(plan.is_empty());
+    }
+
+    #[test]
     fn plan_row_top_edge_emits_invalid_with_up_dir() {
         // y=0 wrong → INVALID at (2, 0), direction always UP in row mode.
         let mut pixels = make_row_grid(4, 4);
@@ -895,6 +908,13 @@ mod tests {
         let entries = plan_entries(&plan);
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0], (PLAN_TYPE_VALID, PLAN_DIR_LEFT, 1, 4));
+    }
+
+    #[test]
+    fn plan_round_ignores_temporarily_absent_active_cells() {
+        let pixels = Array2::zeros((9, 9));
+        let plan = build_highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+        assert!(plan.is_empty());
     }
 
     #[test]

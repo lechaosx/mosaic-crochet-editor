@@ -15,6 +15,7 @@ test("Instructions Overview focuses work units and returning preserves Design", 
     await expect(page.locator(".canvas-area")).toBeHidden();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
     await expect(page.locator("#canvas")).toBeVisible();
+    await expect(page.getByRole("img", { name: "Finished pattern chart" })).toBeVisible();
     await expect(page.locator(".instructions-chart > #chart-viewport > #canvas")).toHaveCount(1);
     expect(await page.evaluate(() => document.getElementById("canvas") ===
         (window as typeof window & { __designCanvas?: HTMLCanvasElement }).__designCanvas)).toBe(true);
@@ -155,6 +156,7 @@ test("Live advances by whole rows and resumes the exact instruction plan", async
     const liveTab = page.getByRole("tab", { name: "Live" });
     await expect(liveTab).toBeEnabled();
     await liveTab.click();
+    await expect(page.getByRole("img", { name: "Work-in-progress pattern chart" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Row 1" })).toBeVisible();
     await expect(page.getByText("Yarn B", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Back one row" })).toBeDisabled();
@@ -173,6 +175,40 @@ test("Live advances by whole rows and resumes the exact instruction plan", async
     await page.getByRole("button", { name: "Instructions" }).click();
     await page.getByRole("tab", { name: "Live" }).click();
     await expect(page.getByRole("heading", { name: "Row 1" })).toBeVisible();
+});
+
+test("Live renders completed work, the pending row, and no future rows", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Instructions" }).click();
+    const liveTab = page.getByRole("tab", { name: "Live" });
+    await expect(liveTab).toBeEnabled();
+    const rowCount = await page.locator("#instructions-units .instructions-unit").count();
+    await page.getByRole("button", { name: "Fit view" }).click();
+    await page.getByRole("button", { name: "Row 2, Yarn A" }).click();
+
+    const overviewRow1 = await cellCoord(page, 4, rowCount - 1);
+    const finishedRow1 = await pixelRGB(page, overviewRow1.cx, overviewRow1.cy);
+
+    await liveTab.click();
+    const pendingRow1 = await cellCoord(page, 4, rowCount - 1);
+    const futureRow2 = await cellCoord(page, 4, rowCount - 2);
+    const foundation = await cellCoord(page, 4, rowCount);
+    expect(await pixelRGB(page, futureRow2.cx, futureRow2.cy)).toEqual([22, 22, 24]);
+    expect(await pixelRGB(page, pendingRow1.cx, pendingRow1.cy)).not.toEqual(finishedRow1);
+    expect(await pixelRGB(page, foundation.cx, foundation.cy)).not.toEqual([22, 22, 24]);
+
+    await page.getByRole("button", { name: "Done with Row 1" }).click();
+    const completedRow1 = await cellCoord(page, 4, rowCount - 1);
+    expect(await pixelRGB(page, completedRow1.cx, completedRow1.cy)).toEqual(finishedRow1);
+
+    await page.getByRole("button", { name: "Back one row" }).click();
+    const restoredPendingRow1 = await cellCoord(page, 4, rowCount - 1);
+    expect(await pixelRGB(page, restoredPendingRow1.cx, restoredPendingRow1.cy)).not.toEqual(finishedRow1);
+
+    await page.getByRole("tab", { name: "Overview" }).click();
+    await page.getByRole("button", { name: "Row 2, Yarn A" }).click();
+    const overviewAgain = await cellCoord(page, 4, rowCount - 1);
+    expect(await pixelRGB(page, overviewAgain.cx, overviewAgain.cy)).toEqual(finishedRow1);
 });
 
 test("Live is unavailable while instruction blockers remain", async ({ page }) => {

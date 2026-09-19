@@ -106,6 +106,39 @@ pub fn row_work_sequence_at(
     }
 }
 
+pub fn row_wip_pixels(
+    finished: &Array2<u8>,
+    canvas_size: IVec2,
+    completed_units: usize,
+) -> Array2<u8> {
+    let mut highlights = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
+    common::compute_row_highlights(canvas_size, finished, &mut highlights);
+    let mut wip = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
+
+    if canvas_size.y > 0 {
+        let foundation_y = canvas_size.y - 1;
+        for x in 0..canvas_size.x {
+            wip[[foundation_y as usize, x as usize]] =
+                common::natural_color_row(canvas_size.y, foundation_y);
+        }
+    }
+
+    for row_index in 0..completed_units.min(canvas_size.y.saturating_sub(1) as usize) {
+        for step in row_work_at(&highlights, canvas_size, false, row_index) {
+            wip[[step.worked_coord.y as usize, step.worked_coord.x as usize]] =
+                common::natural_color_row(canvas_size.y, step.worked_coord.y);
+            if step.kind == Stitch::Oc {
+                wip[[step.parent_coord.y as usize, step.parent_coord.x as usize]] =
+                    common::opposite_color(common::natural_color_row(
+                        canvas_size.y,
+                        step.parent_coord.y,
+                    ));
+            }
+        }
+    }
+    wip
+}
+
 pub fn round_work_at(
     highlights: &Array2<u8>,
     canvas_size: IVec2,
@@ -241,6 +274,51 @@ pub fn round_work_sequence_at(
         steps,
         compression: pattern::compress(&flat),
     }
+}
+
+pub fn round_wip_pixels(
+    finished: &Array2<u8>,
+    canvas_size: IVec2,
+    virtual_size: IVec2,
+    offset: IVec2,
+    rounds: i32,
+    completed_units: usize,
+) -> Array2<u8> {
+    let mut highlights = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
+    common::compute_round_highlights(
+        canvas_size,
+        virtual_size,
+        offset,
+        rounds,
+        finished,
+        &mut highlights,
+    );
+    let mut wip = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
+
+    for round_index in 0..completed_units.min(rounds.max(0) as usize) {
+        for step in round_work_at(
+            &highlights,
+            canvas_size,
+            virtual_size,
+            offset,
+            rounds,
+            false,
+            round_index,
+        ) {
+            wip[[step.worked_coord.y as usize, step.worked_coord.x as usize]] =
+                common::natural_color_round(virtual_size, offset, rounds, step.worked_coord);
+            if step.kind == Stitch::Oc {
+                wip[[step.parent_coord.y as usize, step.parent_coord.x as usize]] =
+                    common::opposite_color(common::natural_color_round(
+                        virtual_size,
+                        offset,
+                        rounds,
+                        step.parent_coord,
+                    ));
+            }
+        }
+    }
+    wip
 }
 
 #[cfg(test)]
@@ -411,6 +489,52 @@ mod tests {
             structured.compression.as_slice(),
             [SequenceItem::RepeatGroup(repeat)] if repeat.count == 4
         ));
+    }
+
+    #[test]
+    fn row_wip_replays_only_completed_overlay_work() {
+        let size = v(3, 3);
+        let mut finished =
+            Array2::from_shape_fn((3, 3), |(y, _)| common::natural_color_row(size.y, y as i32));
+        finished[[2, 1]] = common::opposite_color(common::natural_color_row(size.y, 2));
+        finished[[1, 0]] = common::opposite_color(common::natural_color_row(size.y, 1));
+
+        let before_row_1 = row_wip_pixels(&finished, size, 0);
+        assert_eq!(before_row_1.row(0).to_vec(), [0, 0, 0]);
+        assert_eq!(before_row_1.row(1).to_vec(), [0, 0, 0]);
+        assert_eq!(before_row_1.row(2).to_vec(), [1, 1, 1]);
+
+        let after_row_1 = row_wip_pixels(&finished, size, 1);
+        assert_eq!(after_row_1.row(0).to_vec(), [0, 0, 0]);
+        assert_eq!(after_row_1.row(1).to_vec(), [2, 2, 2]);
+        assert_eq!(after_row_1.row(2).to_vec(), [1, 2, 1]);
+
+        assert_eq!(row_wip_pixels(&finished, size, 2), finished);
+    }
+
+    #[test]
+    fn round_wip_hides_future_rings_and_their_overlay_contributions() {
+        let size = v(7, 7);
+        let mut finished = Array2::from_shape_fn((7, 7), |(y, x)| {
+            common::natural_color_round(size, v(0, 0), 3, v(x as i32, y as i32))
+        });
+        finished[[2, 1]] = common::opposite_color(finished[[2, 1]]);
+
+        assert!(round_wip_pixels(&finished, size, size, v(0, 0), 3, 0)
+            .iter()
+            .all(|pixel| *pixel == common::COLOR_TRANSPARENT));
+
+        let after_round_2 = round_wip_pixels(&finished, size, size, v(0, 0), 3, 2);
+        assert_eq!(after_round_2[[2, 0]], common::COLOR_TRANSPARENT);
+        assert_eq!(
+            after_round_2[[2, 1]],
+            common::natural_color_round(size, v(0, 0), 3, v(1, 2)),
+        );
+
+        assert_eq!(
+            round_wip_pixels(&finished, size, size, v(0, 0), 3, 3),
+            finished
+        );
     }
 
     // innerW=1, innerH=1, rounds=2 → virtual 5×5, canvas 5×5, offset (0,0).

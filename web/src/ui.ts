@@ -134,6 +134,7 @@ export interface InstructionsView {
     onAlternate: (cb: () => void) => void;
     onUnitFocus: (cb: (coords: number[], label: string) => void) => void;
     onIssueFocus: (cb: (issue: InstructionIssue) => void) => void;
+    onLivePreview: (cb: (completedUnits: number | null) => void) => void;
     onClose:     (cb: () => void) => void;
     close:       () => void;
 }
@@ -882,6 +883,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
         textPanel.hidden = tab !== "text";
         if (tab === "overview") overviewPanel.prepend(instructionsChart);
         if (tab === "live") livePanel.prepend(instructionsChart);
+        if (tab !== "text") {
+            canvas.setAttribute("aria-label", tab === "live"
+                ? "Work-in-progress pattern chart"
+                : "Finished pattern chart");
+        }
         for (const [name, button] of [
             ["overview", overviewTab], ["live", liveTab], ["text", textTab],
         ] as const) {
@@ -916,6 +922,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const closeListeners: (() => void)[] = [];
         const focusListeners: ((coords: number[], label: string) => void)[] = [];
         const issueListeners: ((issue: InstructionIssue) => void)[] = [];
+        const livePreviewListeners: ((completedUnits: number | null) => void)[] = [];
         let activeFocus: HTMLButtonElement | null = null;
         let liveUnits: readonly InstructionOverviewUnit[] = [];
         let liveCompleted = 0;
@@ -927,7 +934,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         alternateChk.addEventListener("change", onAlt);
         selectInstructionsTab("overview");
         instructionsChart.append(chartViewport);
-        canvas.setAttribute("aria-label", "Pattern chart preview");
         canvas.removeAttribute("aria-describedby");
         instructions.hidden = false;
         canvasArea.hidden = true;
@@ -954,6 +960,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 liveDone.hidden = true;
                 if (doneHadFocus) liveUnit.focus();
                 if (total > 0) focusLive(liveUnits[total - 1]);
+                livePreviewListeners.forEach(f => f(liveCompleted));
                 return;
             }
             const unit = liveUnits[liveCompleted];
@@ -965,6 +972,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             liveDone.setAttribute("aria-label", `Done with ${unit.label}`);
             liveDone.title = `Done with ${unit.label}`;
             focusLive(unit);
+            livePreviewListeners.forEach(f => f(liveCompleted));
         };
         const refreshLiveAvailability = () => {
             liveTab.disabled = isBusy || hasBlockers || liveUnits.length === 0;
@@ -983,7 +991,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         };
         instructionsTabChanged = tab => {
             if (tab === "live" && liveUnits.length > 0) renderLive();
-            if (tab === "overview") activeFocus?.click();
+            if (tab === "overview") {
+                activeFocus?.click();
+                livePreviewListeners.forEach(f => f(null));
+            }
         };
         liveBack.onclick = () => {
             if (liveCompleted === 0) return;
@@ -1111,6 +1122,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             onAlternate: (f) => altListeners.push(f),
             onUnitFocus: (f) => focusListeners.push(f),
             onIssueFocus: (f) => issueListeners.push(f),
+            onLivePreview: (f) => livePreviewListeners.push(f),
             onClose:     (f) => closeListeners.push(f),
             close,
         };
