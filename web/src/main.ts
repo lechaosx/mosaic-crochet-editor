@@ -106,9 +106,6 @@ function hideFreshStart() {
     freshStartVisible = false;
     startSurface.hidden = true;
 }
-const instructionsViewport = makeViewport(document.getElementById("instructions-canvas") as HTMLCanvasElement);
-const instructionsCtx = instructionsViewport.canvas.getContext("2d", { alpha: false })!;
-const instructionsRs = makeRendererState();
 let instructionsPreviewStore: Store | null = null;
 let instructionsOpen = false;
 let selectionMoveMode: SelectionMoveMode = "move";
@@ -234,19 +231,24 @@ function syncSelectPreview() {
     );
 }
 
-observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, () => render(viewport, ctx, rs, store));
-observeCanvasResize(
-    instructionsViewport.canvas,
-    v => { instructionsViewport.dpr = v; },
-    () => {
-        if (instructionsPreviewStore) {
-            render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
-        }
-    },
-);
+function renderCanvas() {
+    render(viewport, ctx, rs, instructionsPreviewStore ?? store);
+}
+
+observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);
 
 // Renderer + side-effect channels (Store invokes them on every `commit`).
-store.setRenderer (s => { rs.paintPreview = null; previewCell = null; render(viewport, ctx, rs, s); });
+store.setRenderer(s => {
+    rs.paintPreview = null;
+    previewCell = null;
+    if (instructionsPreviewStore) {
+        instructionsPreviewStore.commit(
+            preview => { preview.rotation = s.state.rotation; },
+            { recompute: false, render: false, persist: false },
+        );
+    }
+    renderCanvas();
+});
 store.setHistoryFn(s => historySave(s));
 store.setPersistFn(s => {
     ui.setRecoveryStatus(saveToLocalStorage(s) ? "saved" : "failed");
@@ -255,7 +257,7 @@ store.setPersistFn(s => {
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => ui.setViewState(
-    viewport.view.zoom, s.state.rotation, navigateLatched || navigateMomentary,
+    viewport.view.zoom, s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
 store.addObserver(s => updateStatus(s, null, null, hasConfiguredTransforms()));
 store.addObserver(s => {
@@ -410,7 +412,7 @@ function showKeyboardCell(cell: { x: number; y: number }, announce = true) {
     rs.keyboardCursor = keyboardCell;
     updateStatus(store, keyboardCell.x, keyboardCell.y, hasConfiguredTransforms());
     if (announce) document.getElementById("canvas-cell-status")!.textContent = keyboardCellDescription(keyboardCell);
-    render(viewport, ctx, rs, store);
+    renderCanvas();
 }
 
 function applyKeyboardTool() {
@@ -451,7 +453,7 @@ function clearPaintPreview() {
     previewCell = null;
     if (!rs.paintPreview) return;
     rs.paintPreview = null;
-    render(viewport, ctx, rs, store);
+    renderCanvas();
 }
 
 function previewPaintAt(x: number | null, y: number | null, clientX: number | null, clientY: number | null) {
@@ -482,7 +484,7 @@ function previewPaintAt(x: number | null, y: number | null, clientX: number | nu
     if (outcome.reason) {
         rs.paintPreview = null;
         ui.setCanvasFeedback(`Preview · ${outcome.reason}`);
-        render(viewport, ctx, rs, store);
+        renderCanvas();
         return;
     }
     const changed: string[] = [];
@@ -520,7 +522,7 @@ function previewPaintAt(x: number | null, y: number | null, clientX: number | nu
                 p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds,
             ),
     };
-    render(viewport, ctx, rs, store);
+    renderCanvas();
 }
 
 function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
@@ -608,7 +610,7 @@ function onTransformPopoverToggle(open: boolean) {
     clearPaintPreview();
     rs.previewRepeatGuides = open;
     if (!open) viewport.canvas.style.cursor = "";
-    render(viewport, ctx, rs, store);
+    renderCanvas();
 }
 
 function onReplicateSelection() {
@@ -719,16 +721,17 @@ function fitPattern() {
         viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
         store.state.labelsVisible,
     );
-    render(viewport, ctx, rs, store);
-    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
+    renderCanvas();
+    ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
 }
 function zoomView(factor: number) {
     const rect = viewport.canvas.getBoundingClientRect();
     zoomAt(viewport.canvas, viewport.view, rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
-    render(viewport, ctx, rs, store);
-    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
+    renderCanvas();
+    ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
 }
 function toggleNavigate() {
+    if (instructionsOpen) return;
     navigateLatched = !navigateLatched;
     ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
 }
@@ -905,15 +908,17 @@ async function onInstructions() {
     const exportPixels = store.state.float
         ? anchorIntoCanvas(store.state).pixels
         : store.state.pixels;
-    const dlg = ui.openInstructions();
     instructionsOpen = true;
+    ui.setViewState(viewport.view.zoom, store.state.rotation, true);
+    const dlg = ui.openInstructions();
     let cancelled = false;
     dlg.onClose(() => {
         instructionsOpen = false;
         cancelled = true;
         instructionsPreviewStore = null;
-        instructionsRs.focusPath = null;
-        render(viewport, ctx, rs, store);
+        rs.focusPath = null;
+        ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
+        renderCanvas();
     });
     const plan = store.plan;
     const issues: { x: number; y: number }[] = [];
@@ -936,29 +941,18 @@ async function onInstructions() {
         liveTransforms: false,
         float: null,
     });
-    fitToView(
-        instructionsViewport.canvas,
-        instructionsViewport.view,
-        store.state.pattern,
-        store.state.rotation,
-        store.state.labelsVisible,
-    );
-    render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
+    renderCanvas();
 
     dlg.onUnitFocus((flatCoords) => {
-        instructionsRs.focusPath = [];
+        rs.focusPath = [];
         for (let i = 0; i < flatCoords.length; i += 2) {
-            instructionsRs.focusPath.push({ x: flatCoords[i], y: flatCoords[i + 1] });
+            rs.focusPath.push({ x: flatCoords[i], y: flatCoords[i + 1] });
         }
-        if (instructionsPreviewStore) {
-            render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
-        }
+        if (instructionsPreviewStore) renderCanvas();
     });
     dlg.onIssueFocus((issue) => {
-        instructionsRs.focusPath = [{ x: issue.x, y: issue.y }];
-        if (instructionsPreviewStore) {
-            render(instructionsViewport, instructionsCtx, instructionsRs, instructionsPreviewStore);
-        }
+        rs.focusPath = [{ x: issue.x, y: issue.y }];
+        if (instructionsPreviewStore) renderCanvas();
     });
 
     const startSession = (alt: boolean) => {
@@ -1102,7 +1096,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
         clearPaintPreview();
-        if (editBaseline) {
+        if (instructionsOpen || editBaseline) {
             gesture = null;
             return;
         }
@@ -1313,7 +1307,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 || [...next].some(id => !rs.axesInDeleteZone.has(id));
             if (changed) {
                 rs.axesInDeleteZone = next;
-                render(viewport, ctx, rs, store);
+                renderCanvas();
             }
             return;
         }
@@ -1329,7 +1323,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 gesture.rect.endY = p.y;
             }
             syncSelectPreview();
-            render(viewport, ctx, rs, store);
+            renderCanvas();
             return;
         }
         if (gesture.kind === "wand") {
@@ -1383,7 +1377,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             }
             gesture = null;
             syncSelectPreview();
-            render(viewport, ctx, rs, store);
+            renderCanvas();
             return;
         }
         if (gesture.kind === "wand") {
@@ -1453,7 +1447,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         if (gesture.kind === "select") {
             gesture = null;
             syncSelectPreview();
-            render(viewport, ctx, rs, store);
+            renderCanvas();
             return;
         }
         if (gesture.kind === "wand") {
@@ -1477,18 +1471,19 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
     },
     onHover:      (x, y, clientX, clientY) => {
+        if (instructionsOpen) return;
         updateStatus(store, x, y, hasConfiguredTransforms());
         previewPaintAt(x, y, clientX, clientY);
     },
     onView:       () => {
-        render(viewport, ctx, rs, store);
-        ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
+        renderCanvas();
+        ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
     },
-    navigate:     () => navigateLatched || navigateMomentary,
+    navigate:     () => instructionsOpen || navigateLatched || navigateMomentary,
 });
 
 viewport.canvas.addEventListener("pointermove", event => {
-    if (event.buttons || !rs.previewRepeatGuides) return;
+    if (instructionsOpen || event.buttons || !rs.previewRepeatGuides) return;
     const frac = screenToPatternFrac(
         viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
         store.state.pattern, event.clientX, event.clientY,
@@ -1500,16 +1495,19 @@ viewport.canvas.addEventListener("pointerleave", () => {
     viewport.canvas.style.cursor = "";
 });
 viewport.canvas.addEventListener("focus", () => {
+    if (instructionsOpen) return;
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
     showKeyboardCell(keyboardCell ?? { x: Math.floor(W / 2), y: Math.floor(H / 2) });
 });
 viewport.canvas.addEventListener("blur", () => {
+    if (instructionsOpen) return;
     rs.keyboardCursor = null;
     updateStatus(store, null, null, hasConfiguredTransforms());
-    render(viewport, ctx, rs, store);
+    renderCanvas();
 });
 viewport.canvas.addEventListener("pointerdown", event => {
     viewport.canvas.focus({ preventScroll: true });
+    if (instructionsOpen) return;
     if (canvasSpacePending) {
         canvasSpaceNavigated = true;
         return;
@@ -1716,7 +1714,7 @@ if (saved) {
     );
     refreshSymmetryUi();
     historyEnsureInitialized(store.state);
-    render(viewport, ctx, rs, store);
+    renderCanvas();
 } else {
     const { pattern, pixels } = applyEditSettings();
     fitToView(

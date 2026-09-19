@@ -78,7 +78,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 
 Session script, evidence tables, and gate criteria: [Instructions validation protocol](doc/instructions-validation.md).
 
-- [ ] Reuse the editor's persistent canvas and viewport in Instructions.
+- [x] Reuse the editor's persistent canvas and viewport in Instructions.
   - Move the same chart viewport between Design, Overview, and Live while changing the surrounding controls and disabling authoring outside Design.
   - Preserve pan, zoom, and rotation across workspace changes; Overview renders the finished chart and Live renders the progress state.
   - Verify there is only one canvas, its view state survives every workspace switch, and pointer/keyboard authoring cannot mutate the pattern from Instructions.

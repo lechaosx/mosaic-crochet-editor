@@ -4,13 +4,21 @@ import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
 test("Instructions Overview focuses work units and returning preserves Design", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 0, 1);
+    await page.evaluate(() => {
+        (window as typeof window & { __designCanvas?: HTMLCanvasElement }).__designCanvas =
+            document.getElementById("canvas") as HTMLCanvasElement;
+    });
 
     await page.getByRole("button", { name: "Instructions" }).click();
     await expect(page.getByRole("main", { name: "Instructions" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeFocused();
     await expect(page.locator(".canvas-area")).toBeHidden();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
-    await expect(page.getByRole("img", { name: "Finished chart preview" })).toBeVisible();
+    await expect(page.locator("#canvas")).toBeVisible();
+    await expect(page.locator(".instructions-chart > #chart-viewport > #canvas")).toHaveCount(1);
+    expect(await page.evaluate(() => document.getElementById("canvas") ===
+        (window as typeof window & { __designCanvas?: HTMLCanvasElement }).__designCanvas)).toBe(true);
+    await expect(page.locator("canvas")).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Row 1, Yarn B" })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Row 2, Yarn A" }).click();
     await expect(page.getByRole("button", { name: "Row 2, Yarn A" })).toHaveAttribute("aria-pressed", "true");
@@ -37,6 +45,32 @@ test("Instructions Overview focuses work units and returning preserves Design", 
     await expect(page.getByRole("button", { name: "Instructions" })).toBeFocused();
     const painted = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, painted.cx, painted.cy)).toEqual([0, 0, 0]);
+});
+
+test("Instructions preserves and controls the shared chart viewport", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.getByRole("button", { name: "Invert" }).click();
+    const designZoom = await page.getByRole("status", { name: "Rendered cell size" }).textContent();
+    const designCell = await cellCoord(page, 1, 1);
+    const designPixel = await pixelRGB(page, designCell.cx, designCell.cy);
+
+    await page.getByRole("button", { name: "Instructions" }).click();
+    await expect(page.locator(".instructions-chart #canvas")).toBeVisible();
+    await expect(page.getByRole("status", { name: "Rendered cell size" })).toHaveText(designZoom!);
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    const instructionsZoom = await page.getByRole("status", { name: "Rendered cell size" }).textContent();
+    expect(instructionsZoom).not.toBe(designZoom);
+    await clickCell(page, 1, 1);
+
+    await page.getByRole("tab", { name: "Live" }).click();
+    await expect(page.locator("#instructions-live .instructions-chart #canvas")).toBeVisible();
+    await page.getByRole("button", { name: "Back to Design" }).click();
+
+    await expect(page.locator(".canvas-area > #chart-viewport > #canvas")).toBeVisible();
+    await expect(page.getByRole("status", { name: "Rendered cell size" })).toHaveText(instructionsZoom!);
+    const returnedCell = await cellCoord(page, 1, 1);
+    expect(await pixelRGB(page, returnedCell.cx, returnedCell.cy)).toEqual(designPixel);
 });
 
 test("Back to Design restores focus to More in the compact toolbar", async ({ page }) => {
@@ -195,7 +229,7 @@ test("Live completes and reopens a Centre-out round as one boundary", async ({ p
 
     await page.getByRole("button", { name: "Done with Round 1" }).click();
     await expect(page.getByRole("heading", { name: "Pattern complete" })).toBeFocused();
-    await expect(live.getByRole("status")).toContainText("1 of 1 complete");
+    await expect(live.locator("#instructions-live-progress")).toContainText("1 of 1 complete");
     await expect(back).toBeEnabled();
     await expect(page.getByRole("button", { name: /Done with/ })).toBeHidden();
 

@@ -828,7 +828,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     /* ── Instructions workspace ─────────────────────────────────────── */
     const instructions   = el("instructions-workspace");
-    const canvasArea     = el("canvas").parentElement as HTMLElement;
+    const canvasArea     = document.querySelector<HTMLElement>(".canvas-area")!;
+    const chartViewport  = el("chart-viewport");
     const authoringDock  = el("authoring-dock");
     const overviewPanel  = el("instructions-overview");
     const livePanel      = el("instructions-live");
@@ -836,7 +837,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const overviewTab    = el<HTMLButtonElement>("instructions-overview-tab");
     const liveTab        = el<HTMLButtonElement>("instructions-live-tab");
     const textTab        = el<HTMLButtonElement>("instructions-text-tab");
-    const instructionsChart = el("instructions-canvas").parentElement as HTMLElement;
+    const instructionsChart = el("instructions-chart");
     const instructionsTitle = el("instructions-title");
     const unitsList      = el<HTMLOListElement>("instructions-units");
     const focusStatus    = el("instructions-focus-status");
@@ -925,6 +926,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
         selectInstructionsTab("overview");
+        instructionsChart.append(chartViewport);
+        canvas.setAttribute("aria-label", "Pattern chart preview");
+        canvas.removeAttribute("aria-describedby");
         instructions.hidden = false;
         canvasArea.hidden = true;
         authoringDock.hidden = true;
@@ -999,6 +1003,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
             instructionsTabChanged = null;
             liveBack.onclick = null;
             liveDone.onclick = null;
+            canvasArea.prepend(chartViewport);
+            canvas.setAttribute("aria-label", "Editable pattern chart");
+            canvas.setAttribute("aria-describedby", "canvas-cell-status");
             instructions.hidden = true;
             canvasArea.hidden = false;
             authoringDock.hidden = false;
