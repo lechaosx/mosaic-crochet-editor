@@ -6,10 +6,10 @@ Status: ready for formative sessions. No product gate has passed until observati
 
 Run the two gates independently:
 
-1. **Basic Live gate** — whether Overview plus whole-row/whole-round Done and Back is useful during real crochet without a reconstructed physical-WIP view.
+1. **Live tracking gate** — whether chart-derived WIP plus whole-row/whole-round Done and Back is useful during real crochet, or whether users need finer compressed-instruction tracking.
 2. **Traversal gate** — whether crocheters can choose and understand row or round start, direction, and direction schedule without the editor implying a technique.
 
-Compression-tree tracking and chart-derived WIP are separate decisions. Evidence for one does not justify the other.
+Chart-derived WIP is the Live baseline. Evidence for finer tracking must identify failures inside a row or round rather than general preference.
 
 ## Recruitment
 
@@ -152,7 +152,7 @@ Consider it only when participants repeatedly retain the correct row/round but l
 
 ### Chart-derived WIP
 
-Consider it only when participants understand the selected unit and path but make repeated work errors because the finished chart shows future overlays. Record the exact mistaken cells. Familiarity preference alone does not justify reconstructing physical WIP.
+Confirm that participants distinguish completed work, the pending unit, and future work; that future overlays never affect the visible surface; and that switching to Overview provides an understandable finished reference. Record the exact cells whenever the rendered state is misleading.
 
 ## Research constraints behind the prompts
 

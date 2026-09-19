@@ -74,13 +74,21 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Bundle one small editable example that demonstrates Colour, Overlay, Mirror & Repeat, and Instructions without adding a tutorial carousel or nullable-document architecture.
   - Verify untouched loads, intentionally created blank patterns, legacy recovery, canceled creation/open, and compact layouts.
 
-### Stage 8 — Validate before extending Instructions
+### Stage 8 — Make Live a trustworthy view of the work
 
 Session script, evidence tables, and gate criteria: [Instructions validation protocol](doc/instructions-validation.md).
 
-- [ ] Product gate: observe the shipped Overview and row/round Live loop in real crochet sessions.
-  - Record whether row/round Done and Back are sufficiently low-click, where users lose their place, and whether the finished chart plus focused current path is honest enough without reconstructed physical WIP.
-  - Decide separately whether compression-tree tracking or chart-derived WIP earns its substantially higher implementation cost.
+- [ ] Reuse the editor's persistent canvas and viewport in Instructions.
+  - Move the same chart viewport between Design, Overview, and Live while changing the surrounding controls and disabling authoring outside Design.
+  - Preserve pan, zoom, and rotation across workspace changes; Overview renders the finished chart and Live renders the progress state.
+  - Verify there is only one canvas, its view state survives every workspace switch, and pointer/keyboard authoring cannot mutate the pattern from Instructions.
+- [ ] Derive Live's chart from the confirmed crochet-work prefix.
+  - Render completed work as solid, the current unit as a distinct pending preview, and future work as absent. Future overlay contributions must not appear before their instruction completes.
+  - Keep whole-row/whole-round Done and Back as the initial progress boundary and keep the finished chart available in Overview.
+  - Verify row and centre-out sequences at zero, intermediate, backward, and complete progress boundaries, including overlays whose supporting cell is already visible.
+- [ ] Product gate: observe the shared-view, chart-derived WIP loop in real crochet sessions.
+  - Record whether row/round Done and Back are sufficiently low-click, where users lose their place, and whether compressed-instruction tracking would prevent those specific failures.
+  - Decide separately whether compression-tree tracking earns its substantially higher implementation cost.
 - [ ] Product gate: validate row origins and centre-out corner/side-midpoint terminology with crocheters.
   - Test left/right row origins, clockwise/counter-clockwise rounds, both even-side midpoint choices, and same/alternating schedules without implying turning, joining, cutting, or carrying.
 - [ ] If the traversal gate passes, expose and persist explicit traversal in Instructions.
@@ -93,7 +101,7 @@ Session script, evidence tables, and gate criteria: [Instructions validation pro
 ### Not in this sequence
 
 - Runtime replacement of the current mirror/repeat model, inverse editing through generated instances, and output composition remain separate high-risk projects despite their successful pure prototypes.
-- Recursive Live compression tracking, reconstructed physical WIP, dual progress cursors, edit reconciliation, Focus mode, Wake Lock, and Print remain dependent on crochet-session evidence.
+- Recursive Live compression tracking, dual progress cursors, edit reconciliation, Focus mode, Wake Lock, and Print remain dependent on crochet-session evidence.
 - Multi-detent sheets, resizable inspector persistence, semantic zoom, overview navigator, exhaustive Help/coach marks, persistent clipboard, filename association, pen hardware specialization, and multi-theme polish remain lower priority.
 - Preserve room for these ideas through existing module and state boundaries; do not add speculative state or abstraction for them.
 
