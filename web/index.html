@@ -69,7 +69,7 @@
   </div>
 
   <div class="workspace">
-    <nav class="authoring-dock" id="authoring-dock" aria-label="Authoring tools">
+    <nav class="authoring-dock" id="authoring-dock" aria-label="Authoring tools" data-workspace="design">
       <div class="dock-group g-paint" role="group" aria-label="Colour tools">
         <span class="dock-group-label" aria-hidden="true">Colour</span>
         <button class="btn btn--icon" id="tool-pencil" title="Pencil — set finished-square colour (P)" aria-label="Pencil"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-pencil"/></svg></button>
@@ -113,7 +113,7 @@
       <div id="chart-viewport" class="chart-viewport">
         <canvas id="canvas" role="img" aria-label="Editable pattern chart" aria-describedby="canvas-cell-status" tabindex="0">Editable pattern chart. Use the authoring tools and canvas context to edit it.</canvas>
         <div class="canvas-controls" role="group" aria-label="Canvas view">
-          <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
+          <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate" data-workspace="design"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
           <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>
           <div class="canvas-control-group">
             <button class="btn btn--icon" id="view-zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
@@ -128,7 +128,7 @@
         </div>
       </div>
       <span id="canvas-cell-status" class="visually-hidden" role="status" aria-label="Keyboard cell" aria-live="polite" aria-atomic="true"></span>
-      <div id="status" class="status" aria-label="Canvas context">
+      <div id="status" class="status" aria-label="Canvas context" data-workspace="design">
         <span id="status-tool"></span>
         <span id="status-yarn"></span>
         <span id="status-coordinates" hidden></span>

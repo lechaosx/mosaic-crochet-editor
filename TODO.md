@@ -92,6 +92,10 @@ Session script, evidence tables, and gate criteria: [Instructions validation pro
   - Keep Design and Crochet as peer top-level modes; switch only their overlay panels while the canvas and document bar remain stable.
   - Replace the separate Text view and download action with Copy instructions for the complete compressed dump.
   - Verify inclusive current-line WIP, mode switching, copy outcomes, progress recovery, blockers, wide layouts, tablets, and compact screens.
+- [x] Align current controls with executable user stories.
+  - Keep the document bar identical in Design and Crochet, and route its authoring commands back to Design before they act.
+  - In Crochet, omit the redundant Navigate toggle and Design context cluster while retaining shared Fit, zoom, rotation, and direct canvas navigation.
+  - Keep the reverse control-to-story map in [user stories](doc/user-stories.md) and verify workspace ownership in end-to-end tests.
 - [ ] Product gate: observe the shared-view, chart-derived WIP loop in real crochet sessions.
   - Record whether row/round Done and Back are sufficiently low-click, where users lose their place, and whether compressed-instruction tracking would prevent those specific failures.
   - Decide separately whether compression-tree tracking earns its substantially higher implementation cost.

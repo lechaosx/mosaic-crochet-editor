@@ -1,10 +1,18 @@
 import { test, expect } from "@playwright/test";
 import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
 
-test("Design and Crochet are peer modes with one chart and instruction list", async ({ page }) => {
+test("a crocheter gets a focused workspace while the global document bar stays available", async ({ page }) => {
     await page.setViewportSize({ width: 2200, height: 900 });
     await bootApp(page);
     await clickCell(page, 0, 1);
+    await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Load" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save .mcw" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Navigate" })).toBeVisible();
+    await expect(page.getByLabel("Canvas context")).toBeVisible();
+    await expect(page.getByText("Alternate direction", { exact: true })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeHidden();
     await page.evaluate(() => {
         (window as typeof window & { __designCanvas?: HTMLCanvasElement }).__designCanvas =
             document.getElementById("canvas") as HTMLCanvasElement;
@@ -19,7 +27,15 @@ test("Design and Crochet are peer modes with one chart and instruction list", as
     await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Load" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save .mcw" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Redo" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(page.getByRole("status", { name: "Browser recovery" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Navigate" })).toBeHidden();
+    await expect(page.getByLabel("Canvas context")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Fit view" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Zoom in" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Rotate view right" })).toBeVisible();
     await expect(page.locator(".canvas-area")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
     await expect(page.locator("#canvas")).toBeVisible();
@@ -40,6 +56,8 @@ test("Design and Crochet are peer modes with one chart and instruction list", as
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Design" })).toBeFocused();
     await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Navigate" })).toBeVisible();
+    await expect(page.getByLabel("Canvas context")).toBeVisible();
     const painted = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, painted.cx, painted.cy)).toEqual([0, 0, 0]);
 });
@@ -71,11 +89,42 @@ test("Crochet preserves and controls the shared chart viewport", async ({ page }
 test("workspace switch remains direct in the compact toolbar", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
+    await expect(page.getByRole("button", { name: "More" })).toBeVisible();
     const canvasBefore = await page.locator(".canvas-area").boundingBox();
     await page.getByRole("button", { name: "Crochet" }).click();
+    await expect(page.getByRole("button", { name: "More" })).toBeVisible();
     expect(await page.locator(".canvas-area").boundingBox()).toEqual(canvasBefore);
     await page.getByRole("button", { name: "Design" }).click();
     await expect(page.getByRole("button", { name: "Design" })).toBeFocused();
+});
+
+test("global authoring commands return a crocheter to Design before opening their context", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 1, 1);
+    const edited = await cellCoord(page, 1, 1);
+
+    await page.getByRole("button", { name: "Crochet" }).click();
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.getByRole("button", { name: "Design" })).toHaveAttribute("aria-pressed", "true");
+    expect(await pixelRGB(page, edited.cx, edited.cy)).toEqual([255, 255, 255]);
+
+    await page.getByRole("button", { name: "Crochet" }).click();
+    await page.getByRole("button", { name: "Redo" }).click();
+    await expect(page.getByRole("button", { name: "Design" })).toHaveAttribute("aria-pressed", "true");
+    expect(await pixelRGB(page, edited.cx, edited.cy)).toEqual([0, 0, 0]);
+
+    await page.getByRole("button", { name: "Crochet" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByRole("button", { name: "Design" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
+    await expect(page.locator("#hl-popover")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeVisible();
+
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Crochet" }).click();
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await expect(page.getByRole("button", { name: "Design" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 });
 
 test("switching workspaces does not move selected Design content", async ({ page }) => {

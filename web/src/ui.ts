@@ -157,6 +157,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
         pattern: el("btn-edit"),
     };
     let activeInspector: InspectorPanel | null = null;
+    let closeInstructionsWorkspace: ((restoreFocus: boolean) => void) | null = null;
+    const enterDesignForCommand = () => closeInstructionsWorkspace?.(false);
 
     const workspaceShell = document.querySelector<HTMLElement>(".workspace")!;
     const canvasShell = document.querySelector<HTMLElement>(".canvas-area")!;
@@ -618,6 +620,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     /* ── Settings inspector ───────────────────────────────────────────── */
     el("btn-hl-toggle").addEventListener("click", e => {
         e.preventDefault();
+        enterDesignForCommand();
         if (isInspectorOpen("settings")) closeInspector();
         else {
             openInspector("settings", "Settings");
@@ -631,8 +634,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
 
     /* ── History and canvas view ─────────────────────────────────────── */
-    el("btn-undo")  .addEventListener("click", cb.onUndo);
-    el("btn-redo")  .addEventListener("click", cb.onRedo);
+    el("btn-undo").addEventListener("click", () => {
+        enterDesignForCommand();
+        cb.onUndo();
+    });
+    el("btn-redo").addEventListener("click", () => {
+        enterDesignForCommand();
+        cb.onRedo();
+    });
     el("rotate-cw") .addEventListener("click", () => cb.onRotate( 45));
     el("rotate-ccw").addEventListener("click", () => cb.onRotate(-45));
     el("view-rotation-reset").addEventListener("click", cb.onResetRotation);
@@ -689,7 +698,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     /* ── Save / load / Instructions ─────────────────────────────────── */
     el("btn-save")  .addEventListener("click", cb.onSave);
-    el("btn-load")  .addEventListener("click", cb.onLoad);
+    el("btn-load").addEventListener("click", () => {
+        enterDesignForCommand();
+        cb.onLoad();
+    });
     el("btn-export").addEventListener("click", cb.onInstructions);
 
     /* ── Pattern inspector ────────────────────────────────────────────── */
@@ -717,6 +729,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     btnEdit.addEventListener("click", e => {
         e.preventDefault();
+        enterDesignForCommand();
         if (isInspectorOpen("pattern")) return;
         openInspector("pattern", "Pattern");
         cb.onEditOpen();
@@ -858,7 +871,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     /* ── Crochet workspace ──────────────────────────────────────────── */
     const instructions   = el("instructions-workspace");
-    const authoringDock  = el("authoring-dock");
     const instructionsTitle = el("instructions-title");
     const unitsList      = el<HTMLOListElement>("instructions-units");
     const exportProgress = el("export-progress");
@@ -904,7 +916,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         canvas.removeAttribute("aria-describedby");
         canvas.setAttribute("aria-label", "Crochet progress chart");
         instructions.hidden = false;
-        authoringDock.hidden = true;
         inspectorHost.hidden = true;
         document.body.classList.add("crochet-mode");
         designMode.setAttribute("aria-pressed", "false");
@@ -976,23 +987,27 @@ export function mountUI(cb: UICallbacks): UIHandle {
             renderCrochet();
         };
 
-        const close = () => {
+        const close = (restoreFocus = true) => {
+            if (closeInstructionsWorkspace !== close) return;
+            closeInstructionsWorkspace = null;
+            designMode.removeEventListener("click", onDesignMode);
             alternateChk.removeEventListener("change", onAlt);
             liveBack.onclick = null;
             liveDone.onclick = null;
             canvas.setAttribute("aria-label", "Editable pattern chart");
             canvas.setAttribute("aria-describedby", "canvas-cell-status");
             instructions.hidden = true;
-            authoringDock.hidden = false;
             inspectorHost.hidden = inspectorWasHidden;
             document.body.classList.remove("crochet-mode");
             designMode.setAttribute("aria-pressed", "true");
             crochetMode.setAttribute("aria-pressed", "false");
             queueCanvasChromeSync();
             closeListeners.forEach(f => f());
-            designMode.focus();
+            if (restoreFocus) designMode.focus();
         };
-        designMode.addEventListener("click", close, { once: true });
+        const onDesignMode = () => close(true);
+        closeInstructionsWorkspace = close;
+        designMode.addEventListener("click", onDesignMode);
 
         return {
             setProgress: (count, total) => {
@@ -1074,7 +1089,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             onIssueFocus: (f) => issueListeners.push(f),
             onLivePreview: (f) => livePreviewListeners.push(f),
             onClose:     (f) => closeListeners.push(f),
-            close,
+            close: () => close(true),
         };
     }
 
