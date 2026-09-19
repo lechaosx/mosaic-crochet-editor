@@ -142,12 +142,13 @@ input  { font: inherit; color: inherit; }
   position: relative;
   flex: 1 1 0;
   min-height: 0;
-  display: grid;
-  grid-template: minmax(0, 1fr) fit-content(45%) / minmax(0, 1fr);
+  display: block;
 }
 
 .authoring-dock {
-  grid-row: 2;
+  position: absolute;
+  inset: auto 0 0;
+  max-height: 45%;
   min-height: 0;
   display: flex;
   align-items: center;
@@ -211,13 +212,10 @@ input  { font: inherit; color: inherit; }
 }
 
 @media (min-width: 64rem) {
-  .workspace {
-    grid-template: minmax(0, 1fr) / auto minmax(0, 1fr) auto;
-  }
-
   .authoring-dock {
-    grid-row: 1;
-    grid-column: 1;
+    inset: 0 auto 0 0;
+    width: clamp(16rem, 24vw, 20rem);
+    max-height: none;
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: stretch;
@@ -247,8 +245,8 @@ input  { font: inherit; color: inherit; }
   }
 
   .inspector-host {
-    position: static;
-    grid-column: 3;
+    position: absolute;
+    inset: 0 0 0 auto;
     width: clamp(18rem, 24vw, 23rem);
     max-height: none;
     border-top: 0;
@@ -461,10 +459,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
    Canvas area & status
    ────────────────────────────────────────────────────────────────────────── */
 .canvas-area {
-  grid-row: 1;
-  grid-column: 1;
+  --canvas-chrome-left: 0px;
+  --canvas-chrome-right: 0px;
+  --canvas-chrome-bottom: 0px;
+  position: absolute;
+  inset: 0;
   flex: 1 1 0;
-  position: relative;
   overflow: hidden;
   background: var(--bg-0);
   min-height: 0;
@@ -494,12 +494,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .canvas-controls {
   position: absolute;
   top: var(--space-2);
-  right: var(--space-3);
+  right: calc(var(--canvas-chrome-right) + var(--space-3));
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--space-1);
-  max-width: calc(100% - 2 * var(--space-3));
+  max-width: calc(100% - var(--canvas-chrome-left) - var(--canvas-chrome-right) - 2 * var(--space-3));
   padding: var(--space-1);
   background: rgba(20, 20, 22, 0.7);
   border-radius: var(--radius-1);
@@ -576,9 +576,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .status {
   position: absolute;
-  bottom: var(--space-2);
-  left: var(--space-3);
-  right: var(--space-3);
+  bottom: calc(var(--canvas-chrome-bottom) + var(--space-2));
+  left: auto;
+  right: calc(var(--canvas-chrome-right) + var(--space-3));
+  width: max-content;
+  max-width: calc(100% - var(--canvas-chrome-left) - var(--canvas-chrome-right) - 2 * var(--space-3));
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -876,15 +878,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
    Instructions workspace
    ────────────────────────────────────────────────────────────────────────── */
 .instructions-workspace {
-  grid-row: 1;
-  grid-column: 1;
+  position: absolute;
+  inset: auto 0 0;
+  max-height: 45%;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
   padding: clamp(var(--space-3), 3vw, var(--space-5));
-  overflow: auto;
+  overflow: hidden;
   color: var(--fg-1);
   background: var(--bg-0);
 }
@@ -903,53 +906,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .instructions-kicker { color: var(--accent); font-size: var(--font-sm); }
 .instructions-intro { margin: 0; max-width: 52rem; color: var(--fg-2); }
 
-.instructions-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  border-bottom: var(--border);
-}
-
-.instructions-tabs .btn {
-  border-color: transparent;
-  border-radius: var(--radius-1) var(--radius-1) 0 0;
-}
-
-.instructions-tabs .btn[aria-selected="true"] {
+.g-mode .btn[aria-pressed="true"] {
   color: var(--fg-0);
   background: var(--accent-soft);
   border-color: var(--accent);
 }
 
-.instructions-overview,
-.instructions-live {
+.instructions-crochet {
+  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(18rem, 1fr);
-  gap: var(--space-3);
-}
-
-.instructions-chart {
-  position: relative;
-  min-width: 0;
-  min-height: 16rem;
-  overflow: hidden;
-  background: var(--bg-0);
-  border: var(--border);
-  border-radius: var(--radius-1);
-}
-
-.instructions-live-card {
-  min-width: 0;
-  align-self: stretch;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--bg-1);
-  border: var(--border);
-  border-radius: var(--radius-1);
 }
 
 .instructions-live-progress,
@@ -960,30 +926,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .instructions-live-unavailable { margin: 0; }
 .instructions-live-save-warning { margin: 0; }
-.instructions-live-card h2 { color: var(--fg-0); font-size: var(--font-lg); }
-.instructions-live-card h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.instructions-sequence > h2 { padding: var(--space-3); }
+.instructions-sequence > h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .instructions-header h1:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-.instructions-live-yarn {
-  align-self: flex-start;
-  padding: var(--space-1) var(--space-2);
-  color: var(--fg-0);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-  border-radius: var(--radius-pill);
-}
-
-#instructions-live-text {
-  color: var(--fg-0);
-  font: var(--font-base)/1.55 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  overflow-wrap: anywhere;
-}
 
 .instructions-live-actions {
   display: grid;
   grid-template-columns: 1fr 2fr;
   gap: var(--space-2);
-  margin-top: auto;
+  padding: var(--space-3);
+  border-top: var(--border);
 }
 
 #instructions-live-done {
@@ -994,6 +946,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 .instructions-sequence {
+  height: 100%;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -1023,21 +976,19 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 .instructions-unit {
-  width: 100%;
   min-height: var(--hit);
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  text-align: left;
   border-bottom: var(--border);
 }
 
-.instructions-unit:hover { background: var(--bg-2); }
-.instructions-unit[aria-pressed="true"] {
+.instructions-unit[aria-current="step"] {
   background: var(--accent-soft);
   box-shadow: inset 3px 0 var(--accent);
 }
+.instructions-unit--complete { opacity: 0.72; }
 
 .instructions-unit-meta { color: var(--fg-0); white-space: nowrap; }
 .instructions-unit code {
@@ -1049,23 +1000,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   white-space: nowrap;
 }
 
-.instructions-text-panel {
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(16rem, 1fr) auto;
-  gap: var(--space-3);
-}
-
-.instructions-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
-  margin: 0;
-}
-
-.instructions-legend div { display: flex; align-items: baseline; gap: var(--space-2); }
-.instructions-legend dt { color: var(--fg-0); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-.instructions-legend dd { margin: 0; color: var(--fg-2); }
 .instructions-actions { justify-content: flex-end; flex-wrap: wrap; }
 .instructions-action-status { margin-right: auto; color: var(--fg-2); font-size: var(--font-sm); }
 
@@ -1074,27 +1008,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   color: var(--fg-2);
   font-variant-numeric: tabular-nums;
   animation: pulse 1s ease-in-out infinite alternate;
-}
-
-#export-text {
-  width: 100%;
-  min-height: 16rem;
-  background: var(--bg-0);
-  color: var(--fg-1);
-  border: 1px solid var(--bg-4);
-  border-radius: var(--radius-1);
-  padding: var(--space-3);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: var(--font-sm);
-  line-height: 1.55;
-  resize: none;
-}
-
-@media (max-width: 48rem), (orientation: portrait) {
-  .instructions-overview,
-  .instructions-live {
-    grid-template: minmax(14rem, 3fr) minmax(10rem, 2fr) / minmax(0, 1fr);
-  }
 }
 
 .warning {
@@ -1193,8 +1106,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 @media (min-width: 64rem) {
-  .canvas-area,
-  .instructions-workspace { grid-column: 2; }
+  .instructions-workspace {
+    inset: 0 auto 0 0;
+    width: clamp(16rem, 24vw, 20rem);
+    max-height: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

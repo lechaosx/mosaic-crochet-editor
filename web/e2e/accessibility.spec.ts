@@ -280,12 +280,8 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await expectHoverLabels("Transform inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
-    await page.getByRole("button", { name: "Instructions" }).click();
-    await expectHoverLabels("Instructions Overview");
-    await page.getByRole("tab", { name: "Text" }).click();
-    await expectHoverLabels("Instructions Text");
-    await page.getByRole("tab", { name: "Live" }).click();
-    await expectHoverLabels("Instructions Live");
+    await page.getByRole("button", { name: "Crochet" }).click();
+    await expectHoverLabels("Crochet");
 });
 
 test("explicit inspector opening moves focus to its first available control", async ({ page }) => {

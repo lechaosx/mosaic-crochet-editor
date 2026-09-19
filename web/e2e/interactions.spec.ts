@@ -34,8 +34,10 @@ test("Pattern keeps canvas zoom available", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-edit").click();
     const canvas = await page.locator("#canvas").boundingBox();
+    const inspector = await page.locator("#inspector-host").boundingBox();
     if (!canvas) throw new Error("canvas bounds unavailable");
-    const start = { cx: canvas.x + canvas.width - 40, cy: canvas.y + canvas.height / 2 };
+    if (!inspector) throw new Error("inspector bounds unavailable");
+    const start = { cx: inspector.x - 40, cy: canvas.y + canvas.height / 2 };
     expect(await page.evaluate(({ cx, cy }) => (document.elementFromPoint(cx, cy) as HTMLElement | null)?.id, start))
         .toBe("canvas");
     const before = await page.evaluate(() => ({

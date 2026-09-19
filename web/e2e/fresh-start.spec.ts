@@ -106,7 +106,7 @@ test("legacy browser recovery bypasses the start choices", async ({ page }) => {
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
 });
 
-test("example is editable and demonstrates overlay, mirror, repeat, and Instructions", async ({ page }) => {
+test("example is editable and demonstrates overlay, mirror, repeat, and Crochet", async ({ page }) => {
     await bootFresh(page);
     await page.getByRole("button", { name: "Try an example" }).click();
 
@@ -114,10 +114,9 @@ test("example is editable and demonstrates overlay, mirror, repeat, and Instruct
     expect(recovery.workspace.axes.length).toBeGreaterThan(0);
     expect(recovery.workspace.repeat.enabled).toBe(true);
 
-    await page.getByRole("button", { name: "Instructions" }).click();
-    await expect(page.getByRole("main", { name: "Instructions" })).toBeVisible();
-    await page.getByRole("tab", { name: "Text" }).click();
-    await expect(page.getByRole("textbox", { name: "Compressed instructions" })).toHaveValue(/oc/);
+    await page.getByRole("button", { name: "Crochet" }).click();
+    await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();
+    await expect(page.locator("#instructions-units")).toContainText("oc");
 });
 
 test("fresh choices fit a compact viewport", async ({ page }) => {

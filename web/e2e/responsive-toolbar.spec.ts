@@ -188,7 +188,7 @@ test("labelled controls grow instead of clipping at doubled text size", async ({
 test("short landscape keeps canvas and scrollable tools at doubled text size", async ({ page }) => {
     await page.setViewportSize({ width: 568, height: 320 });
     await bootApp(page);
-    expect(await page.locator("#authoring-dock").evaluate(el => el.scrollHeight <= el.clientHeight)).toBe(true);
+    expect(await page.locator("#authoring-dock").evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
     await page.evaluate(() => {
         document.documentElement.style.fontSize = "200%";
         window.dispatchEvent(new Event("resize"));
@@ -206,41 +206,46 @@ test("short landscape keeps canvas and scrollable tools at doubled text size", a
     }
 });
 
-test("Instructions reflows without horizontal scrolling at doubled text size", async ({ page }) => {
+test("Crochet panel reflows without horizontal scrolling at doubled text size", async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 568 });
     await bootApp(page);
     await page.evaluate(() => {
         document.documentElement.style.fontSize = "200%";
         window.dispatchEvent(new Event("resize"));
     });
-    await page.getByRole("button", { name: "More" }).click();
-    await page.getByRole("menuitem", { name: "Instructions" }).click();
+    await page.getByRole("button", { name: "Crochet" }).click();
 
     const workspace = page.locator("#instructions-workspace");
     await expect(workspace).toBeVisible();
     expect(await workspace.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    await expect(page.getByRole("button", { name: "Back to Design" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Overview" })).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Text" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeVisible();
+    await expect(page.locator("#instructions-units .instructions-unit").first()).toHaveAttribute("aria-current", "step");
 });
 
-test("constrained layouts place the authoring dock below the canvas and use an inspector sheet", async ({ page }) => {
+test("constrained panels overlay the canvas and move status above their visible edge", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 44);
     const canvas = await page.locator(".canvas-area").boundingBox();
     const dock = await page.locator("#authoring-dock").boundingBox();
-    expect(dock!.y).toBeGreaterThanOrEqual(canvas!.y + canvas!.height - 1);
+    expect(dock!.y).toBeGreaterThan(canvas!.y);
+    expect(dock!.y + dock!.height).toBeLessThanOrEqual(canvas!.y + canvas!.height + 1);
+    const status = await page.locator("#status").boundingBox();
+    expect(status!.y + status!.height).toBeLessThanOrEqual(dock!.y + 1);
 
     await page.getByRole("button", { name: "Pattern" }).click();
+    const canvasAfter = await page.locator(".canvas-area").boundingBox();
     const inspector = await page.locator("#inspector-host").boundingBox();
     expect(inspector!.y).toBeGreaterThan(canvas!.y);
     expect(inspector!.width).toBe(768);
+    expect(canvasAfter).toEqual(canvas);
+    const statusWithInspector = await page.locator("#status").boundingBox();
+    expect(statusWithInspector!.y + statusWithInspector!.height).toBeLessThanOrEqual(inspector!.y + 1);
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
-test("wide layouts use a document bar, left tool rail, and pinned inspector column", async ({ page }) => {
+test("wide overlay panels leave canvas geometry stable and anchor its chrome to visible edges", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 36);
@@ -255,13 +260,19 @@ test("wide layouts use a document bar, left tool rail, and pinned inspector colu
     const dock = await page.locator("#authoring-dock").boundingBox();
     const canvasBefore = await page.locator(".canvas-area").boundingBox();
     expect(dock!.y).toBeGreaterThanOrEqual(documentBar!.y + documentBar!.height - 1);
-    expect(canvasBefore!.x).toBeGreaterThanOrEqual(dock!.x + dock!.width - 1);
+    expect(dock!.x).toBe(canvasBefore!.x);
+    const statusBefore = await page.locator("#status").boundingBox();
+    expect(statusBefore!.x).toBeGreaterThanOrEqual(dock!.x + dock!.width - 1);
 
     await page.getByRole("button", { name: "Pattern" }).click();
     const canvasAfter = await page.locator(".canvas-area").boundingBox();
     const inspector = await page.locator("#inspector-host").boundingBox();
-    expect(inspector!.x).toBeGreaterThanOrEqual(canvasAfter!.x + canvasAfter!.width - 1);
-    expect(canvasAfter!.width).toBeLessThan(canvasBefore!.width);
+    const controls = await page.locator(".canvas-controls").boundingBox();
+    const statusAfter = await page.locator("#status").boundingBox();
+    expect(inspector!.x + inspector!.width).toBeLessThanOrEqual(canvasAfter!.x + canvasAfter!.width + 1);
+    expect(canvasAfter).toEqual(canvasBefore);
+    expect(controls!.x + controls!.width).toBeLessThanOrEqual(inspector!.x + 1);
+    expect(statusAfter!.x + statusAfter!.width).toBeLessThanOrEqual(inspector!.x + 1);
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });

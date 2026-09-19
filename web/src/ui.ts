@@ -158,6 +158,33 @@ export function mountUI(cb: UICallbacks): UIHandle {
     };
     let activeInspector: InspectorPanel | null = null;
 
+    const workspaceShell = document.querySelector<HTMLElement>(".workspace")!;
+    const canvasShell = document.querySelector<HTMLElement>(".canvas-area")!;
+    const authoringPanel = el("authoring-dock");
+    const crochetPanel = el("instructions-workspace");
+    const syncCanvasChromeInsets = () => {
+        const workspaceRect = workspaceShell.getBoundingClientRect();
+        const wide = matchMedia("(min-width: 64rem)").matches;
+        const modePanel = !crochetPanel.hidden ? crochetPanel : !authoringPanel.hidden ? authoringPanel : null;
+        const inspectorRect = inspectorHost.hidden ? null : inspectorHost.getBoundingClientRect();
+        const modeRect = modePanel?.getBoundingClientRect() ?? null;
+        const left = wide && modeRect ? modeRect.right - workspaceRect.left : 0;
+        const right = wide && inspectorRect ? workspaceRect.right - inspectorRect.left : 0;
+        const bottom = wide ? 0 : Math.max(
+            modeRect ? workspaceRect.bottom - modeRect.top : 0,
+            inspectorRect ? workspaceRect.bottom - inspectorRect.top : 0,
+        );
+        canvasShell.style.setProperty("--canvas-chrome-left", `${Math.max(0, left)}px`);
+        canvasShell.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);
+        canvasShell.style.setProperty("--canvas-chrome-bottom", `${Math.max(0, bottom)}px`);
+    };
+    const queueCanvasChromeSync = () => requestAnimationFrame(syncCanvasChromeInsets);
+    const canvasChromeObserver = new ResizeObserver(queueCanvasChromeSync);
+    for (const panel of [workspaceShell, authoringPanel, crochetPanel, inspectorHost]) {
+        canvasChromeObserver.observe(panel);
+    }
+    window.addEventListener("resize", queueCanvasChromeSync);
+
     function isInspectorOpen(panel: InspectorPanel) {
         return !inspectorHost.hidden && activeInspector === panel;
     }
@@ -175,6 +202,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             inspectorTriggers[key].setAttribute("aria-expanded", String(key === panel));
         });
         if (panel === "transforms") cb.onTransformPopoverToggle(true);
+        queueCanvasChromeSync();
     }
 
     function focusFirstInspectorControl(panel: InspectorPanel) {
@@ -194,6 +222,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             inspectorTriggers[key].setAttribute("aria-expanded", "false");
         });
         activeInspector = null;
+        queueCanvasChromeSync();
 
         const trigger = panel === null ? null : inspectorTriggers[panel];
         const more = el<HTMLButtonElement>("btn-more");
@@ -827,22 +856,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
         refreshWipeAvailability();
     }
 
-    /* ── Instructions workspace ─────────────────────────────────────── */
+    /* ── Crochet workspace ──────────────────────────────────────────── */
     const instructions   = el("instructions-workspace");
-    const canvasArea     = document.querySelector<HTMLElement>(".canvas-area")!;
-    const chartViewport  = el("chart-viewport");
     const authoringDock  = el("authoring-dock");
-    const overviewPanel  = el("instructions-overview");
-    const livePanel      = el("instructions-live");
-    const textPanel      = el("instructions-text-panel");
-    const overviewTab    = el<HTMLButtonElement>("instructions-overview-tab");
-    const liveTab        = el<HTMLButtonElement>("instructions-live-tab");
-    const textTab        = el<HTMLButtonElement>("instructions-text-tab");
-    const instructionsChart = el("instructions-chart");
     const instructionsTitle = el("instructions-title");
     const unitsList      = el<HTMLOListElement>("instructions-units");
-    const focusStatus    = el("instructions-focus-status");
-    const exportText     = el<HTMLTextAreaElement>("export-text");
     const exportProgress = el("export-progress");
     const exportWarning  = el("export-warning");
     const blockerSummary = el("instructions-blocker-summary");
@@ -851,71 +869,21 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const liveUnavailable = el("instructions-live-unavailable");
     const liveProgress   = el("instructions-live-progress");
     const liveSaveWarning = el("instructions-live-save-warning");
-    const liveUnit       = el("instructions-live-unit");
-    const liveYarn       = el("instructions-live-yarn");
-    const liveText       = el("instructions-live-text");
+    const liveComplete   = el("instructions-complete");
     const liveBack       = el<HTMLButtonElement>("instructions-live-back");
     const liveDone       = el<HTMLButtonElement>("instructions-live-done");
     const exportActionStatus = el("export-action-status");
+    const designMode     = el<HTMLButtonElement>("instructions-design");
+    const crochetMode    = el<HTMLButtonElement>("btn-export");
+    let instructionText = "";
     el("export-copy").addEventListener("click", async () => {
         try {
-            await navigator.clipboard.writeText(exportText.value);
+            await navigator.clipboard.writeText(instructionText);
             exportActionStatus.textContent = "Instructions copied.";
         } catch {
             exportActionStatus.textContent = "Could not copy instructions.";
         }
     });
-    el("export-download").addEventListener("click", () => {
-        const blob = new Blob([exportText.value], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        Object.assign(document.createElement("a"), { href: url, download: "pattern.txt" }).click();
-        URL.revokeObjectURL(url);
-        exportActionStatus.textContent = "Downloaded pattern.txt.";
-    });
-
-    type InstructionsTab = "overview" | "live" | "text";
-    let instructionsTabChanged: ((tab: InstructionsTab) => void) | null = null;
-
-    function selectInstructionsTab(tab: InstructionsTab) {
-        if (tab === "live" && liveTab.disabled) return;
-        overviewPanel.hidden = tab !== "overview";
-        livePanel.hidden = tab !== "live";
-        textPanel.hidden = tab !== "text";
-        if (tab === "overview") overviewPanel.prepend(instructionsChart);
-        if (tab === "live") livePanel.prepend(instructionsChart);
-        if (tab !== "text") {
-            canvas.setAttribute("aria-label", tab === "live"
-                ? "Work-in-progress pattern chart"
-                : "Finished pattern chart");
-        }
-        for (const [name, button] of [
-            ["overview", overviewTab], ["live", liveTab], ["text", textTab],
-        ] as const) {
-            const selected = tab === name;
-            button.setAttribute("aria-selected", String(selected));
-            button.tabIndex = selected ? 0 : -1;
-        }
-        instructionsTitle.textContent = tab === "overview" ? "Overview" : tab === "live" ? "Live" : "Text";
-        instructionsTabChanged?.(tab);
-    }
-    overviewTab.addEventListener("click", () => selectInstructionsTab("overview"));
-    liveTab.addEventListener("click", () => selectInstructionsTab("live"));
-    textTab.addEventListener("click", () => selectInstructionsTab("text"));
-    for (const tab of [overviewTab, liveTab, textTab]) {
-        tab.addEventListener("keydown", event => {
-            if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-            event.preventDefault();
-            event.stopPropagation();
-            const enabled = [overviewTab, liveTab, textTab].filter(button => !button.disabled);
-            const current = enabled.indexOf(tab);
-            const target = event.key === "Home" ? enabled[0]
-                : event.key === "End" ? enabled.at(-1)!
-                : enabled[(current + (event.key === "ArrowLeft" ? -1 : 1) + enabled.length) % enabled.length];
-            const name = target === overviewTab ? "overview" : target === liveTab ? "live" : "text";
-            selectInstructionsTab(name);
-            target.focus();
-        });
-    }
 
     function openInstructions(): InstructionsView {
         const altListeners: (() => void)[] = [];
@@ -923,7 +891,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const focusListeners: ((coords: number[], label: string) => void)[] = [];
         const issueListeners: ((issue: InstructionIssue) => void)[] = [];
         const livePreviewListeners: ((completedUnits: number | null) => void)[] = [];
-        let activeFocus: HTMLButtonElement | null = null;
+        const unitElements: HTMLElement[] = [];
+        let activeIssue: HTMLButtonElement | null = null;
         let liveUnits: readonly InstructionOverviewUnit[] = [];
         let liveCompleted = 0;
         let liveProgressChanged = (_completedUnits: number) => true;
@@ -932,102 +901,98 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const inspectorWasHidden = inspectorHost.hidden;
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
-        selectInstructionsTab("overview");
-        instructionsChart.append(chartViewport);
         canvas.removeAttribute("aria-describedby");
+        canvas.setAttribute("aria-label", "Crochet progress chart");
         instructions.hidden = false;
-        canvasArea.hidden = true;
         authoringDock.hidden = true;
         inspectorHost.hidden = true;
-        el("btn-export").setAttribute("aria-current", "page");
+        document.body.classList.add("crochet-mode");
+        designMode.setAttribute("aria-pressed", "false");
+        crochetMode.setAttribute("aria-pressed", "true");
+        queueCanvasChromeSync();
         instructionsTitle.focus();
 
         const workKind = () => liveUnits[0]?.label.startsWith("Round") ? "round" : "row";
-        const focusLive = (unit: InstructionOverviewUnit) => {
-            focusListeners.forEach(f => f(unit.workedCoords, unit.label));
-        };
-        const renderLive = () => {
+        const renderCrochet = () => {
             const total = liveUnits.length;
             liveProgress.textContent = `${liveCompleted} of ${total} complete`;
-            liveBack.disabled = liveCompleted === 0;
+            liveBack.disabled = isBusy || hasBlockers || liveCompleted === 0;
             liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
             liveBack.title = `Back one ${workKind()}`;
+            unitElements.forEach((item, index) => {
+                item.classList.toggle("instructions-unit--complete", index < liveCompleted);
+                if (!hasBlockers && liveCompleted < total && index === liveCompleted) {
+                    item.setAttribute("aria-current", "step");
+                } else {
+                    item.removeAttribute("aria-current");
+                }
+            });
             if (liveCompleted >= total) {
                 const doneHadFocus = document.activeElement === liveDone;
-                liveUnit.textContent = "Pattern complete";
-                liveYarn.hidden = true;
-                liveText.textContent = "All chart-derived work units are complete.";
+                liveComplete.hidden = false;
                 liveDone.hidden = true;
-                if (doneHadFocus) liveUnit.focus();
-                if (total > 0) focusLive(liveUnits[total - 1]);
+                if (doneHadFocus) liveComplete.focus();
+                focusListeners.forEach(f => f([], "Pattern complete"));
                 livePreviewListeners.forEach(f => f(liveCompleted));
                 return;
             }
             const unit = liveUnits[liveCompleted];
-            liveUnit.textContent = unit.label;
-            liveYarn.hidden = false;
-            liveYarn.textContent = `Yarn ${unit.yarn}`;
-            liveText.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
+            liveComplete.hidden = true;
             liveDone.hidden = false;
+            liveDone.disabled = isBusy || hasBlockers;
             liveDone.setAttribute("aria-label", `Done with ${unit.label}`);
             liveDone.title = `Done with ${unit.label}`;
-            focusLive(unit);
-            livePreviewListeners.forEach(f => f(liveCompleted));
-        };
-        const refreshLiveAvailability = () => {
-            liveTab.disabled = isBusy || hasBlockers || liveUnits.length === 0;
             if (hasBlockers) {
-                liveUnavailable.textContent = "Resolve chart issues to use Live.";
+                livePreviewListeners.forEach(f => f(null));
+                return;
+            }
+            focusListeners.forEach(f => f([], unit.label));
+            livePreviewListeners.forEach(f => f(liveCompleted + 1));
+            unitElements[liveCompleted]?.scrollIntoView({ block: "nearest" });
+        };
+        const refreshCrochetAvailability = () => {
+            if (hasBlockers) {
+                liveUnavailable.textContent = "Resolve chart issues to track crochet progress.";
                 liveUnavailable.hidden = false;
             } else if (!isBusy && liveUnits.length === 0) {
-                liveUnavailable.textContent = "No rows or rounds are available for Live.";
+                liveUnavailable.textContent = "No rows or rounds are available.";
                 liveUnavailable.hidden = false;
             } else {
                 liveUnavailable.hidden = true;
             }
-            if (liveTab.disabled && liveTab.getAttribute("aria-selected") === "true") {
-                selectInstructionsTab("overview");
-            }
-        };
-        instructionsTabChanged = tab => {
-            if (tab === "live" && liveUnits.length > 0) renderLive();
-            if (tab === "overview") {
-                activeFocus?.click();
-                livePreviewListeners.forEach(f => f(null));
-            }
+            liveBack.disabled = isBusy || hasBlockers || liveCompleted === 0;
+            liveDone.disabled = isBusy || hasBlockers || liveUnits.length === 0;
         };
         liveBack.onclick = () => {
             if (liveCompleted === 0) return;
             liveCompleted--;
             liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
-            renderLive();
+            renderCrochet();
         };
         liveDone.onclick = () => {
             if (liveCompleted >= liveUnits.length) return;
             liveCompleted++;
             liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
-            renderLive();
+            renderCrochet();
         };
 
         const close = () => {
             alternateChk.removeEventListener("change", onAlt);
-            instructionsTabChanged = null;
             liveBack.onclick = null;
             liveDone.onclick = null;
-            canvasArea.prepend(chartViewport);
             canvas.setAttribute("aria-label", "Editable pattern chart");
             canvas.setAttribute("aria-describedby", "canvas-cell-status");
             instructions.hidden = true;
-            canvasArea.hidden = false;
             authoringDock.hidden = false;
             inspectorHost.hidden = inspectorWasHidden;
-            el("btn-export").removeAttribute("aria-current");
+            document.body.classList.remove("crochet-mode");
+            designMode.setAttribute("aria-pressed", "true");
+            crochetMode.setAttribute("aria-pressed", "false");
+            queueCanvasChromeSync();
             closeListeners.forEach(f => f());
-            const exportButton = el<HTMLButtonElement>("btn-export");
-            const moreButton = el<HTMLButtonElement>("btn-more");
-            (exportButton.getClientRects().length > 0 ? exportButton : moreButton).focus();
+            designMode.focus();
         };
-        el("instructions-design").addEventListener("click", close, { once: true });
+        designMode.addEventListener("click", close, { once: true });
 
         return {
             setProgress: (count, total) => {
@@ -1036,53 +1001,40 @@ export function mountUI(cb: UICallbacks): UIHandle {
             },
             endProgress: () => { exportProgress.hidden = true; },
             appendLine: (line) => {
-                exportText.value += (exportText.value ? "\n" : "") + line;
+                instructionText += (instructionText ? "\n" : "") + line;
             },
             appendUnit: (unit) => {
                 const item = document.createElement("li");
-                const button = document.createElement("button");
-                button.type = "button";
-                button.className = "instructions-unit";
-                button.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}`);
-                button.title = `Focus ${unit.label} path on the chart`;
-                button.setAttribute("aria-pressed", "false");
+                item.className = "instructions-unit";
+                item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}`);
                 const meta = document.createElement("span");
                 meta.className = "instructions-unit-meta";
                 meta.textContent = `${unit.label} · Yarn ${unit.yarn}`;
                 const text = document.createElement("code");
                 text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
-                button.append(meta, text);
-                item.append(button);
+                item.append(meta, text);
                 unitsList.append(item);
-                const focus = () => {
-                    activeFocus?.setAttribute("aria-pressed", "false");
-                    activeFocus = button;
-                    button.setAttribute("aria-pressed", "true");
-                    focusStatus.textContent = `Showing ${unit.label} path`;
-                    focusListeners.forEach(f => f(unit.workedCoords, unit.label));
-                };
-                button.addEventListener("click", focus);
-                if (activeFocus === null) focus();
+                unitElements.push(item);
             },
             clearText: () => {
-                exportText.value = "";
+                instructionText = "";
                 exportActionStatus.textContent = "";
             },
             clearUnits: () => {
                 unitsList.replaceChildren();
-                activeFocus = null;
-                focusStatus.textContent = "";
+                unitElements.length = 0;
+                activeIssue = null;
                 liveUnits = [];
                 liveCompleted = 0;
-                refreshLiveAvailability();
+                refreshCrochetAvailability();
             },
             setLivePlan: (units, completedUnits, onProgress) => {
                 liveUnits = units;
                 liveCompleted = Math.min(Math.max(0, completedUnits), units.length);
                 liveProgressChanged = onProgress;
                 liveSaveWarning.hidden = true;
-                refreshLiveAvailability();
-                if (liveTab.getAttribute("aria-selected") === "true") renderLive();
+                refreshCrochetAvailability();
+                renderCrochet();
             },
             setBlockers: (issues) => {
                 hasBlockers = issues.length > 0;
@@ -1100,24 +1052,22 @@ export function mountUI(cb: UICallbacks): UIHandle {
                     button.setAttribute("aria-pressed", "false");
                     button.textContent = `Unresolved overlay · ${issue.x}, ${issue.y}`;
                     const focus = () => {
-                        activeFocus?.setAttribute("aria-pressed", "false");
-                        activeFocus = button;
+                        activeIssue?.setAttribute("aria-pressed", "false");
+                        activeIssue = button;
                         button.setAttribute("aria-pressed", "true");
-                        focusStatus.textContent = `Showing issue at ${issue.x}, ${issue.y}`;
                         issueListeners.forEach(f => f(issue));
                     };
                     button.addEventListener("click", focus);
                     issuesList.append(button);
-                    if (activeFocus === null) focus();
+                    if (activeIssue === null) focus();
                 }
-                refreshLiveAvailability();
+                refreshCrochetAvailability();
             },
             alternate: () => alternateChk.checked,
             setBusy: (busy) => {
                 isBusy = busy;
-                el<HTMLButtonElement>("export-copy")    .disabled = busy;
-                el<HTMLButtonElement>("export-download").disabled = busy;
-                refreshLiveAvailability();
+                el<HTMLButtonElement>("export-copy").disabled = busy;
+                refreshCrochetAvailability();
             },
             onAlternate: (f) => altListeners.push(f),
             onUnitFocus: (f) => focusListeners.push(f),
@@ -1143,12 +1093,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
 // ─── Toolbar layout ──────────────────────────────────────────────────────────
 function mountToolbarLayout() {
     const documentBar = el("document-bar");
+    const modeGroup = document.querySelector(".g-mode") as HTMLElement;
     const fileGroup = document.querySelector(".g-file") as HTMLElement;
     const viewGroup = document.querySelector(".g-hlrot") as HTMLElement;
     const moreButton = el<HTMLButtonElement>("btn-more");
     const morePopover = el("more-popover");
     const moreActions = el("more-actions");
-    const fileActions = [el("btn-edit"), el("btn-load"), el("btn-save"), el("btn-export")];
+    const fileActions = [el("btn-edit"), el("btn-load"), el("btn-save")];
     const viewActions = [el("btn-hl-toggle")];
     const compactActions = [...fileActions, ...viewActions] as HTMLButtonElement[];
     let compact = false;
@@ -1214,7 +1165,7 @@ function mountToolbarLayout() {
         const cs = getComputedStyle(documentBar);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
         const gap     = parseFloat(cs.columnGap) || 0;
-        compactBelow = padding + gap + fileGroup.offsetWidth + viewGroup.offsetWidth;
+        compactBelow = padding + gap * 2 + modeGroup.offsetWidth + fileGroup.offsetWidth + viewGroup.offsetWidth;
     }
 
     function applyLayout() {

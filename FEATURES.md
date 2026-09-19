@@ -131,22 +131,21 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Legacy v4 recovery and Undo data migrate once into independently versioned v5 envelopes; a failed recovery migration write keeps the usable legacy copy. — **Agent's choice**
 - The document bar reports browser recovery as saved, restored, or failed independently from the explicitly named **Save .mcw** file action. — **Agent's choice**
 
-## Save / Load / Instructions
+## Save / Load / Crochet
 
 - File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
 - `.mcw` stores pattern geometry, pixels, and colours; symmetry axes, repeat settings, and floats remain session-only. Loading keeps the current transforms and drops the active float. — **your decision** (float and repeat boundaries); **Agent's choice** (axis boundary)
 - Unreadable, invalid, or unsupported `.mcw` files report a dismissible inline document error and leave the active session unchanged. Starting another load clears the previous error; dismissal returns focus to Load or compact More. — **Agent's choice**
 - Cancelling a native save picker is quiet; picker or write failures use the dismissible document error and return focus to Save or compact More. — **Agent's choice**
-- Instructions is a peer workspace to Design. Design, Overview, and Live move one persistent chart canvas and its pan/zoom/rotation state between mode-specific layouts; Instructions makes it navigation-only. It opens on a read-only Overview, moves keyboard focus to the workspace heading, and pairs the finished chart with a structured row/round list; selecting a unit focuses its chart path without changing project data or progress. Reactivating the current workspace preserves its view and session. Returning focuses the visible Instructions entry point or compact More. Landscape places chart and list side by side, while portrait stacks them. — **your decision** (shared canvas and mode-specific chrome); **Agent's choice** (workspace focus and responsive layout)
-- The Instructions header, view tabs, generation options, and sequence heading wrap when enlarged text leaves insufficient width, avoiding horizontal workspace scrolling without changing their order or semantics. — **Agent's choice**
-- Instructions Text retains exact compressed Copy/Download output for valid charts, reports copy/download outcomes inline, provides a notation legend and alternate-direction generation, and preserves the live editor state when returning to Design. — **Agent's choice**
-- Instructions emits structured work units line-by-line with a live progress counter; returning to Design cancels generation. — **your decision** (line-by-line, cancellation); **Agent's choice** (structured units, progress counter)
-- Instructions assigns `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**
-- Alternate-direction toggle in Instructions Text re-generates immediately on change. — **your decision**
-- Invalid overlay placements are blockers linked to their chart coordinates. Overview remains available and Text remains copyable as a labelled draft, using `?` for unresolved in-sequence work and one coordinate-bearing unresolved line per blocker. — **Agent's choice**
-- Optional Live Instructions renders a chart-derived WIP surface on the shared editor canvas and advances at complete row/round boundaries with Done and Back. Completed work is solid, the current unit is a pending path, and future cells and overlay contributions are absent; Overview remains the finished reference. Live also shows yarn and compressed work; unresolved overlays disable it, confirmed progress resumes locally only for the same complete structured plan, failed progress writes remain visibly warned, and keyboard completion focus moves from the removed final Done action to the completion heading. — **your decision** (optional Live, shared canvas visuals, temporal WIP, finished reference, and local progress); **Agent's choice** (row/round prototype boundary, exact-plan reset, scoped recovery warning, and completion focus)
+- Design and Crochet are peer modes selected in a stable document bar. One canvas remains fixed beneath mode-specific overlay panels, preserving its screen geometry, pan, zoom, and rotation; authoring is disabled in Crochet. — **your decision** (peer modes, stable top bar, and overlay-panel canvas model); **Agent's choice** (one persistent DOM canvas)
+- Crochet combines the chart-derived overview and progress flow into one complete row/round list. The current line is highlighted, and the canvas shows the finished appearance through that line while future work and overlay contributions remain absent. Done and Back move whole-line progress boundaries. — **your decision**
+- Crochet emits structured work units line-by-line with a generation counter. Returning to Design cancels generation, and re-entering Crochet resumes locally only when the complete regenerated plan matches. — **your decision** (line-by-line and local progress); **Agent's choice** (structured units, counter, and exact-plan reset)
+- The complete compressed instruction dump remains available through Copy instructions; copy success or failure is reported inline, and there is no separate Text mode or download action. Alternate direction regenerates the list and copied text. — **your decision** (Copy replaces Text mode); **Agent's choice** (inline outcome)
+- Crochet instructions assign `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**
+- Invalid overlay placements are spatially linked blockers. The copied instructions remain a labelled draft using `?` for unresolved in-sequence work and one coordinate-bearing unresolved line per blocker; progress controls stay disabled. — **Agent's choice**
+- A failed Crochet progress write is visibly warned, and completing the final unit moves keyboard focus from the removed Done action to the completion heading. — **Agent's choice**
 
-### Instructions limitations
+### Crochet instruction limitations
 
 - Round joins are not emitted. — **Agent's choice**
 - Foundation method is not indicated. — **Agent's choice**
@@ -162,22 +161,22 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Dynamic symmetry-axis actions identify the affected axis kind and position in hover and accessibility labels. Focus follows a toggled axis or the nearest remaining row after deletion. — **Agent's choice**
 - Explicitly opening an inspector focuses its first available control, while automatic error-driven opening does not steal focus. Escape closes the active inspector before canvas shortcuts run; dismissal restores focus to its visible opener, compact overflow trigger, or active authoring tool. — **Agent's choice**
 - Compact More exposes standard menu semantics: opening focuses the first command, arrow and boundary keys navigate commands, Escape restores the trigger, and Tab dismisses the menu before continuing sequential focus. Commands return to ordinary button semantics in the wide document bar. — **Agent's choice**
-- Composite keyboard widgets consume their navigation keys so Instructions tabs and compact More cannot also move selected canvas content. — **Agent's choice**
+- Composite keyboard widgets consume their navigation keys so compact More cannot also move selected canvas content. — **Agent's choice**
 - An actionable selection count opens a labelled Selection card on every input type. It exposes Move content, Duplicate content, Move selection area, Copy, Cut, Paste, and Deselect using the existing float semantics; after the selection is removed, a clipboard count keeps Paste discoverable. Move outcomes are temporary UI state and reset to Move content after leaving Move. — **Agent's choice**
 - The context strip reports why a canvas gesture was rejected when painting outside the selection, starting Move without or outside a selection, choosing a geometrically unavailable Overlay target, or editing a protected cell. Repeated rejection within one gesture is coalesced into one polite status announcement. — **Agent's choice**
 - Mouse and pen hover preview the exact one-cell Pencil, Eraser, Invert, or Overlay result before contact, including live transform destinations, no-op destinations, overlay support, and rejected placement reasons; dense previews retain exact counts while simplifying outlines. — **Agent's choice**
 - Authoring tools, Mirror & Repeat, and Navigate use a consistent yarn-neutral line-icon family; accessible names and shortcuts remain stable, and the active tool has a non-colour underline. — **Agent's choice**
 - The focusable Design canvas has one strongly outlined logical-cell cursor rather than per-cell DOM controls. Arrow inspection announces coordinate, cell yarn, overlay state, and placement availability; Space applies the active tool, while selection nudges are scoped to Move and form controls retain native keys. — **Agent's choice**
-- Design and Instructions expose the shared canvas under a mode-appropriate accessible name; labelled controls and context remain the operable interface. — **Agent's choice**
+- Design and Crochet expose the shared canvas under a mode-appropriate accessible name; labelled controls and context remain the operable interface. — **Agent's choice**
 
 ## Workspace shell
 
 - Document and history commands occupy a top document bar; paint, transform, and yarn controls occupy a separate authoring dock without changing their established order. — **Agent's choice**
-- At 64rem and wider the dock is a left rail and an open inspector is a right column. Constrained layouts place the dock below the canvas and present the same inspector content as a non-modal bottom sheet. — **Agent's choice**
+- Mode panels and inspectors overlay the canvas so their changing size never shifts its geometry. At 64rem and wider they occupy the left or right edge; constrained layouts use bottom sheets. — **your decision**
 - Pattern, Selection, Mirror & Repeat, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
 - Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact, growing with increased root text size. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document commands and Settings move into More; when enlarged controls cannot fit a short viewport, the dock scrolls instead of collapsing the canvas. — **Agent's choice**
 - The compact document-bar breakpoint derives from its groups' measured intrinsic widths rather than device labels. — **Agent's choice**
-- A wrapping canvas context strip shows the active tool and yarn, hovered coordinates, an actionable selection or clipboard count, valid and invalid overlay counts, and live/paused transform state when transforms are configured. — **Agent's choice**
+- A compact floating canvas status cluster shows the active tool and yarn, hovered coordinates, an actionable selection or clipboard count, valid and invalid overlay counts, and live/paused transform state. Navigation and status follow the unobscured right/bottom edges around overlay panels without resizing the canvas. — **your decision** (compact floating status and visual anchoring); **Agent's choice** (measured insets)
 
 ## Adaptive workspace conventions
 

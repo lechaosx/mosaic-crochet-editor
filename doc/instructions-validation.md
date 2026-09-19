@@ -1,4 +1,4 @@
-# Instructions validation protocol
+# Crochet validation protocol
 
 Status: ready for formative sessions. No product gate has passed until observations are recorded below.
 
@@ -6,10 +6,10 @@ Status: ready for formative sessions. No product gate has passed until observati
 
 Run the two gates independently:
 
-1. **Live tracking gate** — whether chart-derived WIP plus whole-row/whole-round Done and Back is useful during real crochet, or whether users need finer compressed-instruction tracking.
+1. **Crochet tracking gate** — whether chart-derived WIP plus whole-row/whole-round Done and Back is useful during real crochet, or whether users need finer compressed-instruction tracking.
 2. **Traversal gate** — whether crocheters can choose and understand row or round start, direction, and direction schedule without the editor implying a technique.
 
-Chart-derived WIP is the Live baseline. Evidence for finer tracking must identify failures inside a row or round rather than general preference.
+Chart-derived WIP is the Crochet baseline. Evidence for finer tracking must identify failures inside a row or round rather than general preference.
 
 ## Recruitment
 
@@ -38,7 +38,7 @@ Use strong yarn contrast and label the physical yarns A and B. Do not teach a fo
 
 Allow 35–50 minutes. Ask permission before recording the screen, hands, or audio. Record the app version or commit, viewport, input method, and whether the participant has seen the app before.
 
-Before opening Instructions, ask the participant to describe how they normally:
+Before opening Crochet, ask the participant to describe how they normally:
 
 - find the start of a chart row or round;
 - remember the current position within a long row or round;
@@ -47,7 +47,7 @@ Before opening Instructions, ask the participant to describe how they normally:
 
 Do not introduce the app's proposed traversal terms during this baseline.
 
-## Basic Live tasks
+## Basic Crochet tasks
 
 Use neutral prompts and allow silence. Explain only that `oc` marks an overlay operation whose physical method is the participant's choice.
 
@@ -71,20 +71,20 @@ For every row or round, record:
 - whether Back recovered the intended boundary;
 - number of app actions between boundaries;
 - whether the participant lost the current row/round, chart position, compressed-instruction position, yarn, or physical stitch position;
-- whether they used the focused path, compressed text, finished chart, or physical work to recover;
+- whether they used the highlighted instruction, WIP chart, compressed text, or physical work to recover;
 - any point where the finished chart implied that not-yet-worked overlay was already physically present;
 - facilitator intervention and the exact reason it was needed.
 
 After each geometry, ask:
 
-- “What did the highlighted path mean to you?”
+- “What did the highlighted instruction line mean to you?”
 - “What did you expect Done and Back to change?”
 - “What information was missing when you resumed?”
 - “Would showing partly completed crochet have changed your decision, or only made the picture look more familiar?”
 
 ## Traversal terminology tasks
 
-Run these after the Live tasks so proposed labels cannot prime the baseline observation.
+Run these after the Crochet tasks so proposed labels cannot prime the baseline observation.
 
 Use small chart diagrams with a start marker and arrow. Show the diagram without a label first, ask the participant to describe it, then test the candidate label. A participant must demonstrate the result on the diagram; agreement with wording alone is insufficient.
 
@@ -128,7 +128,7 @@ Record terminology results separately:
 
 ## Gate criteria
 
-### Basic Live
+### Basic Crochet
 
 Pass Rows and Centre-out separately. A geometry passes only when confirmation sessions show all of the following:
 
@@ -136,9 +136,9 @@ Pass Rows and Centre-out separately. A geometry passes only when confirmation se
 - interruption recovery succeeds from the shipped chart, focused path, text, and physical work;
 - no repeated error comes from treating finished-chart overlays as already crocheted;
 - Done and Back are not the dominant source of interaction or attention;
-- participants can identify the next unit and Yarn A/B after returning to Design and reopening Live.
+- participants can identify the next unit and Yarn A/B after returning to Design and reopening Crochet.
 
-If only one geometry passes, extend only that geometry. A failed gate remains a reason to improve or remove the affected Live path, not a reason to add more progress controls.
+If only one geometry passes, extend only that geometry. A failed gate remains a reason to improve or remove the affected Crochet path, not a reason to add more progress controls.
 
 ### Traversal
 
@@ -152,7 +152,7 @@ Consider it only when participants repeatedly retain the correct row/round but l
 
 ### Chart-derived WIP
 
-Confirm that participants distinguish completed work, the pending unit, and future work; that future overlays never affect the visible surface; and that switching to Overview provides an understandable finished reference. Record the exact cells whenever the rendered state is misleading.
+Confirm that participants understand the canvas as finished work through the highlighted current line, distinguish it from future work, and never see a future overlay affect the visible surface. Record the exact cells whenever the rendered state is misleading.
 
 ## Research constraints behind the prompts
 

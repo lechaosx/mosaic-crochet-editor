@@ -42,11 +42,14 @@
     </symbol>
   </svg>
   <header class="document-bar" id="document-bar">
+      <div class="document-actions g-mode" role="group" aria-label="Workspace">
+        <button class="btn" id="instructions-design" type="button" aria-pressed="true" title="Design pattern">Design</button>
+        <button class="btn" id="btn-export" type="button" aria-pressed="false" title="Follow chart-derived crochet instructions" aria-controls="instructions-workspace">Crochet</button>
+      </div>
       <div class="document-actions g-file">
         <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions">Pattern</button>
         <button class="btn" id="btn-load"   title="Load .mcw file">Load</button>
         <button class="btn" id="btn-save"   title="Save editable pattern as an .mcw file">Save .mcw</button>
-        <button class="btn" id="btn-export" title="Open chart-derived instructions" aria-controls="instructions-workspace">Instructions</button>
         <button class="btn" id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
         <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
         <button class="btn" id="btn-more" title="More commands" aria-haspopup="menu" aria-expanded="false" hidden>More</button>
@@ -158,19 +161,13 @@
       </div>
     </section>
 
-    <main id="instructions-workspace" class="instructions-workspace" aria-label="Instructions" hidden>
+    <aside id="instructions-workspace" class="instructions-workspace" aria-label="Crochet" hidden>
       <header class="instructions-header">
         <div>
-          <div class="instructions-kicker">Instructions</div>
-          <h1 id="instructions-title" tabindex="-1">Overview</h1>
+          <div class="instructions-kicker">Pattern</div>
+          <h1 id="instructions-title" tabindex="-1">Crochet</h1>
         </div>
-        <button class="btn" id="instructions-design" type="button" title="Return to the Design workspace">Back to Design</button>
       </header>
-      <div class="instructions-tabs" role="tablist" aria-label="Instructions view">
-        <button class="btn" id="instructions-overview-tab" type="button" role="tab" aria-controls="instructions-overview" aria-selected="true" title="Show the finished chart and work sequence">Overview</button>
-        <button class="btn" id="instructions-live-tab" type="button" role="tab" aria-controls="instructions-live" aria-selected="false" title="Follow the chart one row or round at a time" disabled>Live</button>
-        <button class="btn" id="instructions-text-tab" type="button" role="tab" aria-controls="instructions-text-panel" aria-selected="false" title="Show compressed plain-text instructions">Text</button>
-      </div>
       <p class="instructions-intro">Chart-derived work in crochet order. Foundations, transitions, joins, and finishing remain your choice.</p>
       <div class="instructions-options">
         <label class="toggle">
@@ -179,50 +176,31 @@
           Alternate direction
         </label>
         <span id="export-progress" class="instructions-progress" hidden></span>
+        <span id="export-action-status" class="instructions-action-status" role="status" aria-label="Copy instructions status" aria-live="polite"></span>
+        <button class="btn" id="export-copy" type="button" aria-label="Copy instructions" title="Copy compressed instructions">Copy instructions</button>
       </div>
       <div id="export-warning" class="warning instructions-blockers" hidden>
         <strong id="instructions-blocker-summary"></strong>
-        <span>Text is a draft. Question marks and unresolved lines identify work the chart cannot derive.</span>
+        <span>Instructions are a draft. Question marks and unresolved lines identify work the chart cannot derive.</span>
         <div id="instructions-issues" aria-label="Instruction blockers"></div>
       </div>
-      <section id="instructions-overview" class="instructions-overview" role="tabpanel" aria-labelledby="instructions-overview-tab">
-        <div class="instructions-chart" id="instructions-chart"></div>
+      <section class="instructions-crochet">
         <div class="instructions-sequence">
           <div class="instructions-sequence-header">
             <h2>Work sequence</h2>
-            <span id="instructions-focus-status" role="status" aria-label="Preview focus" aria-live="polite"></span>
+            <span id="instructions-live-progress" role="status" aria-live="polite"></span>
           </div>
-          <ol id="instructions-units" aria-label="Work sequence"></ol>
-        </div>
-      </section>
-      <section id="instructions-live" class="instructions-live" role="tabpanel" aria-labelledby="instructions-live-tab" hidden>
-        <article class="instructions-live-card">
-          <div class="instructions-live-progress" id="instructions-live-progress" role="status" aria-live="polite"></div>
           <p class="warning instructions-live-save-warning" id="instructions-live-save-warning" role="alert" hidden>Progress could not be saved locally. Keep this tab open to retain your place.</p>
-          <h2 id="instructions-live-unit" tabindex="-1"></h2>
-          <strong class="instructions-live-yarn" id="instructions-live-yarn"></strong>
-          <code id="instructions-live-text"></code>
+          <p id="instructions-live-unavailable" class="instructions-live-unavailable" hidden></p>
+          <ol id="instructions-units" aria-label="Work sequence"></ol>
+          <h2 id="instructions-complete" tabindex="-1" hidden>Pattern complete</h2>
           <div class="instructions-live-actions">
             <button class="btn" id="instructions-live-back" type="button" title="Back one work unit">Back</button>
             <button class="btn" id="instructions-live-done" type="button" title="Complete this work unit">Done</button>
           </div>
-        </article>
+        </div>
       </section>
-      <p id="instructions-live-unavailable" class="instructions-live-unavailable" hidden></p>
-      <section id="instructions-text-panel" class="instructions-text-panel" role="tabpanel" aria-labelledby="instructions-text-tab" hidden>
-        <dl class="instructions-legend" aria-label="Notation legend">
-          <div><dt>sc</dt><dd>Single crochet</dd></div>
-          <div><dt>ch</dt><dd>Chain</dd></div>
-          <div><dt>oc</dt><dd>Chart-required overlay operation</dd></div>
-        </dl>
-        <textarea id="export-text" aria-label="Compressed instructions" readonly spellcheck="false"></textarea>
-        <footer class="instructions-actions">
-          <span id="export-action-status" class="instructions-action-status" role="status" aria-label="Text actions" aria-live="polite"></span>
-          <button class="btn" id="export-copy" type="button" aria-label="Copy text" title="Copy compressed instructions">Copy</button>
-          <button class="btn" id="export-download" type="button" aria-label="Download text" title="Download compressed instructions as pattern.txt">Download .txt</button>
-        </footer>
-      </section>
-    </main>
+    </aside>
 
     <aside id="inspector-host" class="inspector-host" aria-labelledby="inspector-title" hidden>
       <header class="inspector-header">

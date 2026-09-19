@@ -26,8 +26,8 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 | 0 — Correctness before redesign | Gesture cancellation, persistence boundaries, Wand history, and native control semantics shipped |
 | 1 — Existing-workspace usability | Adaptive targets, active context, touch selection actions, blocked-action feedback, and Yarn A/B shipped |
 | 2 — Transactions and adaptive shell | Versioned codecs/recovery, Pattern Apply/Cancel, adaptive workspace, view controls, and recovery status shipped |
-| 3 — Structured chart companion | Typed work sequence, compression structure, Instructions Text, and Overview shipped |
-| 4 — Product prototypes | Tool grouping, transform evaluator, row/round Live, and quarter-output composition prototypes completed |
+| 3 — Structured chart companion | Typed work sequence and compression structure shipped |
+| 4 — Product prototypes | Tool grouping, transform evaluator, row/round progress, and quarter-output composition prototypes completed |
 | 5 — Traversal prototype | Semantic row and centre-out traversal geometry completed; UI and persistence remain validation-gated |
 
 ### Delivery rules
@@ -74,27 +74,33 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Bundle one small editable example that demonstrates Colour, Overlay, Mirror & Repeat, and Instructions without adding a tutorial carousel or nullable-document architecture.
   - Verify untouched loads, intentionally created blank patterns, legacy recovery, canceled creation/open, and compact layouts.
 
-### Stage 8 — Make Live a trustworthy view of the work
+### Stage 8 — Make Crochet a trustworthy view of the work
 
 Session script, evidence tables, and gate criteria: [Instructions validation protocol](doc/instructions-validation.md).
 
 - [x] Reuse the editor's persistent canvas and viewport in Instructions.
-  - Move the same chart viewport between Design, Overview, and Live while changing the surrounding controls and disabling authoring outside Design.
-  - Preserve pan, zoom, and rotation across workspace changes; Overview renders the finished chart and Live renders the progress state.
-  - Verify there is only one canvas, its view state survives every workspace switch, and pointer/keyboard authoring cannot mutate the pattern from Instructions.
+  - Keep the same chart viewport fixed beneath Design and Crochet overlay panels, disabling authoring outside Design.
+  - Preserve canvas geometry, pan, zoom, and rotation across mode changes; keep the document bar stable in both modes.
+  - Anchor navigation and the compact status cluster to the unobscured canvas edges as overlay panels change size.
+  - Verify there is only one canvas, its geometry and view state survive every mode switch, and pointer/keyboard authoring cannot mutate the pattern from Crochet.
 - [x] Derive Live's chart from the confirmed crochet-work prefix.
-  - Render completed work as solid, the current unit as a distinct pending preview, and future work as absent. Future overlay contributions must not appear before their instruction completes.
-  - Keep whole-row/whole-round Done and Back as the initial progress boundary and keep the finished chart available in Overview.
+  - Render through the end of the highlighted current unit as finished work and future work as absent. Future overlay contributions must not appear before their instruction enters the preview.
+  - Keep whole-row/whole-round Done and Back as the initial progress boundary.
   - Verify row and centre-out sequences at zero, intermediate, backward, and complete progress boundaries, including overlays whose supporting cell is already visible.
+- [x] Merge Overview and Live into one Crochet mode.
+  - Present one chart and the complete compressed row/round list, with the current line highlighted and progress always visible in context.
+  - Keep Design and Crochet as peer top-level modes; switch only their overlay panels while the canvas and document bar remain stable.
+  - Replace the separate Text view and download action with Copy instructions for the complete compressed dump.
+  - Verify inclusive current-line WIP, mode switching, copy outcomes, progress recovery, blockers, wide layouts, tablets, and compact screens.
 - [ ] Product gate: observe the shared-view, chart-derived WIP loop in real crochet sessions.
   - Record whether row/round Done and Back are sufficiently low-click, where users lose their place, and whether compressed-instruction tracking would prevent those specific failures.
   - Decide separately whether compression-tree tracking earns its substantially higher implementation cost.
 - [ ] Product gate: validate row origins and centre-out corner/side-midpoint terminology with crocheters.
   - Test left/right row origins, clockwise/counter-clockwise rounds, both even-side midpoint choices, and same/alternating schedules without implying turning, joining, cutting, or carrying.
-- [ ] If the traversal gate passes, expose and persist explicit traversal in Instructions.
-  - Make Overview, Live, and Text consume the same ordered walk; preview its path on the chart and mark an incompatible semantic origin as needing adjustment rather than silently relocating it.
+- [ ] If the traversal gate passes, expose and persist explicit traversal in Crochet.
+  - Make the chart, visible list, and copied text consume the same ordered walk; mark an incompatible semantic origin as needing adjustment rather than silently relocating it.
   - Version `.mcw`, recovery, and history deliberately because traversal affects generated output.
-- [ ] If the basic Live gate passes, add boundary-level `Start Live here` and `Crochet again`.
+- [ ] If the basic Crochet gate passes, add boundary-level `Start here` and `Crochet again`.
   - Starting later treats the preceding row/round prefix as complete in one reversible progress boundary. Restarting clears only local Live progress after confirmation.
   - Do not add stitch-by-stitch advancement, preview cursors, Focus mode, Wake Lock, or edit reconciliation in this slice.
 
