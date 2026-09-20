@@ -1,23 +1,37 @@
-import type { InstructionOverviewUnit } from "./ui";
+import type { PatternState } from "@mosaic/logic/types";
 
 const LIVE_PROGRESS_KEY = "mosaic-live-progress";
-const LIVE_PROGRESS_VERSION = 1;
+const LIVE_PROGRESS_VERSION = 2;
 const FNV_OFFSET = 0xcbf29ce484222325n;
 const FNV_PRIME = 0x100000001b3n;
 
 interface LiveProgressRecord {
-    version: 1;
+    version: 2;
     fingerprint: string;
     completedUnits: number;
 }
 
-export function fingerprintInstructionPlan(units: readonly InstructionOverviewUnit[]): string {
-    const bytes = new TextEncoder().encode(JSON.stringify(units));
-    let hash = FNV_OFFSET;
+function fingerprint(bytes: Uint8Array, initial = FNV_OFFSET): bigint {
+    let hash = initial;
     for (const byte of bytes) {
         hash ^= BigInt(byte);
         hash = BigInt.asUintN(64, hash * FNV_PRIME);
     }
+    return hash;
+}
+
+function fingerprintString(value: string): bigint {
+    return fingerprint(new TextEncoder().encode(value));
+}
+
+export function fingerprintPatternShape(pattern: PatternState): string {
+    return fingerprintString(JSON.stringify(pattern)).toString(16).padStart(16, "0");
+}
+
+export function fingerprintPattern(pattern: PatternState, pixels: Uint8Array): string {
+    let hash = fingerprintString(JSON.stringify(pattern));
+    hash = fingerprint(new Uint8Array([0]), hash);
+    hash = fingerprint(pixels, hash);
     return hash.toString(16).padStart(16, "0");
 }
 
@@ -34,7 +48,11 @@ export function loadLiveProgress(fingerprint: string, totalUnits: number): numbe
             localStorage.removeItem(LIVE_PROGRESS_KEY);
             return 0;
         }
-        return value.fingerprint === fingerprint ? value.completedUnits! : 0;
+        if (value.fingerprint !== fingerprint) {
+            localStorage.removeItem(LIVE_PROGRESS_KEY);
+            return 0;
+        }
+        return value.completedUnits!;
     } catch {
         localStorage.removeItem(LIVE_PROGRESS_KEY);
         return 0;

@@ -26,7 +26,7 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-about-changelog")))
-        .toBe("2026-09-20-about-dialog-sizing");
+        .toBe("2026-09-20-crochet-row-details");
 });
 
 test("canceling the About file picker keeps the dialog available", async ({ page }) => {

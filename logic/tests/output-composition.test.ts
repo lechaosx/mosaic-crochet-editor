@@ -98,7 +98,6 @@ describe("output composition prototype", () => {
             pattern.offsetX,
             pattern.offsetY,
             pattern.rounds,
-            false,
         );
         expect(session.total()).toBe(2);
         for (let round = 1; round <= 2; round++) {

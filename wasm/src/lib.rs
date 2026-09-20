@@ -70,14 +70,12 @@ const _: () = {
 enum InstructionMode {
     Row {
         canvas_size: IVec2,
-        alternate: bool,
     },
     Round {
         canvas_size: IVec2,
         virtual_size: IVec2,
         offset: IVec2,
         rounds: i32,
-        alternate: bool,
     },
 }
 
@@ -100,8 +98,7 @@ pub struct InstructionUnit {
     kind: InstructionUnitKind,
     number: u32,
     yarn: InstructionYarn,
-    text: String,
-    worked_coords: Vec<i32>,
+    sequence: export::WorkSequence,
 }
 
 #[wasm_bindgen]
@@ -119,11 +116,44 @@ impl InstructionUnit {
     }
 
     pub fn text(&self) -> String {
-        self.text.clone()
+        let label = match self.kind {
+            InstructionUnitKind::Row => "Row",
+            InstructionUnitKind::Round => "Round",
+        };
+        format!(
+            "{label} {}: {}",
+            self.number,
+            pattern::to_string(&self.sequence.compression),
+        )
     }
 
     pub fn worked_coords(&self) -> Vec<i32> {
-        self.worked_coords.clone()
+        self.sequence
+            .steps
+            .iter()
+            .flat_map(|step| [step.worked_coord.x, step.worked_coord.y])
+            .collect()
+    }
+
+    pub fn reversed_text(&self) -> String {
+        let label = match self.kind {
+            InstructionUnitKind::Row => "Row",
+            InstructionUnitKind::Round => "Round",
+        };
+        format!(
+            "{label} {}: {}",
+            self.number,
+            pattern::to_string(&self.sequence.reversed().compression),
+        )
+    }
+
+    pub fn reversed_worked_coords(&self) -> Vec<i32> {
+        self.sequence
+            .reversed()
+            .steps
+            .iter()
+            .flat_map(|step| [step.worked_coord.x, step.worked_coord.y])
+            .collect()
     }
 }
 
@@ -149,23 +179,21 @@ impl InstructionSession {
         let index = self.index;
         self.index += 1;
         let sequence = match &self.mode {
-            InstructionMode::Row {
-                canvas_size,
-                alternate,
-            } => export::row_work_sequence_at(&self.highlights, *canvas_size, *alternate, index),
+            InstructionMode::Row { canvas_size } => {
+                export::row_work_sequence_at(&self.highlights, *canvas_size, false, index)
+            }
             InstructionMode::Round {
                 canvas_size,
                 virtual_size,
                 offset,
                 rounds,
-                alternate,
             } => export::round_work_sequence_at(
                 &self.highlights,
                 *canvas_size,
                 *virtual_size,
                 *offset,
                 *rounds,
-                *alternate,
+                false,
                 index,
             ),
         };
@@ -178,24 +206,11 @@ impl InstructionSession {
             export::YarnSlot::A => InstructionYarn::A,
             export::YarnSlot::B => InstructionYarn::B,
         };
-        let label = match kind {
-            InstructionUnitKind::Row => "Row",
-            InstructionUnitKind::Round => "Round",
-        };
-        let worked_coords = sequence
-            .steps
-            .iter()
-            .flat_map(|step| [step.worked_coord.x, step.worked_coord.y])
-            .collect();
         Some(InstructionUnit {
             kind,
             number,
             yarn,
-            text: format!(
-                "{label} {number}: {}",
-                pattern::to_string(&sequence.compression)
-            ),
-            worked_coords,
+            sequence,
         })
     }
 }
@@ -255,17 +270,11 @@ pub fn build_highlight_plan_round(
 }
 
 #[wasm_bindgen]
-pub fn instruction_start_row(
-    pixels: &[u8],
-    width: i32,
-    height: i32,
-    alternate: bool,
-) -> InstructionSession {
+pub fn instruction_start_row(pixels: &[u8], width: i32, height: i32) -> InstructionSession {
     InstructionSession {
         highlights: highlights_row(pixels, width, height),
         mode: InstructionMode::Row {
             canvas_size: IVec2::new(width, height),
-            alternate,
         },
         index: 0,
         total: height.max(0) as usize,
@@ -282,7 +291,6 @@ pub fn instruction_start_round(
     offset_x: i32,
     offset_y: i32,
     rounds: i32,
-    alternate: bool,
 ) -> InstructionSession {
     let canvas_size = IVec2::new(canvas_width, canvas_height);
     let virtual_size = IVec2::new(virtual_width, virtual_height);
@@ -294,7 +302,6 @@ pub fn instruction_start_round(
             virtual_size,
             offset,
             rounds,
-            alternate,
         },
         index: 0,
         total: rounds as usize,
@@ -349,8 +356,9 @@ mod instruction_session_tests {
 
     #[test]
     fn row_session_exposes_unit_metadata_text_and_worked_path() {
-        let pixels = initialize_row_pattern(3, 3);
-        let mut session = instruction_start_row(&pixels, 3, 3, false);
+        let mut pixels = initialize_row_pattern(3, 3);
+        pixels[2 * 3] = common::opposite_color(pixels[2 * 3]);
+        let mut session = instruction_start_row(&pixels, 3, 3);
 
         assert_eq!(session.total(), 3);
         let foundation = session.next().expect("foundation row");
@@ -363,14 +371,16 @@ mod instruction_session_tests {
         let row_2 = session.next().expect("second row");
         assert_eq!(row_2.number(), 2);
         assert_eq!(row_2.yarn() as u8, InstructionYarn::B as u8);
-        assert_eq!(row_2.text(), "Row 2: sc × 3");
+        assert_eq!(row_2.text(), "Row 2: oc, sc × 2");
         assert_eq!(row_2.worked_coords(), vec![0, 1, 1, 1, 2, 1]);
+        assert_eq!(row_2.reversed_text(), "Row 2: sc × 2, oc");
+        assert_eq!(row_2.reversed_worked_coords(), vec![2, 1, 1, 1, 0, 1]);
     }
 
     #[test]
     fn round_session_exposes_the_visible_worked_path() {
         let pixels = initialize_round_pattern(7, 7, 7, 7, 0, 0, 3);
-        let mut session = instruction_start_round(&pixels, 7, 7, 7, 7, 0, 0, 3, false);
+        let mut session = instruction_start_round(&pixels, 7, 7, 7, 7, 0, 0, 3);
 
         assert_eq!(session.total(), 3);
         let unit = session.next().expect("first round");
@@ -380,6 +390,11 @@ mod instruction_session_tests {
         assert!(unit.text().starts_with("Round 1:"));
         assert_eq!(unit.worked_coords().len() % 2, 0);
         assert!(!unit.worked_coords().is_empty());
+        assert!(!unit.reversed_text().is_empty());
+        assert_eq!(
+            unit.reversed_worked_coords().len(),
+            unit.worked_coords().len()
+        );
     }
 
     #[test]

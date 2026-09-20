@@ -23,8 +23,8 @@ This map covers the workflows represented by the current interface. The linked e
 
 - As a crocheter, I can switch from Design to Crochet without moving or replacing the chart, and I see instruction controls rather than authoring controls around it. ([instructions.spec.ts](../web/e2e/instructions.spec.ts))
 - As a crocheter, I can always see where I am in the complete row or round sequence and see the chart as it should look through the end of the highlighted line, without future work leaking into the preview. ([instructions.spec.ts](../web/e2e/instructions.spec.ts))
-- As a crocheter, I can advance or go back by a whole row or round, resume the matching plan on this device, and recognize completion. ([instructions.spec.ts](../web/e2e/instructions.spec.ts))
-- As a crocheter, I can regenerate alternating directions and copy the complete compressed instruction dump with visible success or failure feedback. ([instructions.spec.ts](../web/e2e/instructions.spec.ts))
+- As a crocheter, I can choose any instruction, move back or forward by a whole row or round, retain my place across stitch edits, and recognize the progress limits. ([instructions.spec.ts](../web/e2e/instructions.spec.ts))
+- As a crocheter, I can switch alternating direction immediately and copy the complete compressed instruction dump with visible success or failure feedback. ([instructions.spec.ts](../web/e2e/instructions.spec.ts))
 - As a crocheter, I can locate unresolved chart positions and cannot record misleading progress until those blockers are fixed. ([instructions.spec.ts](../web/e2e/instructions.spec.ts))
 
 ## Access and adaptation
@@ -38,8 +38,8 @@ Every visible control must serve one of the stories above in its current workspa
 
 | Surface | Design | Crochet |
 |---|---|---|
-| Document bar | Identical global mode, Pattern, Load, Save, Undo, Redo, recovery, and Settings controls | Identical; authoring commands return to Design before acting, while Save stays in place |
-| Mode panel | Colour, Overlay, Arrange, and Yarn controls | Direction, copy, blockers, work sequence, Back, and Done |
+| Document bar | Identical global mode, Pattern, Load, Save, Undo, Redo, recovery, and Settings controls | Identical; Pattern and Settings stay in Crochet until a Pattern canvas change, while document mutations return to Design |
+| Mode panel | Colour, Overlay, Arrange, and Yarn controls | Direction, copy, errors, selectable work sequence, Back, and Forward |
 | Canvas controls | Navigate, Fit, zoom, and rotation | Fit, zoom, and rotation; direct canvas gestures already navigate |
 | Canvas status | Tool, yarn, coordinates, selection, overlay, and transform context | Omitted; current-line and progress context live in the Crochet panel |
-| Inspector | Pattern, Selection, Mirror & Repeat, and Settings | Opened through a global authoring command only after returning to Design |
+| Inspector | Pattern, Selection, Mirror & Repeat, and Settings | Pattern and Settings open without leaving Crochet |

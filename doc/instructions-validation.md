@@ -6,7 +6,7 @@ Status: ready for formative sessions. No product gate has passed until observati
 
 Run the two gates independently:
 
-1. **Crochet tracking gate** — whether chart-derived WIP plus whole-row/whole-round Done and Back is useful during real crochet, or whether users need finer compressed-instruction tracking.
+1. **Crochet tracking gate** — whether chart-derived WIP plus selectable whole-row/whole-round progress is useful during real crochet, or whether users need finer compressed-instruction tracking.
 2. **Traversal gate** — whether crocheters can choose and understand row or round start, direction, and direction schedule without the editor implying a technique.
 
 Chart-derived WIP is the Crochet baseline. Evidence for finer tracking must identify failures inside a row or round rather than general preference.
@@ -55,7 +55,7 @@ Use neutral prompts and allow silence. Explain only that `oc` marks an overlay o
 
 1. Open the Rows fixture and ask: “Use the app to continue this pattern for three rows.”
 2. After the participant completes part of the second row, interrupt for two minutes with an unrelated question. Ask them to resume without pointing at the screen.
-3. After they mark the next row complete, say: “Suppose that last row was marked complete too early. Show what you would do.”
+3. After they advance to the next row, say: “Suppose you advanced too early. Show what you would do.”
 4. Ask them to check the finished work against the chart and identify the next row and yarn.
 
 ### Centre-out
@@ -67,7 +67,7 @@ Repeat the same task for three rounds. Do not resolve the participant's starting
 For every row or round, record:
 
 - whether work began at the intended chart position;
-- whether Done was used only after completing the boundary;
+- whether Forward was used only after completing the boundary;
 - whether Back recovered the intended boundary;
 - number of app actions between boundaries;
 - whether the participant lost the current row/round, chart position, compressed-instruction position, yarn, or physical stitch position;
@@ -78,7 +78,7 @@ For every row or round, record:
 After each geometry, ask:
 
 - “What did the highlighted instruction line mean to you?”
-- “What did you expect Done and Back to change?”
+- “What did you expect Forward and Back to change?”
 - “What information was missing when you resumed?”
 - “Would showing partly completed crochet have changed your decision, or only made the picture look more familiar?”
 
@@ -116,7 +116,7 @@ Ask whether `start` means the first chart position, the yarn join, the corner gr
 
 Copy one row per session. Link detailed notes or recordings rather than embedding personal information here.
 
-| Session | Experience and handedness | Device/input | Geometry | Units completed | Boundary errors | Resume result | Lost-place category | Technique assumption exposed | Notes |
+| Session | Experience and handedness | Device/input | Geometry | Current unit | Boundary errors | Resume result | Lost-place category | Technique assumption exposed | Notes |
 |---|---|---|---|---:|---:|---|---|---|---|
 | — | — | — | — | — | — | — | — | — | — |
 
@@ -132,11 +132,11 @@ Record terminology results separately:
 
 Pass Rows and Centre-out separately. A geometry passes only when confirmation sessions show all of the following:
 
-- participants complete and reverse whole-unit progress without facilitator instruction;
+- participants advance and reverse whole-unit progress without facilitator instruction;
 - interruption recovery succeeds from the shipped chart, focused path, text, and physical work;
 - no repeated error comes from treating finished-chart overlays as already crocheted;
-- Done and Back are not the dominant source of interaction or attention;
-- participants can identify the next unit and Yarn A/B after returning to Design and reopening Crochet.
+- Forward and Back are not the dominant source of interaction or attention;
+- participants can identify the next unit and its yarn colour after returning to Design and reopening Crochet.
 
 If only one geometry passes, extend only that geometry. A failed gate remains a reason to improve or remove the affected Crochet path, not a reason to add more progress controls.
 

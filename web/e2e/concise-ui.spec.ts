@@ -48,12 +48,13 @@ test("contextual inspectors rely on controls and hover text", async ({ page }) =
     await expect(page.getByText("No axes yet", { exact: false })).toHaveCount(0);
 });
 
-test("Crochet presents controls and instructions as distinct groups without an introduction", async ({ page }) => {
+test("Crochet omits redundant panel and list headings", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Crochet" }).click();
 
     await expect(page.getByRole("group", { name: "Crochet options" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Instructions", level: 2 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Crochet" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Instructions" })).toHaveCount(0);
     await expect(page.getByText("Chart-derived work in crochet order.", { exact: false })).toHaveCount(0);
 });
 
@@ -70,5 +71,5 @@ test("Crochet summarizes errors without prose or navigation", async ({ page }) =
     await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("2 errors");
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByText(/unresolved|draft|resolve chart/i)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Done with Row 1" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
 });

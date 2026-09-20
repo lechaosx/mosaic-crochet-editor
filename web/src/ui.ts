@@ -110,8 +110,8 @@ export interface UIHandle {
 export interface InstructionOverviewUnit {
     label: string;
     yarn: "A" | "B";
+    color: string;
     text: string;
-    workedCoords: number[];
 }
 
 export interface InstructionsView {
@@ -162,9 +162,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const syncCanvasChromeInsets = () => {
         const workspaceRect = workspaceShell.getBoundingClientRect();
         const wide = matchMedia("(min-width: 64rem)").matches;
-        const modePanel = !crochetPanel.hidden ? crochetPanel : !authoringPanel.hidden ? authoringPanel : null;
+        const authoringRect = authoringPanel.hidden ? null : authoringPanel.getBoundingClientRect();
+        const crochetRect = crochetPanel.hidden ? null : crochetPanel.getBoundingClientRect();
         const inspectorRect = inspectorHost.hidden ? null : inspectorHost.getBoundingClientRect();
-        const modeRect = modePanel?.getBoundingClientRect() ?? null;
+        const modeRect = crochetRect ?? authoringRect;
         const left = wide && modeRect ? modeRect.right - workspaceRect.left : 0;
         const right = wide && inspectorRect ? workspaceRect.right - inspectorRect.left : 0;
         const bottom = wide ? 0 : Math.max(
@@ -619,7 +620,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     /* ── Settings inspector ───────────────────────────────────────────── */
     el("btn-hl-toggle").addEventListener("click", e => {
         e.preventDefault();
-        enterDesignForCommand();
         if (isInspectorOpen("settings")) closeInspector();
         else {
             openInspector("settings", "Settings");
@@ -744,7 +744,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     };
     btnEdit.addEventListener("click", e => {
         e.preventDefault();
-        enterDesignForCommand();
         if (isInspectorOpen("pattern")) {
             closeInspector();
             return;
@@ -775,8 +774,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     function applyAndCommitPatternEdit() {
         editPreviewActive = true;
-        if (cb.onEditChange()) cb.onEditCommit();
-        else cb.onEditRevert();
+        if (cb.onEditChange()) {
+            cb.onEditCommit();
+            enterDesignForCommand();
+        } else cb.onEditRevert();
         editPreviewActive = false;
     }
 
@@ -806,7 +807,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             refreshWipeAvailability();
             if (isInspectorOpen("pattern")) {
                 editPreviewActive = true;
-                cb.onEditChange();
+                if (cb.onEditChange()) enterDesignForCommand();
             }
         };
         el(id).addEventListener("input", preview);
@@ -857,16 +858,16 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     /* ── Crochet workspace ──────────────────────────────────────────── */
     const instructions   = el("instructions-workspace");
-    const instructionsTitle = el("instructions-title");
     const unitsList      = el<HTMLOListElement>("instructions-units");
     const exportProgress = el("export-progress");
     const alternateChk   = el<HTMLInputElement>("alternate");
     const liveUnavailable = el("instructions-live-unavailable");
     const liveProgress   = el("instructions-live-progress");
     const liveSaveWarning = el("instructions-live-save-warning");
-    const liveComplete   = el("instructions-complete");
+    const currentInstruction = el("instructions-current");
+    const currentInstructionText = el("instructions-current-text");
     const liveBack       = el<HTMLButtonElement>("instructions-live-back");
-    const liveDone       = el<HTMLButtonElement>("instructions-live-done");
+    const liveForward    = el<HTMLButtonElement>("instructions-live-forward");
     const exportActionStatus = el("export-action-status");
     const instructionErrors = el("instructions-errors");
     const designMode     = el<HTMLButtonElement>("instructions-design");
@@ -885,7 +886,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const altListeners: (() => void)[] = [];
         const closeListeners: (() => void)[] = [];
         const livePreviewListeners: ((completedUnits: number | null) => void)[] = [];
-        const unitElements: HTMLElement[] = [];
+        const unitElements: HTMLButtonElement[] = [];
         let liveUnits: readonly InstructionOverviewUnit[] = [];
         let liveCompleted = 0;
         let liveProgressChanged = (_completedUnits: number) => true;
@@ -901,39 +902,36 @@ export function mountUI(cb: UICallbacks): UIHandle {
         designMode.setAttribute("aria-pressed", "false");
         crochetMode.setAttribute("aria-pressed", "true");
         queueCanvasChromeSync();
-        instructionsTitle.focus();
+        instructions.focus();
 
         const workKind = () => liveUnits[0]?.label.startsWith("Round") ? "round" : "row";
         const renderCrochet = () => {
             const total = liveUnits.length;
-            liveProgress.textContent = `${liveCompleted} / ${total}`;
+            const current = total === 0 ? 0 : Math.min(liveCompleted + 1, total);
+            liveProgress.textContent = `${current} / ${total}`;
             liveBack.disabled = isBusy || liveCompleted === 0;
             liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
             liveBack.title = `Back one ${workKind()}`;
+            liveForward.disabled = isBusy || total === 0 || liveCompleted >= total - 1;
+            liveForward.setAttribute("aria-label", `Forward one ${workKind()}`);
+            liveForward.title = `Forward one ${workKind()}`;
             unitElements.forEach((item, index) => {
+                item.disabled = isBusy;
                 item.classList.toggle("instructions-unit--complete", index < liveCompleted);
-                if (liveCompleted < total && index === liveCompleted) {
+                if (index === liveCompleted) {
                     item.setAttribute("aria-current", "step");
                 } else {
                     item.removeAttribute("aria-current");
                 }
             });
-            if (liveCompleted >= total) {
-                const doneHadFocus = document.activeElement === liveDone;
-                liveComplete.hidden = false;
-                liveDone.hidden = true;
-                if (doneHadFocus) liveComplete.focus();
-                livePreviewListeners.forEach(f => f(liveCompleted));
-                return;
+            const currentUnit = liveUnits[liveCompleted] ?? null;
+            currentInstruction.hidden = currentUnit === null;
+            if (currentUnit) {
+                currentInstructionText.textContent =
+                    currentUnit.text.slice(currentUnit.text.indexOf(":") + 1).trim();
             }
-            const unit = liveUnits[liveCompleted];
-            liveComplete.hidden = true;
-            liveDone.hidden = false;
-            liveDone.disabled = isBusy;
-            liveDone.setAttribute("aria-label", `Done with ${unit.label}`);
-            liveDone.title = `Done with ${unit.label}`;
-            livePreviewListeners.forEach(f => f(liveCompleted + 1));
-            unitElements[liveCompleted]?.scrollIntoView({ block: "nearest" });
+            livePreviewListeners.forEach(f => f(current));
+            unitElements[Math.min(liveCompleted, total - 1)]?.scrollIntoView({ block: "nearest" });
         };
         const refreshCrochetAvailability = () => {
             if (!isBusy && liveUnits.length === 0) {
@@ -943,7 +941,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 liveUnavailable.hidden = true;
             }
             liveBack.disabled = isBusy || liveCompleted === 0;
-            liveDone.disabled = isBusy || liveUnits.length === 0;
+            liveForward.disabled = isBusy || liveUnits.length === 0
+                || liveCompleted >= liveUnits.length - 1;
         };
         liveBack.onclick = () => {
             if (liveCompleted === 0) return;
@@ -951,8 +950,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
             liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
             renderCrochet();
         };
-        liveDone.onclick = () => {
-            if (liveCompleted >= liveUnits.length) return;
+        liveForward.onclick = () => {
+            if (liveCompleted >= liveUnits.length - 1) return;
             liveCompleted++;
             liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
             renderCrochet();
@@ -964,11 +963,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
             designMode.removeEventListener("click", onDesignMode);
             alternateChk.removeEventListener("change", onAlt);
             liveBack.onclick = null;
-            liveDone.onclick = null;
+            liveForward.onclick = null;
             canvas.setAttribute("aria-label", "Editable pattern chart");
             canvas.setAttribute("aria-describedby", "canvas-cell-status");
             instructions.hidden = true;
-            inspectorHost.hidden = inspectorWasHidden;
+            if (inspectorHost.hidden) inspectorHost.hidden = inspectorWasHidden;
             document.body.classList.remove("crochet-mode");
             designMode.setAttribute("aria-pressed", "true");
             crochetMode.setAttribute("aria-pressed", "false");
@@ -990,16 +989,33 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 instructionText += (instructionText ? "\n" : "") + line;
             },
             appendUnit: (unit) => {
-                const item = document.createElement("li");
+                const row = document.createElement("li");
+                const item = document.createElement("button");
+                item.type = "button";
+                item.disabled = isBusy;
                 item.className = "instructions-unit";
                 item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}`);
+                item.title = `Go to ${unit.label}, Yarn ${unit.yarn}`;
+                const index = unitElements.length;
+                item.onclick = () => {
+                    if (isBusy || index >= liveUnits.length) return;
+                    liveCompleted = index;
+                    liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
+                    renderCrochet();
+                };
                 const meta = document.createElement("span");
-                meta.className = "instructions-unit-meta";
-                meta.textContent = `${unit.label} · Yarn ${unit.yarn}`;
+                meta.className = "instructions-unit-number";
+                meta.textContent = unit.label.replace(/^\D+/, "");
+                const yarn = document.createElement("span");
+                yarn.className = "instructions-unit-yarn";
+                yarn.style.backgroundColor = unit.color;
+                yarn.title = `Yarn ${unit.yarn} · ${unit.color}`;
+                yarn.setAttribute("aria-hidden", "true");
                 const text = document.createElement("code");
                 text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
-                item.append(meta, text);
-                unitsList.append(item);
+                item.append(meta, yarn, text);
+                row.append(item);
+                unitsList.append(row);
                 unitElements.push(item);
             },
             clearText: () => {
@@ -1011,11 +1027,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 unitElements.length = 0;
                 liveUnits = [];
                 liveCompleted = 0;
+                currentInstruction.hidden = true;
                 refreshCrochetAvailability();
             },
             setLivePlan: (units, completedUnits, onProgress) => {
                 liveUnits = units;
-                liveCompleted = Math.min(Math.max(0, completedUnits), units.length);
+                liveCompleted = units.length === 0
+                    ? 0
+                    : Math.min(Math.max(0, completedUnits), units.length - 1);
                 liveProgressChanged = onProgress;
                 liveSaveWarning.hidden = true;
                 refreshCrochetAvailability();
@@ -1030,6 +1049,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 isBusy = busy;
                 el<HTMLButtonElement>("export-copy").disabled = busy;
                 refreshCrochetAvailability();
+                renderCrochet();
             },
             onAlternate: (f) => altListeners.push(f),
             onLivePreview: (f) => livePreviewListeners.push(f),

@@ -37,6 +37,46 @@ pub struct WorkSequence {
     pub compression: Vec<SequenceItem>,
 }
 
+impl WorkSequence {
+    pub fn reversed(&self) -> Self {
+        let mut groups: Vec<&[WorkStep]> = Vec::new();
+        let mut start = 0;
+        while start < self.steps.len() {
+            let parent = self.steps[start].parent_coord;
+            let mut end = start + 1;
+            while end < self.steps.len() && self.steps[end].parent_coord == parent {
+                end += 1;
+            }
+            groups.push(&self.steps[start..end]);
+            start = end;
+        }
+        let steps = groups
+            .into_iter()
+            .rev()
+            .flat_map(|group| group.iter().copied())
+            .collect();
+        Self {
+            steps,
+            compression: reverse_compression(&self.compression),
+        }
+    }
+}
+
+fn reverse_compression(items: &[SequenceItem]) -> Vec<SequenceItem> {
+    items
+        .iter()
+        .rev()
+        .map(|item| match item {
+            SequenceItem::Stitch(kind) => SequenceItem::Stitch(*kind),
+            // Traversal reverses parent groups as units; stitches sharing one parent keep their order.
+            SequenceItem::Group(children) => SequenceItem::Group(children.clone()),
+            SequenceItem::RepeatGroup(repeat) => {
+                SequenceItem::repeat(reverse_compression(&repeat.items), repeat.count)
+            }
+        })
+        .collect()
+}
+
 fn stitch_from_highlight(highlights: &Array2<u8>, coord: IVec2) -> Stitch {
     match highlights[[coord.y as usize, coord.x as usize]] {
         common::HIGHLIGHT_VALID_OVERLAY | common::HIGHLIGHT_INVALID => Stitch::Oc,
@@ -491,6 +531,26 @@ mod tests {
             structured.compression.as_slice(),
             [SequenceItem::RepeatGroup(repeat)] if repeat.count == 4
         ));
+    }
+
+    #[test]
+    fn compressed_work_can_reverse_without_reclassifying_or_recompressing() {
+        let mut row_highlights = no_highlights(5, 3);
+        row_highlights[[2, 1]] = common::HIGHLIGHT_VALID_OVERLAY;
+        row_highlights[[2, 4]] = common::HIGHLIGHT_VALID_OVERLAY;
+        let row = row_work_sequence_at(&row_highlights, v(5, 3), false, 1);
+        assert_eq!(
+            row.reversed(),
+            row_work_sequence_at(&row_highlights, v(5, 3), true, 1)
+        );
+
+        let round_highlights = no_highlights(7, 7);
+        let round =
+            round_work_sequence_at(&round_highlights, v(7, 7), v(7, 7), v(0, 0), 3, false, 1);
+        assert_eq!(
+            round.reversed(),
+            round_work_sequence_at(&round_highlights, v(7, 7), v(7, 7), v(0, 0), 3, true, 1,),
+        );
     }
 
     #[test]

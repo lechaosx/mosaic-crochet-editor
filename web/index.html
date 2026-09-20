@@ -40,6 +40,9 @@
     <symbol id="icon-navigate" viewBox="0 0 24 24">
       <path d="M7 13V7a1.5 1.5 0 0 1 3 0v4-7a1.5 1.5 0 0 1 3 0v7-5a1.5 1.5 0 0 1 3 0v5-3a1.5 1.5 0 0 1 3 0v5c0 5-2.5 7-6.5 7H11c-2 0-3.5-1.1-4.5-2.7L4 13a1.5 1.5 0 0 1 2.4-1.8L9 14"/>
     </symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24">
+      <rect x="8" y="8" width="11" height="11" rx="1"/><path d="M16 8V5H5v11h3"/>
+    </symbol>
   </svg>
   <header class="document-bar" id="document-bar">
       <div class="document-actions g-mode" role="group" aria-label="Workspace">
@@ -160,6 +163,8 @@
               <li>Made the Design tool rail more compact and streamlined workspace guidance.</li>
               <li>Started row numbering with the bottom foundation row.</li>
               <li>Constrained About to a readable height, kept its actions visible, and made only its changelog entries scroll.</li>
+              <li>Made Crochet instructions compact, directly selectable, cached, and persist progress across stitch edits.</li>
+              <li>Separated Crochet row details, showed yarn colours, wrapped long instructions, and kept inspectors open until the chart changes.</li>
             </ul>
           </section>
           <section class="about-changelog-entry">
@@ -226,10 +231,7 @@
       </article>
     </dialog>
 
-    <aside id="instructions-workspace" class="instructions-workspace" aria-label="Crochet" hidden>
-      <header class="instructions-header">
-        <h1 id="instructions-title" tabindex="-1">Crochet</h1>
-      </header>
+    <aside id="instructions-workspace" class="instructions-workspace" aria-label="Crochet" tabindex="-1" hidden>
       <div class="instructions-options" role="group" aria-label="Crochet options">
         <label class="toggle">
           <input type="checkbox" id="alternate">
@@ -238,22 +240,21 @@
         </label>
         <span id="export-progress" class="instructions-progress" hidden></span>
         <span id="export-action-status" class="instructions-action-status" role="status" aria-label="Copy instructions status" aria-live="polite"></span>
-        <button class="btn" id="export-copy" type="button" aria-label="Copy instructions" title="Copy compressed instructions">Copy instructions</button>
+        <button class="btn btn--icon" id="export-copy" type="button" aria-label="Copy instructions" title="Copy compressed instructions"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-copy"/></svg></button>
       </div>
       <span id="instructions-errors" class="instructions-errors" role="status" aria-label="Crochet errors" aria-live="polite" hidden></span>
       <section class="instructions-crochet">
         <div class="instructions-sequence">
-          <div class="instructions-sequence-header">
-            <h2>Instructions</h2>
-            <span id="instructions-live-progress" role="status" aria-live="polite"></span>
-          </div>
           <p class="warning instructions-live-save-warning" id="instructions-live-save-warning" role="alert" title="Keep this tab open to retain your place" hidden>Progress not saved</p>
           <p id="instructions-live-unavailable" class="instructions-live-unavailable" hidden></p>
           <ol id="instructions-units" aria-label="Instructions"></ol>
-          <h2 id="instructions-complete" tabindex="-1" hidden>Pattern complete</h2>
+          <div id="instructions-current" class="instructions-current" role="status" aria-label="Current instruction" aria-live="polite" hidden>
+            <code id="instructions-current-text"></code>
+          </div>
           <div class="instructions-live-actions">
-            <button class="btn" id="instructions-live-back" type="button" title="Back one work unit">Back</button>
-            <button class="btn" id="instructions-live-done" type="button" title="Complete this work unit">Done</button>
+            <button class="btn btn--icon" id="instructions-live-back" type="button" title="Back one work unit">←</button>
+            <span id="instructions-live-progress" role="status" aria-live="polite"></span>
+            <button class="btn btn--icon" id="instructions-live-forward" type="button" title="Forward one work unit">→</button>
           </div>
         </div>
       </section>

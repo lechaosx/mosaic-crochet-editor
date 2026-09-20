@@ -5,7 +5,7 @@ import { PlanType, PlanDir, lock_invalid_row, lock_invalid_round, transformed_ta
          initialize_row_pattern,
          instruction_start_row, instruction_start_round,
          instruction_wip_row, instruction_wip_round,
-         InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
+         InstructionUnit, InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateCoordinates,
@@ -28,7 +28,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
-import { fingerprintInstructionPlan, loadLiveProgress, saveLiveProgress } from "./live-progress";
+import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress } from "./live-progress";
 import { copyrightNotice, LATEST_CHANGELOG_DATE, markAboutSeen, shouldShowAbout } from "./about";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -123,6 +123,12 @@ aboutDialog.addEventListener("click", event => {
 document.getElementById("about-close")!.addEventListener("click", closeAbout);
 let instructionsPreviewStore: Store | null = null;
 let instructionsOpen = false;
+interface CachedInstructionUnit {
+    work: InstructionUnit;
+    label: string;
+    yarn: "A" | "B";
+}
+let instructionCache: { fingerprint: string; units: CachedInstructionUnit[] } | null = null;
 let selectionMoveMode: SelectionMoveMode = "move";
 let selectionMode: SelectionMode = "replace";
 let navigateLatched = false;
@@ -1002,59 +1008,109 @@ async function onInstructions() {
         renderCanvas();
     });
 
-    const startSession = (alt: boolean) => {
+    const startSession = () => {
         const { pattern } = store.state;
         const { canvasWidth: W, canvasHeight: H } = pattern;
-        if (pattern.mode === "row") return instruction_start_row(exportPixels, W, H, alt);
+        if (pattern.mode === "row") return instruction_start_row(exportPixels, W, H);
         const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
-        return instruction_start_round(exportPixels, W, H, vw, vh, ox, oy, rounds, alt);
+        return instruction_start_round(exportPixels, W, H, vw, vh, ox, oy, rounds);
     };
 
-    let runId = 0;
+    const patternFingerprint = fingerprintPattern(store.state.pattern, exportPixels);
+    const progressFingerprint = fingerprintPatternShape(store.state.pattern);
+    const totalUnits = store.state.pattern.mode === "row"
+        ? store.state.pattern.canvasHeight
+        : store.state.pattern.rounds;
+    let completedUnits = loadLiveProgress(progressFingerprint, totalUnits);
+    let generatedUnits: CachedInstructionUnit[] = [];
+    const directionalUnit = (unit: CachedInstructionUnit, index: number): InstructionOverviewUnit => {
+        const reversed = dlg.alternate() && index % 2 === 1;
+        return {
+            label: unit.label,
+            yarn: unit.yarn,
+            color: unit.yarn === "A" ? store.state.colorA : store.state.colorB,
+            text: reversed ? unit.work.reversed_text() : unit.work.text(),
+        };
+    };
+    const renderUnits = (units: readonly CachedInstructionUnit[], live: boolean) => {
+        dlg.clearText();
+        dlg.clearUnits();
+        const directionalUnits = units.map(directionalUnit);
+        directionalUnits.forEach(directional => {
+            dlg.appendUnit(directional);
+            dlg.appendLine(directional.text);
+        });
+        if (live) {
+            dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
+                completedUnits = nextCompleted;
+                return saveLiveProgress(progressFingerprint, completedUnits);
+            });
+        }
+    };
+    const cached = instructionCache?.fingerprint === patternFingerprint
+        ? instructionCache.units
+        : null;
+    if (!cached && instructionCache) {
+        instructionCache.units.forEach(unit => unit.work.free());
+        instructionCache = null;
+    }
+
     const run = async () => {
-        const myRun = ++runId;
         dlg.setBusy(true);
         dlg.clearText();
         dlg.clearUnits();
         dlg.setErrors(instructionErrors.size);
-        const session = startSession(dlg.alternate());
+        const session = startSession();
         const total = session.total();
-        const units: InstructionOverviewUnit[] = [];
+        const units: CachedInstructionUnit[] = [];
+        generatedUnits = units;
         let count = 0;
         let unit = session.next();
         while (unit !== undefined) {
-            if (cancelled || myRun !== runId) {
+            if (cancelled) {
                 unit.free();
+                units.forEach(generated => generated.work.free());
                 session.free();
                 dlg.endProgress();
                 return;
             }
             const label = `${unit.kind() === InstructionUnitKind.Row ? "Row" : "Round"} ${unit.number()}`;
-            const text = unit.text();
-            const workedCoords = Array.from(unit.worked_coords());
             const yarn = unit.yarn() === InstructionYarn.A ? "A" : "B";
-            unit.free();
-            const overviewUnit: InstructionOverviewUnit = { label, yarn, text, workedCoords };
-            units.push(overviewUnit);
-            dlg.appendUnit(overviewUnit);
-            dlg.appendLine(text);
+            const cachedUnit: CachedInstructionUnit = { work: unit, label, yarn };
+            units.push(cachedUnit);
+            const directional = directionalUnit(cachedUnit, units.length - 1);
+            dlg.appendUnit(directional);
+            dlg.appendLine(directional.text);
             dlg.setProgress(++count, total);
             await new Promise<void>(res => requestAnimationFrame(() => res()));
             unit = session.next();
         }
         session.free();
-        if (!cancelled && myRun === runId) {
-            const fingerprint = fingerprintInstructionPlan(units);
-            dlg.setLivePlan(units, loadLiveProgress(fingerprint, units.length), completedUnits => {
-                return saveLiveProgress(fingerprint, completedUnits);
-            });
+        if (!cancelled) {
+            instructionCache = { fingerprint: patternFingerprint, units };
+            renderUnits(units, true);
+        } else {
+            units.forEach(generated => generated.work.free());
         }
         dlg.endProgress();
         dlg.setBusy(false);
     };
 
-    dlg.onAlternate(run);
-    run();
+    dlg.onAlternate(() => {
+        const units = instructionCache?.fingerprint === patternFingerprint
+            ? instructionCache.units
+            : generatedUnits;
+        renderUnits(units, instructionCache?.fingerprint === patternFingerprint);
+    });
+    dlg.setErrors(instructionErrors.size);
+    if (cached) {
+        generatedUnits = cached;
+        renderUnits(cached, true);
+        dlg.endProgress();
+        dlg.setBusy(false);
+    } else {
+        run();
+    }
 }
 
 // ── Mount UI + gestures ─────────────────────────────────────────────────────

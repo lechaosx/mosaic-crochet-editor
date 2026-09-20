@@ -8,6 +8,8 @@ Mosaic Crochet Editor is deployed continuously from `master`; changes are groupe
 - Made the Design tool rail more compact and streamlined workspace guidance.
 - Started row numbering with the bottom foundation row.
 - Constrained About to a readable height, kept its actions visible, and made only its changelog entries scroll.
+- Made Crochet instructions compact, directly selectable, cached, and persist progress across stitch edits.
+- Separated Crochet row details, showed yarn colours, wrapped long instructions, and kept inspectors open until the chart changes.
 
 ## 19 September 2026
 
