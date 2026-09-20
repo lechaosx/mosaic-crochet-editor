@@ -174,13 +174,15 @@ test("Clear drawing restores natural colours immediately and is undoable", async
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
     const beforeReset = await historyLength(page);
     await page.getByRole("button", { name: "Pattern" }).click();
+    const fittedCell = await cellCoord(page, 0, 1);
 
     await page.getByRole("button", { name: "Clear drawing" }).click();
 
-    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(B);
+    expect(await pixelRGB(page, fittedCell.cx, fittedCell.cy)).toEqual(B);
     expect(await historyLength(page)).toBe(beforeReset + 1);
     await page.getByRole("button", { name: "Undo" }).click();
-    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
+    const restoredCell = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, restoredCell.cx, restoredCell.cy)).toEqual(A);
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 });
 

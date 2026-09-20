@@ -79,11 +79,89 @@ test("turning row numbers on reframes the phone canvas and updates cell size", a
     }));
     expect(withNumbers.scale).toBeLessThan(withoutNumbers.scale);
     expect(withNumbers.offset).not.toBe(withoutNumbers.offset);
-    const dpr = await page.evaluate(() => window.devicePixelRatio);
-    const fittedCellSize = `${Math.round(withNumbers.scale / dpr)} px`;
-    await expect(page.locator("#view-zoom-value")).toHaveText(fittedCellSize);
+    await expect(page.locator("#view-zoom-value")).toHaveCount(0);
     const bounds = await renderedBounds(page);
     expect(bounds.minX).toBeGreaterThanOrEqual(4);
+});
+
+test("Fit uses the unobscured workspace beside wide overlay panels", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 600 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Fit view" }).click();
+
+    const visible = await page.evaluate(() => {
+        const canvas = document.getElementById("canvas")!.getBoundingClientRect();
+        const dock = document.getElementById("authoring-dock")!.getBoundingClientRect();
+        const inspector = document.getElementById("inspector-host")!.getBoundingClientRect();
+        const m = window.__test_matrix__!;
+        const corners = [
+            m.transformPoint({ x: 0, y: 0 }),
+            m.transformPoint({ x: 9, y: 0 }),
+            m.transformPoint({ x: 0, y: 9 }),
+            m.transformPoint({ x: 9, y: 9 }),
+        ];
+        return {
+            left: dock.right - canvas.left,
+            right: inspector.left - canvas.left,
+            top: 0,
+            bottom: canvas.height,
+            corners: corners.map(({ x, y }) => ({ x: x / window.devicePixelRatio, y: y / window.devicePixelRatio })),
+        };
+    });
+
+    for (const corner of visible.corners) {
+        expect(corner.x).toBeGreaterThanOrEqual(visible.left);
+        expect(corner.x).toBeLessThanOrEqual(visible.right);
+        expect(corner.y).toBeGreaterThanOrEqual(visible.top);
+        expect(corner.y).toBeLessThanOrEqual(visible.bottom);
+    }
+});
+
+test("Fit keeps the chart below persistent view controls", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 600 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Fit view" }).click();
+
+    const { top, bounds } = await page.evaluate(() => {
+        const canvas = document.getElementById("canvas")!.getBoundingClientRect();
+        const controls = document.querySelector(".canvas-controls")!.getBoundingClientRect();
+        const m = window.__test_matrix__!;
+        const points = [
+            m.transformPoint({ x: 0, y: 0 }),
+            m.transformPoint({ x: 9, y: 0 }),
+            m.transformPoint({ x: 0, y: 9 }),
+            m.transformPoint({ x: 9, y: 9 }),
+        ].map(({ x, y }) => ({ x: x / window.devicePixelRatio, y: y / window.devicePixelRatio }));
+        return {
+            top: controls.bottom - canvas.top,
+            bounds: { minY: Math.min(...points.map(point => point.y)) },
+        };
+    });
+
+    expect(bounds.minY).toBeGreaterThanOrEqual(top);
+});
+
+test("Fit immediately uses Crochet panel bounds", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 600 });
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await page.getByRole("button", { name: "Fit view" }).click();
+
+    const { left, corners } = await page.evaluate(() => {
+        const canvas = document.getElementById("canvas")!.getBoundingClientRect();
+        const panel = document.getElementById("instructions-workspace")!.getBoundingClientRect();
+        const m = window.__test_matrix__!;
+        return {
+            left: panel.right - canvas.left,
+            corners: [
+                m.transformPoint({ x: 0, y: 0 }), m.transformPoint({ x: 9, y: 0 }),
+                m.transformPoint({ x: 0, y: 9 }), m.transformPoint({ x: 9, y: 9 }),
+            ].map(({ x }) => x / window.devicePixelRatio),
+        };
+    });
+
+    expect(Math.min(...corners)).toBeGreaterThanOrEqual(left);
 });
 
 test("Fit keeps rotated half-round numbers inside a phone canvas", async ({ page }) => {

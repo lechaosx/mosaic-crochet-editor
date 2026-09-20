@@ -7,7 +7,6 @@ import { AppPreferences } from "./preferences";
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;
 const ROT_DURATION = 250;
-const FADE_RATE    = 1 / 0.18;   // per second
 const FAVICON_SIZE = 32;
 const MAX_TRANSFORM_PREVIEW_CLAIMS = 1_048_576;
 const LABEL_FONT   = `ui-monospace, "SF Mono", Menlo, monospace`;
@@ -40,6 +39,13 @@ export interface Viewport {
     canvas: HTMLCanvasElement;
     view:   ViewState;
     dpr:    number;
+}
+
+export interface CanvasWorkspace {
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
 }
 
 export function makeViewport(canvas: HTMLCanvasElement): Viewport {
@@ -79,7 +85,6 @@ export interface RendererState {
     // so a restored rotation doesn't spin in on load.
     targetRotation: number | null;
     rotAnim: { startTime: number; startRot: number; endRot: number } | null;
-    topIndicatorOpacity: number;
     rafId: number | null;
     lastFrameTime: number;
     lastStore: Store | null;
@@ -113,7 +118,6 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         visualRotation: 0,
         targetRotation: null,
         rotAnim:        null,
-        topIndicatorOpacity: 0,
         rafId:          null,
         lastFrameTime:  0,
         lastStore:      null,
@@ -193,10 +197,12 @@ export function screenToPatternFrac(
 
 export function fitToView(
     canvas: HTMLCanvasElement, view: ViewState, pattern: PatternState, rotationDeg: number,
-    labelsVisible: boolean,
+    labelsVisible: boolean, workspace: CanvasWorkspace,
 ) {
     const rect = canvas.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return;
+    const width = Math.max(0, workspace.right - workspace.left);
+    const height = Math.max(0, workspace.bottom - workspace.top);
+    if (width <= 0 || height <= 0) return;
     const margin = 0.92;
     const rad = rotationDeg * Math.PI / 180;
     const c = Math.cos(rad);
@@ -241,11 +247,13 @@ export function fitToView(
     }
 
     view.zoom = clampZoom(margin * Math.min(
-        rect.width / (maxX - minX),
-        rect.height / (maxY - minY),
+        width / (maxX - minX),
+        height / (maxY - minY),
     ));
-    view.panX = -view.zoom * (minX + maxX) / 2;
-    view.panY = -view.zoom * (minY + maxY) / 2;
+    view.panX = (workspace.left + workspace.right - rect.width) / 2
+        - view.zoom * (minX + maxX) / 2;
+    view.panY = (workspace.top + workspace.bottom - rect.height) / 2
+        - view.zoom * (minY + maxY) / 2;
 }
 
 // ── Animation ──────────────────────────────────────────────────────────────
@@ -279,15 +287,7 @@ function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, n
         else { rs.visualRotation = rs.rotAnim.endRot; rs.rotAnim = null; }
     }
 
-    const targetOpacity = rs.rotAnim ? 1 : 0;
     const dtSec = Math.min(0.05, (now - rs.lastFrameTime) / 1000);
-    if (rs.topIndicatorOpacity !== targetOpacity) {
-        const step = FADE_RATE * dtSec;
-        rs.topIndicatorOpacity = rs.topIndicatorOpacity < targetOpacity
-            ? Math.min(targetOpacity, rs.topIndicatorOpacity + step)
-            : Math.max(targetOpacity, rs.topIndicatorOpacity - step);
-        if (rs.topIndicatorOpacity !== targetOpacity) active = true;
-    }
 
     // Marching ants: animate the dash offset while any ants outline is
     // visible. Convert screen-px/sec to pattern-units/sec so the visible
@@ -430,7 +430,6 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
-    if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
 }
 
 // Trace the selection's boundary as one or more closed polylines (one per
@@ -677,30 +676,6 @@ function renderRoundLabels(
         if (isFull) ctx.strokeText(label, p.x, p.y);
         ctx.fillText(label, p.x, p.y);
     }
-    ctx.restore();
-}
-
-function renderTopIndicator(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    pattern: PatternState, opacity: number,
-) {
-    const cx = pattern.canvasWidth / 2;
-    const tipY  = -0.4;
-    const baseY = -1.6;
-    const half  = 0.7;
-
-    ctx.save();
-    ctx.fillStyle   = `rgba(214, 83, 163, ${(0.92 * opacity).toFixed(3)})`;
-    ctx.strokeStyle = `rgba(0, 0, 0, ${(0.55 * opacity).toFixed(3)})`;
-    ctx.lineWidth   = 1.2 / (view.zoom * dpr);
-    ctx.lineJoin    = "round";
-    ctx.beginPath();
-    ctx.moveTo(cx - half, baseY);
-    ctx.lineTo(cx + half, baseY);
-    ctx.lineTo(cx,        tipY);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
     ctx.restore();
 }
 

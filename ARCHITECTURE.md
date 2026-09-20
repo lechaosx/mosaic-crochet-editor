@@ -97,9 +97,10 @@ Vite + TypeScript I/O shell. Imports `@mosaic/logic` and `@mosaic/wasm`.
 
 ### Render & coordinate model
 - Canvas is sized to the viewport; the pattern is positioned via `ctx.setTransform`, not via CSS transforms on the element. — **Agent's choice**
+- UI measures overlay-panel and canvas-chrome occlusion and supplies the remaining rectangular workspace to fit calculations; the canvas backing surface stays unchanged. — **Agent's choice**
 - All transforms (pan, zoom, rotation) go through ctx. The matrix is built so that the rotation pivot is the pattern centre. — **your decision** (pattern-centre pivot); **Agent's choice** (ctx-only).
 - `visualRotation` (animated) is kept separate from `view.rotation` (target/persisted) so painting mid-animation hits the pixel that's actually on screen. — **Agent's choice**
-- Rotation animation runs in a single rAF loop alongside the indicator opacity. — **Agent's choice**
+- Rotation animation runs in a single rAF loop. — **Agent's choice**
 
 ### Gestures
 Pointer-event state machine — one path for mouse, pen, touch:

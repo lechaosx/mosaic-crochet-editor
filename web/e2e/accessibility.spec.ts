@@ -242,7 +242,8 @@ test("compact menu navigation does not move selected canvas content", async ({ p
     await bootApp(page);
     await clickCell(page, 0, 1);
     await page.keyboard.press("s");
-    await clickCell(page, 0, 1);
+    const selectedCell = await cellCoord(page, 0, 1);
+    await page.mouse.click(selectedCell.cx, selectedCell.cy);
     await expect(page.getByRole("button", { name: /selected/ })).toBeVisible();
 
     await page.getByRole("button", { name: "More" }).click();

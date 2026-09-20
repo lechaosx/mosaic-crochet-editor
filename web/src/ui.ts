@@ -2,6 +2,7 @@ import { Tool, SymKey, PatternState, Axis, RepeatGrid } from "@mosaic/logic/type
 import type { SelectMode } from "@mosaic/logic/selection";
 import type { OverlayAction } from "@mosaic/logic/paint";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
+import type { CanvasWorkspace } from "./render";
 
 export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
 export type SelectionMode = SelectMode;
@@ -103,7 +104,8 @@ export interface UIHandle {
     setCrochetProgress: (hasProgress: boolean) => void;
     setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
     setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
-    setViewState:       (zoom: number, rotation: number, navigating: boolean) => void;
+    getCanvasWorkspace: () => CanvasWorkspace;
+    setViewState:       (rotation: number, navigating: boolean) => void;
     setEditError:       (message: string | null) => void;
     setEditSummary:     (width: number, height: number, preserved: number, added: number, removed: number) => void;
     syncEditInputs:     (s: PatternState) => void;
@@ -160,10 +162,17 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const workspaceShell = document.querySelector<HTMLElement>(".workspace")!;
     const canvasShell = document.querySelector<HTMLElement>(".canvas-area")!;
     const canvas = el("canvas");
+    const canvasControls = document.querySelector<HTMLElement>(".canvas-controls")!;
+    const canvasStatus = el("status");
+    const canvasInstruction = el("instructions-current");
     const authoringPanel = el("authoring-dock");
     const crochetPanel = el("instructions-workspace");
+    let canvasWorkspace: CanvasWorkspace = {
+        left: 0, top: 0, right: canvas.clientWidth, bottom: canvas.clientHeight,
+    };
     const syncCanvasChromeInsets = () => {
         const workspaceRect = workspaceShell.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
         const wide = matchMedia("(min-width: 64rem)").matches;
         const authoringRect = authoringPanel.hidden ? null : authoringPanel.getBoundingClientRect();
         const crochetRect = crochetPanel.hidden ? null : crochetPanel.getBoundingClientRect();
@@ -178,6 +187,27 @@ export function mountUI(cb: UICallbacks): UIHandle {
         canvasShell.style.setProperty("--canvas-chrome-left", `${Math.max(0, left)}px`);
         canvasShell.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);
         canvasShell.style.setProperty("--canvas-chrome-bottom", `${Math.max(0, bottom)}px`);
+        const workspace: CanvasWorkspace = {
+            left: Math.max(0, left),
+            top: 0,
+            right: Math.max(0, canvasRect.width - right),
+            bottom: Math.max(0, canvasRect.height - bottom),
+        };
+        for (const chrome of [canvasControls, canvasStatus, canvasInstruction]) {
+            if (chrome.getClientRects().length === 0) continue;
+            const chromeRect = chrome.getBoundingClientRect();
+            const chromeLeft = chromeRect.left - canvasRect.left;
+            const chromeRight = chromeRect.right - canvasRect.left;
+            if (chromeRight <= workspace.left || chromeLeft >= workspace.right) continue;
+            const chromeTop = chromeRect.top - canvasRect.top;
+            const chromeBottom = chromeRect.bottom - canvasRect.top;
+            if (chromeTop + chromeBottom <= canvasRect.height) {
+                workspace.top = Math.max(workspace.top, chromeBottom);
+            } else {
+                workspace.bottom = Math.min(workspace.bottom, chromeTop);
+            }
+        }
+        canvasWorkspace = workspace;
     };
     const queueCanvasChromeSync = () => requestAnimationFrame(syncCanvasChromeInsets);
     const canvasChromeObserver = new ResizeObserver(queueCanvasChromeSync);
@@ -185,6 +215,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         canvasChromeObserver.observe(panel);
     }
     window.addEventListener("resize", queueCanvasChromeSync);
+    syncCanvasChromeInsets();
 
     function isInspectorOpen(panel: InspectorPanel) {
         return !inspectorHost.hidden && activeInspector === panel;
@@ -715,8 +746,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         (action.getClientRects().length > 0 ? action : more).focus();
     });
 
-    function setViewState(zoom: number, rotation: number, navigating: boolean) {
-        el("view-zoom-value").textContent = `${Math.round(zoom)} px`;
+    function setViewState(rotation: number, navigating: boolean) {
         const navigate = el<HTMLButtonElement>("view-navigate");
         navigate.classList.toggle("btn--active", navigating);
         navigate.setAttribute("aria-pressed", String(navigating));
@@ -725,10 +755,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const signed = normalized > 180 ? normalized - 360 : normalized;
         const angle = `${signed < 0 ? "−" : ""}${Math.abs(signed)}°`;
         const reset = el<HTMLButtonElement>("view-rotation-reset");
-        reset.textContent = angle;
         reset.disabled = signed === 0;
-        reset.setAttribute("aria-label", signed === 0 ? "Reset view rotation" : `Reset view rotation from ${angle}`);
-        reset.title = signed === 0 ? "Reset view rotation" : `Reset view rotation from ${angle}`;
+        reset.setAttribute("aria-label", signed === 0 ? "Reset view orientation" : `Reset view orientation from ${angle}`);
+        reset.title = signed === 0 ? "Reset view orientation" : `Reset view orientation from ${angle}`;
+        el<HTMLElement>("view-orientation-arrow").style.transform = `rotate(${rotation}deg)`;
     }
 
     /* ── Save / load / Instructions ─────────────────────────────────── */
@@ -943,6 +973,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         inspectorHost.hidden = true;
         document.body.classList.add("crochet-mode");
         setCrochetMode(true);
+        syncCanvasChromeInsets();
         queueCanvasChromeSync();
         instructions.focus();
 
@@ -1010,6 +1041,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             if (inspectorHost.hidden) inspectorHost.hidden = inspectorWasHidden;
             document.body.classList.remove("crochet-mode");
             setCrochetMode(false);
+            syncCanvasChromeInsets();
             queueCanvasChromeSync();
             closeListeners.forEach(f => f());
             if (restoreFocus) crochetMode.focus();
@@ -1104,7 +1136,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setHistory, setCrochetProgress: (hasProgress) => {
             hasCrochetProgress = hasProgress;
             if (!closeInstructionsWorkspace) setCrochetMode(false);
-        }, setRecoveryStatus, setDocumentError, setViewState, setEditError, setEditSummary,
+        }, setRecoveryStatus, setDocumentError, getCanvasWorkspace: () => {
+            syncCanvasChromeInsets();
+            return canvasWorkspace;
+        },
+        setViewState, setEditError, setEditSummary,
         syncEditInputs,
         openInstructions,
     };

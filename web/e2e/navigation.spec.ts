@@ -42,18 +42,20 @@ test("canvas view controls zoom, fit, rotate, and reset without editing", async 
     await controls.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(350);
     expect(Math.abs((await matrix(page)).b)).toBeGreaterThan(1);
-    const reset = controls.getByRole("button", { name: "Reset view rotation" });
-    await expect(reset).toHaveText("45°");
-    await expect(reset).toHaveAttribute("aria-label", "Reset view rotation from 45°");
+    const reset = controls.locator("#view-rotation-reset");
+    await expect(reset).toHaveAccessibleName("Reset view orientation from 45°");
+    const arrow = reset.locator(".view-orientation-arrow");
+    await expect(arrow).toHaveText("↑");
+    await expect(arrow).toHaveCSS("transform", "matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)");
     await reset.click();
     await page.waitForTimeout(350);
     expect((await matrix(page)).b).toBeCloseTo(0, 4);
-    await expect(reset).toHaveText("0°");
+    await expect(reset).toHaveAccessibleName("Reset view orientation");
 
     await controls.getByRole("button", { name: "Rotate view left" }).click();
     await page.waitForTimeout(350);
-    await expect(reset).toHaveText("−45°");
-    await expect(reset).toHaveAttribute("aria-label", "Reset view rotation from −45°");
+    await expect(reset).toHaveAccessibleName("Reset view orientation from −45°");
+    await expect(arrow).toHaveCSS("transform", "matrix(0.707107, -0.707107, 0.707107, 0.707107, 0, 0)");
     await reset.click();
     expect(await historyLength(page)).toBe(history);
 });

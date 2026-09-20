@@ -602,18 +602,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .about-footer a { color: var(--accent); }
 .settings-about { width: 100%; }
 
-#view-zoom-value {
-  display: grid;
-  place-items: center;
-  min-width: 3.5rem;
-  min-height: var(--hit);
-  padding-inline: var(--space-1);
-  color: var(--fg-1);
-  background: var(--bg-2);
-  border: 1px solid var(--bg-4);
-  border-radius: var(--radius-1);
-  font-size: var(--font-sm);
-  font-variant-numeric: tabular-nums;
+.view-orientation-arrow {
+  display: block;
+  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .status {

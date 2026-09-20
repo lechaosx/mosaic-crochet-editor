@@ -66,24 +66,38 @@ test("Crochet preserves and controls the shared chart viewport", async ({ page }
     await bootApp(page);
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.getByRole("button", { name: "Invert colours" }).click();
-    const designZoom = await page.getByRole("status", { name: "Rendered cell size" }).textContent();
+    const designZoom = await page.evaluate(() => window.__test_matrix__!.a);
     const designCell = await cellCoord(page, 1, 1);
     const designPixel = await pixelRGB(page, designCell.cx, designCell.cy);
 
     await page.locator("#btn-export").click();
     await expect(page.locator(".canvas-area #canvas")).toBeVisible();
-    await expect(page.getByRole("status", { name: "Rendered cell size" })).toHaveText(designZoom!);
+    expect(await page.evaluate(() => window.__test_matrix__!.a)).toBeCloseTo(designZoom, 4);
     await page.getByRole("button", { name: "Zoom in" }).click();
-    const crochetZoom = await page.getByRole("status", { name: "Rendered cell size" }).textContent();
-    expect(crochetZoom).not.toBe(designZoom);
+    const crochetZoom = await page.evaluate(() => window.__test_matrix__!.a);
+    expect(crochetZoom).toBeGreaterThan(designZoom);
     await clickCell(page, 1, 1);
 
     await page.locator("#btn-export").click();
 
     await expect(page.locator(".canvas-area > #chart-viewport > #canvas")).toBeVisible();
-    await expect(page.getByRole("status", { name: "Rendered cell size" })).toHaveText(crochetZoom!);
+    expect(await page.evaluate(() => window.__test_matrix__!.a)).toBeCloseTo(crochetZoom, 4);
     const returnedCell = await cellCoord(page, 1, 1);
     expect(await pixelRGB(page, returnedCell.cx, returnedCell.cy)).toEqual(designPixel);
+});
+
+test("Crochet keeps the orientation reset control operable", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+
+    const orientation = page.locator("#view-rotation-reset");
+    await expect(orientation).toHaveAccessibleName("Reset view orientation from 45°");
+    await expect(orientation).toBeVisible();
+    await orientation.click();
+    await page.waitForTimeout(300);
+    await expect(orientation).toHaveAccessibleName("Reset view orientation");
 });
 
 test("workspace switch remains direct in the compact toolbar", async ({ page }) => {

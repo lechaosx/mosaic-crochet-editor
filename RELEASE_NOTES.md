@@ -4,6 +4,8 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 20 September 2026
 
+- Fit now frames the chart within the visible workspace around open panels, while the canvas stays in place.
+- View controls now use a persistent orientation arrow to show and reset rotation, with a cleaner zoom control group.
 - The centred Crochet control now begins, continues, or returns to Design, while Open and New clear progress only for a different chart.
 - Overlay drawing now has explicit Place, Clear, and Invert actions for mouse, pen, and touch, with opposite-action right-click shortcuts.
 - Selection modes and actions now live together in the Selection inspector with their shortcuts.

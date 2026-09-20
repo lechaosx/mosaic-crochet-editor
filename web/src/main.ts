@@ -298,7 +298,7 @@ store.setPersistFn(s => {
 // Observers — run after every commit.
 store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
 store.addObserver(s => ui.setViewState(
-    viewport.view.zoom, s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
+    s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
 store.addObserver(() => updateCoordinates(null, null));
 store.addObserver(s => {
@@ -531,7 +531,7 @@ function setTool(t: Tool) {
     if (wasSelectionTool && !isSelectionTool) selectionMode = "replace";
     if (navigateLatched) {
         navigateLatched = false;
-        ui.setViewState(viewport.view.zoom, store.state.rotation, navigateMomentary);
+        ui.setViewState(store.state.rotation, navigateMomentary);
     }
     ui.setCanvasFeedback(null);
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
@@ -604,12 +604,13 @@ function onLabelsToggle() {
     if (v) {
         fitToView(
             viewport.canvas, viewport.view, store.state.pattern, store.state.rotation, true,
+            ui.getCanvasWorkspace(),
         );
     }
     preferences.labelsVisible = v;
     saveAppPreferences(preferences);
     renderCanvas();
-    ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
+    ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
 }
 function onLockInvalidToggle() {
     const v = (document.getElementById("lock-invalid") as HTMLInputElement).checked;
@@ -625,21 +626,21 @@ function resetRotation() {
 function fitPattern() {
     fitToView(
         viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
-        preferences.labelsVisible,
+        preferences.labelsVisible, ui.getCanvasWorkspace(),
     );
     renderCanvas();
-    ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
+    ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
 }
 function zoomView(factor: number) {
     const rect = viewport.canvas.getBoundingClientRect();
     zoomAt(viewport.canvas, viewport.view, rect.left + rect.width / 2, rect.top + rect.height / 2, factor);
     renderCanvas();
-    ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
+    ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
 }
 function toggleNavigate() {
     if (instructionsOpen) return;
     navigateLatched = !navigateLatched;
-    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched || navigateMomentary);
+    ui.setViewState(store.state.rotation, navigateLatched || navigateMomentary);
 }
 
 // Paste switches to the Move tool so the user can drag the result.
@@ -698,6 +699,7 @@ function onEditChange(): boolean {
     ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
     fitToView(
         viewport.canvas, viewport.view, pattern, store.state.rotation, preferences.labelsVisible,
+        ui.getCanvasWorkspace(),
     );
     store.commit(s => {
         s.pattern  = pattern;
@@ -743,7 +745,7 @@ function onEditRevert() {
     editBaseline = null;
     fitToView(
         viewport.canvas, viewport.view, baseline.pattern, store.state.rotation,
-        preferences.labelsVisible,
+        preferences.labelsVisible, ui.getCanvasWorkspace(),
     );
     store.replace({
         ...store.state,
@@ -762,7 +764,7 @@ function applyRestored(r: Restored) {
     if (dimsChanged) {
         fitToView(
             viewport.canvas, viewport.view, r.pattern, store.state.rotation,
-            preferences.labelsVisible,
+            preferences.labelsVisible, ui.getCanvasWorkspace(),
         );
     }
     store.replace(
@@ -817,7 +819,7 @@ async function onLoad() {
     if (!sameAuthoredPattern(loaded.pattern, loaded.pixels)) clearCrochetProgress();
     fitToView(
         viewport.canvas, viewport.view, loaded.pattern, store.state.rotation,
-        preferences.labelsVisible,
+        preferences.labelsVisible, ui.getCanvasWorkspace(),
     );
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
@@ -840,14 +842,14 @@ async function onInstructions() {
         ? anchorIntoCanvas(store.state).pixels
         : store.state.pixels;
     instructionsOpen = true;
-    ui.setViewState(viewport.view.zoom, store.state.rotation, true);
+    ui.setViewState(store.state.rotation, true);
     const dlg = ui.openInstructions();
     let cancelled = false;
     dlg.onClose(() => {
         instructionsOpen = false;
         cancelled = true;
         instructionsPreviewStore = null;
-        ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
+        ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
         renderCanvas();
     });
     const plan = store.plan;
@@ -1068,6 +1070,7 @@ function beginFreshPattern() {
     if (!sameAuthoredPattern(fresh.pattern, fresh.pixels)) clearCrochetProgress();
     fitToView(
         viewport.canvas, viewport.view, fresh.pattern, fresh.rotation, preferences.labelsVisible,
+        ui.getCanvasWorkspace(),
     );
     historyReset(fresh);
     patternHistorySession = false;
@@ -1088,7 +1091,7 @@ function useExample() {
     const example = exampleSession();
     fitToView(
         viewport.canvas, viewport.view, example.pattern, example.rotation,
-        preferences.labelsVisible,
+        preferences.labelsVisible, ui.getCanvasWorkspace(),
     );
     historyReset(example);
     store.replace(example, { persist: true });
@@ -1509,7 +1512,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     },
     onView:       () => {
         renderCanvas();
-        ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
+        ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
     },
     navigate:     () => instructionsOpen || navigateLatched || navigateMomentary,
 });
@@ -1539,7 +1542,7 @@ document.addEventListener("keydown", e => {
         e.preventDefault();
         if (!e.repeat) {
             navigateMomentary = true;
-            ui.setViewState(viewport.view.zoom, store.state.rotation, true);
+            ui.setViewState(store.state.rotation, true);
         }
         return;
     }
@@ -1547,7 +1550,7 @@ document.addEventListener("keydown", e => {
         e.preventDefault();
         if (!e.repeat) {
             navigateMomentary = true;
-            ui.setViewState(viewport.view.zoom, store.state.rotation, true);
+            ui.setViewState(store.state.rotation, true);
         }
         return;
     }
@@ -1656,7 +1659,7 @@ document.addEventListener("keydown", e => {
 document.addEventListener("keyup", e => {
     if (e.code === "Space") {
         navigateMomentary = false;
-        ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched);
+        ui.setViewState(store.state.rotation, navigateLatched);
     } else if (e.key === "Alt") {
         if (maskArrowState && store.state.float) {
             const shifted = shiftedFloatMask(store.state);
@@ -1675,7 +1678,7 @@ window.addEventListener("blur", () => {
     ctrlArrowStamped = false;
     maskArrowState   = null;
     navigateMomentary = false;
-    ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched);
+    ui.setViewState(store.state.rotation, navigateLatched);
 });
 
 // ── Initial DOM-input sync + first render ────────────────────────────────────
@@ -1711,7 +1714,7 @@ ui.setRecoveryStatus(saved ? "recovered" : "saved");
 if (saved) {
     fitToView(
         viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
-        preferences.labelsVisible,
+        preferences.labelsVisible, ui.getCanvasWorkspace(),
     );
     refreshSymmetryUi();
     historyEnsureInitialized(store.state);
@@ -1720,12 +1723,12 @@ if (saved) {
     const { pattern, pixels } = applyEditSettings();
     fitToView(
         viewport.canvas, viewport.view, pattern, store.state.rotation,
-        preferences.labelsVisible,
+        preferences.labelsVisible, ui.getCanvasWorkspace(),
     );
     store.commit(s => { s.pattern = pattern; s.pixels = pixels; }, { persist: false });
     refreshSymmetryUi();
     historyReset(store.state);
     ui.setHistory(canUndo(), canRedo());
 }
-ui.setViewState(viewport.view.zoom, store.state.rotation, false);
+ui.setViewState(store.state.rotation, false);
 if (shouldShowAbout(currentReleaseHash)) showAbout();
