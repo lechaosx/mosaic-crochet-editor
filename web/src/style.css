@@ -548,15 +548,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-size: clamp(var(--font-lg), 5vw, 1.5rem);
 }
 
-.start-card p { margin-top: var(--space-2); }
-
-.start-kicker {
-  color: var(--fg-2);
-  font-size: var(--font-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
 .start-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -602,6 +593,13 @@ input[type="checkbox"] { accent-color: var(--accent); }
   z-index: 5;
   transition: opacity var(--t-fast);
 }
+
+.status:not(:has(
+  #status-coordinates:not([hidden]),
+  #status-feedback:not([hidden]),
+  #selection-mode-controls:not([hidden]),
+  #status-selection:not([hidden])
+)) { display: none; }
 
 /* ──────────────────────────────────────────────────────────────────────────
    Popovers (native popover API)
@@ -707,15 +705,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   border-top: 1px solid var(--bg-3, rgba(255, 255, 255, 0.08));
 }
 
-.sym-list:empty::before {
-  content: "No axes yet — add one above";
-  color: var(--fg-2);
-  font-size: var(--font-sm);
-  font-style: italic;
-  padding: var(--space-2);
-  text-align: center;
-}
-
 /* Grid alignment so kind icon / position / toggle / delete columns line up
    across every row, regardless of position-string length. */
 .sym-list-row {
@@ -781,13 +770,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   padding-top: var(--space-2);
   border-top: 1px solid var(--bg-3, rgba(255, 255, 255, 0.08));
 }
-
-.popover-help {
-  color: var(--fg-2);
-  font-size: var(--font-sm);
-}
-
-.settings-choice { display: flex; flex-direction: column; gap: var(--space-1); }
 
 .popover-footer {
   display: flex;
@@ -901,9 +883,12 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .instructions-header { justify-content: space-between; flex-wrap: wrap; }
 .instructions-options { flex-wrap: wrap; }
+.instructions-errors {
+  align-self: flex-start;
+  color: var(--danger);
+  font-size: var(--font-sm);
+}
 .instructions-header h1 { margin: 0; color: var(--fg-0); font-size: var(--font-lg); }
-.instructions-kicker { color: var(--accent); font-size: var(--font-sm); }
-.instructions-intro { margin: 0; max-width: 52rem; color: var(--fg-2); }
 
 .g-mode .btn[aria-pressed="true"] {
   color: var(--fg-0);
@@ -966,8 +951,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 .instructions-sequence h2 { color: var(--fg-0); font-size: var(--font-base); }
-#instructions-focus-status { color: var(--fg-2); font-size: var(--font-sm); }
-
 #instructions-units {
   min-height: 0;
   list-style: none;
@@ -1018,27 +1001,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-size: var(--font-sm);
 }
 
-.instructions-blockers {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
-}
-
-.instructions-blockers strong { color: var(--fg-0); }
-
-#instructions-issues {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  flex-basis: 100%;
-}
-
-.instructions-issue[aria-pressed="true"] {
-  color: var(--fg-0);
-  border-color: var(--danger);
-  box-shadow: inset 0 0 0 1px var(--danger);
-}
 
 /* ──────────────────────────────────────────────────────────────────────────
    Toggle switch

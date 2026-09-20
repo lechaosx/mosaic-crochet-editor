@@ -75,7 +75,7 @@ test("choosing an intentionally blank pattern restores directly on return", asyn
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
     await expect(page.locator("#start-surface")).toBeHidden();
     await expect(page.getByRole("status", { name: "Browser recovery" }))
-        .toHaveText("Recovered from this device");
+        .toHaveText("Recovered");
 });
 
 test("legacy browser recovery bypasses the start choices", async ({ page }) => {

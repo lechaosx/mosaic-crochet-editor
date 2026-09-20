@@ -45,20 +45,18 @@ test("segmented radios and switches retain native keyboard operation", async ({ 
     await expect(labels).not.toBeChecked();
 });
 
-test("context strip follows the active tool, yarn, selection, and transforms", async ({ page }) => {
+test("context strip only shows information not visible in controls", async ({ page }) => {
     await bootApp(page);
     const status = page.locator("#status");
 
-    await expect(status).toContainText("Colour · Pencil");
-    await expect(status).toContainText("Yarn A");
+    await expect(status).toBeHidden();
 
     await page.getByRole("button", { name: "Fill" }).click();
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
-    await expect(status).toContainText("Colour · Fill");
-    await expect(status).toContainText("Yarn B");
+    await expect(status).toBeHidden();
 
     await page.getByRole("button", { name: "Overlay" }).click();
-    await expect(status).toContainText("Overlay placement");
+    await expect(status).toBeHidden();
 
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);
@@ -70,10 +68,10 @@ test("context strip follows the active tool, yarn, selection, and transforms", a
 
     await page.locator("#btn-sym-toggle").click();
     await page.locator("#add-sym-v").click();
-    await expect(status).toContainText("Transforms live");
+    await expect(status).not.toContainText("Transforms live");
 
     await page.locator("label:has(#live-transforms)").click();
-    await expect(status).toContainText("Transforms paused");
+    await expect(status).not.toContainText("Transforms paused");
 });
 
 test("yarn controls expose select, edit, and undoable swap actions", async ({ page }) => {

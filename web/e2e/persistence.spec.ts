@@ -15,10 +15,10 @@ test("local recovery failure stays visible and does not imply an mcw save", asyn
 
     await bootApp(page);
     const recoveryStatus = page.getByRole("status", { name: "Browser recovery" });
-    await expect(recoveryStatus).toHaveText("Local save failed");
+    await expect(recoveryStatus).toHaveText("Recovery failed");
     await expect(page.getByRole("button", { name: "Save .mcw" })).toBeVisible();
     await clickCell(page, 0, 1);
-    await expect(recoveryStatus).toHaveText("Local save failed");
+    await expect(recoveryStatus).toHaveText("Recovery failed");
 });
 
 test("continuous paint writes recovery once when the stroke completes", async ({ page }) => {
@@ -68,7 +68,7 @@ test("paint, reload, content survives via localStorage", async ({ page }) => {
     // Wait for the app to fully re-render.
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
     await expect(page.getByRole("status", { name: "Browser recovery" }))
-        .toHaveText("Recovered from this device");
+        .toHaveText("Recovered");
     const c = await cellCoord(page, 0, 1);
     expect((await pixelRGB(page, c.cx, c.cy))).toEqual(A);
 });

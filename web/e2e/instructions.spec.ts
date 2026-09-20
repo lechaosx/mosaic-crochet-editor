@@ -10,7 +10,7 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     await expect(page.getByRole("button", { name: "Save .mcw" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Navigate" })).toBeVisible();
-    await expect(page.getByLabel("Canvas context")).toBeVisible();
+    await expect(page.getByLabel("Canvas context")).toBeHidden();
     await expect(page.getByText("Alternate direction", { exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeHidden();
     await page.evaluate(() => {
@@ -30,7 +30,7 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     await expect(page.getByRole("button", { name: "Undo" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Redo" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
-    await expect(page.getByRole("status", { name: "Browser recovery" })).toBeVisible();
+    await expect(page.getByRole("status", { name: "Browser recovery" })).toBeHidden();
     await expect(page.getByRole("button", { name: "Navigate" })).toBeHidden();
     await expect(page.getByLabel("Canvas context")).toBeHidden();
     await expect(page.getByRole("button", { name: "Fit view" })).toBeVisible();
@@ -57,7 +57,7 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     await expect(page.getByRole("button", { name: "Design" })).toBeFocused();
     await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Navigate" })).toBeVisible();
-    await expect(page.getByLabel("Canvas context")).toBeVisible();
+    await expect(page.getByLabel("Canvas context")).toBeHidden();
     const painted = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, painted.cx, painted.cy)).toEqual([0, 0, 0]);
 });
@@ -164,21 +164,23 @@ test("reselecting Crochet preserves its current line", async ({ page }) => {
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 });
 
-test("Crochet links blockers and labels unresolved instructions as a draft", async ({ page }) => {
+test("Crochet summarizes errors without blocking progress", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("label:has(#lock-invalid)").click();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
-    await clickCell(page, 0, 0);
+    await clickCell(page, 0, 2);
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await clickCell(page, 0, 1);
 
     await page.getByRole("button", { name: "Crochet" }).click();
-    await expect(page.getByText("Draft — 1 unresolved overlay position")).toBeVisible();
-    const issue = page.getByRole("button", { name: "Focus unresolved overlay at 0, 0" });
-    await expect(issue).toBeVisible();
-    await issue.click();
-    await expect(issue).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("1 error");
+    await expect(page.locator('.instructions-unit[aria-label="Row 8, Yarn B"]')).toContainText("oc");
+    await expect(page.locator('.instructions-unit[aria-label="Row 9, Yarn A"]')).toContainText("oc");
+    await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Done with Row 1" })).toBeEnabled();
 });
 
 test("Crochet advances by whole rows and resumes the exact instruction plan", async ({ page }) => {
@@ -226,7 +228,7 @@ test("Crochet renders through the current row and no future rows", async ({ page
     expect(await pixelRGB(page, futureAgain.cx, futureAgain.cy)).toEqual([22, 22, 24]);
 });
 
-test("Crochet progress is unavailable while instruction blockers remain", async ({ page }) => {
+test("Crochet progress remains available when the chart has errors", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("label:has(#lock-invalid)").click();
@@ -235,8 +237,9 @@ test("Crochet progress is unavailable while instruction blockers remain", async 
     await clickCell(page, 0, 0);
 
     await page.getByRole("button", { name: "Crochet" }).click();
-    await expect(page.getByRole("button", { name: "Done with Row 1" })).toBeDisabled();
-    await expect(page.getByText("Resolve chart issues to track crochet progress.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Done with Row 1" })).toBeEnabled();
+    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.getByText(/resolve chart/i)).toHaveCount(0);
 });
 
 test("Crochet reports when its progress cannot be saved locally", async ({ page }) => {
@@ -255,7 +258,7 @@ test("Crochet reports when its progress cannot be saved locally", async ({ page 
     await page.getByRole("button", { name: "Done with Row 1" }).click();
 
     await expect(page.getByRole("alert"))
-        .toHaveText("Progress could not be saved locally. Keep this tab open to retain your place.");
+        .toHaveText("Progress not saved");
     await page.getByRole("button", { name: "Design" }).click();
     await page.getByRole("button", { name: "Crochet" }).click();
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
@@ -274,7 +277,7 @@ test("Crochet completes and reopens a Centre-out round as one boundary", async (
 
     await page.getByRole("button", { name: "Done with Round 1" }).click();
     await expect(page.getByRole("heading", { name: "Pattern complete" })).toBeFocused();
-    await expect(page.locator("#instructions-live-progress")).toContainText("1 of 1 complete");
+    await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 1");
     await expect(back).toBeEnabled();
     await expect(page.getByRole("button", { name: /Done with/ })).toBeHidden();
 
@@ -294,7 +297,7 @@ test("Crochet reports copy completion", async ({ page }) => {
     const status = page.getByRole("status", { name: "Copy instructions status" });
 
     await page.getByRole("button", { name: "Copy instructions" }).click();
-    await expect(status).toHaveText("Instructions copied.");
+    await expect(status).toHaveText("Copied");
 });
 
 test("Crochet reports clipboard failure", async ({ page }) => {
@@ -309,5 +312,5 @@ test("Crochet reports clipboard failure", async ({ page }) => {
 
     await page.getByRole("button", { name: "Copy instructions" }).click();
     await expect(page.getByRole("status", { name: "Copy instructions status" }))
-        .toHaveText("Could not copy instructions.");
+        .toHaveText("Copy failed");
 });

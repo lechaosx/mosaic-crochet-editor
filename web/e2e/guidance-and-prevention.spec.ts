@@ -35,7 +35,7 @@ test("prevention blocks a new impossible mark but allows its correction", async 
     const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
 
     await clickCell(page, 1, 0, { button: "right" });
-    await expect(page.locator("#status-feedback")).toContainText("Protected cell skipped");
+    await expect(page.locator("#status-feedback")).toContainText("Protected");
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toBe(before);
 
     await page.getByRole("button", { name: "Settings" }).click();

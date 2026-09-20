@@ -76,7 +76,7 @@ test("Space applies Select and reports a protected Pencil edit", async ({ page }
     await page.keyboard.press("p");
     await page.keyboard.press("2");
     await page.keyboard.press("Space");
-    await expect(page.locator("#status-feedback")).toContainText("Protected cell skipped");
+    await expect(page.locator("#status-feedback")).toContainText("Protected");
 });
 
 test("keyboard paint keeps allowed transform destinations when another is protected", async ({ page }) => {
@@ -87,7 +87,7 @@ test("keyboard paint keeps allowed transform destinations when another is protec
     await page.keyboard.press("h");
     await page.keyboard.press("2");
     await page.keyboard.press("Space");
-    await expect(page.locator("#status-feedback")).toContainText("Protected cell skipped");
+    await expect(page.locator("#status-feedback")).toContainText("Protected");
     const allowed = await cellCoord(page, 4, 8);
     expect(await pixelRGB(page, allowed.cx, allowed.cy)).toEqual([255, 255, 255]);
 });

@@ -53,7 +53,7 @@
         <button class="btn" id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
         <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
         <button class="btn" id="btn-more" title="More commands" aria-haspopup="menu" aria-expanded="false" hidden>More</button>
-        <span id="recovery-status" class="document-status" role="status" aria-label="Browser recovery" aria-live="polite">Saved locally</span>
+        <span id="recovery-status" class="document-status" role="status" aria-label="Browser recovery" aria-live="polite" hidden></span>
       </div>
       <div class="document-actions g-hlrot">
         <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false">⚙</button>
@@ -111,7 +111,7 @@
 
     <main class="canvas-area">
       <div id="chart-viewport" class="chart-viewport">
-        <canvas id="canvas" role="img" aria-label="Editable pattern chart" aria-describedby="canvas-cell-status" tabindex="0">Editable pattern chart. Use the authoring tools and canvas context to edit it.</canvas>
+        <canvas id="canvas" role="img" aria-label="Editable pattern chart" aria-describedby="canvas-cell-status" tabindex="0">Editable pattern chart.</canvas>
         <div class="canvas-controls" role="group" aria-label="Canvas view">
           <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate" data-workspace="design"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
           <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>
@@ -129,8 +129,6 @@
       </div>
       <span id="canvas-cell-status" class="visually-hidden" role="status" aria-label="Keyboard cell" aria-live="polite" aria-atomic="true"></span>
       <div id="status" class="status" aria-label="Canvas context" data-workspace="design">
-        <span id="status-tool"></span>
-        <span id="status-yarn"></span>
         <span id="status-coordinates" hidden></span>
         <span id="status-feedback" class="status-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></span>
         <div id="selection-mode-controls" class="selection-mode-controls" role="group" aria-label="Selection mode" hidden>
@@ -139,19 +137,12 @@
           <button class="btn" id="selection-subtract" type="button" aria-pressed="false" aria-disabled="true" title="Subtract cells from the current selection">Subtract</button>
         </div>
         <button id="status-selection" class="status-action" type="button" aria-controls="inspector-host" aria-expanded="false" title="Open selection actions" hidden></button>
-        <span id="status-overlays"></span>
-        <span id="status-invalid" hidden></span>
-        <span id="status-transforms" hidden></span>
       </div>
     </main>
 
     <section id="start-surface" class="start-surface" aria-labelledby="start-title" hidden>
       <div class="start-card">
-        <div>
-          <div class="start-kicker">Mosaic Crochet Editor</div>
-          <h1 id="start-title">Start a pattern</h1>
-          <p>Begin with a blank chart, open an editable pattern, or explore the tools in a small example.</p>
-        </div>
+        <h1 id="start-title">Start a pattern</h1>
         <div class="start-actions">
           <button class="btn" id="start-row" type="button">Row pattern</button>
           <button class="btn" id="start-round" type="button">Centre-out pattern</button>
@@ -163,13 +154,9 @@
 
     <aside id="instructions-workspace" class="instructions-workspace" aria-label="Crochet" hidden>
       <header class="instructions-header">
-        <div>
-          <div class="instructions-kicker">Pattern</div>
-          <h1 id="instructions-title" tabindex="-1">Crochet</h1>
-        </div>
+        <h1 id="instructions-title" tabindex="-1">Crochet</h1>
       </header>
-      <p class="instructions-intro">Chart-derived work in crochet order. Foundations, transitions, joins, and finishing remain your choice.</p>
-      <div class="instructions-options">
+      <div class="instructions-options" role="group" aria-label="Crochet options">
         <label class="toggle">
           <input type="checkbox" id="alternate">
           <span class="toggle-track"></span>
@@ -179,20 +166,16 @@
         <span id="export-action-status" class="instructions-action-status" role="status" aria-label="Copy instructions status" aria-live="polite"></span>
         <button class="btn" id="export-copy" type="button" aria-label="Copy instructions" title="Copy compressed instructions">Copy instructions</button>
       </div>
-      <div id="export-warning" class="warning instructions-blockers" hidden>
-        <strong id="instructions-blocker-summary"></strong>
-        <span>Instructions are a draft. Question marks and unresolved lines identify work the chart cannot derive.</span>
-        <div id="instructions-issues" aria-label="Instruction blockers"></div>
-      </div>
+      <span id="instructions-errors" class="instructions-errors" role="status" aria-label="Crochet errors" aria-live="polite" hidden></span>
       <section class="instructions-crochet">
         <div class="instructions-sequence">
           <div class="instructions-sequence-header">
-            <h2>Work sequence</h2>
+            <h2>Instructions</h2>
             <span id="instructions-live-progress" role="status" aria-live="polite"></span>
           </div>
-          <p class="warning instructions-live-save-warning" id="instructions-live-save-warning" role="alert" hidden>Progress could not be saved locally. Keep this tab open to retain your place.</p>
+          <p class="warning instructions-live-save-warning" id="instructions-live-save-warning" role="alert" title="Keep this tab open to retain your place" hidden>Progress not saved</p>
           <p id="instructions-live-unavailable" class="instructions-live-unavailable" hidden></p>
-          <ol id="instructions-units" aria-label="Work sequence"></ol>
+          <ol id="instructions-units" aria-label="Instructions"></ol>
           <h2 id="instructions-complete" tabindex="-1" hidden>Pattern complete</h2>
           <div class="instructions-live-actions">
             <button class="btn" id="instructions-live-back" type="button" title="Back one work unit">Back</button>
@@ -224,20 +207,15 @@
       <button class="btn" id="selection-paste" type="button" aria-label="Paste" title="Paste copied cells (Ctrl+V)">Paste <kbd>Ctrl+V</kbd></button>
       <button class="btn" id="selection-deselect" type="button" aria-label="Deselect" title="Place content and remove the selection (Escape)">Deselect <kbd>Esc</kbd></button>
     </div>
-    <div id="selection-deselect-help" class="popover-help">Deselect places the content and removes the selection.</div>
-    <div id="selection-paste-help" class="popover-help">Nothing copied yet.</div>
   </section>
 
   <!-- ── Settings inspector ───────────────────────────────────────────── -->
   <section id="hl-popover" class="inspector-panel" aria-label="Settings" hidden>
-    <div class="settings-choice">
-      <label class="toggle popover-row" title="Show chart-derived overlay and invalid-placement marks.">
+    <label class="toggle popover-row" title="Show overlays and invalid-placement marks">
         <span class="popover-label">Show stitch guidance</span>
-        <input type="checkbox" id="show-guidance" aria-describedby="guidance-help" checked>
+        <input type="checkbox" id="show-guidance" checked>
         <span class="toggle-track"></span>
-      </label>
-      <p id="guidance-help" class="popover-help">Show ✕ overlays and ! placement warnings on the chart.</p>
-    </div>
+    </label>
     <div class="popover-row" title="Fade the visible ✕ overlay marks and ! invalid marks.">
       <span class="popover-label">Guidance opacity</span>
       <input type="range" id="hl-opacity" value="100" min="1" max="100" aria-label="Guidance opacity">
@@ -251,14 +229,11 @@
       <input type="checkbox" id="labels-on" checked>
       <span class="toggle-track"></span>
     </label>
-    <div class="settings-choice">
-      <label class="toggle popover-row" title="Prevent new marks on cells that can never host a valid overlay; corrections still work.">
+    <label class="toggle popover-row" title="Block new marks on cells that cannot host an overlay">
         <span class="popover-label">Prevent impossible overlay placements</span>
-        <input type="checkbox" id="lock-invalid" aria-describedby="prevention-help" checked>
+        <input type="checkbox" id="lock-invalid" checked>
         <span class="toggle-track"></span>
-      </label>
-      <p id="prevention-help" class="popover-help">New impossible marks are blocked, but existing ones can be corrected. Turn off for free sketching.</p>
-    </div>
+    </label>
   </section>
 
   <!-- ── Mirror & Repeat inspector ───────────────────────────────────── -->
@@ -307,7 +282,6 @@
       <div class="popover-row">
         <button class="btn" id="replicate-selection" title="Stamp transformed copies from the current selection (T)" disabled>Stamp transformed copies</button>
       </div>
-      <div id="replicate-selection-hint" class="popover-help" aria-live="polite">Select cells and configure a transformation.</div>
       <div id="transform-error" class="warning" role="alert" hidden></div>
     </div>
   </section>

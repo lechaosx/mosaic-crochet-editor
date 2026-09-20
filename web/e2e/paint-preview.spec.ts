@@ -7,7 +7,7 @@ test("Pencil hover previews exact live mirror destinations without editing", asy
     const before = await page.evaluate(() => localStorage.getItem("mosaic-recovery"));
     const target = await cellCoord(page, 0, 1);
     await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("2 cells will change");
+    await expect(page.locator("#status-feedback")).toContainText("2 cells");
     await expect(page.locator("#status-feedback")).toContainText("0, 1");
     await expect(page.locator("#status-feedback")).toContainText("8, 1");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
@@ -23,8 +23,8 @@ test("Pencil hover distinguishes an unchanged mirror destination", async ({ page
     await page.keyboard.press("v");
     const target = await cellCoord(page, 0, 1);
     await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("1 cell will change");
-    await expect(page.locator("#status-feedback")).toContainText("1 destination unchanged or skipped");
+    await expect(page.locator("#status-feedback")).toContainText("1 cell");
+    await expect(page.locator("#status-feedback")).toContainText("1 unchanged");
 });
 
 test("Eraser and Invert preview current one-cell outcomes", async ({ page }) => {
@@ -34,11 +34,11 @@ test("Eraser and Invert preview current one-cell outcomes", async ({ page }) => 
 
     await page.keyboard.press("e");
     await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("1 cell will change");
+    await expect(page.locator("#status-feedback")).toContainText("1 cell");
 
     await page.keyboard.press("i");
     await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("1 cell will change");
+    await expect(page.locator("#status-feedback")).toContainText("1 cell");
 });
 
 test("Overlay preview names its inward support and explains an unavailable target", async ({ page }) => {
@@ -47,7 +47,7 @@ test("Overlay preview names its inward support and explains an unavailable targe
     const valid = await cellCoord(page, 2, 1);
     await page.mouse.move(valid.cx, valid.cy);
     await expect(page.locator("#status-feedback")).toContainText("support 2, 2");
-    await expect(page.locator("#status-feedback")).toContainText("1 cell will change");
+    await expect(page.locator("#status-feedback")).toContainText("1 cell");
     const previewGlyph = await pixelRGB(page, valid.cx, valid.cy);
     await clickCell(page, 2, 1);
     expect(await pixelRGB(page, valid.cx, valid.cy)).toEqual(previewGlyph);

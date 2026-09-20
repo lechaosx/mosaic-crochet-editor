@@ -113,11 +113,6 @@ export interface InstructionOverviewUnit {
     workedCoords: number[];
 }
 
-export interface InstructionIssue {
-    x: number;
-    y: number;
-}
-
 export interface InstructionsView {
     setProgress: (count: number, total: number) => void;
     endProgress: () => void;
@@ -127,12 +122,10 @@ export interface InstructionsView {
     clearUnits:  () => void;
     setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
                   onProgress: (completedUnits: number) => boolean) => void;
-    setBlockers: (issues: InstructionIssue[]) => void;
+    setErrors:   (count: number) => void;
     alternate:   () => boolean;
     setBusy:     (busy: boolean) => void;
     onAlternate: (cb: () => void) => void;
-    onUnitFocus: (cb: (coords: number[], label: string) => void) => void;
-    onIssueFocus: (cb: (issue: InstructionIssue) => void) => void;
     onLivePreview: (cb: (completedUnits: number | null) => void) => void;
     onClose:     (cb: () => void) => void;
     close:       () => void;
@@ -299,8 +292,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const selectionCut = el<HTMLButtonElement>("selection-cut");
     const selectionPaste = el<HTMLButtonElement>("selection-paste");
     const selectionDeselect = el<HTMLButtonElement>("selection-deselect");
-    const selectionDeselectHelp = el("selection-deselect-help");
-    const selectionPasteHelp = el("selection-paste-help");
     const modeButtons: Record<SelectionMoveMode, HTMLButtonElement> = {
         move: el("selection-mode-move"),
         duplicate: el("selection-mode-duplicate"),
@@ -361,9 +352,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
         selectionCopy.hidden = !hasSelection;
         selectionCut.hidden = !hasSelection;
         selectionDeselect.hidden = !hasSelection;
-        selectionDeselectHelp.hidden = !hasSelection;
         selectionPaste.disabled = !hasClip;
-        selectionPasteHelp.hidden = hasClip;
+        selectionPaste.title = hasClip ? "Paste copied cells (Ctrl+V)" : "Nothing copied";
         (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(key => {
             const active = key === mode;
             modeButtons[key].classList.toggle("btn--active", active);
@@ -440,7 +430,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         el(id).addEventListener("click", () => cb.onAddAxis(key))
     );
     const replicateSelection = el<HTMLButtonElement>("replicate-selection");
-    const replicateSelectionHint = el("replicate-selection-hint");
     const transformError = el("transform-error");
     replicateSelection.addEventListener("click", cb.onReplicateSelection);
     const liveTransforms = el<HTMLInputElement>("live-transforms");
@@ -448,10 +437,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     function setTransformState(hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) {
         replicateSelection.disabled = !hasSelection || !hasTransforms;
-        replicateSelectionHint.hidden = hasSelection && hasTransforms;
-        replicateSelectionHint.textContent = !hasTransforms
-            ? "Configure a symmetry axis or repeat grid."
-            : "Select cells to stamp transformed copies.";
+        replicateSelection.title = !hasTransforms
+            ? "Configure a transform first"
+            : !hasSelection ? "Select cells first" : "Stamp transformed copies (T)";
         liveTransforms.checked = liveEnabled;
 
         const state = !hasTransforms ? "none" : liveEnabled ? "live" : "paused";
@@ -668,9 +656,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setRecoveryStatus(state: "saved" | "recovered" | "failed") {
         const status = el("recovery-status");
         status.dataset.state = state;
+        status.hidden = state === "saved";
         status.textContent = state === "failed"
-            ? "Local save failed"
-            : state === "recovered" ? "Recovered from this device" : "Saved locally";
+            ? "Recovery failed"
+            : state === "recovered" ? "Recovered" : "";
         status.title = state === "failed"
             ? "Browser recovery could not be updated; recent changes may be lost if this tab closes."
             : "Browser recovery is current. Save .mcw creates a separate editable pattern file.";
@@ -866,9 +855,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const instructionsTitle = el("instructions-title");
     const unitsList      = el<HTMLOListElement>("instructions-units");
     const exportProgress = el("export-progress");
-    const exportWarning  = el("export-warning");
-    const blockerSummary = el("instructions-blocker-summary");
-    const issuesList     = el("instructions-issues");
     const alternateChk   = el<HTMLInputElement>("alternate");
     const liveUnavailable = el("instructions-live-unavailable");
     const liveProgress   = el("instructions-live-progress");
@@ -877,31 +863,28 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const liveBack       = el<HTMLButtonElement>("instructions-live-back");
     const liveDone       = el<HTMLButtonElement>("instructions-live-done");
     const exportActionStatus = el("export-action-status");
+    const instructionErrors = el("instructions-errors");
     const designMode     = el<HTMLButtonElement>("instructions-design");
     const crochetMode    = el<HTMLButtonElement>("btn-export");
     let instructionText = "";
     el("export-copy").addEventListener("click", async () => {
         try {
             await navigator.clipboard.writeText(instructionText);
-            exportActionStatus.textContent = "Instructions copied.";
+            exportActionStatus.textContent = "Copied";
         } catch {
-            exportActionStatus.textContent = "Could not copy instructions.";
+            exportActionStatus.textContent = "Copy failed";
         }
     });
 
     function openInstructions(): InstructionsView {
         const altListeners: (() => void)[] = [];
         const closeListeners: (() => void)[] = [];
-        const focusListeners: ((coords: number[], label: string) => void)[] = [];
-        const issueListeners: ((issue: InstructionIssue) => void)[] = [];
         const livePreviewListeners: ((completedUnits: number | null) => void)[] = [];
         const unitElements: HTMLElement[] = [];
-        let activeIssue: HTMLButtonElement | null = null;
         let liveUnits: readonly InstructionOverviewUnit[] = [];
         let liveCompleted = 0;
         let liveProgressChanged = (_completedUnits: number) => true;
         let isBusy = true;
-        let hasBlockers = false;
         const inspectorWasHidden = inspectorHost.hidden;
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
@@ -918,13 +901,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const workKind = () => liveUnits[0]?.label.startsWith("Round") ? "round" : "row";
         const renderCrochet = () => {
             const total = liveUnits.length;
-            liveProgress.textContent = `${liveCompleted} of ${total} complete`;
-            liveBack.disabled = isBusy || hasBlockers || liveCompleted === 0;
+            liveProgress.textContent = `${liveCompleted} / ${total}`;
+            liveBack.disabled = isBusy || liveCompleted === 0;
             liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
             liveBack.title = `Back one ${workKind()}`;
             unitElements.forEach((item, index) => {
                 item.classList.toggle("instructions-unit--complete", index < liveCompleted);
-                if (!hasBlockers && liveCompleted < total && index === liveCompleted) {
+                if (liveCompleted < total && index === liveCompleted) {
                     item.setAttribute("aria-current", "step");
                 } else {
                     item.removeAttribute("aria-current");
@@ -935,36 +918,27 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 liveComplete.hidden = false;
                 liveDone.hidden = true;
                 if (doneHadFocus) liveComplete.focus();
-                focusListeners.forEach(f => f([], "Pattern complete"));
                 livePreviewListeners.forEach(f => f(liveCompleted));
                 return;
             }
             const unit = liveUnits[liveCompleted];
             liveComplete.hidden = true;
             liveDone.hidden = false;
-            liveDone.disabled = isBusy || hasBlockers;
+            liveDone.disabled = isBusy;
             liveDone.setAttribute("aria-label", `Done with ${unit.label}`);
             liveDone.title = `Done with ${unit.label}`;
-            if (hasBlockers) {
-                livePreviewListeners.forEach(f => f(null));
-                return;
-            }
-            focusListeners.forEach(f => f([], unit.label));
             livePreviewListeners.forEach(f => f(liveCompleted + 1));
             unitElements[liveCompleted]?.scrollIntoView({ block: "nearest" });
         };
         const refreshCrochetAvailability = () => {
-            if (hasBlockers) {
-                liveUnavailable.textContent = "Resolve chart issues to track crochet progress.";
-                liveUnavailable.hidden = false;
-            } else if (!isBusy && liveUnits.length === 0) {
-                liveUnavailable.textContent = "No rows or rounds are available.";
+            if (!isBusy && liveUnits.length === 0) {
+                liveUnavailable.textContent = "No instructions";
                 liveUnavailable.hidden = false;
             } else {
                 liveUnavailable.hidden = true;
             }
-            liveBack.disabled = isBusy || hasBlockers || liveCompleted === 0;
-            liveDone.disabled = isBusy || hasBlockers || liveUnits.length === 0;
+            liveBack.disabled = isBusy || liveCompleted === 0;
+            liveDone.disabled = isBusy || liveUnits.length === 0;
         };
         liveBack.onclick = () => {
             if (liveCompleted === 0) return;
@@ -1030,7 +1004,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
             clearUnits: () => {
                 unitsList.replaceChildren();
                 unitElements.length = 0;
-                activeIssue = null;
                 liveUnits = [];
                 liveCompleted = 0;
                 refreshCrochetAvailability();
@@ -1043,32 +1016,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 refreshCrochetAvailability();
                 renderCrochet();
             },
-            setBlockers: (issues) => {
-                hasBlockers = issues.length > 0;
-                issuesList.replaceChildren();
-                exportWarning.hidden = issues.length === 0;
-                blockerSummary.textContent = issues.length === 1
-                    ? "Draft — 1 unresolved overlay position"
-                    : `Draft — ${issues.length} unresolved overlay positions`;
-                for (const issue of issues) {
-                    const button = document.createElement("button");
-                    button.type = "button";
-                    button.className = "btn instructions-issue";
-                    button.setAttribute("aria-label", `Focus unresolved overlay at ${issue.x}, ${issue.y}`);
-                    button.title = `Focus unresolved overlay at ${issue.x}, ${issue.y}`;
-                    button.setAttribute("aria-pressed", "false");
-                    button.textContent = `Unresolved overlay · ${issue.x}, ${issue.y}`;
-                    const focus = () => {
-                        activeIssue?.setAttribute("aria-pressed", "false");
-                        activeIssue = button;
-                        button.setAttribute("aria-pressed", "true");
-                        issueListeners.forEach(f => f(issue));
-                    };
-                    button.addEventListener("click", focus);
-                    issuesList.append(button);
-                    if (activeIssue === null) focus();
-                }
-                refreshCrochetAvailability();
+            setErrors: (count) => {
+                instructionErrors.textContent = count === 1 ? "1 error" : `${count} errors`;
+                instructionErrors.hidden = count === 0;
             },
             alternate: () => alternateChk.checked,
             setBusy: (busy) => {
@@ -1077,8 +1027,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 refreshCrochetAvailability();
             },
             onAlternate: (f) => altListeners.push(f),
-            onUnitFocus: (f) => focusListeners.push(f),
-            onIssueFocus: (f) => issueListeners.push(f),
             onLivePreview: (f) => livePreviewListeners.push(f),
             onClose:     (f) => closeListeners.push(f),
             close: () => close(true),

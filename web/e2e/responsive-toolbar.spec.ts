@@ -226,6 +226,7 @@ test("constrained panels overlay the canvas and move status above their visible 
     await page.setViewportSize({ width: 768, height: 1024 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 44);
+    await page.keyboard.press("Control+a");
     const canvas = await page.locator(".canvas-area").boundingBox();
     const dock = await page.locator("#authoring-dock").boundingBox();
     expect(dock!.y).toBeGreaterThan(canvas!.y);
@@ -249,6 +250,7 @@ test("wide overlay panels leave canvas geometry stable and anchor its chrome to 
     await page.setViewportSize({ width: 1280, height: 800 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 36);
+    await page.keyboard.press("Control+a");
     await expect(page.getByText("Colour", { exact: true })).toBeHidden();
     await expect(page.getByText("Overlay", { exact: true })).toBeHidden();
     await expect(page.getByText("Arrange", { exact: true })).toBeHidden();

@@ -20,17 +20,6 @@ const ANTS_SCREEN_PX_PER_SEC = 24;
 // look. With 24 px/s + 3 px/step the visual ticks ~8 times per second.
 const ANTS_STEP_PX = 3;
 
-const TOOL_LABELS = {
-    pencil: "Colour · Pencil",
-    fill: "Colour · Fill",
-    eraser: "Colour · Eraser",
-    invert: "Colour · Invert",
-    overlay: "Overlay placement",
-    select: "Arrange · Select",
-    wand: "Arrange · Magic wand",
-    move: "Arrange · Move",
-} as const;
-
 // `PlanDir` → outward offset in pattern coords. Single source of truth for
 // the direction enum decoding; the actual direction *selection* per cell
 // happens in Rust (`build_highlight_plan_*`).
@@ -114,7 +103,6 @@ export interface RendererState {
     axesInDeleteZone: Set<string>;
     previewRepeatGuides: boolean;
     paintPreview: { before: Uint8Array; after: Uint8Array; plan: Int16Array; unchangedTargets: number[] } | null;
-    focusPath: { x: number; y: number }[] | null;
     keyboardCursor: { x: number; y: number } | null;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
@@ -141,7 +129,6 @@ export function makeRendererState(): RendererState {
         axesInDeleteZone:       new Set<string>(),
         previewRepeatGuides:    false,
         paintPreview:          null,
-        focusPath:              null,
         keyboardCursor:        null,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
@@ -460,7 +447,6 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderFocusPath(ctx, view, dpr, rs.focusPath);
     renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, rs.paintPreview?.plan ?? store.plan, m,
         store.state.showGuidance === false ? 0 : hlOpacity / 100);
     if (rs.paintPreview) renderPaintPreviewOutline(
@@ -568,35 +554,6 @@ function renderPaintPreviewOutline(
             ctx.fill();
         }
     }
-    ctx.restore();
-}
-
-function renderFocusPath(
-    ctx: CanvasRenderingContext2D,
-    view: ViewState,
-    dpr: number,
-    path: { x: number; y: number }[] | null,
-) {
-    if (!path?.length) return;
-    ctx.save();
-    ctx.fillStyle = "rgba(214, 83, 163, 0.24)";
-    for (const point of path) ctx.fillRect(point.x, point.y, 1, 1);
-    ctx.strokeStyle = "#d653a3";
-    ctx.lineWidth = 2 / (view.zoom * dpr);
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(path[0].x + 0.5, path[0].y + 0.5);
-    for (let i = 1; i < path.length; i++) {
-        const previous = path[i - 1];
-        const point = path[i];
-        if (Math.abs(point.x - previous.x) + Math.abs(point.y - previous.y) <= 1) {
-            ctx.lineTo(point.x + 0.5, point.y + 0.5);
-        } else {
-            ctx.moveTo(point.x + 0.5, point.y + 0.5);
-        }
-    }
-    ctx.stroke();
     ctx.restore();
 }
 
@@ -1088,29 +1045,8 @@ function renderSymmetryGuides(
     ctx.restore();
 }
 
-// ── Status bar ─────────────────────────────────────────────────────────────
-export function updateStatus(store: Store, x: number | null, y: number | null, hasTransforms: boolean) {
-    const plan = store.plan;
-    if (!plan) return;
-    // Corners emit two records sharing the same wrong cell — counted once
-    // each since each is a distinct visible glyph.
-    let valid = 0, invalid = 0;
-    for (let i = 0; i < plan.length; i += 4) {
-        if (plan[i] === PlanType.Valid) valid++;
-        else                            invalid++;
-    }
-    const setItem = (id: string, text: string) => {
-        const item = document.getElementById(id)!;
-        item.textContent = text;
-        item.hidden = text === "";
-    };
-
-    setItem("status-tool", TOOL_LABELS[store.state.activeTool]);
-    setItem("status-yarn", `Yarn ${store.state.primaryColor === 1 ? "A" : "B"}`);
-    setItem("status-coordinates", x !== null && y !== null ? `${x}, ${y}` : "");
-    setItem("status-overlays", `${valid} overlay${valid !== 1 ? "s" : ""}`);
-    setItem("status-invalid", invalid > 0 ? `${invalid} invalid` : "");
-    setItem("status-transforms", hasTransforms
-        ? `Transforms ${store.state.liveTransforms ? "live" : "paused"}`
-        : "");
+export function updateCoordinates(x: number | null, y: number | null) {
+    const coordinates = document.getElementById("status-coordinates")!;
+    coordinates.textContent = x !== null && y !== null ? `${x}, ${y}` : "";
+    coordinates.hidden = x === null || y === null;
 }

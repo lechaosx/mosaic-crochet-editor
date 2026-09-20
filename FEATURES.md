@@ -93,6 +93,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
   - **Guidance opacity** (default 100%, minimum 1%) — dims visible ✕ and !. — **Agent's choice**
   - **Invalid marker intensity** (default 65%) — adjusts only the ! marker's HSL saturation, full range 0–100%. Hue and lightness stay algorithmic; the user can tune the "vibe" without bypassing the palette-aware hue choice. — **your decision**
 - **Prevent impossible overlay placements** reverts paint/fill/invert writes to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when it was correctly coloured; a contextual explanation appears and corrective edits still work. Fresh sessions start with prevention on, while saved sessions retain their setting. — **your decision** (protected-cell rule); **Agent's choice** (name, feedback, fresh default)
+- Settings keeps explanations in control hover text rather than persistent paragraphs. — **your decision**
 
 ## Labels
 
@@ -129,7 +130,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - A browser with no usable recovery shows four first-use choices: enter the editor with a Rows or Centre-out pattern and its modeless Pattern inspector, open `.mcw`, or load a small editable example. Canceling the file picker leaves the choices; choosing a blank pattern creates recovery immediately and restores directly on return. — **Agent's choice**
 - A continuous paint stroke renders every update but writes session recovery once on release. — **Agent's choice**
 - Legacy v4 recovery and Undo data migrate once into independently versioned v5 envelopes; a failed recovery migration write keeps the usable legacy copy. — **Agent's choice**
-- The document bar reports browser recovery as saved, restored, or failed independently from the explicitly named **Save .mcw** file action. — **Agent's choice**
+- The document bar reports only browser recovery restore or failure; routine successful recovery writes stay quiet and remain independent from the explicitly named **Save .mcw** file action. — **your decision**
 
 ## Save / Load / Crochet
 
@@ -143,7 +144,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Crochet emits structured work units line-by-line with a generation counter. Returning to Design cancels generation, and re-entering Crochet resumes locally only when the complete regenerated plan matches. — **your decision** (line-by-line and local progress); **Agent's choice** (structured units, counter, and exact-plan reset)
 - The complete compressed instruction dump remains available through Copy instructions; copy success or failure is reported inline, and there is no separate Text mode or download action. Alternate direction regenerates the list and copied text. — **your decision** (Copy replaces Text mode); **Agent's choice** (inline outcome)
 - Crochet instructions assign `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**
-- Invalid overlay placements are spatially linked blockers. The copied instructions remain a labelled draft using `?` for unresolved in-sequence work and one coordinate-bearing unresolved line per blocker; progress controls stay disabled. — **Agent's choice**
+- Crochet reports invalid overlay placements only as a plain singular or plural error count. They do not block progress; generation emits affected work as `oc`, while the chart carries location. — **your decision**
 - A failed Crochet progress write is visibly warned, and completing the final unit moves keyboard focus from the removed Done action to the completion heading. — **Agent's choice**
 
 ### Crochet instruction limitations
@@ -164,7 +165,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Compact More exposes standard menu semantics: opening focuses the first command, arrow and boundary keys navigate commands, Escape restores the trigger, and Tab dismisses the menu before continuing sequential focus. Commands return to ordinary button semantics in the wide document bar. — **Agent's choice**
 - Composite keyboard widgets consume their navigation keys so compact More cannot also move selected canvas content. — **Agent's choice**
 - An actionable selection count opens a labelled Selection card on every input type. It exposes Move content, Duplicate content, Move selection area, Copy, Cut, Paste, and Deselect using the existing float semantics; after the selection is removed, a clipboard count keeps Paste discoverable. Move outcomes are temporary UI state and reset to Move content after leaving Move. — **Agent's choice**
-- The context strip reports why a canvas gesture was rejected when painting outside the selection, starting Move without or outside a selection, choosing a geometrically unavailable Overlay target, or editing a protected cell. Repeated rejection within one gesture is coalesced into one polite status announcement. — **Agent's choice**
+- The context strip gives terse causes for rejected canvas gestures and coalesces repeated rejection within one gesture. — **your decision**
 - Mouse and pen hover preview the exact one-cell Pencil, Eraser, Invert, or Overlay result before contact, including live transform destinations, no-op destinations, overlay support, and rejected placement reasons; dense previews retain exact counts while simplifying outlines. — **Agent's choice**
 - Authoring tools, Mirror & Repeat, and Navigate use a consistent yarn-neutral line-icon family; accessible names and shortcuts remain stable, and the active tool has a non-colour underline. — **Agent's choice**
 - The focusable Design canvas has one strongly outlined logical-cell cursor rather than per-cell DOM controls. Arrow inspection announces coordinate, cell yarn, overlay state, and placement availability; Space applies the active tool, while selection nudges are scoped to Move and form controls retain native keys. — **Agent's choice**
@@ -178,7 +179,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Pattern, Selection, Mirror & Repeat, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
 - Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact, growing with increased root text size. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document commands and Settings move into More; when enlarged controls cannot fit a short viewport, the dock scrolls instead of collapsing the canvas. — **Agent's choice**
 - The compact document-bar breakpoint derives from its groups' measured intrinsic widths rather than device labels. — **Agent's choice**
-- A compact floating canvas status cluster shows the active tool and yarn, hovered coordinates, an actionable selection or clipboard count, valid and invalid overlay counts, and live/paused transform state. Navigation and status follow the unobscured right/bottom edges around overlay panels without resizing the canvas. — **your decision** (compact floating status and visual anchoring); **Agent's choice** (measured insets)
+- A compact floating canvas context appears only for hovered coordinates, actionable selection or clipboard counts, paint-preview details, and rejected actions. Tool, yarn, transform, and overlay state stay in their owning controls or on the chart. Navigation and context follow the unobscured right/bottom edges around overlay panels without resizing the canvas. — **your decision** (content and visual anchoring); **Agent's choice** (measured insets)
 - Crochet omits the Design-only Navigate toggle and authoring context cluster; Fit, zoom, rotation, and direct canvas navigation remain available beside Crochet progress. — **joint**
 
 ## Adaptive workspace conventions
