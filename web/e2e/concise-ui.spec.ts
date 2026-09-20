@@ -1,15 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { bootApp, cellCoord, clickCell } from "./_helpers";
 
-test("the start surface and idle canvas omit redundant guidance and status", async ({ page }) => {
+test("About and the idle canvas omit redundant guidance and status", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
 
-    const start = page.getByRole("region", { name: "Start a pattern" });
-    await expect(start).toBeVisible();
+    const about = page.getByRole("dialog", { name: "Mosaic Crochet Editor" });
+    await expect(about).toBeVisible();
     await expect(page.getByText("Begin with a blank chart", { exact: false })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Row pattern" }).click();
+    await page.getByRole("button", { name: "New", exact: true }).click();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("status", { name: "Browser recovery" })).toBeHidden();
     await expect(page.getByLabel("Canvas context")).toBeHidden();

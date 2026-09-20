@@ -140,17 +140,91 @@
       </div>
     </main>
 
-    <section id="start-surface" class="start-surface" aria-labelledby="start-title" hidden>
-      <div class="start-card">
-        <h1 id="start-title">Start a pattern</h1>
-        <div class="start-actions">
-          <button class="btn" id="start-row" type="button">Row pattern</button>
-          <button class="btn" id="start-round" type="button">Centre-out pattern</button>
-          <button class="btn" id="start-open" type="button">Open .mcw</button>
-          <button class="btn" id="start-example" type="button">Try an example</button>
+    <dialog id="about-dialog" class="about-dialog" aria-labelledby="about-title">
+      <article class="about-card">
+        <header class="about-header">
+          <div>
+            <h1 id="about-title">Mosaic Crochet Editor</h1>
+            <p class="about-updated">Last updated <span id="about-updated"></span></p>
+          </div>
+          <button class="btn btn--icon btn--ghost" id="about-close" type="button" aria-label="Close About" title="Close About">×</button>
+        </header>
+        <p>Design alternating-yarn mosaic crochet charts, preview overlay stitches, and follow chart-derived crochet instructions in your browser.</p>
+        <section class="about-changelog-region" aria-labelledby="about-changelog-title">
+          <h2 id="about-changelog-title">Changelog</h2>
+          <div class="about-changelog" id="about-changelog">
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-09-20">20 September 2026</time></h3>
+            <ul>
+              <li>Replaced the welcome screen with About, including the full changelog and New, Open, and Example actions.</li>
+              <li>Made the Design tool rail more compact and streamlined workspace guidance.</li>
+              <li>Started row numbering with the bottom foundation row.</li>
+              <li>Constrained About to a readable height, kept its actions visible, and made only its changelog entries scroll.</li>
+            </ul>
+          </section>
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-09-19">19 September 2026</time></h3>
+            <ul>
+              <li>Made Pattern a modeless inspector with live, undoable edits.</li>
+              <li>Combined generated instructions and progress into the stable Crochet workspace.</li>
+              <li>Kept one shared canvas and added chart-derived work-in-progress previews.</li>
+            </ul>
+          </section>
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-09-16">16 September 2026</time></h3>
+            <ul>
+              <li>Added a keyboard-operated canvas cell cursor.</li>
+              <li>Added first-run pattern, file, and example choices.</li>
+            </ul>
+          </section>
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-09-15">15 September 2026</time></h3>
+            <ul>
+              <li>Added direct selection modes, editable symmetry guides, and drawing previews.</li>
+              <li>Improved touch targets, enlarged-text layouts, and file error reporting.</li>
+              <li>Separated stitch-guidance visibility from invalid-placement prevention.</li>
+            </ul>
+          </section>
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-09-14">14 September 2026</time></h3>
+            <ul>
+              <li>Improved focus restoration, inspector keyboard behavior, hover labels, and compact-menu navigation.</li>
+              <li>Added visible canvas rotation and clearer pattern-file errors.</li>
+            </ul>
+          </section>
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-09-13">13 September 2026</time></h3>
+            <ul>
+              <li>Introduced the adaptive editor shell, explicit canvas navigation, and browser recovery status.</li>
+              <li>Added versioned project files, browser recovery, and persistent undo history.</li>
+              <li>Added repeat transforms and resumable crochet instructions.</li>
+            </ul>
+          </section>
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-09-12">12 September 2026</time></h3>
+            <ul>
+              <li>Added touch mask movement, selection symmetry replication, repeat grids, and transform safety bounds.</li>
+            </ul>
+          </section>
+          <section class="about-changelog-entry">
+            <h3><time datetime="2026-05-08">May 2026</time></h3>
+            <ul>
+              <li>Created the browser editor with row and centre-out geometry, drawing tools, overlays, selection, symmetry, saving, and generated crochet instructions.</li>
+            </ul>
+          </section>
+          </div>
+        </section>
+        <footer class="about-footer">
+          <a href="https://github.com/lechaosx/mosaic-crochet-editor" target="_blank" rel="noreferrer">Source code</a>
+          <span id="about-copyright"></span>
+        </footer>
+        <div class="about-actions" id="about-actions" aria-label="Pattern actions">
+          <button class="btn" id="about-new" type="button" autofocus>New</button>
+          <button class="btn" id="about-open" type="button">Open</button>
+          <button class="btn" id="about-example" type="button">Example</button>
         </div>
-      </div>
-    </section>
+      </article>
+    </dialog>
 
     <aside id="instructions-workspace" class="instructions-workspace" aria-label="Crochet" hidden>
       <header class="instructions-header">
@@ -234,6 +308,7 @@
         <input type="checkbox" id="lock-invalid" checked>
         <span class="toggle-track"></span>
     </label>
+    <button class="btn settings-about" id="settings-about" type="button" title="About Mosaic Crochet Editor">About Mosaic Crochet Editor</button>
   </section>
 
   <!-- ── Mirror & Repeat inspector ───────────────────────────────────── -->

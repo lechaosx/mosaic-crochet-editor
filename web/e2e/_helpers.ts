@@ -112,9 +112,9 @@ export async function touchPanZoom(
 export async function bootApp(page: Page) {
     await page.goto("/");
     await page.waitForFunction(() => !!window.__test_matrix__);
-    if (await page.locator("#start-surface").isVisible()) {
-        await page.locator("#start-row").evaluate((button: HTMLButtonElement) => button.click());
-        await page.locator("#start-surface").waitFor({ state: "hidden" });
+    if (await page.locator("#about-dialog").isVisible()) {
+        await page.locator("#about-new").evaluate((button: HTMLButtonElement) => button.click());
+        await page.locator("#about-dialog").waitFor({ state: "hidden" });
         await page.keyboard.press("Escape");
     }
 }

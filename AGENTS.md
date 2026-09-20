@@ -2,21 +2,23 @@
 
 ## Documentation roles
 
-The three top-level docs each have a distinct job. Keep them in their lane — don't mix purposes.
+The four top-level docs each have a distinct job. Keep them in their lane — don't mix purposes.
 
 - **`README.md`** — documentation **for users, devs, and visitors**. The "how do I use / build / run this" file. Prose, examples, screenshots if any. Lives in the present tense.
 - **`FEATURES.md`** — **product decisions**. Terse log of what the app does and (briefly) why, attributed. Not a tutorial — describe the decision, not the usage. If you want to write "Click X to do Y", that belongs in README.
 - **`ARCHITECTURE.md`** — **technical decisions**. Code structure, module boundaries, algorithm choices, library/runtime picks. Specific implementation detail (math formulas, function signatures, step-by-step algorithms) belongs in source code comments — not here. This file records *why* things are shaped the way they are.
+- **`CHANGELOG.md`** — dated, user-visible changes deployed continuously from `master`. No release versions or semantic versioning. Its complete entries are also shown in the About dialog.
 
-In short: README answers "how do I", FEATURES answers "why does it behave this way", ARCHITECTURE answers "why is the code shaped this way".
+In short: README answers "how do I", FEATURES answers "why does it behave this way", ARCHITECTURE answers "why is the code shaped this way", and CHANGELOG answers "what changed for users".
 
 ## Keeping the docs up to date
 
-The three docs are living and must stay in sync with the codebase. Never let them drift.
+The four docs are living and must stay in sync with the codebase. Never let them drift.
 
 ### When to update which
 
 - User-visible behaviour changes (a tool added, a gesture changed, a shortcut added) → update **README.md** *and* add a one-line decision to **FEATURES.md**.
+- Every user-visible change → add a terse entry under the current date in **CHANGELOG.md** and mirror the complete changelog in the About dialog. When the newest entry changes, update `LATEST_CHANGELOG_ID` in `web/src/about.ts` so About opens once for existing users.
 - Tech stack / dependency / module / non-trivial architectural change → add a one-line decision to **ARCHITECTURE.md**.
 - Bug fix that changes documented behaviour → update the relevant file(s).
 
@@ -32,7 +34,7 @@ When in doubt, be honest. If you suggested something and the user accepted it wi
 
 ### Format
 
-Follow the existing structure in each file. Add new entries under the appropriate section. Do not reorganise existing sections without being asked. Keep entries terse — these are decision logs, not tutorials.
+Follow the existing structure in each file. Add new entries under the appropriate section. Do not reorganise existing sections without being asked. Keep entries terse — decision logs and changelog entries are not tutorials. Changelog headings use dates, not release numbers.
 
 ### Priority
 

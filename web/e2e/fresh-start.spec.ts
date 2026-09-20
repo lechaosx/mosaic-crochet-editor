@@ -5,25 +5,31 @@ async function bootFresh(page: import("@playwright/test").Page) {
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
 }
 
-test("fresh load offers starts and choosing a pattern enters its modeless editor", async ({ page }) => {
+test("first load shows About and New creates a pattern in the Pattern inspector", async ({ page }) => {
     await bootFresh(page);
 
-    const start = page.getByRole("region", { name: "Start a pattern" });
-    await expect(start).toBeVisible();
-    await expect(page.getByRole("button", { name: "Row pattern" })).toBeFocused();
-    await expect(page.getByRole("button", { name: "Centre-out pattern" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Open .mcw" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Try an example" })).toBeVisible();
+    const about = page.getByRole("dialog", { name: "Mosaic Crochet Editor" });
+    await expect(about).toBeVisible();
+    await expect(about.getByText("Last updated 20 September 2026")).toBeVisible();
+    await expect(about.locator("#about-version")).toHaveCount(0);
+    await expect(about.getByRole("heading", { name: "Changelog" })).toBeVisible();
+    await expect(about.locator("#about-changelog")).toContainText("May 2026");
+    await expect(about.getByText(`© ${new Date().getFullYear()} Drahomír Dlabaja`)).toBeVisible();
+    await expect(about.getByRole("button", { name: "New" })).toBeFocused();
+    await expect(about.getByRole("button", { name: "Open" })).toBeVisible();
+    await expect(about.getByRole("button", { name: "Example" })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBeNull();
 
-    await page.getByRole("button", { name: "Centre-out pattern" }).click();
-    await expect(page.getByRole("radio", { name: "Centre-out" })).toBeChecked();
-    await expect(start).toBeHidden();
+    await about.getByRole("button", { name: "New" }).click();
+
+    await expect(about).toBeHidden();
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
+    expect(await page.evaluate(() => localStorage.getItem("mosaic-about-changelog")))
+        .toBe("2026-09-20-about-dialog-sizing");
 });
 
-test("canceling the fresh-start file picker keeps the choices available", async ({ page }) => {
+test("canceling the About file picker keeps the dialog available", async ({ page }) => {
     await page.addInitScript(() => {
         const nativeClick = HTMLInputElement.prototype.click;
         HTMLInputElement.prototype.click = function () {
@@ -36,16 +42,16 @@ test("canceling the fresh-start file picker keeps the choices available", async 
     });
     await bootFresh(page);
 
-    await page.getByRole("button", { name: "Open .mcw" }).click();
+    await page.getByRole("button", { name: "Open", exact: true }).click();
 
-    await expect(page.getByRole("region", { name: "Start a pattern" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBeNull();
 });
 
-test("opening an mcw file from the fresh choices enters the editor", async ({ page }) => {
+test("opening an mcw file from About enters the editor", async ({ page }) => {
     await bootFresh(page);
     const chooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Open .mcw" }).click();
+    await page.getByRole("button", { name: "Open", exact: true }).click();
     const chooser = await chooserPromise;
     await chooser.setFiles({
         name: "small.mcw",
@@ -59,26 +65,39 @@ test("opening an mcw file from the fresh choices enters the editor", async ({ pa
         })),
     });
 
-    await expect(page.locator("#start-surface")).toBeHidden();
+    await expect(page.locator("#about-dialog")).toBeHidden();
     const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
     expect(recovery.document.state.canvasWidth).toBe(3);
 });
 
-test("choosing an intentionally blank pattern restores directly on return", async ({ page }) => {
+test("closing About suppresses it until the latest changelog entry changes", async ({ page }) => {
     await bootFresh(page);
-    await page.getByRole("button", { name: "Row pattern" }).click();
-
-    await expect(page.locator("#start-surface")).toBeHidden();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
+    await page.getByRole("button", { name: "Close About" }).click();
+    await expect(page.locator("#about-dialog")).toBeHidden();
 
     await page.reload();
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
-    await expect(page.locator("#start-surface")).toBeHidden();
-    await expect(page.getByRole("status", { name: "Browser recovery" }))
-        .toHaveText("Recovered");
+    await expect(page.locator("#about-dialog")).toBeHidden();
+
+    await page.evaluate(() => localStorage.setItem("mosaic-about-changelog", "2026-09-19-pattern-inspector"));
+    await page.reload();
+    await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
+    await expect(page.locator("#about-dialog")).toBeVisible();
 });
 
-test("legacy browser recovery bypasses the start choices", async ({ page }) => {
+test("About reopens from Settings and light-dismisses", async ({ page }) => {
+    await bootFresh(page);
+    await page.getByRole("button", { name: "Close About" }).click();
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "About Mosaic Crochet Editor" }).click();
+    await expect(page.locator("#about-dialog")).toBeVisible();
+
+    await page.mouse.click(4, 4);
+    await expect(page.locator("#about-dialog")).toBeHidden();
+});
+
+test("legacy browser recovery still shows About for an unseen changelog entry", async ({ page }) => {
     await page.addInitScript(() => {
         localStorage.setItem("mosaic-pattern-v4", JSON.stringify({
             version: 4,
@@ -99,14 +118,14 @@ test("legacy browser recovery bypasses the start choices", async ({ page }) => {
     });
     await bootFresh(page);
 
-    await expect(page.locator("#start-surface")).toBeHidden();
+    await expect(page.locator("#about-dialog")).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-pattern-v4"))).toBeNull();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
 });
 
 test("example is editable and demonstrates overlay, mirror, repeat, and Crochet", async ({ page }) => {
     await bootFresh(page);
-    await page.getByRole("button", { name: "Try an example" }).click();
+    await page.getByRole("button", { name: "Example" }).click();
 
     const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
     expect(recovery.workspace.axes.length).toBeGreaterThan(0);
@@ -117,12 +136,26 @@ test("example is editable and demonstrates overlay, mirror, repeat, and Crochet"
     await expect(page.locator("#instructions-units")).toContainText("oc");
 });
 
-test("fresh choices fit a compact viewport", async ({ page }) => {
+test("About fits a compact viewport", async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 480 });
     await bootFresh(page);
 
-    for (const name of ["Row pattern", "Centre-out pattern", "Open .mcw", "Try an example"]) {
-        const button = page.getByRole("button", { name });
+    await expect(page.locator("#about-changelog")).toHaveCSS("overflow-y", "auto");
+    expect(await page.locator("#about-changelog").evaluate(element =>
+        element.scrollHeight > element.clientHeight,
+    )).toBe(true);
+    const changelogBox = await page.locator("#about-changelog").boundingBox();
+    const copyrightBox = await page.getByText(
+        `© ${new Date().getFullYear()} Drahomír Dlabaja`,
+    ).boundingBox();
+    const actionsBox = await page.locator("#about-actions").boundingBox();
+    expect(changelogBox).not.toBeNull();
+    expect(copyrightBox).not.toBeNull();
+    expect(actionsBox).not.toBeNull();
+    expect(actionsBox!.y).toBeGreaterThan(copyrightBox!.y + copyrightBox!.height);
+
+    for (const name of ["New", "Open", "Example"]) {
+        const button = page.getByRole("button", { name, exact: true });
         await expect(button).toBeVisible();
         const box = await button.boundingBox();
         expect(box).not.toBeNull();
@@ -130,4 +163,23 @@ test("fresh choices fit a compact viewport", async ({ page }) => {
         expect(box!.x + box!.width).toBeLessThanOrEqual(320);
         expect(box!.y + box!.height).toBeLessThanOrEqual(480);
     }
+});
+
+test("About caps its height and keeps the Changelog title outside the scroll area", async ({ page }) => {
+    await bootFresh(page);
+
+    const card = page.locator(".about-card");
+    const title = page.getByRole("heading", { name: "Changelog" });
+    const entries = page.locator("#about-changelog");
+    const cardBox = await card.boundingBox();
+    const titleBox = await title.boundingBox();
+    const entriesBox = await entries.boundingBox();
+
+    expect(cardBox).not.toBeNull();
+    expect(titleBox).not.toBeNull();
+    expect(entriesBox).not.toBeNull();
+    expect(cardBox!.height).toBeLessThanOrEqual(672);
+    expect(cardBox!.height).toBeLessThan(await page.evaluate(() => innerHeight));
+    expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(entriesBox!.y);
+    await expect(entries.getByRole("heading", { name: "Changelog" })).toHaveCount(0);
 });

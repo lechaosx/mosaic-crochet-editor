@@ -127,7 +127,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Persistence
 
 - Editor session state, including axes, repeat settings, live-transform mode, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (transform lifetime)
-- A browser with no usable recovery shows four first-use choices: enter the editor with a Rows or Centre-out pattern and its modeless Pattern inspector, open `.mcw`, or load a small editable example. Canceling the file picker leaves the choices; choosing a blank pattern creates recovery immediately and restores directly on return. — **Agent's choice**
+- About opens on the first visit and once when the newest dated changelog entry changes, independently of browser recovery and without release versioning. The height-constrained dialog keeps its Changelog heading, runtime-current-year copyright, project information, and bottom New/Open/Example actions outside the scrolling entry list; New resets to a blank row pattern and opens the modeless Pattern inspector. The dialog light-dismisses, has an explicit close action, and reopens from Settings. — **your decision**
 - A continuous paint stroke renders every update but writes session recovery once on release. — **Agent's choice**
 - Legacy v4 recovery and Undo data migrate once into independently versioned v5 envelopes; a failed recovery migration write keeps the usable legacy copy. — **Agent's choice**
 - The document bar reports only browser recovery restore or failure; routine successful recovery writes stay quiet and remain independent from the explicitly named **Save .mcw** file action. — **your decision**

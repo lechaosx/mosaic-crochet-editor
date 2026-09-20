@@ -29,6 +29,7 @@ import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
 import { fingerprintInstructionPlan, loadLiveProgress, saveLiveProgress } from "./live-progress";
+import { copyrightNotice, LATEST_CHANGELOG_DATE, markAboutSeen, shouldShowAbout } from "./about";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -100,13 +101,26 @@ const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
-const startSurface = document.getElementById("start-surface") as HTMLElement;
-let freshStartVisible = saved === null;
+const aboutDialog = document.getElementById("about-dialog") as HTMLDialogElement;
+(document.getElementById("about-updated") as HTMLElement).textContent = LATEST_CHANGELOG_DATE;
+(document.getElementById("about-copyright") as HTMLElement).textContent =
+    copyrightNotice(new Date().getFullYear());
 
-function hideFreshStart() {
-    freshStartVisible = false;
-    startSurface.hidden = true;
+function showAbout() {
+    if (!aboutDialog.open) aboutDialog.showModal();
 }
+
+function closeAbout() {
+    if (!aboutDialog.open) return;
+    markAboutSeen();
+    aboutDialog.close();
+}
+
+aboutDialog.addEventListener("close", markAboutSeen);
+aboutDialog.addEventListener("click", event => {
+    if (event.target === aboutDialog) closeAbout();
+});
+document.getElementById("about-close")!.addEventListener("click", closeAbout);
 let instructionsPreviewStore: Store | null = null;
 let instructionsOpen = false;
 let selectionMoveMode: SelectionMoveMode = "move";
@@ -923,7 +937,7 @@ async function onLoad() {
           colorA: loaded.colorA, colorB: loaded.colorB, float: null },
         { history: true, persist: true },
     );
-    if (freshStartVisible) hideFreshStart();
+    closeAbout();
     (document.getElementById("color-a") as HTMLInputElement).value = loaded.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = loaded.colorB;
     ui.setColors(loaded.colorA, loaded.colorB);
@@ -1079,20 +1093,30 @@ const ui: UIHandle = mountUI({
     onZoom: zoomView,
     onNavigate: toggleNavigate,
     onEditOpen, onEditChange, onEditCommit, onEditRevert,
-    onSave, onLoad, onInstructions,
+    onSave, onLoad, onInstructions, onAbout: showAbout,
 });
 
-function beginFreshPattern(mode: "row" | "round") {
-    const creating = freshStartVisible;
-    (document.getElementById("btn-edit") as HTMLButtonElement).click();
-    const radio = document.querySelector<HTMLInputElement>(`[name="edit-mode"][value="${mode}"]`)!;
-    if (!radio.checked) radio.click();
-    if (!creating) return;
-    historyReset(store.state);
+function beginFreshPattern() {
+    const fresh = defaultSession();
+    fresh.pixels = initialize_row_pattern(
+        fresh.pattern.canvasWidth, fresh.pattern.canvasHeight,
+    ).slice();
+    fitToView(
+        viewport.canvas, viewport.view, fresh.pattern, fresh.rotation, fresh.labelsVisible,
+    );
+    historyReset(fresh);
     patternHistorySession = false;
-    store.commit(() => {}, { recompute: false, render: false });
+    store.replace(fresh, { persist: true });
+    syncDomInputs(fresh);
+    ui.setTool(fresh.activeTool);
+    ui.setPrimary(fresh.primaryColor);
+    ui.setColors(fresh.colorA, fresh.colorB);
+    ui.setRepeatGrid(fresh.repeat);
+    ui.syncEditInputs(fresh.pattern);
+    refreshSymmetryUi();
     ui.setHistory(false, false);
-    hideFreshStart();
+    closeAbout();
+    (document.getElementById("btn-edit") as HTMLButtonElement).click();
 }
 
 function useExample() {
@@ -1110,15 +1134,14 @@ function useExample() {
     ui.setRepeatGrid(example.repeat);
     ui.syncEditInputs(example.pattern);
     refreshSymmetryUi();
-    hideFreshStart();
+    closeAbout();
 }
 
-document.getElementById("start-row")!.addEventListener("click", () => beginFreshPattern("row"));
-document.getElementById("start-round")!.addEventListener("click", () => beginFreshPattern("round"));
-document.getElementById("start-open")!.addEventListener("click", () => {
+document.getElementById("about-new")!.addEventListener("click", beginFreshPattern);
+document.getElementById("about-open")!.addEventListener("click", () => {
     (document.getElementById("btn-load") as HTMLButtonElement).click();
 });
-document.getElementById("start-example")!.addEventListener("click", useExample);
+document.getElementById("about-example")!.addEventListener("click", useExample);
 
 const clientToPattern = (cx: number, cy: number) => {
     const pattern = store.state.pattern;
@@ -1762,7 +1785,6 @@ if (saved) {
     refreshSymmetryUi();
     historyReset(store.state);
     ui.setHistory(canUndo(), canRedo());
-    startSurface.hidden = false;
-    (document.getElementById("start-row") as HTMLButtonElement).focus();
 }
 ui.setViewState(viewport.view.zoom, store.state.rotation, false);
+if (shouldShowAbout()) showAbout();

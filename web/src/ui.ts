@@ -80,6 +80,7 @@ export interface UICallbacks {
     onSave:            () => void;
     onLoad:            () => void;
     onInstructions:    () => void;
+    onAbout:           () => void;
 }
 
 export interface UIHandle {
@@ -630,6 +631,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el<HTMLInputElement>("invalid-intensity") .addEventListener("input",  cb.onInvalidIntensityChange);
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
+    el("settings-about").addEventListener("click", () => {
+        closeInspector();
+        cb.onAbout();
+    });
 
     /* ── History and canvas view ─────────────────────────────────────── */
     el("btn-undo").addEventListener("click", () => {

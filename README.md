@@ -43,7 +43,7 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 The workspace separates global document commands from mode-specific panels. One stable canvas fills the workspace while Design tools and Crochet instructions overlay its left edge on wide screens or its bottom edge on narrower screens. The document bar stays identical between modes; choosing Pattern, Load, Undo, Redo, or Settings from Crochet returns to Design before performing that authoring action. Save remains available without leaving Crochet. Pattern, Selection, Mirror & Repeat, and Settings share a right-edge or bottom-sheet inspector; its close button dismisses the current section. None of these panels resize or shift the canvas. At phone widths, lower-frequency document commands and Settings move into **More**. Controls retain their pointer or touch minimum size and grow when the browser's text size is increased; on short screens, panels scroll instead of collapsing the canvas.
 
-With no browser recovery, the app opens on **Start a pattern**. Choose **Row pattern** or **Centre-out pattern** to enter the editor with that blank chart and the normal Pattern inspector open, **Open .mcw** to load an editable file, or **Try an example** to explore Colour, Overlay, Mirror & Repeat, and Crochet in a small editable chart. Canceling the file picker returns to the start choices. Once a pattern is chosen, an example is opened, or a file is loaded, browser recovery resumes and later visits open directly in the editor.
+The app opens **About** on the first visit and once whenever its newest changelog entry changes. The height-constrained dialog keeps its Changelog heading, current-year copyright, project link, and three bottom actions visible while the complete dated entries scroll: **New** creates a blank row pattern and opens the normal Pattern inspector, **Open** loads an editable `.mcw` file, and **Example** loads a small chart that demonstrates Colour, Overlay, Mirror & Repeat, and Crochet. Canceling the file picker leaves About open. Close About with **×**, **Escape**, or a click outside it; reopen it from **Settings → About Mosaic Crochet Editor**.
 
 ### Patterns
 
@@ -121,6 +121,7 @@ The **⚙** button in the document bar opens Settings in the inspector:
 - **Guidance opacity** — fades visible ✕ / ! glyphs from 1–100%. Defaults to 100%.
 - **Show numbers** — row numbers in the left gutter, starting with Row 1 at the bottom; round numbers start with Round 1 at the innermost band and appear above half/quarter charts or in the corner cells of full charts.
 - **Prevent impossible overlay placements** — on for fresh sessions. It blocks new impossible marks (top row in Rows; outermost ring and diagonal corners in Centre-out), but still permits correcting an already-wrong cell. Turn it off for free sketching; saved sessions keep their prior choice.
+- **About Mosaic Crochet Editor** — opens the changelog, copyright, project information, and New/Open/Example actions.
 
 ### Zoom, pan, rotation
 
