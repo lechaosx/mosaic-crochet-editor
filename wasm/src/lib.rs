@@ -268,7 +268,7 @@ pub fn instruction_start_row(
             alternate,
         },
         index: 0,
-        total: (height - 1).max(0) as usize,
+        total: height.max(0) as usize,
     }
 }
 
@@ -352,13 +352,19 @@ mod instruction_session_tests {
         let pixels = initialize_row_pattern(3, 3);
         let mut session = instruction_start_row(&pixels, 3, 3, false);
 
-        assert_eq!(session.total(), 2);
-        let unit = session.next().expect("first row");
-        assert_eq!(unit.kind() as u8, InstructionUnitKind::Row as u8);
-        assert_eq!(unit.number(), 1);
-        assert_eq!(unit.yarn() as u8, InstructionYarn::B as u8);
-        assert_eq!(unit.text(), "Row 1: sc × 3");
-        assert_eq!(unit.worked_coords(), vec![0, 1, 1, 1, 2, 1]);
+        assert_eq!(session.total(), 3);
+        let foundation = session.next().expect("foundation row");
+        assert_eq!(foundation.kind() as u8, InstructionUnitKind::Row as u8);
+        assert_eq!(foundation.number(), 1);
+        assert_eq!(foundation.yarn() as u8, InstructionYarn::A as u8);
+        assert_eq!(foundation.text(), "Row 1: sc × 3");
+        assert_eq!(foundation.worked_coords(), vec![0, 2, 1, 2, 2, 2]);
+
+        let row_2 = session.next().expect("second row");
+        assert_eq!(row_2.number(), 2);
+        assert_eq!(row_2.yarn() as u8, InstructionYarn::B as u8);
+        assert_eq!(row_2.text(), "Row 2: sc × 3");
+        assert_eq!(row_2.worked_coords(), vec![0, 1, 1, 1, 2, 1]);
     }
 
     #[test]
@@ -383,6 +389,10 @@ mod instruction_session_tests {
 
         assert_eq!(
             instruction_wip_row(&pixels, 3, 3, 1),
+            vec![0, 0, 0, 0, 0, 0, 1, 1, 1],
+        );
+        assert_eq!(
+            instruction_wip_row(&pixels, 3, 3, 2),
             vec![0, 0, 0, 2, 2, 2, 1, 2, 1],
         );
     }

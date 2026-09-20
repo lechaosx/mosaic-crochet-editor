@@ -161,7 +161,7 @@ test("reselecting Crochet preserves its current line", async ({ page }) => {
     await crochet.click();
     await page.getByRole("button", { name: "Done with Row 1" }).click();
     await crochet.click();
-    await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn A"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 });
 
 test("Crochet links blockers and labels unresolved instructions as a draft", async ({ page }) => {
@@ -187,21 +187,21 @@ test("Crochet advances by whole rows and resumes the exact instruction plan", as
 
     await page.getByRole("button", { name: "Crochet" }).click();
     await expect(page.getByRole("img", { name: "Crochet progress chart" })).toBeVisible();
-    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn B"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
     await expect(page.getByRole("button", { name: "Back one row" })).toBeDisabled();
 
     await page.getByRole("button", { name: "Done with Row 1" }).click();
-    await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn A"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
     await expect(page.getByRole("button", { name: "Back one row" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Design" }).click();
     await page.getByRole("button", { name: "Crochet" }).click();
-    await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn A"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 
     await page.getByRole("button", { name: "Design" }).click();
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Crochet" }).click();
-    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn B"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
 });
 
 test("Crochet renders through the current row and no future rows", async ({ page }) => {
@@ -212,14 +212,12 @@ test("Crochet renders through the current row and no future rows", async ({ page
     await page.getByRole("button", { name: "Fit view" }).click();
     const currentRow1 = await cellCoord(page, 4, rowCount - 1);
     const futureRow2 = await cellCoord(page, 4, rowCount - 2);
-    const foundation = await cellCoord(page, 4, rowCount);
     expect(await pixelRGB(page, futureRow2.cx, futureRow2.cy)).toEqual([22, 22, 24]);
-    expect(await pixelRGB(page, currentRow1.cx, currentRow1.cy)).toEqual([255, 255, 255]);
-    expect(await pixelRGB(page, foundation.cx, foundation.cy)).not.toEqual([22, 22, 24]);
+    expect(await pixelRGB(page, currentRow1.cx, currentRow1.cy)).not.toEqual([22, 22, 24]);
 
     await page.getByRole("button", { name: "Done with Row 1" }).click();
     const completedRow1 = await cellCoord(page, 4, rowCount - 1);
-    expect(await pixelRGB(page, completedRow1.cx, completedRow1.cy)).toEqual([255, 255, 255]);
+    expect(await pixelRGB(page, completedRow1.cx, completedRow1.cy)).not.toEqual([22, 22, 24]);
     const currentRow2 = await cellCoord(page, 4, rowCount - 2);
     expect(await pixelRGB(page, currentRow2.cx, currentRow2.cy)).not.toEqual([22, 22, 24]);
 
@@ -260,7 +258,7 @@ test("Crochet reports when its progress cannot be saved locally", async ({ page 
         .toHaveText("Progress could not be saved locally. Keep this tab open to retain your place.");
     await page.getByRole("button", { name: "Design" }).click();
     await page.getByRole("button", { name: "Crochet" }).click();
-    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn B"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
 });
 
 test("Crochet completes and reopens a Centre-out round as one boundary", async ({ page }) => {

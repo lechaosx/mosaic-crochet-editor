@@ -71,7 +71,7 @@ pub struct RoundTraversal {
 }
 
 pub fn row_walk_at(size: IVec2, row_index: usize) -> impl Iterator<Item = IVec2> {
-    let y = size.y - 2 - row_index as i32;
+    let y = size.y - 1 - row_index as i32;
     gen move {
         for x in 0..size.x {
             yield IVec2::new(x, y);
@@ -268,11 +268,11 @@ mod tests {
     // ── row_walk_at ──────────────────────────────────────────────────────────
 
     #[test]
-    fn row_walk_yields_h_minus_1_rows() {
-        let rows_3x4: Vec<Vec<IVec2>> = (0..3).map(|i| row_walk_at(v(3, 4), i).collect()).collect();
-        assert_eq!(rows_3x4.len(), 3);
-        let rows_1x2: Vec<Vec<IVec2>> = (0..1).map(|i| row_walk_at(v(1, 2), i).collect()).collect();
-        assert_eq!(rows_1x2.len(), 1);
+    fn row_walk_yields_every_row() {
+        let rows_3x4: Vec<Vec<IVec2>> = (0..4).map(|i| row_walk_at(v(3, 4), i).collect()).collect();
+        assert_eq!(rows_3x4.len(), 4);
+        let rows_1x2: Vec<Vec<IVec2>> = (0..2).map(|i| row_walk_at(v(1, 2), i).collect()).collect();
+        assert_eq!(rows_1x2.len(), 2);
     }
 
     #[test]
@@ -285,19 +285,20 @@ mod tests {
 
     #[test]
     fn row_walk_left_to_right_at_correct_y() {
-        // row_index=0 → y = 4-2-0 = 2
+        // row_index=0 is the bottom row.
         let row: Vec<IVec2> = row_walk_at(v(3, 4), 0).collect();
-        assert_eq!(row[0], v(0, 2));
-        assert_eq!(row[1], v(1, 2));
-        assert_eq!(row[2], v(2, 2));
+        assert_eq!(row[0], v(0, 3));
+        assert_eq!(row[1], v(1, 3));
+        assert_eq!(row[2], v(2, 3));
     }
 
     #[test]
     fn row_walk_y_decreases_across_rows() {
-        let rows: Vec<Vec<IVec2>> = (0..3).map(|i| row_walk_at(v(1, 4), i).collect()).collect();
-        assert_eq!(rows[0][0].y, 2);
-        assert_eq!(rows[1][0].y, 1);
-        assert_eq!(rows[2][0].y, 0);
+        let rows: Vec<Vec<IVec2>> = (0..4).map(|i| row_walk_at(v(1, 4), i).collect()).collect();
+        assert_eq!(rows[0][0].y, 3);
+        assert_eq!(rows[1][0].y, 2);
+        assert_eq!(rows[2][0].y, 1);
+        assert_eq!(rows[3][0].y, 0);
     }
 
     #[test]
@@ -308,11 +309,11 @@ mod tests {
         };
         assert_eq!(
             row_walk_with_traversal(v(4, 4), 0, right_same),
-            [v(3, 2), v(2, 2), v(1, 2), v(0, 2)]
+            [v(3, 3), v(2, 3), v(1, 3), v(0, 3)]
         );
         assert_eq!(
             row_walk_with_traversal(v(4, 4), 1, right_same),
-            [v(3, 1), v(2, 1), v(1, 1), v(0, 1)]
+            [v(3, 2), v(2, 2), v(1, 2), v(0, 2)]
         );
 
         let left_alternate = RowTraversal {
@@ -321,11 +322,11 @@ mod tests {
         };
         assert_eq!(
             row_walk_with_traversal(v(4, 4), 0, left_alternate),
-            [v(0, 2), v(1, 2), v(2, 2), v(3, 2)]
+            [v(0, 3), v(1, 3), v(2, 3), v(3, 3)]
         );
         assert_eq!(
             row_walk_with_traversal(v(4, 4), 1, left_alternate),
-            [v(3, 1), v(2, 1), v(1, 1), v(0, 1)]
+            [v(3, 2), v(2, 2), v(1, 2), v(0, 2)]
         );
     }
 

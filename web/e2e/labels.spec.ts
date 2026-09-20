@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { bootApp } from "./_helpers";
 
-test("row labels exclude the foundation and number the first worked row 1", async ({ page }) => {
+test("row labels number the bottom row 1", async ({ page }) => {
     await page.addInitScript(() => {
         const labels: string[] = [];
         (window as typeof window & { __test_labels__: string[] }).__test_labels__ = labels;
@@ -17,5 +17,5 @@ test("row labels exclude the foundation and number the first worked row 1", asyn
     const labels = await page.evaluate(() => [
         ...new Set((window as typeof window & { __test_labels__: string[] }).__test_labels__),
     ]);
-    expect(labels).toEqual(["8", "7", "6", "5", "4", "3", "2", "1"]);
+    expect(labels).toEqual(["9", "8", "7", "6", "5", "4", "3", "2", "1"]);
 });

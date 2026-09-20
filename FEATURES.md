@@ -96,7 +96,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Labels
 
-- Row labels leave the bottom foundation unnumbered; the first worked row above it is Row 1. — **your decision**
+- Row labels number the bottom row as Row 1 and continue upward. — **your decision**
 - Round labels: innermost ring numbered 1, outermost = R. — **your decision**
 - Round placement: full mode → top-left corner cell of each ring; half/quarter → above the canvas, centred on column r. — **your decision**
 - Glyphs stay upright regardless of canvas rotation; positions follow the pattern's pan/zoom/rotation. — **your decision**
@@ -139,7 +139,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Cancelling a native save picker is quiet; picker or write failures use the dismissible document error and return focus to Save or compact More. — **Agent's choice**
 - Design and Crochet are peer modes selected in a stable document bar. One canvas remains fixed beneath mode-specific overlay panels, preserving its screen geometry, pan, zoom, and rotation; authoring is disabled in Crochet. — **your decision** (peer modes, stable top bar, and overlay-panel canvas model); **Agent's choice** (one persistent DOM canvas)
 - The document bar is identical in both modes. Pattern, Load, Undo, Redo, and Settings return to Design before acting; Save remains available without leaving Crochet. — **your decision** (identical bar); **Agent's choice** (command routing)
-- Crochet combines the chart-derived overview and progress flow into one complete row/round list. The current line is highlighted, and the canvas shows the finished appearance through that line while future work and overlay contributions remain absent. Done and Back move whole-line progress boundaries. — **your decision**
+- Crochet combines the chart-derived overview and progress flow into one complete row/round list. Row instructions start with the bottom foundation as Row 1; round instructions start with the innermost band as Round 1. The current line is highlighted, and the canvas shows the finished appearance through that line while future work and overlay contributions remain absent. Done and Back move whole-line progress boundaries. — **your decision**
 - Crochet emits structured work units line-by-line with a generation counter. Returning to Design cancels generation, and re-entering Crochet resumes locally only when the complete regenerated plan matches. — **your decision** (line-by-line and local progress); **Agent's choice** (structured units, counter, and exact-plan reset)
 - The complete compressed instruction dump remains available through Copy instructions; copy success or failure is reported inline, and there is no separate Text mode or download action. Alternate direction regenerates the list and copied text. — **your decision** (Copy replaces Text mode); **Agent's choice** (inline outcome)
 - Crochet instructions assign `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**

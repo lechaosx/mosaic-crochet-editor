@@ -53,9 +53,9 @@ pub fn row_work_at(
 ) -> Vec<WorkStep> {
     let unit = WorkUnitId::Row(row_index as u32 + 1);
     let yarn = if row_index % 2 == 0 {
-        YarnSlot::B
-    } else {
         YarnSlot::A
+    } else {
+        YarnSlot::B
     };
     let mut steps: Vec<WorkStep> = walk::row_walk_at(canvas_size, row_index)
         .map(|worked_coord| {
@@ -65,7 +65,11 @@ pub fn row_work_at(
                 yarn,
                 worked_coord,
                 parent_coord,
-                kind: stitch_from_highlight(highlights, parent_coord),
+                kind: if parent_coord.y >= canvas_size.y {
+                    Stitch::Sc
+                } else {
+                    stitch_from_highlight(highlights, parent_coord)
+                },
             }
         })
         .collect();
@@ -115,15 +119,7 @@ pub fn row_wip_pixels(
     common::compute_row_highlights(canvas_size, finished, &mut highlights);
     let mut wip = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
 
-    if canvas_size.y > 0 {
-        let foundation_y = canvas_size.y - 1;
-        for x in 0..canvas_size.x {
-            wip[[foundation_y as usize, x as usize]] =
-                common::natural_color_row(canvas_size.y, foundation_y);
-        }
-    }
-
-    for row_index in 0..completed_units.min(canvas_size.y.saturating_sub(1) as usize) {
+    for row_index in 0..completed_units.min(canvas_size.y as usize) {
         for step in row_work_at(&highlights, canvas_size, false, row_index) {
             wip[[step.worked_coord.y as usize, step.worked_coord.x as usize]] =
                 common::natural_color_row(canvas_size.y, step.worked_coord.y);
@@ -355,8 +351,8 @@ mod tests {
         let mut hl = no_highlights(1, 3);
         hl[[2, 0]] = common::HIGHLIGHT_VALID_OVERLAY;
 
-        assert_eq!(export_row_at(&hl, v(1, 3), false, 0), "Row 1: oc");
-        assert_eq!(export_row_at(&hl, v(1, 3), false, 1), "Row 2: sc");
+        assert_eq!(export_row_at(&hl, v(1, 3), false, 1), "Row 2: oc");
+        assert_eq!(export_row_at(&hl, v(1, 3), false, 2), "Row 3: sc");
     }
 
     #[test]
@@ -364,9 +360,9 @@ mod tests {
         let mut hl = no_highlights(1, 3);
         hl[[2, 0]] = common::HIGHLIGHT_INVALID;
 
-        let work = row_work_at(&hl, v(1, 3), false, 0);
+        let work = row_work_at(&hl, v(1, 3), false, 1);
         assert_eq!(work[0].kind, Stitch::Unresolved);
-        assert_eq!(export_row_at(&hl, v(1, 3), false, 0), "Row 1: ?");
+        assert_eq!(export_row_at(&hl, v(1, 3), false, 1), "Row 2: ?");
     }
 
     #[test]
@@ -376,32 +372,39 @@ mod tests {
         hl[[1, 0]] = common::HIGHLIGHT_VALID_OVERLAY;
 
         let row_1 = row_work_at(&hl, v(3, 3), false, 0);
+        assert!(row_1.iter().all(|step| step.kind == Stitch::Sc));
+        assert!(row_1.iter().all(|step| step.unit == WorkUnitId::Row(1)));
+        assert!(row_1.iter().all(|step| step.yarn == YarnSlot::A));
+        assert_eq!(row_1[1].worked_coord, v(1, 2));
+        assert_eq!(export_row_at(&hl, v(3, 3), false, 0), "Row 1: sc × 3");
+
+        let row_2 = row_work_at(&hl, v(3, 3), false, 1);
         assert_eq!(
-            row_1.iter().map(|step| step.kind).collect::<Vec<_>>(),
+            row_2.iter().map(|step| step.kind).collect::<Vec<_>>(),
             [Stitch::Sc, Stitch::Oc, Stitch::Sc,]
         );
-        assert!(row_1.iter().all(|step| step.unit == WorkUnitId::Row(1)));
-        assert!(row_1.iter().all(|step| step.yarn == YarnSlot::B));
-        assert_eq!(row_1[1].worked_coord, v(1, 1));
-        assert_eq!(row_1[1].parent_coord, v(1, 2));
-        assert_eq!(export_row_at(&hl, v(3, 3), false, 0), "Row 1: sc, oc, sc");
+        assert!(row_2.iter().all(|step| step.unit == WorkUnitId::Row(2)));
+        assert!(row_2.iter().all(|step| step.yarn == YarnSlot::B));
+        assert_eq!(row_2[1].worked_coord, v(1, 1));
+        assert_eq!(row_2[1].parent_coord, v(1, 2));
+        assert_eq!(export_row_at(&hl, v(3, 3), false, 1), "Row 2: sc, oc, sc");
 
-        let row_2 = row_work_at(&hl, v(3, 3), true, 1);
+        let row_3 = row_work_at(&hl, v(3, 3), true, 2);
         assert_eq!(
-            row_2
+            row_3
                 .iter()
                 .map(|step| step.worked_coord)
                 .collect::<Vec<_>>(),
-            [v(2, 0), v(1, 0), v(0, 0),]
+            [v(0, 0), v(1, 0), v(2, 0),]
         );
-        assert!(row_2.iter().all(|step| step.unit == WorkUnitId::Row(2)));
-        assert!(row_2.iter().all(|step| step.yarn == YarnSlot::A));
-        assert_eq!(row_2[2].kind, Stitch::Oc);
-        assert_eq!(row_2[2].parent_coord, v(0, 1));
-        assert_eq!(export_row_at(&hl, v(3, 3), false, 1), "Row 2: oc, sc × 2");
-        assert_eq!(export_row_at(&hl, v(3, 3), true, 1), "Row 2: sc × 2, oc");
+        assert!(row_3.iter().all(|step| step.unit == WorkUnitId::Row(3)));
+        assert!(row_3.iter().all(|step| step.yarn == YarnSlot::A));
+        assert_eq!(row_3[0].kind, Stitch::Oc);
+        assert_eq!(row_3[0].parent_coord, v(0, 1));
+        assert_eq!(export_row_at(&hl, v(3, 3), false, 2), "Row 3: oc, sc × 2");
+        assert_eq!(export_row_at(&hl, v(3, 3), true, 2), "Row 3: oc, sc × 2");
 
-        let structured = row_work_sequence_at(&hl, v(3, 3), false, 1);
+        let structured = row_work_sequence_at(&hl, v(3, 3), false, 2);
         let mut expanded = Vec::new();
         expand_kinds(&structured.compression, &mut expanded);
         assert_eq!(
@@ -500,16 +503,19 @@ mod tests {
         finished[[1, 0]] = common::opposite_color(common::natural_color_row(size.y, 1));
 
         let before_row_1 = row_wip_pixels(&finished, size, 0);
-        assert_eq!(before_row_1.row(0).to_vec(), [0, 0, 0]);
-        assert_eq!(before_row_1.row(1).to_vec(), [0, 0, 0]);
-        assert_eq!(before_row_1.row(2).to_vec(), [1, 1, 1]);
+        assert!(before_row_1.iter().all(|pixel| *pixel == common::COLOR_TRANSPARENT));
 
         let after_row_1 = row_wip_pixels(&finished, size, 1);
         assert_eq!(after_row_1.row(0).to_vec(), [0, 0, 0]);
-        assert_eq!(after_row_1.row(1).to_vec(), [2, 2, 2]);
-        assert_eq!(after_row_1.row(2).to_vec(), [1, 2, 1]);
+        assert_eq!(after_row_1.row(1).to_vec(), [0, 0, 0]);
+        assert_eq!(after_row_1.row(2).to_vec(), [1, 1, 1]);
 
-        assert_eq!(row_wip_pixels(&finished, size, 2), finished);
+        let after_row_2 = row_wip_pixels(&finished, size, 2);
+        assert_eq!(after_row_2.row(0).to_vec(), [0, 0, 0]);
+        assert_eq!(after_row_2.row(1).to_vec(), [2, 2, 2]);
+        assert_eq!(after_row_2.row(2).to_vec(), [1, 2, 1]);
+
+        assert_eq!(row_wip_pixels(&finished, size, 3), finished);
     }
 
     #[test]

@@ -285,7 +285,7 @@ export function fitToView(
     include( W / 2,  H / 2);
 
     if (labelsVisible && pattern.mode === "row") {
-        const labelWidth = 0.34 * String(H - 1).length;
+        const labelWidth = 0.34 * String(H).length;
         // The right-aligned labels stay upright while their anchors rotate with the chart.
         const includeRowLabel = (y: number) => {
             const x = -W / 2 - 0.25;
@@ -298,7 +298,7 @@ export function fitToView(
             maxY = Math.max(maxY, anchorY + 0.28);
         };
         includeRowLabel(0.5);
-        includeRowLabel(H - 1.5);
+        includeRowLabel(H - 0.5);
     } else if (labelsVisible && pattern.mode === "round" && pattern.offsetY !== 0) {
         const halfWidth = 0.34 * String(pattern.rounds).length;
         const includeRoundLabel = (x: number) => {
@@ -787,7 +787,7 @@ function renderHighlightSymbols(
     ctx.restore();
 }
 
-// Row labels in the left gutter; the bottom canvas row is the unnumbered foundation.
+// Row labels in the left gutter — row 1 at the bottom (mosaic convention).
 function renderRowLabels(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     pattern: RowState, m: DOMMatrix,
@@ -800,9 +800,9 @@ function renderRowLabels(
     ctx.fillStyle  = "rgba(210, 210, 220, 0.75)";
     ctx.textAlign  = "right";
     ctx.textBaseline = "middle";
-    for (let y = 0; y < H - 1; y++) {
+    for (let y = 0; y < H; y++) {
         const p = m.transformPoint({ x: -0.25, y: y + 0.5 });
-        ctx.fillText(String(H - 1 - y), p.x, p.y);
+        ctx.fillText(String(H - y), p.x, p.y);
     }
     ctx.restore();
 }
