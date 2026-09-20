@@ -31,10 +31,6 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
             primaryColor: 2,
             axes: addAxis(addAxis([], "V", 3, 3), "H", 3, 3),
             repeat: { enabled: true, tileWidth: 3, tileHeight: 2, copiesX: 2, copiesY: 1 },
-            hlOpacity: 42,
-            invalidIntensity: 17,
-            labelsVisible: false,
-            lockInvalid: true,
             rotation: 90,
             pixels: filledPixels(3, 3, 2),
             float: makeFloat([{ x: 2, y: 0, v: 1 }]),
@@ -49,34 +45,12 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.axes.find(a => a.kind === "V")!.active).toBe(true);
         expect(loaded!.axes.find(a => a.kind === "H")!.active).toBe(true);
         expect(loaded!.repeat).toEqual(s.repeat);
-        expect(loaded!.hlOpacity).toBe(42);
-        expect(loaded!.invalidIntensity).toBe(17);
-        expect(loaded!.labelsVisible).toBe(false);
-        expect(loaded!.lockInvalid).toBe(true);
         expect(loaded!.rotation).toBe(90);
         expect(loaded!.pixels[0]).toBe(2);
         expect(loaded!.float).not.toBeNull();
         expect(loaded!.float!.x).toBe(2);
         expect(loaded!.float!.y).toBe(0);
         expect(loaded!.float!.pixels[0]).toBe(1);
-    });
-
-    test("guidance visibility round-trips independently of placement prevention", () => {
-        saveToLocalStorage(rowSession(3, 3, { showGuidance: false, lockInvalid: true, hlOpacity: 65 }));
-        const loaded = loadFromLocalStorage()!;
-        expect(loaded.showGuidance).toBe(false);
-        expect(loaded.lockInvalid).toBe(true);
-        expect(loaded.hlOpacity).toBe(65);
-    });
-
-    test("older zero-opacity recovery stays visually hidden and retains its placement choice", () => {
-        saveToLocalStorage(rowSession(3, 3, { hlOpacity: 0, lockInvalid: false }));
-        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        delete raw.preferences.showGuidance;
-        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
-        const loaded = loadFromLocalStorage()!;
-        expect(loaded.showGuidance).toBe(false);
-        expect(loaded.lockInvalid).toBe(false);
     });
 
     test("nothing in localStorage → null", () => {

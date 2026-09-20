@@ -23,16 +23,79 @@ test("About and the idle canvas omit redundant guidance and status", async ({ pa
     await expect(page.getByLabel("Canvas context")).not.toContainText("overlays");
 });
 
-test("settings keeps guidance in hover text instead of inline prose", async ({ page }) => {
+test("Pattern owns all colour editing while Settings keeps non-colour preferences", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Pattern" }).click();
 
-    await expect(page.getByText("Show ✕ overlays", { exact: false })).toHaveCount(0);
-    await expect(page.getByText("New impossible marks", { exact: false })).toHaveCount(0);
-    await expect(page.locator("label:has(#show-guidance)"))
-        .toHaveAttribute("title", "Show overlays and invalid-placement marks");
+    await expect(page.getByLabel("Yarn A colour")).toHaveValue("#000000");
+    await expect(page.getByLabel("Yarn B colour")).toHaveValue("#ffffff");
+    await expect(page.getByRole("button", { name: "Swap yarn colours" })).toBeVisible();
+    await expect(page.locator("#edit-yarn")).toHaveCount(0);
+    const danger = page.getByLabel("Danger colour");
+    const accent = page.getByLabel("Accent colour");
+    for (const picker of [danger, accent]) {
+        expect(await picker.evaluate(element => {
+            const style = getComputedStyle(element);
+            return style.opacity !== "0" && style.pointerEvents !== "none";
+        })).toBe(true);
+    }
+    await danger.fill("#123456");
+    await accent.fill("#abcdef");
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-preferences")!)))
+        .toMatchObject({ dangerColor: "#123456", accentColor: "#abcdef" });
+
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Settings" }).click();
+    const settings = page.locator("#hl-popover");
+
+    await expect(page.locator("#show-guidance")).toHaveCount(0);
+    await expect(page.getByRole("slider", { name: "Guidance opacity" })).toHaveAttribute("min", "0");
+    await expect(settings.getByLabel("Danger colour")).toHaveCount(0);
+    await expect(settings.getByLabel("Accent colour")).toHaveCount(0);
     await expect(page.locator("label:has(#lock-invalid)"))
         .toHaveAttribute("title", "Block new marks on cells that cannot host an overlay");
+});
+
+test("app preferences survive reload and are not part of undo or recovery snapshots", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Settings" }).click();
+    const opacity = page.getByRole("slider", { name: "Guidance opacity" });
+    await opacity.fill("37");
+    await page.keyboard.press("Escape");
+
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: "Undo" }).click();
+    expect(await page.evaluate(() => {
+        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        return { preferences: recovery.preferences, stored: localStorage.getItem("mosaic-preferences") };
+    })).toEqual({
+        preferences: undefined,
+        stored: JSON.stringify({
+            version: 1,
+            guidanceOpacity: 37,
+            dangerColor: "#ff7474",
+            accentColor: "#d653a3",
+            labelsVisible: true,
+            lockInvalid: true,
+        }),
+    });
+
+    await page.reload();
+    await page.waitForFunction(() => !!window.__test_matrix__);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByRole("slider", { name: "Guidance opacity" })).toHaveValue("37");
+});
+
+test("status is passive and Selection actions live in the authoring dock", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("Control+a");
+
+    const status = page.getByLabel("Canvas context");
+    await expect(status.getByRole("button")).toHaveCount(0);
+    const selection = page.getByRole("button", { name: /Selection actions/ });
+    await expect(selection).toContainText("81");
+    await selection.click();
+    await expect(page.getByRole("group", { name: "Move outcome" })).toBeVisible();
 });
 
 test("contextual inspectors rely on controls and hover text", async ({ page }) => {

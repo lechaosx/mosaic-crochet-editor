@@ -4,6 +4,11 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 20 September 2026
 
+- Overlay drawing now has explicit Place, Clear, and Invert actions for mouse, pen, and touch, with opposite-action right-click shortcuts.
+- Selection modes and actions now live together in the Selection inspector with their shortcuts.
+- The canvas shows committed work without hover previews, while its passive status prioritizes useful context.
+- Pattern brings visible yarn and canvas-colour editing together, while yarn swatches retain direct editing shortcuts.
+- Tool selection, transform guides, warnings, and selections now use a cleaner, consistent visual language.
 - About brings New, Open, Example, and concise release notes together after each update.
 - Design tools leave more room for the chart.
 - Row numbering starts with the bottom foundation row.

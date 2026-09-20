@@ -78,12 +78,14 @@
         <button class="btn btn--icon" id="tool-pencil" title="Pencil — set finished-square colour (P)" aria-label="Pencil"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-pencil"/></svg></button>
         <button class="btn btn--icon" id="tool-fill"   title="Fill a finished-colour region (F)" aria-label="Fill"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-fill"/></svg></button>
         <button class="btn btn--icon" id="tool-eraser" title="Restore natural row or round colour (E); right-click adds overlay" aria-label="Eraser"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-eraser"/></svg></button>
-        <button class="btn btn--icon" id="tool-invert" title="Invert finished-square colours (I)" aria-label="Invert"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-invert"/></svg></button>
+        <button class="btn btn--icon" id="tool-invert" title="Invert finished-square colours (I)" aria-label="Invert colours"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-invert"/></svg></button>
       </div>
 
       <div class="dock-group g-overlay" role="group" aria-label="Overlay tools">
         <span class="dock-group-label" aria-hidden="true">Overlay</span>
-        <button class="btn btn--icon" id="tool-overlay" title="Place a chart-required overlay (O); right-click removes it" aria-label="Overlay"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-overlay"/></svg></button>
+        <button class="btn" id="tool-overlay" title="Place an overlay (O); right-click clears" aria-label="Place overlay">Place</button>
+        <button class="btn" id="overlay-clear" title="Clear an overlay (Shift+O); right-click places" aria-label="Clear overlay">Clear</button>
+        <button class="btn" id="overlay-invert" title="Invert overlay presence" aria-label="Invert overlay">Invert</button>
       </div>
 
       <div class="dock-group g-transform" role="group" aria-label="Arrange tools">
@@ -91,30 +93,26 @@
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-select"/></svg></button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
-        <button class="btn" id="move-mask" title="Move the selection mask without moving its content" aria-label="Mask move" aria-pressed="false">Mask</button>
+        <button class="btn" id="selection-actions" title="Selection modes and actions" aria-label="Selection actions" aria-controls="inspector-host" aria-expanded="false">Selection</button>
         <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Symmetry and repeat: no transforms configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
       </div>
 
       <div class="dock-group g-colors" role="group" aria-label="Yarns">
         <span class="dock-group-label" aria-hidden="true">Yarns</span>
-        <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Select Yarn A (1) — double-click or long-press to edit" aria-label="Yarn A" aria-pressed="true">
+        <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Select Yarn A (1)" aria-label="Yarn A" aria-pressed="true">
           <span class="swatch-label" aria-hidden="true">A</span>
           <span class="swatch-check" aria-hidden="true">✓</span>
-          <input type="color" id="color-a" value="#000000" tabindex="-1">
         </div>
-        <div id="swatch-b" class="swatch" tabindex="0" role="button" title="Select Yarn B (2) — double-click or long-press to edit" aria-label="Yarn B" aria-pressed="false">
+        <div id="swatch-b" class="swatch" tabindex="0" role="button" title="Select Yarn B (2)" aria-label="Yarn B" aria-pressed="false">
           <span class="swatch-label" aria-hidden="true">B</span>
           <span class="swatch-check" aria-hidden="true">✓</span>
-          <input type="color" id="color-b" value="#ffffff" tabindex="-1">
         </div>
-        <button class="btn" id="edit-yarn" type="button" aria-label="Edit Yarn A" title="Edit Yarn A colour">Edit</button>
-        <button class="btn" id="swap-yarns" type="button" aria-label="Swap yarns" title="Swap Yarn A and Yarn B colours">Swap</button>
       </div>
     </nav>
 
     <main class="canvas-area">
       <div id="chart-viewport" class="chart-viewport">
-        <canvas id="canvas" role="img" aria-label="Editable pattern chart" aria-describedby="canvas-cell-status" tabindex="0">Editable pattern chart.</canvas>
+        <canvas id="canvas" role="img" aria-label="Editable pattern chart" tabindex="0">Editable pattern chart.</canvas>
         <div class="canvas-controls" role="group" aria-label="Canvas view">
           <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate" data-workspace="design"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
           <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>
@@ -130,16 +128,10 @@
           </div>
         </div>
       </div>
-      <span id="canvas-cell-status" class="visually-hidden" role="status" aria-label="Keyboard cell" aria-live="polite" aria-atomic="true"></span>
       <div id="status" class="status" aria-label="Canvas context" data-workspace="design">
         <span id="status-coordinates" hidden></span>
         <span id="status-feedback" class="status-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></span>
-        <div id="selection-mode-controls" class="selection-mode-controls" role="group" aria-label="Selection mode" hidden>
-          <button class="btn" id="selection-replace" type="button" aria-pressed="true" title="Replace the current selection">Replace</button>
-          <button class="btn" id="selection-add" type="button" aria-pressed="false" title="Add cells to the current selection">Add</button>
-          <button class="btn" id="selection-subtract" type="button" aria-pressed="false" aria-disabled="true" title="Subtract cells from the current selection">Subtract</button>
-        </div>
-        <button id="status-selection" class="status-action" type="button" aria-controls="inspector-host" aria-expanded="false" title="Open selection actions" hidden></button>
+        <span id="status-selection" hidden></span>
       </div>
     </main>
 
@@ -211,10 +203,15 @@
       <strong id="selection-card-title">Selection</strong>
       <span id="selection-card-clipboard"></span>
     </div>
+    <div id="selection-mode-controls" class="selection-mode-controls" role="group" aria-label="Selection mode" hidden>
+      <button class="btn" id="selection-replace" type="button" aria-pressed="true" title="Replace the current selection">Replace</button>
+      <button class="btn" id="selection-add" type="button" aria-pressed="false" title="Add cells to the current selection (Shift)">Add <kbd>Shift</kbd></button>
+      <button class="btn" id="selection-subtract" type="button" aria-pressed="false" aria-disabled="true" title="Subtract cells from the current selection (Ctrl)">Subtract <kbd>Ctrl</kbd></button>
+    </div>
     <div id="selection-modes" class="selection-modes" role="group" aria-label="Move outcome">
       <button class="btn" id="selection-mode-move" type="button" aria-pressed="true" title="Move the selected cells when dragging">Move content</button>
-      <button class="btn" id="selection-mode-duplicate" type="button" aria-pressed="false" title="Leave the original cells and move a copy">Duplicate content</button>
-      <button class="btn" id="selection-mode-area" type="button" aria-pressed="false" title="Move the selection boundary without moving content">Move selection area</button>
+      <button class="btn" id="selection-mode-duplicate" type="button" aria-pressed="false" title="Leave the original cells and move a copy (Ctrl)">Duplicate <kbd>Ctrl</kbd></button>
+      <button class="btn" id="selection-mode-area" type="button" aria-pressed="false" title="Move the selection boundary without moving content (Alt)">Move area <kbd>Alt</kbd></button>
     </div>
     <div class="selection-actions">
       <button class="btn" id="selection-copy" type="button" aria-label="Copy" title="Copy selected cells (Ctrl+C)">Copy <kbd>Ctrl+C</kbd></button>
@@ -226,18 +223,9 @@
 
   <!-- ── Settings inspector ───────────────────────────────────────────── -->
   <section id="hl-popover" class="inspector-panel" aria-label="Settings" hidden>
-    <label class="toggle popover-row" title="Show overlays and invalid-placement marks">
-        <span class="popover-label">Show stitch guidance</span>
-        <input type="checkbox" id="show-guidance" checked>
-        <span class="toggle-track"></span>
-    </label>
     <div class="popover-row" title="Fade the visible ✕ overlay marks and ! invalid marks.">
       <span class="popover-label">Guidance opacity</span>
-      <input type="range" id="hl-opacity" value="100" min="1" max="100" aria-label="Guidance opacity">
-    </div>
-    <div class="popover-row" title="How vivid the ! invalid markers are. Hue is picked automatically to contrast with your colours; this slider only adjusts intensity.">
-      <span class="popover-label">Invalid marker intensity</span>
-      <input type="range" id="invalid-intensity" value="65" min="0" max="100" aria-label="Invalid marker intensity">
+      <input type="range" id="hl-opacity" value="100" min="0" max="100" aria-label="Guidance opacity">
     </div>
     <label class="toggle popover-row" title="Row numbers start at the bottom row; round numbers start at the innermost band.">
       <span class="popover-label">Show numbers</span>
@@ -341,10 +329,37 @@
     </div>
 
     <div id="edit-error" class="warning" role="alert" hidden></div>
-
     <input type="checkbox" id="edit-wipe" hidden>
-    <button class="btn" id="edit-reset" type="button" title="Replace every cell with its natural row or round colour">Reset pattern colours</button>
+    <button class="btn" id="edit-reset" type="button" title="Restore every cell to its natural alternating yarn">Clear drawing</button>
     <p id="edit-summary" class="pattern-summary" role="status" hidden></p>
+
+    <div class="field-group pattern-colours" role="group" aria-label="Pattern colours">
+      <div class="popover-row">
+        <label class="popover-label" for="color-a">Yarn A colour</label>
+        <input type="color" id="color-a" value="#000000" aria-label="Yarn A colour">
+      </div>
+      <div class="popover-row">
+        <label class="popover-label" for="color-b">Yarn B colour</label>
+        <input type="color" id="color-b" value="#ffffff" aria-label="Yarn B colour">
+      </div>
+      <div class="pattern-colour-actions">
+        <button class="btn btn--icon" id="swap-yarns" type="button" aria-label="Swap yarn colours" title="Swap Yarn A and Yarn B colours">⇄</button>
+      </div>
+      <div class="popover-row" title="Colour used for invalid ! markers.">
+        <label class="popover-label" for="danger-color">Danger colour</label>
+        <div class="setting-color">
+          <input type="color" id="danger-color" value="#ff7474" aria-label="Danger colour">
+          <button class="btn" id="danger-color-reset" type="button" title="Reset danger colour">Reset</button>
+        </div>
+      </div>
+      <div class="popover-row" title="Colour used for selections and transform guides.">
+        <label class="popover-label" for="accent-color">Accent colour</label>
+        <div class="setting-color">
+          <input type="color" id="accent-color" value="#d653a3" aria-label="Accent colour">
+          <button class="btn" id="accent-color-reset" type="button" title="Reset accent colour">Reset</button>
+        </div>
+      </div>
+    </div>
   </section>
       </div>
     </aside>

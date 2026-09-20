@@ -23,16 +23,11 @@ export interface SessionState {
     axes:          Axis[];               // user-added symmetry axes
     repeat:        RepeatGrid;
     liveTransforms: boolean;
-    hlOpacity:        number;            // 0..100, matches the input range
-    showGuidance?:     boolean;
-    invalidIntensity: number;            // 0..100, drives ! marker saturation
     // The active lifted-selection layer (on or near canvas). When present,
     // `pixels` carries the canvas with the float's cells cut to natural
     // baseline; `float.pixels` stamps back on top at render. Commit writes
     // lifted pixels back into the canvas and clears the float.
     float:         Float | null;
-    labelsVisible: boolean;
-    lockInvalid:   boolean;
     rotation:      number;               // degrees (target — render.ts animates the visual)
 }
 

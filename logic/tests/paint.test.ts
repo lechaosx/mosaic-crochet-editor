@@ -5,7 +5,7 @@
 
 import { describe, test, expect } from "vitest";
 import { paintOps, PaintCtx, PaintTool } from "../src/paint";
-import { initialize_row_pattern, initialize_round_pattern } from "@mosaic/wasm";
+import { initialize_row_pattern, initialize_round_pattern, overlay_target_available_row } from "@mosaic/wasm";
 import type { PatternState } from "../src/types";
 import { filledPixels, rowPattern } from "./_helpers";
 import { transformsToFlat } from "../src/repeat";
@@ -17,6 +17,7 @@ function ctx(tool: PaintTool, opts: Partial<PaintCtx> = {}): PaintCtx {
         pattern: rowPattern(W, H),
         x: 1, y: 1,
         color: 1, primary: 1,
+        overlayAction: "place",
         invertVisited: tool === "invert" ? new Set() : null,
         transforms: new Float64Array(0),
         shifted: null,
@@ -103,7 +104,7 @@ describe("paintOps", () => {
         expect(out[0]).toBe(2);
     });
 
-    test("overlay left-click paints the inward neighbour with ✕ marker", () => {
+    test("overlay place paints the inward neighbour with ✕ marker", () => {
         // The "paints inward neighbour" detail is core-tested; here we
         // just verify the call returns a different buffer (i.e., it ran).
         const out = paintOps.overlay(ctx("overlay", {
@@ -160,12 +161,73 @@ describe("paintOps", () => {
         expect(out[testIdx]).not.toBe(rowNat[testIdx]);
     });
 
-    test("overlay right-click (clear) calls clear_overlay rather than paint_overlay", () => {
+    test("overlay clear restores the inward neighbour independently of pointer colour", () => {
         const visible = filledPixels(3, 3, 1);
-        const painted = paintOps.overlay(ctx("overlay", { visible: visible.slice(), x: 1, y: 1, color: 1, primary: 1 }));
-        const cleared = paintOps.overlay(ctx("overlay", { visible: visible.slice(), x: 1, y: 1, color: 2, primary: 1 }));
-        // paint_overlay and clear_overlay produce different results from the same input.
-        expect(Array.from(painted)).not.toEqual(Array.from(cleared));
+        const painted = paintOps.overlay(ctx("overlay", {
+            visible: visible.slice(), x: 1, y: 1, color: 2, primary: 1,
+            overlayAction: "place",
+        }));
+        const cleared = paintOps.overlay(ctx("overlay", {
+            visible: painted, x: 1, y: 1, color: 1, primary: 1,
+            overlayAction: "clear",
+        }));
+        expect(Array.from(cleared)).toEqual(Array.from(visible));
+    });
+
+    test("overlay invert places an absent marker and clears a present marker", () => {
+        const visible = filledPixels(3, 3, 1);
+        const placed = paintOps.overlay(ctx("overlay", {
+            visible, x: 1, y: 1, overlayAction: "invert",
+            invertVisited: new Set(),
+        }));
+        expect(Array.from(placed)).not.toEqual(Array.from(visible));
+
+        const cleared = paintOps.overlay(ctx("overlay", {
+            visible: placed, x: 1, y: 1, overlayAction: "invert",
+            invertVisited: new Set(),
+        }));
+        expect(Array.from(cleared)).toEqual(Array.from(visible));
+    });
+
+    test("overlay invert skips geometrically unavailable targets", () => {
+        const visible = filledPixels(3, 3, 1);
+        let target: { x: number; y: number } | null = null;
+        for (let y = 0; y < 3 && target === null; y++) {
+            for (let x = 0; x < 3; x++) {
+                if (!overlay_target_available_row(3, 3, x, y)) {
+                    target = { x, y };
+                    break;
+                }
+            }
+        }
+        expect(target).not.toBeNull();
+        const out = paintOps.overlay(ctx("overlay", {
+            visible,
+            x: target!.x,
+            y: target!.y,
+            overlayAction: "invert",
+            invertVisited: new Set(),
+        }));
+        expect(Array.from(out)).toEqual(Array.from(visible));
+    });
+
+    test("overlay invert toggles a transformed target at most once per stroke", () => {
+        const visible = filledPixels(7, 3, 1);
+        const visited = new Set<number>();
+        const options = {
+            pattern: rowPattern(7, 3),
+            x: 3,
+            y: 1,
+            overlayAction: "invert" as const,
+            invertVisited: visited,
+            transforms: transformsToFlat([], {
+                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
+            }),
+        };
+        const once = paintOps.overlay(ctx("overlay", { visible, ...options }));
+        const twice = paintOps.overlay(ctx("overlay", { visible: once, ...options }));
+        expect(Array.from(twice)).toEqual(Array.from(once));
+        expect(visited.size).toBe(3);
     });
 
     test("overlay round mode: clear undoes paint (round dispatch is self-consistent)", () => {
@@ -180,12 +242,12 @@ describe("paintOps", () => {
         for (let i = 0; i < natural.length && paintX < 0; i++) {
             if (natural[i] === 0) continue;
             const cx = i % W, cy = Math.floor(i / W);
-            const painted = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: cx, y: cy, color: 1, primary: 1, invertVisited: null, transforms: new Float64Array(0), shifted: null });
+            const painted = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: cx, y: cy, color: 1, primary: 1, overlayAction: "place", invertVisited: null, transforms: new Float64Array(0), shifted: null });
             if (!painted.every((v, j) => v === natural[j])) { paintX = cx; paintY = cy; }
         }
         if (paintX < 0) return;   // no valid cell in this pattern (shouldn't happen for 8×8/2 rounds)
-        const withMarker = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: paintX, y: paintY, color: 1, primary: 1, invertVisited: null, transforms: new Float64Array(0), shifted: null });
-        const cleared    = paintOps.overlay({ visible: withMarker,      pattern: roundPat, x: paintX, y: paintY, color: 2, primary: 1, invertVisited: null, transforms: new Float64Array(0), shifted: null });
+        const withMarker = paintOps.overlay({ visible: natural.slice(), pattern: roundPat, x: paintX, y: paintY, color: 1, primary: 1, overlayAction: "place", invertVisited: null, transforms: new Float64Array(0), shifted: null });
+        const cleared    = paintOps.overlay({ visible: withMarker,      pattern: roundPat, x: paintX, y: paintY, color: 2, primary: 1, overlayAction: "clear", invertVisited: null, transforms: new Float64Array(0), shifted: null });
         expect(Array.from(withMarker)).not.toEqual(Array.from(natural));
         expect(Array.from(cleared)).toEqual(Array.from(natural));
     });

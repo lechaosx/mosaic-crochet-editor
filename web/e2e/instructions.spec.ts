@@ -65,7 +65,7 @@ test("a crocheter gets a focused workspace while the global document bar stays a
 test("Crochet preserves and controls the shared chart viewport", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Zoom in" }).click();
-    await page.getByRole("button", { name: "Invert" }).click();
+    await page.getByRole("button", { name: "Invert colours" }).click();
     const designZoom = await page.getByRole("status", { name: "Rendered cell size" }).textContent();
     const designCell = await cellCoord(page, 1, 1);
     const designPixel = await pixelRGB(page, designCell.cx, designCell.cy);

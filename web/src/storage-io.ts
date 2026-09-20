@@ -5,10 +5,16 @@ import { decodeMcw, encodeMcw, McwDocument } from "@mosaic/logic/mcw";
 import { defaultAxes } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
 import { assertRepeatGrid, defaultRepeatGrid } from "@mosaic/logic/repeat";
+import {
+    AppPreferences,
+    DEFAULT_APP_PREFERENCES,
+    hasStoredAppPreferences,
+    saveAppPreferences,
+} from "./preferences";
 
 const RECOVERY_KEY        = "mosaic-recovery";
 const LEGACY_RECOVERY_KEY = "mosaic-pattern-v4";
-const RECOVERY_VERSION    = 5;
+const RECOVERY_VERSION    = 6;
 
 interface LocalSaveV4 {
     version:          4;
@@ -55,9 +61,30 @@ interface RecoveryV5 {
     };
 }
 
+interface RecoveryV6 {
+    version: 6;
+    document: RecoveryV5["document"];
+    workspace: RecoveryV5["workspace"] & { rotation: number };
+}
+
+interface MigratedRecovery {
+    recovery: RecoveryV6;
+    preferences?: AppPreferences;
+}
+
+function preferencesFromLegacy(preferences: RecoveryV5["preferences"]): AppPreferences {
+    return {
+        guidanceOpacity: preferences.showGuidance === false ? 0 : preferences.hlOpacity,
+        dangerColor: DEFAULT_APP_PREFERENCES.dangerColor,
+        accentColor: DEFAULT_APP_PREFERENCES.accentColor,
+        labelsVisible: preferences.labelsVisible,
+        lockInvalid: preferences.lockInvalid,
+    };
+}
+
 function recoveryFromV4(data: LocalSaveV4): RecoveryV5 {
     return {
-        version: RECOVERY_VERSION,
+        version: 5,
         document: {
             state: data.state, pixels: data.pixels,
             colorA: data.colorA, colorB: data.colorB,
@@ -75,20 +102,41 @@ function recoveryFromV4(data: LocalSaveV4): RecoveryV5 {
     };
 }
 
-function migrateRecovery(value: unknown): RecoveryV5 | null {
+function recoveryFromV5(data: RecoveryV5): MigratedRecovery {
+    return {
+        recovery: {
+            version: RECOVERY_VERSION,
+            document: data.document,
+            workspace: {
+                ...data.workspace,
+                rotation: data.preferences.canvasRotation,
+            },
+        },
+        preferences: preferencesFromLegacy(data.preferences),
+    };
+}
+
+function migrateRecovery(value: unknown): MigratedRecovery | null {
     if (typeof value !== "object" || value === null) return null;
     const data = value as Record<string, unknown>;
     if (data.version === RECOVERY_VERSION) {
         if (typeof data.document !== "object" || data.document === null
+            || typeof data.workspace !== "object" || data.workspace === null) return null;
+        return { recovery: data as unknown as RecoveryV6 };
+    }
+    if (data.version === 5) {
+        if (typeof data.document !== "object" || data.document === null
             || typeof data.workspace !== "object" || data.workspace === null
             || typeof data.preferences !== "object" || data.preferences === null) return null;
-        return data as unknown as RecoveryV5;
+        return recoveryFromV5(data as unknown as RecoveryV5);
     }
-    if (data.version === 4 && data.state) return recoveryFromV4(data as unknown as LocalSaveV4);
+    if (data.version === 4 && data.state) {
+        return recoveryFromV5(recoveryFromV4(data as unknown as LocalSaveV4));
+    }
     return null;
 }
 
-function recoveryFromSession(s: Readonly<SessionState>): RecoveryV5 {
+function recoveryFromSession(s: Readonly<SessionState>): RecoveryV6 {
     return {
         version: RECOVERY_VERSION,
         document: {
@@ -100,12 +148,7 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV5 {
             axes: s.axes, repeat: s.repeat,
             liveTransforms: s.liveTransforms,
             float: s.float ? packFloat(s.float) : null,
-        },
-        preferences: {
-            hlOpacity: s.hlOpacity, invalidIntensity: s.invalidIntensity,
-            showGuidance: s.showGuidance ?? s.hlOpacity > 0,
-            labelsVisible: s.labelsVisible, lockInvalid: s.lockInvalid,
-            canvasRotation: s.rotation,
+            rotation: s.rotation,
         },
     };
 }
@@ -126,9 +169,11 @@ export function loadFromLocalStorage(): SessionState | null {
     const saved = current ?? localStorage.getItem(LEGACY_RECOVERY_KEY);
     if (!saved) return null;
     try {
-        const data = migrateRecovery(JSON.parse(saved));
-        if (!data) return null;
-        const { document, workspace, preferences } = data;
+        const parsed: unknown = JSON.parse(saved);
+        const migrated = migrateRecovery(parsed);
+        if (!migrated) return null;
+        const { recovery, preferences } = migrated;
+        const { document, workspace } = recovery;
         assertPatternDimensions(document.state);
         const repeat = workspace.repeat ?? defaultRepeatGrid();
         assertRepeatGrid(repeat);
@@ -142,17 +187,14 @@ export function loadFromLocalStorage(): SessionState | null {
             axes:             workspace.axes ?? defaultAxes(document.state.canvasWidth, document.state.canvasHeight),
             repeat,
             liveTransforms:   workspace.liveTransforms ?? true,
-            hlOpacity:        preferences.hlOpacity === 0 ? 100 : preferences.hlOpacity,
-            showGuidance:     preferences.showGuidance ?? preferences.hlOpacity > 0,
-            invalidIntensity: preferences.invalidIntensity,
             float:            workspace.float ? unpackFloat(workspace.float) : null,
-            labelsVisible:    preferences.labelsVisible,
-            lockInvalid:      preferences.lockInvalid,
-            rotation:         preferences.canvasRotation,
+            rotation:         workspace.rotation ?? 0,
         };
-        if (sourceKey === LEGACY_RECOVERY_KEY) {
+        if (preferences && !hasStoredAppPreferences()) saveAppPreferences(preferences);
+        if (sourceKey === LEGACY_RECOVERY_KEY
+            || recovery.version !== (parsed as { version?: number }).version) {
             try {
-                localStorage.setItem(RECOVERY_KEY, JSON.stringify(data));
+                localStorage.setItem(RECOVERY_KEY, JSON.stringify(recovery));
                 localStorage.removeItem(LEGACY_RECOVERY_KEY);
             } catch {
                 return restored;

@@ -8,11 +8,13 @@ import {
     paint_natural_row, paint_natural_round,
     paint_overlay_row, paint_overlay_round,
     clear_overlay_row, clear_overlay_round,
+    overlay_target_available_row, overlay_target_available_round,
     transformed_target_indices,
 } from "@mosaic/wasm";
 import { PatternState } from "./types";
 
 export type PaintTool = "pencil" | "fill" | "eraser" | "overlay" | "invert";
+export type OverlayAction = "place" | "clear" | "invert";
 
 export interface PaintCtx {
     visible:        Uint8Array;
@@ -21,6 +23,7 @@ export interface PaintCtx {
     y:              number;
     color:          1 | 2;
     primary:        1 | 2;
+    overlayAction?: OverlayAction;
     invertVisited:  Set<number> | null;
     transforms:     Float64Array;
     shifted:        Uint8Array | null;
@@ -49,18 +52,39 @@ export const paintOps: Record<PaintTool, PaintOp> = {
             );
     },
 
-    // Left click = paint a ✕ at the click cell (writes its *inward
-    // neighbour*); right click = clear it.
-    overlay: ({ visible, pattern: p, x, y, color, primary, transforms }) => {
-        const clear = color !== primary;
-        if (p.mode === "row") {
-            return clear
-                ? clear_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, transforms)
-                : paint_overlay_row(visible, p.canvasWidth, p.canvasHeight, x, y, transforms);
+    overlay: ({ visible, pattern: p, x, y, overlayAction = "place", invertVisited, transforms }) => {
+        const apply = (source: Uint8Array, tx: number, ty: number, action: "place" | "clear", activeTransforms: Float64Array) => {
+            if (p.mode === "row") {
+                return action === "clear"
+                    ? clear_overlay_row(source, p.canvasWidth, p.canvasHeight, tx, ty, activeTransforms)
+                    : paint_overlay_row(source, p.canvasWidth, p.canvasHeight, tx, ty, activeTransforms);
+            }
+            return action === "clear"
+                ? clear_overlay_round(source, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, tx, ty, activeTransforms)
+                : paint_overlay_round(source, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, tx, ty, activeTransforms);
+        };
+        if (overlayAction !== "invert") return apply(visible, x, y, overlayAction, transforms);
+
+        const available = (tx: number, ty: number) => p.mode === "row"
+            ? overlay_target_available_row(p.canvasWidth, p.canvasHeight, tx, ty)
+            : overlay_target_available_round(
+                p.canvasWidth, p.canvasHeight,
+                p.virtualWidth, p.virtualHeight,
+                p.offsetX, p.offsetY, p.rounds,
+                tx, ty,
+            );
+        let out: Uint8Array = visible.slice();
+        const none = new Float64Array(0);
+        for (const index of transformed_target_indices(p.canvasWidth, p.canvasHeight, x, y, transforms)) {
+            if (invertVisited?.has(index)) continue;
+            invertVisited?.add(index);
+            const tx = index % p.canvasWidth;
+            const ty = Math.floor(index / p.canvasWidth);
+            const cleared = apply(out, tx, ty, "clear", none);
+            const markerWasPresent = cleared.some((pixel, i) => pixel !== out[i]);
+            out = markerWasPresent ? cleared : available(tx, ty) ? apply(out, tx, ty, "place", none) : out;
         }
-        return clear
-            ? clear_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, transforms)
-            : paint_overlay_round(visible, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, transforms);
+        return out;
     },
 
     // Flip pixels between primary and secondary on each *first* visit; a

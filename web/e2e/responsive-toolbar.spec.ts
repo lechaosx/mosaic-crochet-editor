@@ -142,20 +142,31 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     expect(await page.locator(".canvas-controls").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
-test("phone contextual and Settings controls keep 44px targets", async ({ page }) => {
+test("phone contextual, Settings, and Pattern colour controls keep 44px targets", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
     await page.keyboard.press("Control+a");
-    const selection = await page.locator("#status-selection").boundingBox();
+    const selection = await page.locator("#selection-actions").boundingBox();
     expect(selection!.height).toBeGreaterThanOrEqual(44);
 
     await page.getByRole("button", { name: "More" }).click();
     await page.getByRole("menuitem", { name: "Settings" }).click();
     for (const target of [
         page.locator("#hl-opacity"),
-        page.locator("#invalid-intensity"),
         page.locator("label:has(#labels-on)"),
         page.locator("label:has(#lock-invalid)"),
+    ]) {
+        const box = await target.boundingBox();
+        expect(box!.height).toBeGreaterThanOrEqual(44);
+    }
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Pattern" }).click();
+    for (const target of [
+        page.locator("#color-a"),
+        page.locator("#color-b"),
+        page.locator("#danger-color"),
+        page.locator("#accent-color"),
     ]) {
         const box = await target.boundingBox();
         expect(box!.height).toBeGreaterThanOrEqual(44);

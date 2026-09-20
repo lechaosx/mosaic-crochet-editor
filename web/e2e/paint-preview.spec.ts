@@ -1,58 +1,53 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, pixelRGB } from "./_helpers";
 
-test("Pencil hover previews exact live mirror destinations without editing", async ({ page }) => {
+test("hover reports only coordinates and never previews a paint result", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("v");
-    const before = await page.evaluate(() => localStorage.getItem("mosaic-recovery"));
-    const target = await cellCoord(page, 0, 1);
-    await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("2 cells");
-    await expect(page.locator("#status-feedback")).toContainText("0, 1");
-    await expect(page.locator("#status-feedback")).toContainText("8, 1");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
+    const source = await cellCoord(page, 0, 1);
     const mirrored = await cellCoord(page, 8, 1);
-    const previewColor = await pixelRGB(page, mirrored.cx, mirrored.cy);
-    await clickCell(page, 0, 1);
-    expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual(previewColor);
+    const beforeSource = await pixelRGB(page, source.cx, source.cy);
+    const beforeMirrored = await pixelRGB(page, mirrored.cx, mirrored.cy);
+
+    await page.mouse.move(source.cx, source.cy);
+
+    expect(await pixelRGB(page, source.cx, source.cy)).toEqual(beforeSource);
+    expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual(beforeMirrored);
+    await expect(page.locator("#status-coordinates")).toHaveText("0, 1");
+    await expect(page.locator("#status-feedback")).toBeHidden();
 });
 
-test("Pencil hover distinguishes an unchanged mirror destination", async ({ page }) => {
+test("Overlay exposes touch actions while right-click performs the opposite place/clear action", async ({ page }) => {
     await bootApp(page);
-    await clickCell(page, 8, 1);
-    await page.keyboard.press("v");
-    const target = await cellCoord(page, 0, 1);
-    await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("1 cell");
-    await expect(page.locator("#status-feedback")).toContainText("1 unchanged");
-});
+    const place = page.getByRole("button", { name: "Place overlay" });
+    const clear = page.getByRole("button", { name: "Clear overlay" });
+    const invert = page.getByRole("button", { name: "Invert overlay" });
+    await expect(place).toBeVisible();
+    await expect(clear).toBeVisible();
+    await expect(invert).toBeVisible();
 
-test("Eraser and Invert preview current one-cell outcomes", async ({ page }) => {
-    await bootApp(page);
-    await clickCell(page, 2, 1);
     const target = await cellCoord(page, 2, 1);
+    const before = await pixelRGB(page, target.cx, target.cy);
+    await place.click();
+    await page.mouse.click(target.cx, target.cy);
+    expect(await pixelRGB(page, target.cx, target.cy)).not.toEqual(before);
+    await page.mouse.click(target.cx, target.cy, { button: "right" });
+    expect(await pixelRGB(page, target.cx, target.cy)).toEqual(before);
 
-    await page.keyboard.press("e");
-    await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("1 cell");
+    await clear.click();
+    await page.mouse.click(target.cx, target.cy, { button: "right" });
+    expect(await pixelRGB(page, target.cx, target.cy)).not.toEqual(before);
+    await page.mouse.click(target.cx, target.cy);
+    expect(await pixelRGB(page, target.cx, target.cy)).toEqual(before);
 
-    await page.keyboard.press("i");
-    await page.mouse.move(target.cx, target.cy);
-    await expect(page.locator("#status-feedback")).toContainText("1 cell");
-});
-
-test("Overlay preview names its inward support and explains an unavailable target", async ({ page }) => {
-    await bootApp(page);
+    await page.keyboard.press("Shift+O");
+    await expect(clear).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("o");
-    const valid = await cellCoord(page, 2, 1);
-    await page.mouse.move(valid.cx, valid.cy);
-    await expect(page.locator("#status-feedback")).toContainText("support 2, 2");
-    await expect(page.locator("#status-feedback")).toContainText("1 cell");
-    const previewGlyph = await pixelRGB(page, valid.cx, valid.cy);
-    await clickCell(page, 2, 1);
-    expect(await pixelRGB(page, valid.cx, valid.cy)).toEqual(previewGlyph);
+    await expect(place).toHaveAttribute("aria-pressed", "true");
 
-    const foundation = await cellCoord(page, 2, 8);
-    await page.mouse.move(foundation.cx, foundation.cy);
-    await expect(page.locator("#status-feedback")).toContainText("No inward supporting cell");
+    await invert.click();
+    await page.mouse.click(target.cx, target.cy, { button: "right" });
+    expect(await pixelRGB(page, target.cx, target.cy)).not.toEqual(before);
+    await page.mouse.click(target.cx, target.cy);
+    expect(await pixelRGB(page, target.cx, target.cy)).toEqual(before);
 });

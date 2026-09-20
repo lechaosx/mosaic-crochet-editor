@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { packFloat, packPixels } from "@mosaic/logic/storage";
 import { addAxis } from "@mosaic/logic/symmetry";
 import { loadFromLocalStorage } from "../src/storage-io";
+import { loadAppPreferences } from "../src/preferences";
 import { historyPeek } from "../src/history";
 import { makeFloat, rowSession } from "./_helpers";
 
@@ -28,11 +29,11 @@ describe("browser persistence migrations", () => {
             axes: session.axes,
             repeat: session.repeat,
             liveTransforms: session.liveTransforms,
-            hlOpacity: session.hlOpacity,
-            invalidIntensity: session.invalidIntensity,
+            hlOpacity: 42,
+            invalidIntensity: 17,
             float: packFloat(session.float!),
-            labelsVisible: session.labelsVisible,
-            lockInvalid: session.lockInvalid,
+            labelsVisible: false,
+            lockInvalid: true,
             canvasRotation: session.rotation,
         }));
 
@@ -46,10 +47,20 @@ describe("browser persistence migrations", () => {
         expect(restored!.float).toEqual(session.float);
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        expect(migrated.version).toBe(5);
+        expect(migrated.version).toBe(6);
         expect(migrated.document).toMatchObject({ state: session.pattern, colorA: session.colorA, colorB: session.colorB });
-        expect(migrated.workspace).toMatchObject({ axes: session.axes, repeat: session.repeat, liveTransforms: false });
-        expect(migrated.preferences).toMatchObject({ canvasRotation: session.rotation });
+        expect(migrated.workspace).toMatchObject({
+            axes: session.axes,
+            repeat: session.repeat,
+            liveTransforms: false,
+            rotation: session.rotation,
+        });
+        expect(migrated.preferences).toBeUndefined();
+        expect(loadAppPreferences()).toMatchObject({
+            guidanceOpacity: 42,
+            labelsVisible: false,
+            lockInvalid: true,
+        });
         expect(localStorage.getItem("mosaic-pattern-v4")).toBeNull();
     });
 
@@ -110,11 +121,11 @@ describe("browser persistence migrations", () => {
             axes: session.axes,
             repeat: session.repeat,
             liveTransforms: session.liveTransforms,
-            hlOpacity: session.hlOpacity,
-            invalidIntensity: session.invalidIntensity,
+            hlOpacity: 100,
+            invalidIntensity: 65,
             float: null,
-            labelsVisible: session.labelsVisible,
-            lockInvalid: session.lockInvalid,
+            labelsVisible: true,
+            lockInvalid: true,
             canvasRotation: session.rotation,
         });
         localStorage.setItem("mosaic-pattern-v4", legacy);

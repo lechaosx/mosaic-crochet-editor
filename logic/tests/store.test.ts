@@ -73,7 +73,7 @@ describe("Store commit chain", () => {
     test("recompute=false skips plan rebuild", () => {
         const s = newStore();
         const planBefore = s.plan;
-        s.commit(state => { state.hlOpacity = 50; }, { recompute: false });
+        s.commit(state => { state.rotation = 45; }, { recompute: false });
         expect(s.plan).toBe(planBefore);
     });
 
@@ -120,9 +120,9 @@ describe("Store commit chain", () => {
         const s = newStore();
         let renders = 0;
         s.setRenderer(() => { renders++; });
-        const next: SessionState = { ...s.state, hlOpacity: 50 };
+        const next: SessionState = { ...s.state, rotation: 45 };
         s.replace(next);
-        expect(s.state.hlOpacity).toBe(50);
+        expect(s.state.rotation).toBe(45);
         expect(renders).toBe(1);
     });
 

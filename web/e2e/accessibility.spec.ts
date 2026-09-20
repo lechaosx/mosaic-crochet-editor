@@ -55,7 +55,7 @@ test("context strip only shows information not visible in controls", async ({ pa
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await expect(status).toBeHidden();
 
-    await page.getByRole("button", { name: "Overlay" }).click();
+    await page.getByRole("button", { name: "Place overlay", exact: true }).click();
     await expect(status).toBeHidden();
 
     await page.keyboard.press("s");
@@ -65,6 +65,7 @@ test("context strip only shows information not visible in controls", async ({ pa
     const hovered = await cellCoord(page, 1, 1);
     await page.mouse.move(hovered.cx, hovered.cy);
     await expect(status).toContainText("1, 1");
+    await expect(page.locator("#status-selection")).toBeHidden();
 
     await page.locator("#btn-sym-toggle").click();
     await page.locator("#add-sym-v").click();
@@ -74,18 +75,14 @@ test("context strip only shows information not visible in controls", async ({ pa
     await expect(status).not.toContainText("Transforms paused");
 });
 
-test("yarn controls expose select, edit, and undoable swap actions", async ({ page }) => {
+test("yarn controls expose direct selection and Pattern owns editing actions", async ({ page }) => {
     await bootApp(page);
     const yarnA = page.getByRole("button", { name: "Yarn A", exact: true });
     const yarnB = page.getByRole("button", { name: "Yarn B", exact: true });
-    const edit = page.locator("#edit-yarn");
-    const swap = page.getByRole("button", { name: "Swap yarns" });
 
     await expect(yarnA).toContainText("A");
     await expect(yarnB).toContainText("B");
     await expect(yarnA).toHaveAttribute("aria-pressed", "true");
-    await expect(edit).toBeVisible();
-    await expect(swap).toBeVisible();
 
     await yarnB.focus();
     const focusOutline = await yarnB.evaluate(element => {
@@ -95,10 +92,11 @@ test("yarn controls expose select, edit, and undoable swap actions", async ({ pa
     expect(focusOutline.style).toBe("solid");
     expect(focusOutline.width).toBeGreaterThanOrEqual(2);
     await page.keyboard.press("Space");
-    await expect(edit).toHaveAccessibleName("Edit Yarn B");
-    await yarnA.focus();
-    await page.keyboard.press("Enter");
-    await expect(edit).toHaveAccessibleName("Edit Yarn A");
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const swap = page.getByRole("button", { name: "Swap yarn colours" });
+    await expect(page.locator("#edit-yarn")).toHaveCount(0);
+    await expect(swap).toBeVisible();
+    await expect(swap).toHaveText("⇄");
     await yarnB.click();
 
     const before = await page.evaluate(() => ({
@@ -113,6 +111,35 @@ test("yarn controls expose select, edit, and undoable swap actions", async ({ pa
     await page.getByRole("button", { name: "Undo" }).click();
     await expect(page.locator("#color-a")).toHaveValue(before.a);
     await expect(page.locator("#color-b")).toHaveValue(before.b);
+});
+
+test("double-click and long-press invoke the chosen yarn picker from the dock", async ({ page }) => {
+    await bootApp(page);
+    const yarnA = page.getByRole("button", { name: "Yarn A", exact: true });
+    const yarnB = page.getByRole("button", { name: "Yarn B", exact: true });
+    const colorA = page.getByLabel("Yarn A colour");
+    const colorB = page.getByLabel("Yarn B colour");
+    await colorA.evaluate(input => input.addEventListener("click", event => {
+        event.preventDefault();
+        (input as HTMLElement).dataset.pickerInvoked = "true";
+    }));
+    await colorB.evaluate(input => input.addEventListener("click", event => {
+        event.preventDefault();
+        (input as HTMLElement).dataset.pickerInvoked = "true";
+    }));
+
+    await yarnA.dblclick();
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    await expect(colorA).toHaveAttribute("data-picker-invoked", "true");
+
+    await page.keyboard.press("Escape");
+    const box = (await yarnB.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(550);
+    await page.mouse.up();
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    await expect(colorB).toHaveAttribute("data-picker-invoked", "true");
 });
 
 test("dynamic symmetry actions name their axis and position", async ({ page }) => {
@@ -286,7 +313,7 @@ test("explicit inspector opening moves focus to its first available control", as
     await bootApp(page);
 
     await page.getByRole("button", { name: "Settings" }).click();
-    await expect(page.getByRole("checkbox", { name: "Show stitch guidance" })).toBeFocused();
+    await expect(page.getByRole("slider", { name: "Guidance opacity" })).toBeFocused();
     await page.keyboard.press("Escape");
 
     await page.keyboard.press("Control+a");

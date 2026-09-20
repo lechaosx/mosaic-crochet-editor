@@ -1,7 +1,6 @@
-import { PlanType, PlanDir, lock_invalid_row, lock_invalid_round, transformed_target_indices,
+import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indices,
          overlay_target_available_row, overlay_target_available_round,
          overlay_inward_cell_row, overlay_inward_cell_round,
-         build_highlight_plan_row, build_highlight_plan_round,
          initialize_row_pattern,
          instruction_start_row, instruction_start_round,
          instruction_wip_row, instruction_wip_round,
@@ -26,10 +25,16 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
-import { PaintTool, paintOps } from "@mosaic/logic/paint";
+import { OverlayAction, PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
 import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress } from "./live-progress";
 import { copyrightNotice, markAboutSeen, shouldShowAbout } from "./about";
+import {
+    AppPreferences,
+    DEFAULT_APP_PREFERENCES,
+    loadAppPreferences,
+    saveAppPreferences,
+} from "./preferences";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -49,12 +54,7 @@ function defaultSession(): SessionState {
         axes:           [],
         repeat:         defaultRepeatGrid(),
         liveTransforms: true,
-        hlOpacity:        100,
-        showGuidance:     true,
-        invalidIntensity: 65,
         float:           null,
-        labelsVisible:   true,
-        lockInvalid:     true,
         rotation:        0,
     };
 }
@@ -78,6 +78,7 @@ function exampleSession(): SessionState {
         pixels = paintOps.overlay({
             visible: pixels, pattern, x, y: 2,
             color: 1, primary: 1, invertVisited: null,
+            overlayAction: "place",
             transforms: new Float64Array(0), shifted: null,
         });
     }
@@ -98,8 +99,9 @@ function editableAxisTolerance(): number {
     return Math.max(AXIS_HIT_TOLERANCE, Math.min(1.2, 22 / viewport.view.zoom));
 }
 const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
-const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
+let preferences: AppPreferences = loadAppPreferences();
+const rs       = makeRendererState(preferences);
 const store    = new Store(saved ?? defaultSession());
 const aboutDialog = document.getElementById("about-dialog") as HTMLDialogElement;
 const aboutReleaseNotes = document.getElementById("about-release-notes") as HTMLElement;
@@ -132,12 +134,11 @@ interface CachedInstructionUnit {
     yarn: "A" | "B";
 }
 let instructionCache: { fingerprint: string; units: CachedInstructionUnit[] } | null = null;
+let overlayAction: OverlayAction = "place";
 let selectionMoveMode: SelectionMoveMode = "move";
 let selectionMode: SelectionMode = "replace";
 let navigateLatched = false;
 let navigateMomentary = false;
-let canvasSpacePending = false;
-let canvasSpaceNavigated = false;
 
 // Move-tool drag mode, chosen at paintdown from the UI mode and modifiers:
 //   "move"      → no modifier; drag repositions the float, release records.
@@ -208,8 +209,6 @@ type Gesture =
 const AXIS_HIT_TOLERANCE = 0.4;
 
 let gesture: Gesture | null = null;
-let previewCell: { x: number; y: number } | null = null;
-let keyboardCell: { x: number; y: number } | null = null;
 let gestureFeedbackShown = false;
 let ctrlArrowStamped = false;                        // bake happens once per Ctrl-down
 let maskArrowState: { preFloat: Float } | null = null; // non-null while Alt+Arrow is active
@@ -263,8 +262,6 @@ observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);
 
 // Renderer + side-effect channels (Store invokes them on every `commit`).
 store.setRenderer(s => {
-    rs.paintPreview = null;
-    previewCell = null;
     if (instructionsPreviewStore) {
         instructionsPreviewStore.commit(
             preview => { preview.rotation = s.state.rotation; },
@@ -295,8 +292,8 @@ store.addObserver(s => {
         Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveTransforms,
     );
     ui.setTransformError(null);
-    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
     ui.setSelectionMode(s.state.activeTool, selectionMode, Boolean(s.state.float));
+    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
 });
 
 function selectionCellCount(): number {
@@ -343,7 +340,12 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
     if (!inCanvas && tool !== "overlay") return blocked("Outside pattern");
     if (inCanvas && visible[y * W + x] === 0) return blocked("Outside pattern");
     if (inCanvas && shifted && shifted[y * W + x] === 0) return blocked("Outside selection");
-    if (tool === "overlay" && color === s.primaryColor && !overlayTargetAvailable(pattern, x, y)) {
+    const effectiveOverlayAction = tool === "overlay" && color !== s.primaryColor
+        ? overlayAction === "place" ? "clear"
+            : overlayAction === "clear" ? "place"
+                : "invert"
+        : overlayAction;
+    if (tool === "overlay" && effectiveOverlayAction === "place" && !overlayTargetAvailable(pattern, x, y)) {
         return blocked(overlayInwardCell(pattern, x, y).length === 0
             ? "No inward supporting cell"
             : "Overlay unavailable at this cell");
@@ -356,11 +358,12 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
     let next = paintOps[tool as PaintTool]({
         visible, pattern, x, y,
         color, primary: s.primaryColor,
+        overlayAction: effectiveOverlayAction,
         invertVisited,
         transforms, shifted,
     });
     let protectedSkipped = false;
-    if (s.lockInvalid) {
+    if (preferences.lockInvalid) {
         const unlocked = next;
         next = lockAlwaysInvalid(pattern, visible, unlocked);
         protectedSkipped = !arraysEqual(unlocked, next);
@@ -405,153 +408,6 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         store.commit(state => { state.pixels = pixels; }, { persist: false });
     }
     updateCoordinates(x, y);
-}
-
-function clampKeyboardCell(cell: { x: number; y: number }): { x: number; y: number } {
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    return {
-        x: Math.max(0, Math.min(W - 1, cell.x)),
-        y: Math.max(0, Math.min(H - 1, cell.y)),
-    };
-}
-
-function keyboardCellDescription(cell: { x: number; y: number }): string {
-    const s = store.state;
-    const { canvasWidth: W } = s.pattern;
-    const pixel = visiblePixels(s)[cell.y * W + cell.x];
-    if (pixel === 0) return `Cell ${cell.x}, ${cell.y} · outside pattern`;
-    let marker = "no stitch marker";
-    const directions: Record<number, [number, number]> = {
-        [PlanDir.Up]: [0, -1], [PlanDir.Down]: [0, 1],
-        [PlanDir.Left]: [-1, 0], [PlanDir.Right]: [1, 0],
-    };
-    for (let i = 0; i < store.plan.length; i += 4) {
-        const [dx, dy] = directions[store.plan[i + 1]];
-        if (store.plan[i + 2] + dx !== cell.x || store.plan[i + 3] + dy !== cell.y) continue;
-        marker = store.plan[i] === PlanType.Valid ? "valid overlay" : "invalid overlay warning";
-        if (marker === "valid overlay") break;
-    }
-    const placement = overlayTargetAvailable(s.pattern, cell.x, cell.y)
-        ? "overlay placement available" : "overlay placement unavailable";
-    return `Cell ${cell.x}, ${cell.y} · Yarn ${pixel === 1 ? "A" : "B"} · ${placement} · ${marker}`;
-}
-
-function showKeyboardCell(cell: { x: number; y: number }, announce = true) {
-    keyboardCell = clampKeyboardCell(cell);
-    rs.keyboardCursor = keyboardCell;
-    updateCoordinates(keyboardCell.x, keyboardCell.y);
-    if (announce) document.getElementById("canvas-cell-status")!.textContent = keyboardCellDescription(keyboardCell);
-    renderCanvas();
-}
-
-function applyKeyboardTool() {
-    if (!keyboardCell) return;
-    const { x, y } = keyboardCell;
-    const tool = store.state.activeTool;
-    if (tool === "select") {
-        commitSelectRect(store, x, y, x, y, selectionMode);
-    } else if (tool === "wand") {
-        commitWandAt(store, x, y, selectionMode);
-    } else if (tool === "move") {
-        ui.setCanvasFeedback(store.state.float
-            ? null : "No selection");
-    } else {
-        const outcome = evaluatePaintAt(tool, store.state.primaryColor, x, y, tool === "invert" ? new Set() : null);
-        if (outcome.reason) {
-            ui.setCanvasFeedback(outcome.reason);
-        } else {
-            if (outcome.protectedSkipped) {
-                ui.setCanvasFeedback("Protected · Settings");
-            }
-            if (arraysEqual(outcome.before, outcome.after)) {
-                if (!outcome.protectedSkipped) ui.setCanvasFeedback("No cells changed");
-            } else if (outcome.floatPixels) {
-                const pixels = outcome.floatPixels;
-                store.commit(state => { state.float = { ...state.float!, pixels }; }, { history: true });
-            } else {
-                const pixels = outcome.after;
-                store.commit(state => { state.pixels = pixels; }, { history: true });
-            }
-        }
-    }
-    document.getElementById("canvas-cell-status")!.textContent = keyboardCellDescription(keyboardCell);
-    updateCoordinates(x, y);
-}
-
-function clearPaintPreview() {
-    previewCell = null;
-    if (!rs.paintPreview) return;
-    rs.paintPreview = null;
-    renderCanvas();
-}
-
-function previewPaintAt(x: number | null, y: number | null, clientX: number | null, clientY: number | null) {
-    const tool = store.state.activeTool;
-    if (x === null || y === null || clientX === null || clientY === null
-        || navigateLatched || navigateMomentary || gesture || editBaseline
-        || tool === "fill" || tool === "select" || tool === "wand" || tool === "move") {
-        clearPaintPreview();
-        if (!gesture) ui.setCanvasFeedback(null);
-        return;
-    }
-    if (rs.previewRepeatGuides) {
-        const frac = screenToPatternFrac(
-            viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
-            store.state.pattern, clientX, clientY,
-        );
-        if (pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance()).length > 0
-            || pickRepeatHandle(store.state.repeat, frac.x, frac.y, Math.max(0.4, 22 / viewport.view.zoom))) {
-            clearPaintPreview();
-            ui.setCanvasFeedback(null);
-            return;
-        }
-    }
-    if (previewCell?.x === x && previewCell.y === y) return;
-    previewCell = { x, y };
-    const p = store.state.pattern;
-    const outcome = evaluatePaintAt(tool, store.state.primaryColor, x, y, tool === "invert" ? new Set() : null);
-    if (outcome.reason) {
-        rs.paintPreview = null;
-        ui.setCanvasFeedback(outcome.reason);
-        renderCanvas();
-        return;
-    }
-    const changed: string[] = [];
-    let count = 0;
-    for (let i = 0; i < outcome.before.length; i++) {
-        if (outcome.before[i] === outcome.after[i]) continue;
-        count++;
-        if (changed.length < 4) changed.push(`${i % p.canvasWidth}, ${Math.floor(i / p.canvasWidth)}`);
-    }
-    const unchangedTargets: number[] = [];
-    for (const target of outcome.targets) {
-        let affected = target;
-        if (tool === "overlay") {
-            const inner = overlayInwardCell(p, target % p.canvasWidth, Math.floor(target / p.canvasWidth));
-            affected = inner.length === 2 ? inner[1] * p.canvasWidth + inner[0] : -1;
-        }
-        if (affected < 0 || outcome.before[affected] === outcome.after[affected]) unchangedTargets.push(target);
-    }
-    const support = tool === "overlay" ? overlayInwardCell(p, x, y) : null;
-    const detail = tool === "overlay" && support?.length === 2
-        ? ` · support ${support[0]}, ${support[1]}` : "";
-    const locations = count > 0 ? ` · ${changed.join(" · ")}${count > 4 ? ` · ${count - 4} more` : ""}` : "";
-    const protectedNote = outcome.protectedSkipped ? " · protected" : "";
-    const unchangedNote = unchangedTargets.length
-        ? ` · ${unchangedTargets.length} unchanged` : "";
-    ui.setCanvasFeedback(`${count} cell${count === 1 ? "" : "s"}${detail}${locations}${unchangedNote}${protectedNote}`);
-    rs.paintPreview = count === 0 && unchangedTargets.length === 0 ? null : {
-        before: outcome.before,
-        after: outcome.after,
-        unchangedTargets,
-        plan: count === 0 ? store.plan : p.mode === "row"
-            ? build_highlight_plan_row(outcome.after, p.canvasWidth, p.canvasHeight)
-            : build_highlight_plan_round(
-                outcome.after, p.canvasWidth, p.canvasHeight,
-                p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds,
-            ),
-    };
-    renderCanvas();
 }
 
 function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
@@ -631,12 +487,10 @@ function onRepeatCommit() {
 }
 
 function onLiveTransformsChange(enabled: boolean) {
-    clearPaintPreview();
     store.commit(s => { s.liveTransforms = enabled; }, { recompute: false, render: false });
 }
 
 function onTransformPopoverToggle(open: boolean) {
-    clearPaintPreview();
     rs.previewRepeatGuides = open;
     if (!open) viewport.canvas.style.cursor = "";
     renderCanvas();
@@ -657,7 +511,6 @@ function onReplicateSelection() {
 // Switching tools keeps any active float alive — paint tools clip to its
 // shifted mask, so the selection survives across tool changes.
 function setTool(t: Tool) {
-    clearPaintPreview();
     const wasSelectionTool = store.state.activeTool === "select" || store.state.activeTool === "wand";
     const isSelectionTool = t === "select" || t === "wand";
     if (wasSelectionTool && !isSelectionTool) selectionMode = "replace";
@@ -669,11 +522,6 @@ function setTool(t: Tool) {
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
     ui.setSelectionMode(t, selectionMode, Boolean(store.state.float));
-    if (t !== "move" && selectionMoveMode !== "move") {
-        selectionMoveMode = "move";
-        ui.setMaskMove(false);
-        ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
-    }
 }
 function setSelectionMode(mode: SelectionMode) {
     if (mode === "remove" && !store.state.float) {
@@ -684,17 +532,17 @@ function setSelectionMode(mode: SelectionMode) {
     ui.setCanvasFeedback(null);
     ui.setSelectionMode(store.state.activeTool, mode, Boolean(store.state.float));
 }
-function toggleMaskMove() {
-    setSelectionMoveMode(selectionMoveMode === "mask-only" ? "move" : "mask-only");
-}
 function setSelectionMoveMode(mode: SelectionMoveMode) {
     if (store.state.activeTool !== "move") setTool("move");
     selectionMoveMode = mode;
-    ui.setMaskMove(mode === "mask-only");
     ui.setSelectionState(selectionCellCount(), clipboardCellCount(), mode);
 }
+function setOverlayAction(action: OverlayAction) {
+    overlayAction = action;
+    if (store.state.activeTool !== "overlay") setTool("overlay");
+    ui.setOverlayAction(action);
+}
 function setPrimary(slot: 1 | 2) {
-    clearPaintPreview();
     store.commit(s => { s.primaryColor = slot; }, { recompute: false, render: false });
     ui.setPrimary(slot);
 }
@@ -715,15 +563,26 @@ function onSwapYarns() {
 }
 function onHlOpacityInput() {
     const v = parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
-    store.commit(s => { s.hlOpacity = v; }, { recompute: false });
+    preferences.guidanceOpacity = v;
+    saveAppPreferences(preferences);
+    renderCanvas();
 }
-function onGuidanceToggle() {
-    const visible = (document.getElementById("show-guidance") as HTMLInputElement).checked;
-    store.commit(s => { s.showGuidance = visible; }, { recompute: false });
+function onDangerColorInput() {
+    preferences.dangerColor = (document.getElementById("danger-color") as HTMLInputElement).value;
+    saveAppPreferences(preferences);
+    renderCanvas();
 }
-function onInvalidIntensityInput() {
-    const v = parseInt((document.getElementById("invalid-intensity") as HTMLInputElement).value);
-    store.commit(s => { s.invalidIntensity = v; }, { recompute: false });
+function onAccentColorInput() {
+    preferences.accentColor = (document.getElementById("accent-color") as HTMLInputElement).value;
+    saveAppPreferences(preferences);
+    renderCanvas();
+}
+function resetPreferenceColor(kind: "danger" | "accent") {
+    if (kind === "danger") preferences.dangerColor = DEFAULT_APP_PREFERENCES.dangerColor;
+    else preferences.accentColor = DEFAULT_APP_PREFERENCES.accentColor;
+    syncPreferenceInputs();
+    saveAppPreferences(preferences);
+    renderCanvas();
 }
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
@@ -732,12 +591,15 @@ function onLabelsToggle() {
             viewport.canvas, viewport.view, store.state.pattern, store.state.rotation, true,
         );
     }
-    store.commit(s => { s.labelsVisible = v; }, { recompute: false });
+    preferences.labelsVisible = v;
+    saveAppPreferences(preferences);
+    renderCanvas();
+    ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
 }
 function onLockInvalidToggle() {
-    clearPaintPreview();
     const v = (document.getElementById("lock-invalid") as HTMLInputElement).checked;
-    store.commit(s => { s.lockInvalid = v; }, { recompute: false, render: false });
+    preferences.lockInvalid = v;
+    saveAppPreferences(preferences);
 }
 function rotate(delta: number) {
     store.commit(s => { s.rotation += delta; }, { recompute: false });
@@ -748,7 +610,7 @@ function resetRotation() {
 function fitPattern() {
     fitToView(
         viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
-        store.state.labelsVisible,
+        preferences.labelsVisible,
     );
     renderCanvas();
     ui.setViewState(viewport.view.zoom, store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
@@ -820,7 +682,7 @@ function onEditChange(): boolean {
     const summary = patternChangeSummary(readEditSettings(), source, edited);
     ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
     fitToView(
-        viewport.canvas, viewport.view, pattern, store.state.rotation, store.state.labelsVisible,
+        viewport.canvas, viewport.view, pattern, store.state.rotation, preferences.labelsVisible,
     );
     store.commit(s => {
         s.pattern  = pattern;
@@ -866,7 +728,7 @@ function onEditRevert() {
     editBaseline = null;
     fitToView(
         viewport.canvas, viewport.view, baseline.pattern, store.state.rotation,
-        store.state.labelsVisible,
+        preferences.labelsVisible,
     );
     store.replace({
         ...store.state,
@@ -885,7 +747,7 @@ function applyRestored(r: Restored) {
     if (dimsChanged) {
         fitToView(
             viewport.canvas, viewport.view, r.pattern, store.state.rotation,
-            store.state.labelsVisible,
+            preferences.labelsVisible,
         );
     }
     store.replace(
@@ -939,7 +801,7 @@ async function onLoad() {
     if (!loaded) return;
     fitToView(
         viewport.canvas, viewport.view, loaded.pattern, store.state.rotation,
-        store.state.labelsVisible,
+        preferences.labelsVisible,
     );
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
@@ -1119,7 +981,7 @@ async function onInstructions() {
 // ── Mount UI + gestures ─────────────────────────────────────────────────────
 const ui: UIHandle = mountUI({
     onTool: setTool,
-    onMaskMove: toggleMaskMove,
+    onOverlayAction: setOverlayAction,
     onSelectionMoveMode: setSelectionMoveMode,
     onSelectionMode: setSelectionMode,
     onSelectionCopy: onCopy,
@@ -1140,8 +1002,10 @@ const ui: UIHandle = mountUI({
     onTransformPopoverToggle,
     onReplicateSelection,
     onHighlightChange:         onHlOpacityInput,
-    onGuidanceChange:          onGuidanceToggle,
-    onInvalidIntensityChange:  onInvalidIntensityInput,
+    onDangerColorChange:       onDangerColorInput,
+    onAccentColorChange:       onAccentColorInput,
+    onDangerColorReset:        () => resetPreferenceColor("danger"),
+    onAccentColorReset:        () => resetPreferenceColor("accent"),
     onLabelsVisibleChange:     onLabelsToggle,
     onLockInvalidChange:   onLockInvalidToggle,
     onUndo: undo,
@@ -1161,7 +1025,7 @@ function beginFreshPattern() {
         fresh.pattern.canvasWidth, fresh.pattern.canvasHeight,
     ).slice();
     fitToView(
-        viewport.canvas, viewport.view, fresh.pattern, fresh.rotation, fresh.labelsVisible,
+        viewport.canvas, viewport.view, fresh.pattern, fresh.rotation, preferences.labelsVisible,
     );
     historyReset(fresh);
     patternHistorySession = false;
@@ -1182,7 +1046,7 @@ function useExample() {
     const example = exampleSession();
     fitToView(
         viewport.canvas, viewport.view, example.pattern, example.rotation,
-        example.labelsVisible,
+        preferences.labelsVisible,
     );
     historyReset(example);
     store.replace(example, { persist: true });
@@ -1214,7 +1078,6 @@ const clientToPattern = (cx: number, cy: number) => {
 mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
-        clearPaintPreview();
         if (instructionsOpen || editBaseline) {
             gesture = null;
             return;
@@ -1279,7 +1142,8 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             color,
             prePixels: store.state.pixels.slice(),
             preFloat:  store.state.float,
-            invertVisited: tool === "invert" ? new Set<number>() : null,
+            invertVisited: tool === "invert" || (tool === "overlay" && overlayAction === "invert")
+                ? new Set<number>() : null,
         };
     },
     onPaintAt:    (cx, cy) => {
@@ -1442,6 +1306,11 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 gesture.rect.endY = p.y;
             }
             syncSelectPreview();
+            const width = Math.abs(gesture.rect.endX - gesture.rect.startX) + 1;
+            const height = Math.abs(gesture.rect.endY - gesture.rect.startY) + 1;
+            const count = width * height;
+            const mode = gesture.mode === "remove" ? "Subtract" : gesture.mode === "add" ? "Add" : "Replace";
+            ui.setCanvasFeedback(`${mode} · ${width} × ${height} · ${count} cell${count === 1 ? "" : "s"}`);
             renderCanvas();
             return;
         }
@@ -1496,6 +1365,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             }
             gesture = null;
             syncSelectPreview();
+            ui.setCanvasFeedback(null);
             renderCanvas();
             return;
         }
@@ -1504,6 +1374,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 store.commit(() => {}, { recompute: false, render: false, history: true });
             }
             gesture = null;
+            ui.setCanvasFeedback(null);
             return;
         }
         if (gesture.kind === "axis-drag") {
@@ -1566,6 +1437,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         if (gesture.kind === "select") {
             gesture = null;
             syncSelectPreview();
+            ui.setCanvasFeedback(null);
             renderCanvas();
             return;
         }
@@ -1589,10 +1461,9 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         gesture = null;
         store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
     },
-    onHover:      (x, y, clientX, clientY) => {
+    onHover:      (x, y) => {
         if (instructionsOpen) return;
         updateCoordinates(x, y);
-        previewPaintAt(x, y, clientX, clientY);
     },
     onView:       () => {
         renderCanvas();
@@ -1613,30 +1484,8 @@ viewport.canvas.addEventListener("pointermove", event => {
 viewport.canvas.addEventListener("pointerleave", () => {
     viewport.canvas.style.cursor = "";
 });
-viewport.canvas.addEventListener("focus", () => {
-    if (instructionsOpen) return;
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    showKeyboardCell(keyboardCell ?? { x: Math.floor(W / 2), y: Math.floor(H / 2) });
-});
-viewport.canvas.addEventListener("blur", () => {
-    if (instructionsOpen) return;
-    rs.keyboardCursor = null;
-    updateCoordinates(null, null);
-    renderCanvas();
-});
-viewport.canvas.addEventListener("pointerdown", event => {
+viewport.canvas.addEventListener("pointerdown", () => {
     viewport.canvas.focus({ preventScroll: true });
-    if (instructionsOpen) return;
-    if (canvasSpacePending) {
-        canvasSpaceNavigated = true;
-        return;
-    }
-    const cell = screenToPattern(
-        viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
-        store.state.pattern, event.clientX, event.clientY,
-    );
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    if (!outOfBounds(cell.x, cell.y, W, H)) showKeyboardCell(cell, false);
 });
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────
@@ -1647,8 +1496,6 @@ document.addEventListener("keydown", e => {
     if (e.code === "Space" && t === viewport.canvas) {
         e.preventDefault();
         if (!e.repeat) {
-            canvasSpacePending = true;
-            canvasSpaceNavigated = false;
             navigateMomentary = true;
             ui.setViewState(viewport.view.zoom, store.state.rotation, true);
         }
@@ -1734,17 +1581,8 @@ document.addEventListener("keydown", e => {
     }
     if (e.key.startsWith("Arrow")) {
         if (t !== viewport.canvas) return;
+        if (store.state.activeTool !== "move" || !store.state.float) return;
         e.preventDefault();
-        if (store.state.activeTool !== "move" || !store.state.float) {
-            const cell = keyboardCell ?? {
-                x: Math.floor(store.state.pattern.canvasWidth / 2),
-                y: Math.floor(store.state.pattern.canvasHeight / 2),
-            };
-            const dx = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
-            const dy = e.key === "ArrowUp" ? -1 : e.key === "ArrowDown" ? 1 : 0;
-            showKeyboardCell({ x: cell.x + dx, y: cell.y + dy });
-            return;
-        }
         const step = e.shiftKey ? 5 : 1;
         const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
         const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
@@ -1757,7 +1595,7 @@ document.addEventListener("keydown", e => {
     if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
     else if (k === "e") setTool("eraser");
-    else if (k === "o") setTool("overlay");
+    else if (k === "o") setOverlayAction(e.shiftKey ? "clear" : "place");
     else if (k === "i") setTool("invert");
     else if (k === "s") setTool("select");
     else if (k === "w") setTool("wand");
@@ -1775,9 +1613,6 @@ document.addEventListener("keydown", e => {
 
 document.addEventListener("keyup", e => {
     if (e.code === "Space") {
-        if (canvasSpacePending && !canvasSpaceNavigated) applyKeyboardTool();
-        canvasSpacePending = false;
-        canvasSpaceNavigated = false;
         navigateMomentary = false;
         ui.setViewState(viewport.view.zoom, store.state.rotation, navigateLatched);
     } else if (e.key === "Alt") {
@@ -1805,14 +1640,19 @@ window.addEventListener("blur", () => {
 function syncDomInputs(s: Readonly<SessionState>) {
     (document.getElementById("color-a") as HTMLInputElement).value = s.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = s.colorB;
-    (document.getElementById("hl-opacity")         as HTMLInputElement).value   = String(s.hlOpacity);
-    (document.getElementById("show-guidance")      as HTMLInputElement).checked = s.showGuidance ?? s.hlOpacity > 0;
-    (document.getElementById("invalid-intensity")  as HTMLInputElement).value   = String(s.invalidIntensity);
-    (document.getElementById("labels-on")          as HTMLInputElement).checked = s.labelsVisible;
-    (document.getElementById("lock-invalid") as HTMLInputElement).checked = s.lockInvalid;
+}
+
+function syncPreferenceInputs() {
+    (document.getElementById("hl-opacity") as HTMLInputElement).value = String(preferences.guidanceOpacity);
+    (document.getElementById("danger-color") as HTMLInputElement).value = preferences.dangerColor;
+    (document.getElementById("accent-color") as HTMLInputElement).value = preferences.accentColor;
+    (document.getElementById("labels-on") as HTMLInputElement).checked = preferences.labelsVisible;
+    (document.getElementById("lock-invalid") as HTMLInputElement).checked = preferences.lockInvalid;
 }
 
 syncDomInputs(store.state);
+syncPreferenceInputs();
+ui.setOverlayAction(overlayAction);
 ui.setTool(store.state.activeTool);
 ui.setPrimary(store.state.primaryColor);
 ui.setColors(store.state.colorA, store.state.colorB);
@@ -1829,7 +1669,7 @@ ui.setRecoveryStatus(saved ? "recovered" : "saved");
 if (saved) {
     fitToView(
         viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
-        store.state.labelsVisible,
+        preferences.labelsVisible,
     );
     refreshSymmetryUi();
     historyEnsureInitialized(store.state);
@@ -1838,7 +1678,7 @@ if (saved) {
     const { pattern, pixels } = applyEditSettings();
     fitToView(
         viewport.canvas, viewport.view, pattern, store.state.rotation,
-        store.state.labelsVisible,
+        preferences.labelsVisible,
     );
     store.commit(s => { s.pattern = pattern; s.pixels = pixels; }, { persist: false });
     refreshSymmetryUi();

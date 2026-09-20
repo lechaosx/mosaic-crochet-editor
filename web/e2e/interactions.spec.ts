@@ -152,7 +152,7 @@ test("Pattern presents direct properties with contextual resize feedback", async
 
     await expect(page.getByLabel("Centre opening width")).toBeAttached();
     await expect(page.getByLabel("Centre opening height")).toBeAttached();
-    await expect(page.getByRole("button", { name: "Reset pattern colours" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear drawing" })).toBeVisible();
     await expect(page.locator("#edit-summary")).toBeHidden();
 
     await page.locator("#edit-width").fill("10");
@@ -167,7 +167,7 @@ test("Pattern presents direct properties with contextual resize feedback", async
     await expect(page.locator("#edit-summary")).toBeHidden();
 });
 
-test("Reset pattern colours is immediate and undoable", async ({ page }) => {
+test("Clear drawing restores natural colours immediately and is undoable", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 0, 1);
     const cell = await cellCoord(page, 0, 1);
@@ -175,7 +175,7 @@ test("Reset pattern colours is immediate and undoable", async ({ page }) => {
     const beforeReset = await historyLength(page);
     await page.getByRole("button", { name: "Pattern" }).click();
 
-    await page.getByRole("button", { name: "Reset pattern colours" }).click();
+    await page.getByRole("button", { name: "Clear drawing" }).click();
 
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(B);
     expect(await historyLength(page)).toBe(beforeReset + 1);

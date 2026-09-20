@@ -19,11 +19,7 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         axes: defaultAxes(W, H),
         repeat: defaultRepeatGrid(),
         liveTransforms: true,
-        hlOpacity: 100,
-        invalidIntensity: 65,
         float: null,
-        labelsVisible: true,
-        lockInvalid: false,
         rotation: 0,
         ...opts,
     };

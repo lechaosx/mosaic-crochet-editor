@@ -1,31 +1,31 @@
 import { Tool, SymKey, PatternState, Axis, RepeatGrid } from "@mosaic/logic/types";
 import type { SelectMode } from "@mosaic/logic/selection";
+import type { OverlayAction } from "@mosaic/logic/paint";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 
 export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
 export type SelectionMode = SelectMode;
 
-// ─── Long-press / click helper (works for mouse, pen, touch) ──────────────────
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let startX = 0, startY = 0;
 
     const cancel = () => { if (timer !== null) { clearTimeout(timer); timer = null; } };
 
-    target.addEventListener("pointerdown", e => {
-        startX = e.clientX; startY = e.clientY;
+    target.addEventListener("pointerdown", event => {
+        startX = event.clientX;
+        startY = event.clientY;
         cancel();
         timer = setTimeout(() => { timer = null; onLong(); }, 500);
     });
-    target.addEventListener("pointermove", e => {
-        if (timer === null) return;
-        if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) cancel();
+    target.addEventListener("pointermove", event => {
+        if (timer !== null && Math.hypot(event.clientX - startX, event.clientY - startY) > 8) cancel();
     });
     target.addEventListener("pointerup", () => {
         if (timer !== null) { cancel(); onClick(); }
     });
     target.addEventListener("pointercancel", cancel);
-    target.addEventListener("pointerleave",  cancel);
+    target.addEventListener("pointerleave", cancel);
 }
 
 // ─── Mirror & Repeat button ids ───────────────────────────────────────────────
@@ -41,7 +41,7 @@ const SYM_ADD_BUTTONS: { id: string; key: SymKey; glyph: string }[] = [
 // ─── Public surface ───────────────────────────────────────────────────────────
 export interface UICallbacks {
     onTool:            (t: Tool) => void;
-    onMaskMove:        () => void;
+    onOverlayAction:   (action: OverlayAction) => void;
     onSelectionMoveMode: (mode: SelectionMoveMode) => void;
     onSelectionMode:     (mode: SelectionMode) => void;
     onSelectionCopy:     () => void;
@@ -62,8 +62,10 @@ export interface UICallbacks {
     onTransformPopoverToggle: (open: boolean) => void;
     onReplicateSelection: () => void;
     onHighlightChange:        () => void;
-    onGuidanceChange:         () => void;
-    onInvalidIntensityChange: () => void;
+    onDangerColorChange:      () => void;
+    onAccentColorChange:      () => void;
+    onDangerColorReset:       () => void;
+    onAccentColorReset:       () => void;
     onLabelsVisibleChange:    () => void;
     onLockInvalidChange: () => void;
     onUndo:            () => void;
@@ -85,7 +87,7 @@ export interface UICallbacks {
 
 export interface UIHandle {
     setTool:            (t: Tool) => void;
-    setMaskMove:        (active: boolean) => void;
+    setOverlayAction:   (action: OverlayAction) => void;
     setSelectionState:  (selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) => void;
     setSelectionMode:   (tool: Tool, mode: SelectionMode, hasSelection: boolean) => void;
     setCanvasFeedback:  (message: string | null) => void;
@@ -144,7 +146,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         pattern: el("edit-pattern-widget"),
     };
     const inspectorTriggers: Record<InspectorPanel, HTMLElement> = {
-        selection: el("status-selection"),
+        selection: el("selection-actions"),
         settings: el("btn-hl-toggle"),
         transforms: el("btn-sym-toggle"),
         pattern: el("btn-edit"),
@@ -229,7 +231,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const activeTool = document.querySelector<HTMLButtonElement>(
             ".authoring-dock .btn[aria-pressed='true']",
         );
-        const target = trigger && trigger.getClientRects().length > 0
+        const triggerAvailable = trigger && trigger.getClientRects().length > 0
+            && (!(trigger instanceof HTMLButtonElement) || !trigger.disabled);
+        const target = triggerAvailable
             ? trigger
             : more.getClientRects().length > 0 ? more : activeTool;
         target?.focus();
@@ -261,26 +265,41 @@ export function mountUI(cb: UICallbacks): UIHandle {
         wand:    el("tool-wand"),
         move:    el("tool-move"),
     };
-    (Object.keys(toolButtons) as Tool[]).forEach(t =>
-        toolButtons[t].addEventListener("click", () => cb.onTool(t))
+    (Object.keys(toolButtons) as Tool[]).forEach(t => {
+        if (t !== "overlay") toolButtons[t].addEventListener("click", () => cb.onTool(t));
+    });
+    const overlayButtons: Record<OverlayAction, HTMLButtonElement> = {
+        place: toolButtons.overlay,
+        clear: el("overlay-clear"),
+        invert: el("overlay-invert"),
+    };
+    let overlayAction: OverlayAction = "place";
+    let currentTool: Tool = "pencil";
+    (Object.keys(overlayButtons) as OverlayAction[]).forEach(action =>
+        overlayButtons[action].addEventListener("click", () => cb.onOverlayAction(action))
     );
-    const maskMove = el<HTMLButtonElement>("move-mask");
-    maskMove.addEventListener("click", cb.onMaskMove);
 
     function setTool(t: Tool) {
+        currentTool = t;
         (Object.keys(toolButtons) as Tool[]).forEach(k => {
-            const active = k === t;
+            const active = k === t && (k !== "overlay" || overlayAction === "place");
             toolButtons[k].classList.toggle("btn--active", active);
             toolButtons[k].setAttribute("aria-pressed", String(active));
         });
+        for (const action of ["clear", "invert"] as const) {
+            const active = t === "overlay" && overlayAction === action;
+            overlayButtons[action].classList.toggle("btn--active", active);
+            overlayButtons[action].setAttribute("aria-pressed", String(active));
+        }
     }
-    function setMaskMove(active: boolean) {
-        maskMove.classList.toggle("btn--active", active);
-        maskMove.setAttribute("aria-pressed", String(active));
+    function setOverlayAction(action: OverlayAction) {
+        overlayAction = action;
+        setTool("overlay");
     }
 
     /* ── Selection card ──────────────────────────────────────────────── */
-    const selectionTrigger = el<HTMLButtonElement>("status-selection");
+    const selectionTrigger = el<HTMLButtonElement>("selection-actions");
+    const selectionStatus = el("status-selection");
     const selectionModeControls = el("selection-mode-controls");
     const selectionModeButtons: Record<SelectionMode, HTMLButtonElement> = {
         replace: el("selection-replace"),
@@ -312,6 +331,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         selectionModeButtons[mode].addEventListener("click", () => cb.onSelectionMode(mode))
     );
     function setSelectionMode(tool: Tool, mode: SelectionMode, hasSelection: boolean) {
+        currentTool = tool;
         selectionModeControls.hidden = tool !== "select" && tool !== "wand";
         for (const key of Object.keys(selectionModeButtons) as SelectionMode[]) {
             const button = selectionModeButtons[key];
@@ -324,7 +344,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(mode =>
         modeButtons[mode].addEventListener("click", () => {
             cb.onSelectionMoveMode(mode);
-            closeInspector();
         })
     );
     selectionCopy.addEventListener("click", cb.onSelectionCopy);
@@ -335,18 +354,26 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setSelectionState(selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) {
         const hasSelection = selectedCount > 0;
         const hasClip = clipboardCount > 0;
-        selectionTrigger.hidden = !hasSelection && !hasClip;
+        selectionTrigger.disabled = !hasSelection && !hasClip
+            && currentTool !== "select" && currentTool !== "wand";
         if (hasSelection) {
-            selectionTrigger.textContent = `${selectedCount} selected`;
-            selectionTrigger.setAttribute("aria-label", `${selectedCount} selected`);
+            selectionTrigger.textContent = `Selection · ${selectedCount}`;
+            selectionTrigger.setAttribute("aria-label", `Selection actions, ${selectedCount} selected`);
             selectionTrigger.title = `Open actions for ${selectedCount} selected ${selectedCount === 1 ? "cell" : "cells"}`;
             selectionTitle.textContent = `Selection · ${selectedCount} ${selectedCount === 1 ? "cell" : "cells"}`;
+            selectionStatus.textContent = `${selectedCount} selected`;
         } else if (hasClip) {
-            selectionTrigger.textContent = `Clipboard · ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`;
-            selectionTrigger.setAttribute("aria-label", `Clipboard, ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`);
+            selectionTrigger.textContent = `Clipboard · ${clipboardCount}`;
+            selectionTrigger.setAttribute("aria-label", `Selection actions, clipboard has ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`);
             selectionTrigger.title = `Open clipboard actions for ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`;
             selectionTitle.textContent = "Clipboard";
+            selectionStatus.textContent = `${clipboardCount} copied`;
+        } else {
+            selectionTrigger.textContent = "Selection";
+            selectionTrigger.setAttribute("aria-label", "Selection actions");
+            selectionStatus.textContent = "";
         }
+        selectionStatus.hidden = !hasSelection && !hasClip;
         selectionClipboard.textContent = hasSelection && hasClip
             ? `${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"} copied`
             : "";
@@ -361,9 +388,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             modeButtons[key].classList.toggle("btn--active", active);
             modeButtons[key].setAttribute("aria-pressed", String(active));
         });
-        if (!hasSelection && !hasClip && isInspectorOpen("selection")) {
-            closeInspector();
-        }
+        if (selectionTrigger.disabled && isInspectorOpen("selection")) closeInspector();
     }
 
     function setCanvasFeedback(message: string | null) {
@@ -377,11 +402,18 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const swatchB = el("swatch-b");
     const colorA  = el<HTMLInputElement>("color-a");
     const colorB  = el<HTMLInputElement>("color-b");
-    const editYarn = el<HTMLButtonElement>("edit-yarn");
-    let activeYarn: 1 | 2 = 1;
 
-    bindLongPress(swatchA, () => cb.onPrimaryColor(1), () => colorA.click());
-    bindLongPress(swatchB, () => cb.onPrimaryColor(2), () => colorB.click());
+    const openYarnPicker = (slot: 1 | 2) => {
+        if (!isInspectorOpen("pattern")) {
+            openInspector("pattern", "Pattern");
+            cb.onEditOpen();
+        }
+        const picker = slot === 1 ? colorA : colorB;
+        picker.focus();
+        picker.click();
+    };
+    bindLongPress(swatchA, () => cb.onPrimaryColor(1), () => openYarnPicker(1));
+    bindLongPress(swatchB, () => cb.onPrimaryColor(2), () => openYarnPicker(2));
     const selectWithKeyboard = (event: KeyboardEvent, slot: 1 | 2) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
@@ -389,9 +421,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     };
     swatchA.addEventListener("keydown", event => selectWithKeyboard(event, 1));
     swatchB.addEventListener("keydown", event => selectWithKeyboard(event, 2));
-    swatchA.addEventListener("dblclick", () => colorA.click());
-    swatchB.addEventListener("dblclick", () => colorB.click());
-    editYarn.addEventListener("click", () => (activeYarn === 1 ? colorA : colorB).click());
+    swatchA.addEventListener("dblclick", () => openYarnPicker(1));
+    swatchB.addEventListener("dblclick", () => openYarnPicker(2));
     el("swap-yarns").addEventListener("click", cb.onSwapYarns);
     colorA.addEventListener("input",  cb.onColorChange);
     colorB.addEventListener("input",  cb.onColorChange);
@@ -401,13 +432,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     colorB.addEventListener("change", cb.onColorCommit);
 
     function setPrimary(slot: 1 | 2) {
-        activeYarn = slot;
         swatchA.classList.toggle("swatch--active", slot === 1);
         swatchB.classList.toggle("swatch--active", slot === 2);
         swatchA.setAttribute("aria-pressed", String(slot === 1));
         swatchB.setAttribute("aria-pressed", String(slot === 2));
-        editYarn.setAttribute("aria-label", `Edit Yarn ${slot === 1 ? "A" : "B"}`);
-        editYarn.title = `Edit Yarn ${slot === 1 ? "A" : "B"} colour`;
     }
     function setColors(a: string, b: string) {
         colorA.value = a; colorB.value = b;
@@ -627,8 +655,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         }
     });
     el<HTMLInputElement>("hl-opacity")        .addEventListener("input",  cb.onHighlightChange);
-    el<HTMLInputElement>("show-guidance")     .addEventListener("change", cb.onGuidanceChange);
-    el<HTMLInputElement>("invalid-intensity") .addEventListener("input",  cb.onInvalidIntensityChange);
+    el<HTMLInputElement>("danger-color")      .addEventListener("input",  cb.onDangerColorChange);
+    el<HTMLInputElement>("accent-color")      .addEventListener("input",  cb.onAccentColorChange);
+    el("danger-color-reset").addEventListener("click", cb.onDangerColorReset);
+    el("accent-color-reset").addEventListener("click", cb.onAccentColorReset);
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
     el("settings-about").addEventListener("click", () => {
@@ -965,7 +995,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
             liveBack.onclick = null;
             liveForward.onclick = null;
             canvas.setAttribute("aria-label", "Editable pattern chart");
-            canvas.setAttribute("aria-describedby", "canvas-cell-status");
             instructions.hidden = true;
             if (inspectorHost.hidden) inspectorHost.hidden = inspectorWasHidden;
             document.body.classList.remove("crochet-mode");
@@ -1061,7 +1090,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setMaskMove, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setAxes,
+        setTool, setOverlayAction, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
         setHistory, setRecoveryStatus, setDocumentError, setViewState, setEditError, setEditSummary,

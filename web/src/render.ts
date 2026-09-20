@@ -2,6 +2,7 @@ import { PatternState, RowState, RoundState, Axis, SymKey, RepeatGrid, Float } f
 import { PlanType, PlanDir, transformed_target_indices } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
 import { transformsToFlat } from "@mosaic/logic/repeat";
+import { AppPreferences } from "./preferences";
 
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;
@@ -85,9 +86,7 @@ export interface RendererState {
     // Index 1/2 refreshed from store at the top of `render`. Index 0 is the
     // hole sentinel — render loops skip; `null` makes accidental reads fail loud.
     colors: (string | null)[];
-    // Third palette colour for the ! invalid marker, chosen at render time
-    // to contrast nicely with both user colours. See `chooseContrastingColor`.
-    contrastingColor: string;
+    preferences: AppPreferences;
     // A selection drag shows its resulting membership, not the old marquee.
     hideCommittedSelection: boolean;
     selectPreviewMask: Uint8Array | null;
@@ -102,13 +101,11 @@ export interface RendererState {
     // guides at reduced alpha so the user can see "release = gone."
     axesInDeleteZone: Set<string>;
     previewRepeatGuides: boolean;
-    paintPreview: { before: Uint8Array; after: Uint8Array; plan: Int16Array; unchangedTargets: number[] } | null;
-    keyboardCursor: { x: number; y: number } | null;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
 }
 
-export function makeRendererState(): RendererState {
+export function makeRendererState(preferences: AppPreferences): RendererState {
     const faviconCanvas = document.createElement("canvas");
     faviconCanvas.width  = FAVICON_SIZE;
     faviconCanvas.height = FAVICON_SIZE;
@@ -121,68 +118,16 @@ export function makeRendererState(): RendererState {
         lastFrameTime:  0,
         lastStore:      null,
         colors:         [null, "#000000", "#ffffff"],
-        contrastingColor:     "hsl(0, 70%, 50%)",
+        preferences,
         hideCommittedSelection: false,
         selectPreviewMask:      null,
         dragRect:               null,
         selectionDashOffset:    0,
         axesInDeleteZone:       new Set<string>(),
         previewRepeatGuides:    false,
-        paintPreview:          null,
-        keyboardCursor:        null,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
     };
-}
-
-// ── Third-colour picker for ! marker ───────────────────────────────────────
-// Walk the hue wheel; pick the hue whose minimum hue-distance to both user
-// colours is maximised. Hue is fully algorithmic — never directly user-
-// configurable, so changing palette colours auto-updates the marker.
-// `intensity` (0..100) is the user's "vibe" knob: it drives HSL saturation
-// directly (0% → grey, 100% → max). Default 65 is sensible for most palettes.
-// Grayscale inputs have no meaningful hue, so they contribute nothing to the
-// constraint — their `Infinity` is filtered by `Math.min`. If both inputs
-// are grayscale, every hue is equally good; we default to red (conventional
-// warning colour).
-function chooseContrastingColor(a: string, b: string, intensity: number): string {
-    const sat = Math.max(0, Math.min(100, intensity));
-    const { h: ha, s: sa } = hexToHsl(a);
-    const { h: hb, s: sb } = hexToHsl(b);
-    const aIsGray = sa < 0.1;
-    const bIsGray = sb < 0.1;
-    if (aIsGray && bIsGray) return `hsl(0, ${sat}%, 50%)`;
-    let bestH = 0, bestDist = -1;
-    for (let h = 0; h < 360; h += 3) {
-        const da = aIsGray ? Infinity : hueDist(h, ha);
-        const db = bIsGray ? Infinity : hueDist(h, hb);
-        const d = Math.min(da, db);
-        if (d > bestDist) { bestDist = d; bestH = h; }
-    }
-    return `hsl(${bestH}, ${sat}%, 50%)`;
-}
-
-function hueDist(h1: number, h2: number): number {
-    const d = Math.abs(h1 - h2);
-    return Math.min(d, 360 - d);
-}
-
-function hexToHsl(hex: string): { h: number; s: number; l: number } {
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    const l = (max + min) / 2;
-    let h = 0, s = 0;
-    if (max !== min) {
-        const d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        if      (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
-        else if (max === g) h = ((b - r) / d + 2) * 60;
-        else                h = ((r - g) / d + 4) * 60;
-    }
-    return { h, s, l };
 }
 
 // ── Pure math ──────────────────────────────────────────────────────────────
@@ -391,7 +336,6 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
     rs.lastStore    = store;
     rs.colors[1]    = store.state.colorA;
     rs.colors[2]    = store.state.colorB;
-    rs.contrastingColor = chooseContrastingColor(store.state.colorA, store.state.colorB, store.state.invalidIntensity);
     syncRotation(rs, store.state.rotation, vp, ctx);
     // Kick off the rAF loop whenever any marching-ants outline is on-screen
     // (committed selection that isn't hidden, or an in-flight drag rect).
@@ -404,7 +348,8 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
 }
 
 function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
-    const { pattern, pixels, float, axes, repeat, hlOpacity, labelsVisible } = store.state;
+    const { pattern, pixels, float, axes, repeat } = store.state;
+    const { guidanceOpacity, dangerColor, accentColor, labelsVisible } = rs.preferences;
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { canvas, view, dpr } = vp;
 
@@ -415,7 +360,6 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     // buffer (see `computePlan` in store.ts), so ✕ / ! markers track the
     // float live without a per-frame WASM rebuild.
     const committedPixels = visiblePixels(store.state);
-    const previewPixels = rs.paintPreview?.after ?? committedPixels;
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#161618";
@@ -432,7 +376,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y < H; y++) {
         const row = y * W;
         for (let x = 0; x < W; x++) {
-            const p = previewPixels[row + x];
+            const p = committedPixels[row + x];
             if (p === 0) continue;
             ctx.fillStyle = rs.colors[p] ?? "#333";
             ctx.fillRect(x, y, 1, 1);
@@ -447,17 +391,13 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderHighlightSymbols(ctx, view, dpr, rs.colors, rs.contrastingColor, pattern, previewPixels, rs.paintPreview?.plan ?? store.plan, m,
-        store.state.showGuidance === false ? 0 : hlOpacity / 100);
-    if (rs.paintPreview) renderPaintPreviewOutline(
-        ctx, view, dpr, pattern, rs.paintPreview.before, rs.paintPreview.after,
-        rs.paintPreview.unchangedTargets, rs.contrastingColor,
-    );
+    renderHighlightSymbols(ctx, view, dpr, rs.colors, dangerColor, pattern, committedPixels, store.plan, m,
+        guidanceOpacity / 100);
     if (rs.previewRepeatGuides) {
-        renderSelectionTransformPreview(ctx, view, dpr, pattern, pixels, float, axes, repeat, rs.colors, rs.contrastingColor);
+        renderSelectionTransformPreview(ctx, view, dpr, pattern, pixels, float, axes, repeat, rs.colors, accentColor);
     }
-    renderRepeatGuides(ctx, view, dpr, pattern, repeat, rs.contrastingColor, rs.previewRepeatGuides);
-    renderSymmetryGuides(ctx, view, dpr, pattern, axes, rs.contrastingColor, rs.axesInDeleteZone, rs.previewRepeatGuides);
+    renderRepeatGuides(ctx, view, dpr, pattern, repeat, accentColor, rs.previewRepeatGuides);
+    renderSymmetryGuides(ctx, view, dpr, pattern, axes, accentColor, rs.axesInDeleteZone, rs.previewRepeatGuides);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
@@ -475,86 +415,22 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
                 shifted[cy * W + cx] = 1;
             }
         }
-        renderSelection(ctx, view, dpr, pattern, shifted, rs.contrastingColor, dashOffsetSnapped);
+        renderSelection(ctx, view, dpr, pattern, shifted, accentColor, dashOffsetSnapped);
     }
     if (rs.selectPreviewMask) {
-        renderSelection(ctx, view, dpr, pattern, rs.selectPreviewMask, rs.contrastingColor, dashOffsetSnapped);
+        renderSelection(ctx, view, dpr, pattern, rs.selectPreviewMask, accentColor, dashOffsetSnapped);
     }
     if (rs.dragRect) {
         ctx.save();
         ctx.globalAlpha = rs.selectPreviewMask ? 0.45 : 1;
-        renderDragRect(ctx, view, dpr, rs.dragRect, rs.contrastingColor, dashOffsetSnapped);
+        renderDragRect(ctx, view, dpr, rs.dragRect, accentColor, dashOffsetSnapped);
         ctx.restore();
     }
     if (labelsVisible) {
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
-    if (rs.keyboardCursor) renderKeyboardCursor(ctx, view, dpr, rs.keyboardCursor, rs.contrastingColor);
     if (rs.topIndicatorOpacity > 0.001) renderTopIndicator(ctx, view, dpr, pattern, rs.topIndicatorOpacity);
-}
-
-function renderKeyboardCursor(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    cell: { x: number; y: number }, color: string,
-) {
-    const px = 1 / (view.zoom * dpr);
-    ctx.save();
-    ctx.setLineDash([]);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.9)";
-    ctx.lineWidth = 5 * px;
-    ctx.strokeRect(cell.x + 2.5 * px, cell.y + 2.5 * px, 1 - 5 * px, 1 - 5 * px);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3 * px;
-    ctx.strokeRect(cell.x + 2.5 * px, cell.y + 2.5 * px, 1 - 5 * px, 1 - 5 * px);
-    ctx.restore();
-}
-
-function renderPaintPreviewOutline(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    pattern: PatternState, before: Uint8Array, after: Uint8Array,
-    unchangedTargets: number[], color: string,
-) {
-    const W = pattern.canvasWidth;
-    let count = 0, minX = W, minY = pattern.canvasHeight, maxX = -1, maxY = -1;
-    for (let i = 0; i < before.length; i++) {
-        if (before[i] === after[i]) continue;
-        const x = i % W, y = Math.floor(i / W);
-        count++;
-        minX = Math.min(minX, x); minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-    }
-    for (const i of unchangedTargets) {
-        const x = i % W, y = Math.floor(i / W);
-        minX = Math.min(minX, x); minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-    }
-    if (!count && unchangedTargets.length === 0) return;
-    ctx.save();
-    const px = 2 / (view.zoom * dpr);
-    ctx.lineWidth = px;
-    ctx.strokeStyle = color;
-    ctx.setLineDash([4 * px, 3 * px]);
-    if (count + unchangedTargets.length > 256) {
-        ctx.strokeRect(minX + px / 2, minY + px / 2, maxX - minX + 1 - px, maxY - minY + 1 - px);
-    } else {
-        ctx.beginPath();
-        for (let i = 0; i < before.length; i++) {
-            if (before[i] === after[i]) continue;
-            const x = i % W, y = Math.floor(i / W);
-            ctx.rect(x + px / 2, y + px / 2, 1 - px, 1 - px);
-        }
-        ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.fillStyle = color;
-        for (const i of unchangedTargets) {
-            const x = i % W, y = Math.floor(i / W);
-            ctx.beginPath();
-            ctx.arc(x + 0.5, y + 0.5, Math.min(0.15, 5 / (view.zoom * dpr)), 0, Math.PI * 2);
-            ctx.fill();
-        }
-    }
-    ctx.restore();
 }
 
 // Trace the selection's boundary as one or more closed polylines (one per
@@ -653,15 +529,13 @@ function renderDragRect(
 //   colour the glyph lands on, so the glyph is readable against either
 //   palette).
 // ! for INVALID — screen coords (always points down regardless of canvas
-//   rotation, like axis labels). Drawn in `contrastingColor` — a third palette
-//   colour chosen at render time to contrast with both user colours so the
-//   marker reads against any cell underneath.
+//   rotation, like axis labels). Drawn in the configured danger colour.
 // Both ✕ and ! are dimmable via the user's opacity slider. Round-mode corners
 // produce two plan records sharing the wrong cell with perpendicular
 // directions; each draws independently.
 function renderHighlightSymbols(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    colors: (string | null)[], contrastingColor: string,
+    colors: (string | null)[], dangerColor: string,
     pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
     m: DOMMatrix, opacity: number,
 ) {
@@ -713,7 +587,7 @@ function renderHighlightSymbols(
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    ctx.strokeStyle = contrastingColor;
+    ctx.strokeStyle = dangerColor;
     ctx.lineWidth   = cellPx * 0.16;
     ctx.beginPath();
     for (let i = 0; i < plan.length; i += 4) {
@@ -727,7 +601,7 @@ function renderHighlightSymbols(
     }
     ctx.stroke();
 
-    ctx.fillStyle = contrastingColor;
+    ctx.fillStyle = dangerColor;
     ctx.beginPath();
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] !== PlanType.Invalid) continue;

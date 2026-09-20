@@ -60,13 +60,15 @@ test("two-finger drag and pinch changes the view without leaving a paint mark", 
     )).toBe(1);
 });
 
-test("Mask move toggle supports a modifier-free touch drag", async ({ page }) => {
+test("Move area mode supports a modifier-free touch drag", async ({ page }) => {
     await bootApp(page);
     const painted = await cellCoord(page, 1, 1);
     await page.touchscreen.tap(painted.cx, painted.cy);
-    await page.getByRole("button", { name: "Select" }).tap();
+    await page.getByRole("button", { name: "Select", exact: true }).tap();
     await page.touchscreen.tap(painted.cx, painted.cy);
-    await page.getByRole("button", { name: "Mask move" }).tap();
+    await page.getByRole("button", { name: /1 selected/ }).tap();
+    await page.getByRole("button", { name: /Move area/ }).tap();
+    await page.keyboard.press("Escape");
 
     await touchDragCells(page, 1, 1, 3, 1);
 
@@ -80,18 +82,18 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await bootApp(page);
     const painted = await cellCoord(page, 1, 1);
     await page.touchscreen.tap(painted.cx, painted.cy);
-    await page.getByRole("button", { name: "Select" }).tap();
+    await page.getByRole("button", { name: "Select", exact: true }).tap();
     await page.touchscreen.tap(painted.cx, painted.cy);
 
-    const summary = page.getByRole("button", { name: "1 selected" });
+    const summary = page.getByRole("button", { name: /1 selected/ });
     await expect(summary).toBeVisible();
     await summary.tap();
 
     const card = page.getByRole("dialog", { name: "Selection" });
     await expect(card).toBeVisible();
     await expect(card.getByRole("button", { name: "Move content" })).toHaveAttribute("aria-pressed", "true");
-    await expect(card.getByRole("button", { name: "Duplicate content" })).toBeVisible();
-    await expect(card.getByRole("button", { name: "Move selection area" })).toBeVisible();
+    await expect(card.getByRole("button", { name: /Duplicate/ })).toBeVisible();
+    await expect(card.getByRole("button", { name: /Move area/ })).toBeVisible();
     await expect(card.getByRole("button", { name: "Copy" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Cut" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Paste" })).toBeDisabled();
@@ -99,9 +101,10 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
 
     await card.getByRole("button", { name: "Copy" }).tap();
     await expect(card.getByRole("button", { name: "Paste" })).toBeEnabled();
-    await card.getByRole("button", { name: "Duplicate content" }).tap();
+    await card.getByRole("button", { name: /Duplicate/ }).tap();
     await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(card).toBeHidden();
+    await expect(card).toBeVisible();
+    await page.keyboard.press("Escape");
 
     await touchDragCells(page, 1, 1, 3, 1);
     const source = await cellCoord(page, 1, 1);
@@ -110,10 +113,10 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     expect(await pixelRGB(page, destination.cx, destination.cy)).toEqual([0, 0, 0]);
     await summary.click();
     await expect(card).toBeVisible();
-    await expect(card.getByRole("button", { name: "Duplicate content" })).toHaveAttribute("aria-pressed", "true");
+    await expect(card.getByRole("button", { name: /Duplicate/ })).toHaveAttribute("aria-pressed", "true");
 
     await card.getByRole("button", { name: "Cut" }).click();
-    const clipboardSummary = page.getByRole("button", { name: "Clipboard, 1 cell" });
+    const clipboardSummary = page.getByRole("button", { name: /clipboard has 1 cell/i });
     await expect(clipboardSummary).toBeVisible();
     const hovered = await cellCoord(page, 2, 1);
     await page.mouse.move(hovered.cx, hovered.cy);
@@ -125,11 +128,13 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     expect(await pixelRGB(page, destination.cx, destination.cy)).toEqual([0, 0, 0]);
 });
 
-test("Yarn A and B plus Edit and Swap remain directly available on phone", async ({ page }) => {
+test("Yarn selection stays direct while phone colour editing lives in Pattern", async ({ page }) => {
     await bootApp(page);
     await expect(page.getByRole("button", { name: "Yarn A", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Yarn B", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Edit Yarn A" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Swap yarns" })).toBeVisible();
+    await expect(page.locator("#edit-yarn")).toHaveCount(0);
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Pattern" }).click();
+    await expect(page.getByRole("button", { name: "Swap yarn colours" })).toBeVisible();
     expect(await page.locator("#authoring-dock").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
