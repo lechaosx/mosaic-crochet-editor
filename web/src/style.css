@@ -216,30 +216,33 @@ input  { font: inherit; color: inherit; }
 @media (min-width: 64rem) {
   .authoring-dock {
     inset: 0 auto 0 0;
-    width: clamp(16rem, 24vw, 20rem);
+    width: calc(var(--hit) + var(--space-3));
     max-height: none;
     flex-direction: column;
     flex-wrap: nowrap;
-    align-items: stretch;
-    padding: var(--space-2);
+    align-items: center;
+    padding: var(--space-1);
     border-top: 0;
     border-right: var(--border);
     overflow-y: auto;
   }
 
   .dock-group {
+    width: 100%;
     flex-direction: column;
     flex-wrap: nowrap;
+    align-items: center;
   }
 
   .dock-group-label {
-    display: block;
-    padding-inline: var(--space-1);
-    color: var(--fg-2);
-    font-size: var(--font-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    display: none;
   }
+
+  .authoring-dock .btn { width: var(--hit); padding-inline: 0; }
+  .authoring-dock :is(#move-mask, #edit-yarn, #swap-yarns) { font-size: 0; }
+  #move-mask::before { content: "M"; font-size: var(--font-base); }
+  #edit-yarn::before { content: "✎"; font-size: 1rem; }
+  #swap-yarns::before { content: "⇄"; font-size: 1rem; }
 
   .dock-group + .dock-group {
     padding-top: var(--space-2);

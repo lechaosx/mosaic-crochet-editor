@@ -173,6 +173,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Workspace shell
 
 - Document and history commands occupy a top document bar; paint, transform, and yarn controls occupy a separate authoring dock without changing their established order. — **Agent's choice**
+- The wide-screen Design tool rail is only one control wide to preserve as much canvas space as possible. — **your decision**
 - Mode panels and inspectors overlay the canvas so their changing size never shifts its geometry. At 64rem and wider they occupy the left or right edge; constrained layouts use bottom sheets. — **your decision**
 - Pattern, Selection, Mirror & Repeat, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
 - Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact, growing with increased root text size. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document commands and Settings move into More; when enlarged controls cannot fit a short viewport, the dock scrolls instead of collapsing the canvas. — **Agent's choice**

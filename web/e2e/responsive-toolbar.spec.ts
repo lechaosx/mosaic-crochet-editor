@@ -249,9 +249,9 @@ test("wide overlay panels leave canvas geometry stable and anchor its chrome to 
     await page.setViewportSize({ width: 1280, height: 800 });
     await bootApp(page);
     await expectTargetsAtLeast(page, 36);
-    await expect(page.getByText("Colour", { exact: true })).toBeVisible();
-    await expect(page.getByText("Overlay", { exact: true })).toBeVisible();
-    await expect(page.getByText("Arrange", { exact: true })).toBeVisible();
+    await expect(page.getByText("Colour", { exact: true })).toBeHidden();
+    await expect(page.getByText("Overlay", { exact: true })).toBeHidden();
+    await expect(page.getByText("Arrange", { exact: true })).toBeHidden();
 
     const pencilBox = await page.locator("#tool-pencil").boundingBox();
     expect(pencilBox!.width).toBeLessThan(44);
@@ -259,6 +259,8 @@ test("wide overlay panels leave canvas geometry stable and anchor its chrome to 
     const documentBar = await page.locator("#document-bar").boundingBox();
     const dock = await page.locator("#authoring-dock").boundingBox();
     const canvasBefore = await page.locator(".canvas-area").boundingBox();
+    expect(dock!.width).toBeLessThanOrEqual(52);
+    expect(await page.locator("#authoring-dock").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     expect(dock!.y).toBeGreaterThanOrEqual(documentBar!.y + documentBar!.height - 1);
     expect(dock!.x).toBe(canvasBefore!.x);
     const statusBefore = await page.locator("#status").boundingBox();
