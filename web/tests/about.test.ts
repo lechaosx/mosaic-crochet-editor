@@ -1,26 +1,28 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, test } from "vitest";
-import { copyrightNotice, LATEST_CHANGELOG_ID, markAboutSeen, shouldShowAbout } from "../src/about";
+import { copyrightNotice, markAboutSeen, shouldShowAbout } from "../src/about";
+
+const CURRENT_RELEASE_HASH = "current-hash";
 
 beforeEach(() => localStorage.clear());
 
-describe("About changelog preference", () => {
-    test("shows when no changelog entry has been seen", () => {
-        expect(shouldShowAbout()).toBe(true);
+describe("About release-note preference", () => {
+    test("shows when no release has been seen", () => {
+        expect(shouldShowAbout(CURRENT_RELEASE_HASH)).toBe(true);
     });
 
-    test("stays hidden after the latest changelog entry is seen", () => {
-        markAboutSeen();
+    test("stays hidden after the latest release is seen", () => {
+        markAboutSeen(CURRENT_RELEASE_HASH);
 
-        expect(localStorage.getItem("mosaic-about-changelog")).toBe(LATEST_CHANGELOG_ID);
+        expect(localStorage.getItem("mosaic-about-release-notes")).toBe(CURRENT_RELEASE_HASH);
         expect(localStorage.getItem("mosaic-about-version")).toBeNull();
-        expect(shouldShowAbout()).toBe(false);
+        expect(shouldShowAbout(CURRENT_RELEASE_HASH)).toBe(false);
     });
 
-    test("shows again when the newest changelog entry changes", () => {
-        localStorage.setItem("mosaic-about-changelog", "2026-09-19-pattern-inspector");
+    test("shows again when the newest release changes", () => {
+        localStorage.setItem("mosaic-about-release-notes", "stale-hash");
 
-        expect(shouldShowAbout()).toBe(true);
+        expect(shouldShowAbout(CURRENT_RELEASE_HASH)).toBe(true);
     });
 });
 

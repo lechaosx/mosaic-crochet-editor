@@ -2,8 +2,37 @@
 // by `vitest/config`'s `defineConfig`; Vite itself ignores it). Single
 // config means tests resolve `@mosaic/wasm` through the same
 // `vite-plugin-wasm` glue as the dev/build path.
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type PluginOption } from "vitest/config";
 import wasm from "vite-plugin-wasm";
+import { buildReleaseNotes } from "./build/release-notes";
+
+const releaseNotesPath = fileURLToPath(new URL("../RELEASE_NOTES.md", import.meta.url));
+
+function generatedReleaseNotes(): PluginOption {
+    return {
+        name: "generated-release-notes",
+        configureServer(server) {
+            server.watcher.add(releaseNotesPath);
+        },
+        handleHotUpdate({ file, server }) {
+            if (file === releaseNotesPath) {
+                server.ws.send({ type: "full-reload" });
+                return [];
+            }
+        },
+        async transformIndexHtml(html) {
+            const built = buildReleaseNotes(await readFile(releaseNotesPath, "utf8"));
+            const marker = "          <!-- release-notes:entries -->";
+            if (!html.includes(marker)) throw new Error("index.html has no release-notes entry marker");
+
+            return html
+                .replace('id="about-release-notes"', `id="about-release-notes" data-current-hash="${built.currentHash}"`)
+                .replace(marker, built.html);
+        },
+    };
+}
 
 // Force a full page reload (not HMR) whenever anything in `wasm/pkg/` changes
 // in dev. `vite-plugin-wasm` hot-replaces the JS glue but the .wasm binary is
@@ -24,7 +53,7 @@ function wasmFullReload(): PluginOption {
 }
 
 export default defineConfig({
-    plugins: [wasm(), wasmFullReload()],
+    plugins: [wasm(), wasmFullReload(), generatedReleaseNotes()],
     base: "./",
     build: { target: "esnext" },
     optimizeDeps: { exclude: ["@mosaic/wasm"] },

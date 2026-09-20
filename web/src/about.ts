@@ -1,19 +1,16 @@
-export const LATEST_CHANGELOG_ID = "2026-09-20-crochet-row-details";
-export const LATEST_CHANGELOG_DATE = "20 September 2026";
+const ABOUT_RELEASE_NOTES_KEY = "mosaic-about-release-notes";
 
-const ABOUT_CHANGELOG_KEY = "mosaic-about-changelog";
-
-export function shouldShowAbout(): boolean {
+export function shouldShowAbout(currentReleaseHash: string): boolean {
     try {
-        return localStorage.getItem(ABOUT_CHANGELOG_KEY) !== LATEST_CHANGELOG_ID;
+        return localStorage.getItem(ABOUT_RELEASE_NOTES_KEY) !== currentReleaseHash;
     } catch {
         return true;
     }
 }
 
-export function markAboutSeen(): void {
+export function markAboutSeen(currentReleaseHash: string): void {
     try {
-        localStorage.setItem(ABOUT_CHANGELOG_KEY, LATEST_CHANGELOG_ID);
+        localStorage.setItem(ABOUT_RELEASE_NOTES_KEY, currentReleaseHash);
     } catch {
         // The dialog remains usable when browser storage is unavailable.
     }

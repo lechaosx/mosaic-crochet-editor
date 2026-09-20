@@ -29,7 +29,7 @@ import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic
 import { PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
 import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress } from "./live-progress";
-import { copyrightNotice, LATEST_CHANGELOG_DATE, markAboutSeen, shouldShowAbout } from "./about";
+import { copyrightNotice, markAboutSeen, shouldShowAbout } from "./about";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -102,7 +102,10 @@ const rs       = makeRendererState();
 const saved    = loadFromLocalStorage();
 const store    = new Store(saved ?? defaultSession());
 const aboutDialog = document.getElementById("about-dialog") as HTMLDialogElement;
-(document.getElementById("about-updated") as HTMLElement).textContent = LATEST_CHANGELOG_DATE;
+const aboutReleaseNotes = document.getElementById("about-release-notes") as HTMLElement;
+const currentReleaseHash = aboutReleaseNotes.dataset.currentHash!;
+(document.getElementById("about-updated") as HTMLElement).textContent =
+    aboutReleaseNotes.querySelector("h3")!.textContent;
 (document.getElementById("about-copyright") as HTMLElement).textContent =
     copyrightNotice(new Date().getFullYear());
 
@@ -112,11 +115,11 @@ function showAbout() {
 
 function closeAbout() {
     if (!aboutDialog.open) return;
-    markAboutSeen();
+    markAboutSeen(currentReleaseHash);
     aboutDialog.close();
 }
 
-aboutDialog.addEventListener("close", markAboutSeen);
+aboutDialog.addEventListener("close", () => markAboutSeen(currentReleaseHash));
 aboutDialog.addEventListener("click", event => {
     if (event.target === aboutDialog) closeAbout();
 });
@@ -1843,4 +1846,4 @@ if (saved) {
     ui.setHistory(canUndo(), canRedo());
 }
 ui.setViewState(viewport.view.zoom, store.state.rotation, false);
-if (shouldShowAbout()) showAbout();
+if (shouldShowAbout(currentReleaseHash)) showAbout();

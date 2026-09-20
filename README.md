@@ -35,7 +35,7 @@ Round 15: [(sc, ch, sc), sc × 27] × 4
 
 ---
 
-For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHITECTURE.md](ARCHITECTURE.md) (technical).
+For updates, see [RELEASE_NOTES.md](RELEASE_NOTES.md). For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHITECTURE.md](ARCHITECTURE.md) (technical).
 
 ---
 
@@ -43,7 +43,7 @@ For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHI
 
 The workspace separates global document commands from mode-specific panels. One stable canvas fills the workspace while Design tools and Crochet instructions overlay its left edge on wide screens or its bottom edge on narrower screens. The current Crochet instruction also appears alone in a translucent bottom float centred on the same canvas axis as a fitted pattern, so long rows and rounds remain readable. The document bar stays identical between modes. Pattern and Settings open without leaving Crochet; an effective Pattern canvas change returns to Design, as do Load, Undo, and Redo. Save remains available without leaving Crochet. Pattern, Selection, Mirror & Repeat, and Settings share a right-edge or bottom-sheet inspector; its close button dismisses the current section. None of these panels resize or shift the canvas. At phone widths, lower-frequency document commands and Settings move into **More**. Controls retain their pointer or touch minimum size and grow when the browser's text size is increased; on short screens, panels scroll instead of collapsing the canvas.
 
-The app opens **About** on the first visit and once whenever its newest changelog entry changes. The height-constrained dialog keeps its Changelog heading, current-year copyright, project link, and three bottom actions visible while the complete dated entries scroll: **New** creates a blank row pattern and opens the normal Pattern inspector, **Open** loads an editable `.mcw` file, and **Example** loads a small chart that demonstrates Colour, Overlay, Mirror & Repeat, and Crochet. Canceling the file picker leaves About open. Close About with **×**, **Escape**, or a click outside it; reopen it from **Settings → About Mosaic Crochet Editor**.
+The app opens **About** on the first visit and once whenever the newest entry in `RELEASE_NOTES.md` changes. The dialog keeps its Release notes heading, current-year copyright, project link, and three bottom actions visible while the complete notes scroll: **New** creates a blank row pattern and opens the normal Pattern inspector, **Open** loads an editable `.mcw` file, and **Example** loads a small chart that demonstrates Colour, Overlay, Mirror & Repeat, and Crochet. Canceling the file picker leaves About open. Close About with **×**, **Escape**, or a click outside it; reopen it from **Settings → About Mosaic Crochet Editor**.
 
 ### Patterns
 
@@ -121,7 +121,7 @@ The **⚙** button in the document bar opens Settings in the inspector:
 - **Guidance opacity** — fades visible ✕ / ! glyphs from 1–100%. Defaults to 100%.
 - **Show numbers** — row numbers in the left gutter, starting with Row 1 at the bottom; round numbers start with Round 1 at the innermost band and appear above half/quarter charts or in the corner cells of full charts.
 - **Prevent impossible overlay placements** — on for fresh sessions. It blocks new impossible marks (top row in Rows; outermost ring and diagonal corners in Centre-out), but still permits correcting an already-wrong cell. Turn it off for free sketching; saved sessions keep their prior choice.
-- **About Mosaic Crochet Editor** — opens the changelog, copyright, project information, and New/Open/Example actions.
+- **About Mosaic Crochet Editor** — opens the release notes, copyright, project information, and New/Open/Example actions.
 
 ### Zoom, pan, rotation
 

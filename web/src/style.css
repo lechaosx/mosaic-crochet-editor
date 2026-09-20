@@ -579,14 +579,14 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 .about-actions .btn { white-space: normal; }
-.about-changelog-region {
+.about-release-notes-region {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--space-2);
   min-height: 0;
 }
-.about-changelog-region > h2 { color: var(--fg-0); font-size: var(--font-lg); }
-.about-changelog {
+.about-release-notes-region > h2 { color: var(--fg-0); font-size: var(--font-lg); }
+.about-release-notes {
   display: grid;
   gap: var(--space-3);
   padding-block: var(--space-3);
@@ -594,9 +594,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.about-changelog h3 { color: var(--fg-1); font-size: var(--font-base); }
-.about-changelog ul { display: grid; gap: var(--space-1); padding-inline-start: 1.25rem; }
-.about-changelog-entry { display: grid; gap: var(--space-1); }
+.about-release-notes h3 { color: var(--fg-1); font-size: var(--font-base); }
+.about-release-notes ul { display: grid; gap: var(--space-1); padding-inline-start: 1.25rem; }
+.about-release-notes-entry { display: grid; gap: var(--space-1); }
 .about-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); color: var(--fg-2); font-size: var(--font-sm); }
 .about-footer a { color: var(--accent); }
 .settings-about { width: 100%; }
