@@ -27,7 +27,8 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
-import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress } from "./live-progress";
+import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress,
+         clearLiveProgress, hasLiveProgress } from "./live-progress";
 import { copyrightNotice, markAboutSeen, shouldShowAbout } from "./about";
 import {
     AppPreferences,
@@ -40,6 +41,20 @@ function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
+}
+
+function sameAuthoredPattern(pattern: PatternState, pixels: Uint8Array): boolean {
+    const current = store.state.pattern;
+    if (current.mode !== pattern.mode
+        || current.canvasWidth !== pattern.canvasWidth
+        || current.canvasHeight !== pattern.canvasHeight) return false;
+    if (current.mode === "round" && pattern.mode === "round"
+        && (current.virtualWidth !== pattern.virtualWidth
+            || current.virtualHeight !== pattern.virtualHeight
+            || current.offsetX !== pattern.offsetX
+            || current.offsetY !== pattern.offsetY
+            || current.rounds !== pattern.rounds)) return false;
+    return arraysEqual(visiblePixels(store.state), pixels);
 }
 
 // Minimal sensible defaults — only used when no saved session exists.
@@ -799,6 +814,7 @@ async function onLoad() {
         return;
     }
     if (!loaded) return;
+    if (!sameAuthoredPattern(loaded.pattern, loaded.pixels)) clearCrochetProgress();
     fitToView(
         viewport.canvas, viewport.view, loaded.pattern, store.state.rotation,
         preferences.labelsVisible,
@@ -887,6 +903,7 @@ async function onInstructions() {
         ? store.state.pattern.canvasHeight
         : store.state.pattern.rounds;
     let completedUnits = loadLiveProgress(progressFingerprint, totalUnits);
+    ui.setCrochetProgress(hasLiveProgress(progressFingerprint, totalUnits));
     let generatedUnits: CachedInstructionUnit[] = [];
     const directionalUnit = (unit: CachedInstructionUnit, index: number): InstructionOverviewUnit => {
         const reversed = dlg.alternate() && index % 2 === 1;
@@ -908,7 +925,9 @@ async function onInstructions() {
         if (live) {
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
                 completedUnits = nextCompleted;
-                return saveLiveProgress(progressFingerprint, completedUnits);
+                const saved = saveLiveProgress(progressFingerprint, completedUnits);
+                if (saved) ui.setCrochetProgress(hasLiveProgress(progressFingerprint, totalUnits));
+                return saved;
             });
         }
     };
@@ -1019,11 +1038,34 @@ const ui: UIHandle = mountUI({
     onSave, onLoad, onInstructions, onAbout: showAbout,
 });
 
+function crochetProgressFingerprint() {
+    return fingerprintPatternShape(store.state.pattern);
+}
+
+function crochetProgressTotal() {
+    return store.state.pattern.mode === "row"
+        ? store.state.pattern.canvasHeight
+        : store.state.pattern.rounds;
+}
+
+function syncCrochetProgressControl() {
+    ui.setCrochetProgress(hasLiveProgress(crochetProgressFingerprint(), crochetProgressTotal()));
+}
+
+function clearCrochetProgress() {
+    clearLiveProgress();
+    ui.setCrochetProgress(false);
+}
+
+store.addObserver(syncCrochetProgressControl);
+syncCrochetProgressControl();
+
 function beginFreshPattern() {
     const fresh = defaultSession();
     fresh.pixels = initialize_row_pattern(
         fresh.pattern.canvasWidth, fresh.pattern.canvasHeight,
     ).slice();
+    if (!sameAuthoredPattern(fresh.pattern, fresh.pixels)) clearCrochetProgress();
     fitToView(
         viewport.canvas, viewport.view, fresh.pattern, fresh.rotation, preferences.labelsVisible,
     );

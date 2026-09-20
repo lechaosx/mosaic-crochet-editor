@@ -100,6 +100,7 @@ export interface UIHandle {
     setTransformState:  (hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) => void;
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
+    setCrochetProgress: (hasProgress: boolean) => void;
     setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
     setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
     setViewState:       (zoom: number, rotation: number, navigating: boolean) => void;
@@ -697,7 +698,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             : state === "recovered" ? "Recovered" : "";
         status.title = state === "failed"
             ? "Browser recovery could not be updated; recent changes may be lost if this tab closes."
-            : "Browser recovery is current. Save .mcw creates a separate editable pattern file.";
+            : "Browser recovery is current. Save creates a separate editable pattern file.";
     }
 
     let documentErrorReturn: "load" | "save" = "load";
@@ -736,7 +737,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         enterDesignForCommand();
         cb.onLoad();
     });
-    el("btn-export").addEventListener("click", cb.onInstructions);
 
     /* ── Pattern inspector ────────────────────────────────────────────── */
     const editWidget = el("edit-pattern-widget");
@@ -900,8 +900,21 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const liveForward    = el<HTMLButtonElement>("instructions-live-forward");
     const exportActionStatus = el("export-action-status");
     const instructionErrors = el("instructions-errors");
-    const designMode     = el<HTMLButtonElement>("instructions-design");
     const crochetMode    = el<HTMLButtonElement>("btn-export");
+    let hasCrochetProgress = false;
+    const setCrochetMode = (open: boolean) => {
+        crochetMode.textContent = open
+            ? "Back to Design"
+            : hasCrochetProgress ? "Continue Crocheting" : "Begin Crocheting";
+        crochetMode.title = open
+            ? "Return to pattern design"
+            : hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions";
+        crochetMode.setAttribute("aria-pressed", String(open));
+    };
+    crochetMode.addEventListener("click", () => {
+        if (closeInstructionsWorkspace) closeInstructionsWorkspace(true);
+        else cb.onInstructions();
+    });
     let instructionText = "";
     el("export-copy").addEventListener("click", async () => {
         try {
@@ -929,8 +942,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         instructions.hidden = false;
         inspectorHost.hidden = true;
         document.body.classList.add("crochet-mode");
-        designMode.setAttribute("aria-pressed", "false");
-        crochetMode.setAttribute("aria-pressed", "true");
+        setCrochetMode(true);
         queueCanvasChromeSync();
         instructions.focus();
 
@@ -990,7 +1002,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const close = (restoreFocus = true) => {
             if (closeInstructionsWorkspace !== close) return;
             closeInstructionsWorkspace = null;
-            designMode.removeEventListener("click", onDesignMode);
             alternateChk.removeEventListener("change", onAlt);
             liveBack.onclick = null;
             liveForward.onclick = null;
@@ -998,15 +1009,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
             instructions.hidden = true;
             if (inspectorHost.hidden) inspectorHost.hidden = inspectorWasHidden;
             document.body.classList.remove("crochet-mode");
-            designMode.setAttribute("aria-pressed", "true");
-            crochetMode.setAttribute("aria-pressed", "false");
+            setCrochetMode(false);
             queueCanvasChromeSync();
             closeListeners.forEach(f => f());
-            if (restoreFocus) designMode.focus();
+            if (restoreFocus) crochetMode.focus();
         };
-        const onDesignMode = () => close(true);
         closeInstructionsWorkspace = close;
-        designMode.addEventListener("click", onDesignMode);
 
         return {
             setProgress: (count, total) => {
@@ -1093,7 +1101,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setTool, setOverlayAction, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setAxes,
         readRepeatGrid, setRepeatGrid, setRepeatError,
         setTransformState, setTransformError,
-        setHistory, setRecoveryStatus, setDocumentError, setViewState, setEditError, setEditSummary,
+        setHistory, setCrochetProgress: (hasProgress) => {
+            hasCrochetProgress = hasProgress;
+            if (!closeInstructionsWorkspace) setCrochetMode(false);
+        }, setRecoveryStatus, setDocumentError, setViewState, setEditError, setEditSummary,
         syncEditInputs,
         openInstructions,
     };

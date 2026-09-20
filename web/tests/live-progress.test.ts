@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, test } from "vitest";
 import {
     fingerprintPattern,
     fingerprintPatternShape,
+    clearLiveProgress,
+    hasLiveProgress,
     loadLiveProgress,
     saveLiveProgress,
 } from "../src/live-progress";
@@ -35,6 +37,17 @@ describe("Live instruction progress", () => {
             fingerprintPatternShape({ mode: "row", canvasWidth: 4, canvasHeight: 2 }),
             units.length,
         )).toBe(0);
+        expect(localStorage.getItem("mosaic-live-progress")).toBeNull();
+    });
+
+    test("clears resumable progress explicitly", () => {
+        const fingerprint = fingerprintPatternShape({ mode: "row", canvasWidth: 3, canvasHeight: 2 });
+        expect(saveLiveProgress(fingerprint, 1)).toBe(true);
+        expect(hasLiveProgress(fingerprint, units.length)).toBe(true);
+
+        clearLiveProgress();
+
+        expect(hasLiveProgress(fingerprint, units.length)).toBe(false);
         expect(localStorage.getItem("mosaic-live-progress")).toBeNull();
     });
 

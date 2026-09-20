@@ -207,7 +207,7 @@ test("compact More exposes and navigates a keyboard menu", async ({ page }) => {
     const pattern = page.getByRole("menuitem", { name: "Pattern" });
     await expect(pattern).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("menuitem", { name: "Load" })).toBeFocused();
+    await expect(page.getByRole("menuitem", { name: "Open" })).toBeFocused();
     await page.keyboard.press("End");
     await expect(page.getByRole("menuitem", { name: "Settings" })).toBeFocused();
     await page.keyboard.press("Home");
@@ -230,7 +230,7 @@ test("Tab leaves and closes the compact More menu", async ({ page }) => {
     await more.click();
     await page.keyboard.press("Tab");
     await expect(page.locator("#more-popover")).toBeHidden();
-    await expect(page.getByRole("button", { name: "Pencil" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeFocused();
 
     await more.click();
     await page.keyboard.press("Shift+Tab");
@@ -305,7 +305,7 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await expectHoverLabels("Transform inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
-    await page.getByRole("button", { name: "Crochet" }).click();
+    await page.locator("#btn-export").click();
     await expectHoverLabels("Crochet");
 });
 

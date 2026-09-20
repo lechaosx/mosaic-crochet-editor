@@ -11,6 +11,27 @@ interface LiveProgressRecord {
     completedUnits: number;
 }
 
+function readLiveProgress(fingerprint: string, totalUnits: number): number | null {
+    try {
+        const raw = localStorage.getItem(LIVE_PROGRESS_KEY);
+        if (raw === null) return null;
+        const value = JSON.parse(raw) as Partial<LiveProgressRecord>;
+        if (value.version !== LIVE_PROGRESS_VERSION
+            || typeof value.fingerprint !== "string"
+            || !Number.isInteger(value.completedUnits)
+            || value.completedUnits! < 0
+            || value.completedUnits! > totalUnits
+            || value.fingerprint !== fingerprint) {
+            localStorage.removeItem(LIVE_PROGRESS_KEY);
+            return null;
+        }
+        return value.completedUnits!;
+    } catch {
+        localStorage.removeItem(LIVE_PROGRESS_KEY);
+        return null;
+    }
+}
+
 function fingerprint(bytes: Uint8Array, initial = FNV_OFFSET): bigint {
     let hash = initial;
     for (const byte of bytes) {
@@ -36,26 +57,18 @@ export function fingerprintPattern(pattern: PatternState, pixels: Uint8Array): s
 }
 
 export function loadLiveProgress(fingerprint: string, totalUnits: number): number {
+    return readLiveProgress(fingerprint, totalUnits) ?? 0;
+}
+
+export function hasLiveProgress(fingerprint: string, totalUnits: number): boolean {
+    return (readLiveProgress(fingerprint, totalUnits) ?? 0) > 0;
+}
+
+export function clearLiveProgress(): void {
     try {
-        const raw = localStorage.getItem(LIVE_PROGRESS_KEY);
-        if (raw === null) return 0;
-        const value = JSON.parse(raw) as Partial<LiveProgressRecord>;
-        if (value.version !== LIVE_PROGRESS_VERSION
-            || typeof value.fingerprint !== "string"
-            || !Number.isInteger(value.completedUnits)
-            || value.completedUnits! < 0
-            || value.completedUnits! > totalUnits) {
-            localStorage.removeItem(LIVE_PROGRESS_KEY);
-            return 0;
-        }
-        if (value.fingerprint !== fingerprint) {
-            localStorage.removeItem(LIVE_PROGRESS_KEY);
-            return 0;
-        }
-        return value.completedUnits!;
-    } catch {
         localStorage.removeItem(LIVE_PROGRESS_KEY);
-        return 0;
+    } catch {
+        // Progress is optional when browser storage is unavailable.
     }
 }
 

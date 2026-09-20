@@ -45,18 +45,17 @@
     </symbol>
   </svg>
   <header class="document-bar" id="document-bar">
-      <div class="document-actions g-mode" role="group" aria-label="Workspace">
-        <button class="btn" id="instructions-design" type="button" aria-pressed="true" title="Design pattern">Design</button>
-        <button class="btn" id="btn-export" type="button" aria-pressed="false" title="Follow chart-derived crochet instructions" aria-controls="instructions-workspace">Crochet</button>
-      </div>
       <div class="document-actions g-file">
         <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions">Pattern</button>
-        <button class="btn" id="btn-load"   title="Load .mcw file">Load</button>
-        <button class="btn" id="btn-save"   title="Save editable pattern as an .mcw file">Save .mcw</button>
+        <button class="btn" id="btn-load"   title="Open .mcw file">Open</button>
+        <button class="btn" id="btn-save"   title="Save editable pattern as an .mcw file">Save</button>
         <button class="btn" id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
         <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
         <button class="btn" id="btn-more" title="More commands" aria-haspopup="menu" aria-expanded="false" hidden>More</button>
         <span id="recovery-status" class="document-status" role="status" aria-label="Browser recovery" aria-live="polite" hidden></span>
+      </div>
+      <div class="document-actions g-mode" role="group" aria-label="Crochet workspace">
+        <button class="btn" id="btn-export" type="button" aria-pressed="false" title="Start crochet instructions" aria-controls="instructions-workspace">Begin Crocheting</button>
       </div>
       <div class="document-actions g-hlrot">
         <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false">⚙</button>

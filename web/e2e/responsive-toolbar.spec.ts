@@ -125,7 +125,7 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
 
     await page.getByRole("button", { name: "More" }).click();
     await expect(page.getByRole("menuitem", { name: "Pattern" })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Load", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
     await page.getByRole("menuitem", { name: "Pattern" }).click();
     await expect(page.locator("#inspector-host")).toBeVisible();
@@ -224,7 +224,7 @@ test("Crochet panel reflows without horizontal scrolling at doubled text size", 
         document.documentElement.style.fontSize = "200%";
         window.dispatchEvent(new Event("resize"));
     });
-    await page.getByRole("button", { name: "Crochet" }).click();
+    await page.locator("#btn-export").click();
 
     const workspace = page.locator("#instructions-workspace");
     await expect(workspace).toBeVisible();

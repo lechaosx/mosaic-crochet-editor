@@ -16,7 +16,7 @@ test("local recovery failure stays visible and does not imply an mcw save", asyn
     await bootApp(page);
     const recoveryStatus = page.getByRole("status", { name: "Browser recovery" });
     await expect(recoveryStatus).toHaveText("Recovery failed");
-    await expect(page.getByRole("button", { name: "Save .mcw" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
     await clickCell(page, 0, 1);
     await expect(recoveryStatus).toHaveText("Recovery failed");
 });

@@ -44,7 +44,8 @@ test("canceling the About file picker keeps the dialog available", async ({ page
     });
     await bootFresh(page);
 
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("dialog", { name: "Mosaic Crochet Editor" })
+        .getByRole("button", { name: "Open", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBeNull();
@@ -53,7 +54,8 @@ test("canceling the About file picker keeps the dialog available", async ({ page
 test("opening an mcw file from About enters the editor", async ({ page }) => {
     await bootFresh(page);
     const chooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByRole("dialog", { name: "Mosaic Crochet Editor" })
+        .getByRole("button", { name: "Open", exact: true }).click();
     const chooser = await chooserPromise;
     await chooser.setFiles({
         name: "small.mcw",
@@ -133,7 +135,7 @@ test("example is editable and demonstrates overlay, mirror, repeat, and Crochet"
     expect(recovery.workspace.axes.length).toBeGreaterThan(0);
     expect(recovery.workspace.repeat.enabled).toBe(true);
 
-    await page.getByRole("button", { name: "Crochet" }).click();
+    await page.locator("#btn-export").click();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();
     await expect(page.locator("#instructions-units")).toContainText("oc");
 });

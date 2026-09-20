@@ -92,10 +92,9 @@ input  { font: inherit; color: inherit; }
    Adaptive workspace shell
    ────────────────────────────────────────────────────────────────────────── */
 .document-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   row-gap: var(--space-2);
   column-gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
@@ -110,6 +109,10 @@ input  { font: inherit; color: inherit; }
   align-items: center;
   gap: var(--space-1);
 }
+
+.g-file { justify-self: start; }
+.g-mode { grid-column: 2; }
+.g-hlrot { justify-self: end; }
 
 .document-status {
   display: inline-flex;
@@ -132,7 +135,7 @@ input  { font: inherit; color: inherit; }
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  flex: 1 0 100%;
+  grid-column: 1 / -1;
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
   color: var(--danger);
   background: var(--danger-soft);
@@ -169,12 +172,20 @@ input  { font: inherit; color: inherit; }
 .dock-group-label { display: none; }
 
 .document-bar--compact .g-file {
-  width: 100%;
+  grid-column: 1;
   flex-wrap: wrap;
 }
 .document-bar--compact .btn { padding-inline: var(--space-2); }
 .document-bar--compact .document-status { padding-inline: 0; }
 .document-bar--compact .g-hlrot:empty { display: none; }
+
+.document-bar--compact .g-mode {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
+}
+.document-bar--compact .g-file { grid-row: 2; }
+.document-bar--compact .g-hlrot { grid-row: 2; }
 
 .inspector-host {
   position: fixed;
