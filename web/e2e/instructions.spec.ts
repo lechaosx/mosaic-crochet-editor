@@ -193,10 +193,16 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
     await clickCell(page, 0, 1);
 
+    const crochet = page.getByRole("button", { name: "Begin Crocheting — 1 invalid stitch" });
+    await expect(crochet).toContainText("!");
+    await expect(crochet).toHaveClass(/btn--danger/);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("1 error");
     await expect(page.locator('.instructions-unit[aria-label="Row 8, Yarn B"]')).toContainText("oc");
-    await expect(page.locator('.instructions-unit[aria-label="Row 9, Yarn A"]')).toContainText("oc");
+    const invalidUnit = page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]');
+    await expect(invalidUnit).toContainText("oc");
+    await expect(invalidUnit).toHaveClass(/instructions-unit--invalid/);
+    await expect(invalidUnit).toHaveAccessibleName(/contains invalid stitches/);
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
@@ -259,8 +265,8 @@ test("Crochet lines are compact progress controls", async ({ page }) => {
     await expect(first).not.toContainText("Row");
     await expect(first).not.toContainText("Yarn");
     await expect(first.locator(".instructions-unit-number")).toHaveText("1");
-    await expect(first.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(18, 52, 86)");
-    await expect(second.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(171, 205, 239)");
+    await expect(first.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(18, 52, 86)");
+    await expect(second.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(171, 205, 239)");
     await expect(first.locator("code")).toHaveCSS("white-space", "normal");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-y", "auto");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-x", "hidden");
@@ -304,6 +310,142 @@ test("alternate direction switches cached instructions without regenerating", as
 
     await expect(copy).toBeEnabled();
     await expect(page.locator("#export-progress")).toBeHidden();
+});
+
+test("generation progress does not reframe the Crochet list when it clears", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-height").fill("80");
+    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeVisible();
+
+    await page.locator("#btn-export").click();
+    await expect(page.locator("#export-progress")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
+    const whileGenerating = await page.locator("#instructions-units").boundingBox();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const complete = await page.locator("#instructions-units").boundingBox();
+    expect(complete).toEqual(whileGenerating);
+});
+
+test("Crochet can return to Design during a long generation", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-height").fill("80");
+    await page.locator("#btn-export").click();
+    await expect(page.locator("#export-progress")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
+
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeVisible();
+});
+
+test("a loaded empty round remains a single progress unit", async ({ page }) => {
+    await bootApp(page);
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Open" }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+        name: "empty-round.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({
+            version: 1,
+            state: {
+                mode: "round", canvasWidth: 1, canvasHeight: 1,
+                virtualWidth: 3, virtualHeight: 3, offsetX: 1, offsetY: 1, rounds: 1,
+            },
+            pixels: [0], colorA: "#000000", colorB: "#ffffff",
+        })),
+    });
+
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await expect(page.locator('.instructions-unit[aria-label="Round 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator("#instructions-units .instructions-unit")).toHaveCount(1);
+    await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 1");
+    await expect(page.getByRole("button", { name: "Forward one round" })).toBeDisabled();
+});
+
+test("a local cache scan can cancel at its periodic yield", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-height").fill("80");
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await page.locator("#btn-export").click();
+    const before = await cellCoord(page, 0, 1);
+    const beforePixel = await pixelRGB(page, before.cx, before.cy);
+    await page.getByRole("button", {
+        name: beforePixel[0] < 128 ? "Yarn B" : "Yarn A",
+        exact: true,
+    }).click();
+    await clickCell(page, 0, 1);
+    const after = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, after.cx, after.cy)).not.toEqual(beforePixel);
+    await page.evaluate(() => {
+        window.__test_instruction_yields__ = [];
+        window.__test_on_instruction_yield__ = yielded => {
+            if (yielded.index === 63 && !yielded.recomputed) {
+                document.getElementById("btn-export")!.click();
+            }
+        };
+    });
+
+    await page.locator("#btn-export").click();
+    await expect.poll(() => page.evaluate(() => window.__test_instruction_yields__))
+        .toContainEqual({ index: 63, recomputed: false });
+    await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
+});
+
+test("Crochet canvas arrows start every unit in its actual alternate direction", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const forward = await page.evaluate(() => window.__test_instruction_starts__);
+    expect(forward).toHaveLength(9);
+    expect(forward![1].invalid).toBe(false);
+
+    await page.getByText("Alternate direction", { exact: true }).click();
+    const alternate = await page.evaluate(() => window.__test_instruction_starts__);
+    expect(forward![1].nextX).toBeGreaterThan(forward![1].x);
+    expect(alternate![1].nextX).toBeLessThan(alternate![1].x);
+    expect(alternate![1].y).toBe(forward![1].y);
+});
+
+test("a one-cell quarter round has a canvas start arrow", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.getByText("Quarter", { exact: true }).click();
+    await page.locator("#edit-inner-width").fill("0");
+    await page.locator("#edit-inner-height").fill("0");
+    await page.locator("#edit-rounds").fill("1");
+
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const forward = await page.evaluate(() => window.__test_instruction_starts__);
+    expect(forward).toHaveLength(1);
+    expect(forward![0].nextX === forward![0].x && forward![0].nextY === forward![0].y).toBe(false);
+});
+
+test("round arrows follow Alternate direction", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.locator("#edit-rounds").fill("2");
+
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const forward = await page.evaluate(() => window.__test_instruction_starts__);
+    expect(forward).toHaveLength(2);
+
+    await page.getByText("Alternate direction", { exact: true }).click();
+    const alternate = await page.evaluate(() => window.__test_instruction_starts__);
+    expect(alternate).toHaveLength(2);
+    expect(alternate![1]).not.toMatchObject({
+        x: forward![1].x, y: forward![1].y,
+        nextX: forward![1].nextX, nextY: forward![1].nextY,
+    });
 });
 
 test("Crochet renders through the current row and no future rows", async ({ page }) => {

@@ -2,6 +2,12 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 21 September 2026
+
+- Crochet now keeps unchanged instruction rows or rounds cached while regenerating only changed work, and keeps the generation space stable.
+- Crochet flags invalid work before opening, marks affected instructions, and shows each row or round’s start direction on the chart.
+- Crochet instruction number badges now use the corresponding yarn colour.
+
 ## 20 September 2026
 
 - Fit now frames the chart within the visible workspace around open panels, while the canvas stays in place.

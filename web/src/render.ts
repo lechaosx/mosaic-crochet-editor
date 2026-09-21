@@ -108,6 +108,7 @@ export interface RendererState {
     previewRepeatGuides: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
+    instructionStarts: readonly { x: number; y: number; nextX: number; nextY: number; invalid: boolean }[];
 }
 
 export function makeRendererState(preferences: AppPreferences): RendererState {
@@ -131,6 +132,7 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         previewRepeatGuides:    false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
+        instructionStarts: [],
     };
 }
 
@@ -393,6 +395,8 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 
     renderHighlightSymbols(ctx, view, dpr, rs.colors, dangerColor, pattern, committedPixels, store.plan, m,
         guidanceOpacity / 100);
+    renderInstructionStarts(ctx, view, dpr, rs.instructionStarts, accentColor, dangerColor, m);
+    (window as unknown as { __test_instruction_starts__?: typeof rs.instructionStarts }).__test_instruction_starts__ = rs.instructionStarts;
     if (rs.previewRepeatGuides) {
         renderSelectionTransformPreview(ctx, view, dpr, pattern, pixels, float, axes, repeat, rs.colors, accentColor);
     }
@@ -430,6 +434,40 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
+}
+
+function renderInstructionStarts(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    starts: readonly { x: number; y: number; nextX: number; nextY: number; invalid: boolean }[],
+    accentColor: string, dangerColor: string, m: DOMMatrix,
+) {
+    if (starts.length === 0) return;
+    const cell = view.zoom * dpr;
+    const length = Math.min(cell * 0.38, 18);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(1.5, cell * 0.08);
+    for (const start of starts) {
+        const from = m.transformPoint({ x: start.x + 0.5, y: start.y + 0.5 });
+        const next = m.transformPoint({ x: start.nextX + 0.5, y: start.nextY + 0.5 });
+        const magnitude = Math.hypot(next.x - from.x, next.y - from.y);
+        if (magnitude === 0) continue;
+        const dx = (next.x - from.x) / magnitude;
+        const dy = (next.y - from.y) / magnitude;
+        const tipX = from.x + dx * length, tipY = from.y + dy * length;
+        const side = length * 0.38;
+        ctx.strokeStyle = start.invalid ? dangerColor : accentColor;
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(tipX - dx * side - dy * side, tipY - dy * side + dx * side);
+        ctx.moveTo(tipX, tipY);
+        ctx.lineTo(tipX - dx * side + dy * side, tipY - dy * side - dx * side);
+        ctx.stroke();
+    }
+    ctx.restore();
 }
 
 // Trace the selection's boundary as one or more closed polylines (one per

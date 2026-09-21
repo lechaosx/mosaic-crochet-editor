@@ -3,7 +3,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use glam::IVec2;
-use mosaic_crochet_core::{common, export, pattern, tools};
+use mosaic_crochet_core::{common, export, pattern, tools, walk};
 use ndarray::Array2;
 use wasm_bindgen::prelude::*;
 
@@ -99,6 +99,29 @@ pub struct InstructionUnit {
     number: u32,
     yarn: InstructionYarn,
     sequence: export::WorkSequence,
+    invalid_worked_coords: Vec<i32>,
+}
+
+#[wasm_bindgen]
+pub struct InstructionSignature {
+    kind: InstructionUnitKind,
+    number: u32,
+    yarn: InstructionYarn,
+    content_key: String,
+    invalid_worked_coords: Vec<i32>,
+    start_direction: Vec<i32>,
+    reversed_start_direction: Vec<i32>,
+}
+
+#[wasm_bindgen]
+impl InstructionSignature {
+    pub fn kind(&self) -> InstructionUnitKind { self.kind }
+    pub fn number(&self) -> u32 { self.number }
+    pub fn yarn(&self) -> InstructionYarn { self.yarn }
+    pub fn content_key(&self) -> String { self.content_key.clone() }
+    pub fn invalid_worked_coords(&self) -> Vec<i32> { self.invalid_worked_coords.clone() }
+    pub fn start_direction(&self) -> Vec<i32> { self.start_direction.clone() }
+    pub fn reversed_start_direction(&self) -> Vec<i32> { self.reversed_start_direction.clone() }
 }
 
 #[wasm_bindgen]
@@ -155,6 +178,10 @@ impl InstructionUnit {
             .flat_map(|step| [step.worked_coord.x, step.worked_coord.y])
             .collect()
     }
+
+    pub fn invalid_worked_coords(&self) -> Vec<i32> {
+        self.invalid_worked_coords.clone()
+    }
 }
 
 #[wasm_bindgen]
@@ -165,20 +192,18 @@ pub struct InstructionSession {
     total: usize,
 }
 
-#[wasm_bindgen]
 impl InstructionSession {
-    pub fn total(&self) -> usize {
-        self.total
+    fn identity_at(&self, index: usize) -> (InstructionUnitKind, u32, InstructionYarn) {
+        let kind = match &self.mode {
+            InstructionMode::Row { .. } => InstructionUnitKind::Row,
+            InstructionMode::Round { .. } => InstructionUnitKind::Round,
+        };
+        let yarn = if index % 2 == 0 { InstructionYarn::A } else { InstructionYarn::B };
+        (kind, index as u32 + 1, yarn)
     }
 
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<InstructionUnit> {
-        if self.index >= self.total {
-            return None;
-        }
-        let index = self.index;
-        self.index += 1;
-        let sequence = match &self.mode {
+    fn sequence_at(&self, index: usize) -> export::WorkSequence {
+        match &self.mode {
             InstructionMode::Row { canvas_size } => {
                 export::row_work_sequence_at(&self.highlights, *canvas_size, false, index)
             }
@@ -196,22 +221,113 @@ impl InstructionSession {
                 false,
                 index,
             ),
+        }
+    }
+
+    fn steps_at(&self, index: usize) -> Vec<export::WorkStep> {
+        match &self.mode {
+            InstructionMode::Row { canvas_size } => {
+                export::row_work_at(&self.highlights, *canvas_size, false, index)
+            }
+            InstructionMode::Round {
+                canvas_size,
+                virtual_size,
+                offset,
+                rounds,
+            } => export::round_work_at(
+                &self.highlights,
+                *canvas_size,
+                *virtual_size,
+                *offset,
+                *rounds,
+                false,
+                index,
+            ),
+        }
+    }
+
+    fn invalid_worked_coords(&self, steps: &[export::WorkStep]) -> Vec<i32> {
+        steps
+            .iter()
+            .filter(|step| step.kind == pattern::Stitch::Oc
+                && step.parent_coord.x >= 0
+                && step.parent_coord.y >= 0
+                && step.parent_coord.x < self.highlights.ncols() as i32
+                && step.parent_coord.y < self.highlights.nrows() as i32
+                && self.highlights[[step.parent_coord.y as usize, step.parent_coord.x as usize]]
+                    == common::HIGHLIGHT_INVALID)
+            .flat_map(|step| [step.worked_coord.x, step.worked_coord.y])
+            .collect()
+    }
+
+    fn start_direction(&self, index: usize, steps: &[export::WorkStep], reversed: bool) -> Vec<i32> {
+        let ordered = if reversed {
+            export::WorkSequence { steps: steps.to_vec(), compression: Vec::new() }.reversed().steps
+        } else {
+            steps.to_vec()
         };
-        let first = sequence.steps.first().expect("work unit has visible steps");
-        let (kind, number) = match first.unit {
-            export::WorkUnitId::Row(number) => (InstructionUnitKind::Row, number),
-            export::WorkUnitId::Round(number) => (InstructionUnitKind::Round, number),
-        };
-        let yarn = match first.yarn {
-            export::YarnSlot::A => InstructionYarn::A,
-            export::YarnSlot::B => InstructionYarn::B,
-        };
+        let Some(first) = ordered.first() else { return Vec::new(); };
+        let next = ordered.get(1).map(|step| step.worked_coord).or_else(|| match &self.mode {
+            InstructionMode::Row { .. } => Some(first.worked_coord + IVec2::new(if reversed { -1 } else { 1 }, 0)),
+            InstructionMode::Round { virtual_size, offset, rounds, .. } => {
+                let virtual_coords: Vec<_> = walk::round_walk_at(*virtual_size, *rounds, index as i32 + 1)
+                    .map(|(coord, _)| coord)
+                    .collect();
+                let current = first.worked_coord + *offset;
+                let position = virtual_coords.iter().position(|coord| *coord == current)?;
+                let step = if reversed { virtual_coords.len() - 1 } else { 1 };
+                let neighbor = virtual_coords.get((position + step) % virtual_coords.len())?;
+                Some(*neighbor - *offset)
+            }
+        });
+        next.map(|next| vec![first.worked_coord.x, first.worked_coord.y, next.x, next.y])
+            .unwrap_or_default()
+    }
+}
+
+#[wasm_bindgen]
+impl InstructionSession {
+    pub fn total(&self) -> usize {
+        self.total
+    }
+
+    pub fn signature_at(&self, index: usize) -> Option<InstructionSignature> {
+        if index >= self.total { return None; }
+        let steps = self.steps_at(index);
+        let (kind, number, yarn) = self.identity_at(index);
+        let content_key = steps.iter().map(|step| {
+            format!("{:?}:{}:{}:{}:{}", step.kind, step.parent_coord.x, step.parent_coord.y, step.worked_coord.x, step.worked_coord.y)
+        }).collect::<Vec<_>>().join("|");
+        Some(InstructionSignature {
+            kind,
+            number,
+            yarn,
+            content_key,
+            invalid_worked_coords: self.invalid_worked_coords(&steps),
+            start_direction: self.start_direction(index, &steps, false),
+            reversed_start_direction: self.start_direction(index, &steps, true),
+        })
+    }
+
+    pub fn unit_at(&self, index: usize) -> Option<InstructionUnit> {
+        if index >= self.total { return None; }
+        let sequence = self.sequence_at(index);
+        let (kind, number, yarn) = self.identity_at(index);
         Some(InstructionUnit {
             kind,
             number,
             yarn,
+            invalid_worked_coords: self.invalid_worked_coords(&sequence.steps),
             sequence,
         })
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Option<InstructionUnit> {
+        if self.index >= self.total { return None; }
+        let unit = self.unit_at(self.index)?;
+        self.index += 1;
+        Some(unit)
     }
 }
 
@@ -375,6 +491,45 @@ mod instruction_session_tests {
         assert_eq!(row_2.worked_coords(), vec![0, 1, 1, 1, 2, 1]);
         assert_eq!(row_2.reversed_text(), "Row 2: sc × 2, oc");
         assert_eq!(row_2.reversed_worked_coords(), vec![2, 1, 1, 1, 0, 1]);
+    }
+
+    #[test]
+    fn signature_tracks_work_semantics_and_invalid_metadata_without_compression() {
+        let mut highlights = Array2::zeros((3, 3));
+        highlights[[1, 0]] = common::HIGHLIGHT_INVALID;
+        let session = InstructionSession {
+            highlights,
+            mode: InstructionMode::Row { canvas_size: IVec2::new(3, 3) },
+            index: 0,
+            total: 3,
+        };
+
+        let signature = session.signature_at(2).expect("signature");
+        assert_eq!(signature.kind() as u8, InstructionUnitKind::Row as u8);
+        assert_eq!(signature.number(), 3);
+        assert!(signature.content_key().contains("Oc:0:1:0:0"));
+        assert_eq!(signature.invalid_worked_coords(), vec![0, 0]);
+        assert_eq!(session.unit_at(2).expect("unit").invalid_worked_coords(), vec![0, 0]);
+    }
+
+    #[test]
+    fn round_session_keeps_empty_units_and_single_stitch_directions() {
+        let empty = instruction_start_round(&[0], 1, 1, 3, 3, 1, 1, 1);
+        let empty_signature = empty.signature_at(0).expect("empty round signature");
+        assert_eq!(empty_signature.kind() as u8, InstructionUnitKind::Round as u8);
+        assert_eq!(empty_signature.number(), 1);
+        assert_eq!(empty.unit_at(0).expect("empty round unit").worked_coords(), Vec::<i32>::new());
+        assert!(empty.signature_at(1).is_none());
+        assert!(empty.unit_at(1).is_none());
+
+        let one_cell = instruction_start_round(&[0], 1, 1, 3, 3, 0, 2, 1);
+        let signature = one_cell.signature_at(0).expect("one-cell round signature");
+        assert_eq!(signature.start_direction(), vec![0, 0, 1, 0]);
+        assert_eq!(signature.reversed_start_direction(), vec![0, 0, 0, -1]);
+
+        let first_virtual = instruction_start_round(&[0], 1, 1, 3, 3, 1, 0, 1);
+        let signature = first_virtual.signature_at(0).expect("first virtual signature");
+        assert_eq!(signature.reversed_start_direction(), vec![0, 0, 1, 0]);
     }
 
     #[test]

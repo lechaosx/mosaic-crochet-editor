@@ -943,6 +943,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   color: var(--danger);
   font-size: var(--font-sm);
 }
+.btn--danger { color: var(--danger); border-color: var(--danger); }
 .g-mode .btn[aria-pressed="true"] {
   color: var(--fg-0);
   background: var(--accent-soft);
@@ -1000,7 +1001,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   width: 100%;
   min-height: var(--hit);
   display: grid;
-  grid-template-columns: 2ch 1rem minmax(0, 1fr);
+  grid-template-columns: minmax(2ch, auto) minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-3);
   row-gap: var(--space-1);
@@ -1020,18 +1021,16 @@ input[type="checkbox"] { accent-color: var(--accent); }
   box-shadow: inset 3px 0 var(--accent);
 }
 .instructions-unit--complete { opacity: 0.72; }
+.instructions-unit--invalid { box-shadow: inset 3px 0 var(--danger); }
 
 .instructions-unit-number {
-  color: var(--fg-0);
+  min-width: 2ch;
+  padding: 0.15rem 0.35rem;
+  border: var(--border);
+  border-radius: var(--radius-1);
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
-}
-.instructions-unit-yarn {
-  width: 1rem;
-  height: 1rem;
-  border: var(--border);
-  border-radius: 50%;
 }
 .instructions-unit code {
   min-width: 0;
@@ -1074,6 +1073,15 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-variant-numeric: tabular-nums;
   animation: pulse 1s ease-in-out infinite alternate;
 }
+#export-progress {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#export-progress[hidden] { display: block; visibility: hidden; }
 
 .warning {
   padding: var(--space-2) var(--space-3);

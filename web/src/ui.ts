@@ -7,6 +7,16 @@ import type { CanvasWorkspace } from "./render";
 export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
 export type SelectionMode = SelectMode;
 
+export function instructionBadgeTextColor(color: string): "#000000" | "#ffffff" {
+    if (!/^#[0-9a-f]{6}$/i.test(color)) return "#ffffff";
+    const channel = (offset: number) => {
+        const value = parseInt(color.slice(offset, offset + 2), 16) / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? "#000000" : "#ffffff";
+}
+
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let startX = 0, startY = 0;
@@ -102,6 +112,7 @@ export interface UIHandle {
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setCrochetProgress: (hasProgress: boolean) => void;
+    setCrochetErrors:   (count: number) => void;
     setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
     setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
     getCanvasWorkspace: () => CanvasWorkspace;
@@ -117,6 +128,8 @@ export interface InstructionOverviewUnit {
     yarn: "A" | "B";
     color: string;
     text: string;
+    invalid: boolean;
+    start: { x: number; y: number; nextX: number; nextY: number } | null;
 }
 
 export interface InstructionsView {
@@ -932,13 +945,19 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const instructionErrors = el("instructions-errors");
     const crochetMode    = el<HTMLButtonElement>("btn-export");
     let hasCrochetProgress = false;
+    let crochetErrors = 0;
     const setCrochetMode = (open: boolean) => {
-        crochetMode.textContent = open
+        const label = open
             ? "Back to Design"
             : hasCrochetProgress ? "Continue Crocheting" : "Begin Crocheting";
-        crochetMode.title = open
+        const errors = crochetErrors === 1 ? "1 invalid stitch" : `${crochetErrors} invalid stitches`;
+        crochetMode.textContent = !open && crochetErrors ? `${label} !` : label;
+        crochetMode.title = (open
             ? "Return to pattern design"
-            : hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions";
+            : hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions")
+            + (!open && crochetErrors ? ` — ${errors}` : "");
+        crochetMode.setAttribute("aria-label", `${label}${!open && crochetErrors ? ` — ${errors}` : ""}`);
+        crochetMode.classList.toggle("btn--danger", !open && crochetErrors > 0);
         crochetMode.setAttribute("aria-pressed", String(open));
     };
     crochetMode.addEventListener("click", () => {
@@ -1063,8 +1082,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 item.type = "button";
                 item.disabled = isBusy;
                 item.className = "instructions-unit";
-                item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}`);
-                item.title = `Go to ${unit.label}, Yarn ${unit.yarn}`;
+                item.classList.toggle("instructions-unit--invalid", unit.invalid);
+                item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}${unit.invalid ? ", contains invalid stitches" : ""}`);
+                item.title = `Go to ${unit.label}, Yarn ${unit.yarn}${unit.invalid ? " · contains invalid stitches" : ""}`;
                 const index = unitElements.length;
                 item.onclick = () => {
                     if (isBusy || index >= liveUnits.length) return;
@@ -1075,14 +1095,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 const meta = document.createElement("span");
                 meta.className = "instructions-unit-number";
                 meta.textContent = unit.label.replace(/^\D+/, "");
-                const yarn = document.createElement("span");
-                yarn.className = "instructions-unit-yarn";
-                yarn.style.backgroundColor = unit.color;
-                yarn.title = `Yarn ${unit.yarn} · ${unit.color}`;
-                yarn.setAttribute("aria-hidden", "true");
+                meta.style.backgroundColor = unit.color;
+                meta.style.color = instructionBadgeTextColor(unit.color);
                 const text = document.createElement("code");
                 text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
-                item.append(meta, yarn, text);
+                item.append(meta, text);
                 row.append(item);
                 unitsList.append(row);
                 unitElements.push(item);
@@ -1135,6 +1152,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setTransformState, setTransformError,
         setHistory, setCrochetProgress: (hasProgress) => {
             hasCrochetProgress = hasProgress;
+            if (!closeInstructionsWorkspace) setCrochetMode(false);
+        }, setCrochetErrors: (count) => {
+            crochetErrors = count;
             if (!closeInstructionsWorkspace) setCrochetMode(false);
         }, setRecoveryStatus, setDocumentError, getCanvasWorkspace: () => {
             syncCanvasChromeInsets();

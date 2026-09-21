@@ -4,7 +4,7 @@ import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indi
          initialize_row_pattern,
          instruction_start_row, instruction_start_round,
          instruction_wip_row, instruction_wip_round,
-         InstructionUnit, InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
+         InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
 import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateCoordinates,
@@ -19,6 +19,7 @@ import { addAxis, removeAxis, toggleAxisActive,
 import { defaultRepeatGrid, repeatGridError, transformsToFlat } from "@mosaic/logic/repeat";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit } from "./ui";
+import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          previewSelectRectMask,
@@ -143,12 +144,7 @@ aboutDialog.addEventListener("click", event => {
 document.getElementById("about-close")!.addEventListener("click", closeAbout);
 let instructionsPreviewStore: Store | null = null;
 let instructionsOpen = false;
-interface CachedInstructionUnit {
-    work: InstructionUnit;
-    label: string;
-    yarn: "A" | "B";
-}
-let instructionCache: { fingerprint: string; units: CachedInstructionUnit[] } | null = null;
+let instructionCache: InstructionCache | null = null;
 let overlayAction: OverlayAction = "place";
 let selectionMoveMode: SelectionMoveMode = "move";
 let selectionMode: SelectionMode = "replace";
@@ -273,6 +269,14 @@ function renderCanvas() {
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
 
+function crochetErrorCount() {
+    const errors = new Set<string>();
+    for (let i = 0; i < store.plan.length; i += 4) {
+        if (store.plan[i] === PlanType.Invalid) errors.add(`${store.plan[i + 2]},${store.plan[i + 3]}`);
+    }
+    return errors.size;
+}
+
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);
 
 // Renderer + side-effect channels (Store invokes them on every `commit`).
@@ -301,6 +305,7 @@ store.addObserver(s => ui.setViewState(
     s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
 store.addObserver(() => updateCoordinates(null, null));
+store.addObserver(() => ui.setCrochetErrors(crochetErrorCount()));
 store.addObserver(s => {
     if (!s.state.float && selectionMode === "remove") selectionMode = "replace";
     ui.setTransformState(
@@ -849,6 +854,7 @@ async function onInstructions() {
         instructionsOpen = false;
         cancelled = true;
         instructionsPreviewStore = null;
+        rs.instructionStarts = [];
         ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
         renderCanvas();
     });
@@ -906,20 +912,25 @@ async function onInstructions() {
         : store.state.pattern.rounds;
     let completedUnits = loadLiveProgress(progressFingerprint, totalUnits);
     ui.setCrochetProgress(hasLiveProgress(progressFingerprint, totalUnits));
-    let generatedUnits: CachedInstructionUnit[] = [];
+    let generatedUnits: readonly CachedInstructionUnit[] = [];
     const directionalUnit = (unit: CachedInstructionUnit, index: number): InstructionOverviewUnit => {
         const reversed = dlg.alternate() && index % 2 === 1;
+        const direction = reversed ? unit.reversedStartDirection : unit.startDirection;
         return {
             label: unit.label,
             yarn: unit.yarn,
             color: unit.yarn === "A" ? store.state.colorA : store.state.colorB,
-            text: reversed ? unit.work.reversed_text() : unit.work.text(),
+            text: reversed ? unit.reversedText : unit.text,
+            invalid: unit.invalid,
+            start: direction.length >= 4 ? { x: direction[0], y: direction[1], nextX: direction[2], nextY: direction[3] } : null,
         };
     };
     const renderUnits = (units: readonly CachedInstructionUnit[], live: boolean) => {
         dlg.clearText();
         dlg.clearUnits();
         const directionalUnits = units.map(directionalUnit);
+        rs.instructionStarts = directionalUnits.flatMap(unit => unit.start ? [{ ...unit.start, invalid: unit.invalid }] : []);
+        renderCanvas();
         directionalUnits.forEach(directional => {
             dlg.appendUnit(directional);
             dlg.appendLine(directional.text);
@@ -936,10 +947,6 @@ async function onInstructions() {
     const cached = instructionCache?.fingerprint === patternFingerprint
         ? instructionCache.units
         : null;
-    if (!cached && instructionCache) {
-        instructionCache.units.forEach(unit => unit.work.free());
-        instructionCache = null;
-    }
 
     const run = async () => {
         dlg.setBusy(true);
@@ -950,33 +957,55 @@ async function onInstructions() {
         const total = session.total();
         const units: CachedInstructionUnit[] = [];
         generatedUnits = units;
-        let count = 0;
-        let unit = session.next();
-        while (unit !== undefined) {
+        for (let index = 0; index < total; index++) {
             if (cancelled) {
-                unit.free();
-                units.forEach(generated => generated.work.free());
                 session.free();
                 dlg.endProgress();
                 return;
             }
-            const label = `${unit.kind() === InstructionUnitKind.Row ? "Row" : "Round"} ${unit.number()}`;
-            const yarn = unit.yarn() === InstructionYarn.A ? "A" : "B";
-            const cachedUnit: CachedInstructionUnit = { work: unit, label, yarn };
+            const signature = session.signature_at(index)!;
+            const rawSignature: InstructionUnitSignature = {
+                label: `${signature.kind() === InstructionUnitKind.Row ? "Row" : "Round"} ${signature.number()}`,
+                yarn: signature.yarn() === InstructionYarn.A ? "A" : "B",
+                contentKey: signature.content_key(),
+                invalidWorkedCoords: [...signature.invalid_worked_coords()],
+                startDirection: [...signature.start_direction()],
+                reversedStartDirection: [...signature.reversed_start_direction()],
+            };
+            signature.free();
+            let cachedUnit = cachedInstructionUnit(instructionCache, progressFingerprint, index, rawSignature);
+            const recomputed = !cachedUnit;
+            if (!cachedUnit) {
+                const unit = session.unit_at(index)!;
+                cachedUnit = {
+                    ...rawSignature,
+                    text: unit.text(), reversedText: unit.reversed_text(),
+                    workedCoords: [...unit.worked_coords()], reversedWorkedCoords: [...unit.reversed_worked_coords()],
+                    invalid: rawSignature.invalidWorkedCoords.length > 0,
+                };
+                unit.free();
+            }
             units.push(cachedUnit);
             const directional = directionalUnit(cachedUnit, units.length - 1);
             dlg.appendUnit(directional);
             dlg.appendLine(directional.text);
-            dlg.setProgress(++count, total);
-            await new Promise<void>(res => requestAnimationFrame(() => res()));
-            unit = session.next();
+            dlg.setProgress(index + 1, total);
+            if (shouldYieldInstructionGeneration(index, recomputed)) {
+                const hooks = window as unknown as {
+                    __test_instruction_yields__?: { index: number; recomputed: boolean }[];
+                    __test_on_instruction_yield__?: (yielded: { index: number; recomputed: boolean }) => void;
+                };
+                const yielded = { index, recomputed };
+                hooks.__test_instruction_yields__?.push(yielded);
+                hooks.__test_on_instruction_yield__?.(yielded);
+                await new Promise<void>(res => requestAnimationFrame(() => res()));
+            }
         }
         session.free();
         if (!cancelled) {
-            instructionCache = { fingerprint: patternFingerprint, units };
-            renderUnits(units, true);
-        } else {
-            units.forEach(generated => generated.work.free());
+            generatedUnits = units;
+            instructionCache = { fingerprint: patternFingerprint, shapeFingerprint: progressFingerprint, units };
+            renderUnits(generatedUnits, true);
         }
         dlg.endProgress();
         dlg.setBusy(false);
@@ -1710,6 +1739,7 @@ ui.setSelectionMode(store.state.activeTool, selectionMode, Boolean(store.state.f
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
 ui.setRecoveryStatus(saved ? "recovered" : "saved");
+ui.setCrochetErrors(crochetErrorCount());
 
 if (saved) {
     fitToView(
