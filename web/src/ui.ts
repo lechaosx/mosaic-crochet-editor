@@ -1,4 +1,4 @@
-import { Tool, SymKey, PatternState, Axis, RepeatGrid } from "@mosaic/logic/types";
+import { Tool, SymKey, PatternState, Axis, GridRecipe } from "@mosaic/logic/types";
 import type { SelectMode } from "@mosaic/logic/selection";
 import type { OverlayAction } from "@mosaic/logic/paint";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
@@ -39,7 +39,7 @@ function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => v
     target.addEventListener("pointerleave", cancel);
 }
 
-// ─── Mirror & Repeat button ids ───────────────────────────────────────────────
+// ─── Global Mirror button ids ─────────────────────────────────────────────────
 // One "Add <kind>" button per kind in the inspector's add row.
 const SYM_ADD_BUTTONS: { id: string; key: SymKey; glyph: string }[] = [
     { id: "add-sym-v",  key: "V",  glyph: "↔" },
@@ -67,9 +67,12 @@ export interface UICallbacks {
     onToggleAxis:      (id: string) => void;
     onDeleteAxis:      (id: string) => void;
     onAxisPosition:    (id: string, position: { x?: number; y?: number; c?: number }) => Axis | null;
-    onRepeatInput:     () => void;
-    onRepeatCommit:    () => void;
-    onLiveTransformsChange: (enabled: boolean) => void;
+    onCreateRecipe:    () => void;
+    onActivateRecipe:  (id: string) => void;
+    onDeleteRecipe:    (id: string) => void;
+    onRecipeChange:    (id: string, change: Partial<GridRecipe>) => void;
+    onApplyRecipe:     () => void;
+    onLiveMirrorsChange: (enabled: boolean) => void;
     onTransformPopoverToggle: (open: boolean) => void;
     onReplicateSelection: () => void;
     onHighlightChange:        () => void;
@@ -105,9 +108,8 @@ export interface UIHandle {
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
     setAxes:            (axes: ReadonlyArray<Axis>) => void;
-    readRepeatGrid:     () => RepeatGrid;
-    setRepeatGrid:      (repeat: RepeatGrid) => void;
-    setRepeatError:     (message: string | null) => void;
+    setRecipes:         (recipes: ReadonlyArray<GridRecipe>, activeId: string | null) => void;
+    setRecipeError:     (message: string | null) => void;
     setTransformState:  (hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) => void;
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
@@ -488,7 +490,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         swatchB.style.background = b;
     }
 
-    /* ── Mirror & Repeat inspector ────────────────────────────────────── */
+    /* ── Global Mirror inspector ──────────────────────────────────────── */
     const symList    = el("sym-list");
     const symToggle  = el("btn-sym-toggle");
 
@@ -496,7 +498,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         e.preventDefault();
         if (isInspectorOpen("transforms")) closeInspector();
         else {
-            openInspector("transforms", "Mirror & Repeat");
+            openInspector("transforms", "Global Mirror");
             focusFirstInspectorControl("transforms");
         }
     });
@@ -508,21 +510,21 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const transformError = el("transform-error");
     replicateSelection.addEventListener("click", cb.onReplicateSelection);
     const liveTransforms = el<HTMLInputElement>("live-transforms");
-    liveTransforms.addEventListener("input", () => cb.onLiveTransformsChange(liveTransforms.checked));
+    liveTransforms.addEventListener("input", () => cb.onLiveMirrorsChange(liveTransforms.checked));
 
     function setTransformState(hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) {
         replicateSelection.disabled = !hasSelection || !hasTransforms;
         replicateSelection.title = !hasTransforms
-            ? "Configure a transform first"
-            : !hasSelection ? "Select cells first" : "Stamp transformed copies (T)";
+            ? "Add a Global Mirror axis first"
+            : !hasSelection ? "Select cells to apply Global Mirror" : "Apply Global Mirror (T)";
         liveTransforms.checked = liveEnabled;
 
         const state = !hasTransforms ? "none" : liveEnabled ? "live" : "paused";
         const label = state === "none"
-            ? "Symmetry and repeat: no transforms configured"
+            ? "Global Mirror: no axes configured"
             : state === "live"
-                ? "Symmetry and repeat: applying while drawing"
-                : "Symmetry and repeat: drawing application paused";
+                ? "Global Mirror: applying while drawing"
+                : "Global Mirror: drawing application paused";
         symToggle.dataset.transformState = state;
         symToggle.title = label;
         symToggle.setAttribute("aria-label", label);
@@ -532,45 +534,68 @@ export function mountUI(cb: UICallbacks): UIHandle {
         transformError.textContent = message ?? "";
         transformError.hidden = message === null;
         if (message !== null && !isInspectorOpen("transforms")) {
-            openInspector("transforms", "Mirror & Repeat");
+            openInspector("transforms", "Global Mirror");
         }
     }
 
-    const repeatEnabled = el<HTMLInputElement>("repeat-enabled");
-    const repeatTileWidth = el<HTMLInputElement>("repeat-tile-width");
-    const repeatTileHeight = el<HTMLInputElement>("repeat-tile-height");
-    const repeatCopiesX = el<HTMLInputElement>("repeat-copies-x");
-    const repeatCopiesY = el<HTMLInputElement>("repeat-copies-y");
-    const repeatError = el("repeat-error");
-    const repeatInputs = [repeatEnabled, repeatTileWidth, repeatTileHeight, repeatCopiesX, repeatCopiesY];
-    repeatInputs.forEach(input => {
-        input.addEventListener("input", cb.onRepeatInput);
-        input.addEventListener("change", cb.onRepeatCommit);
-    });
-
-    function readRepeatGrid(): RepeatGrid {
-        return {
-            enabled: repeatEnabled.checked,
-            tileWidth: repeatTileWidth.valueAsNumber,
-            tileHeight: repeatTileHeight.valueAsNumber,
-            copiesX: repeatCopiesX.valueAsNumber,
-            copiesY: repeatCopiesY.valueAsNumber,
-        };
+    const recipeList = el("recipe-list");
+    const recipeControls = el("recipe-controls");
+    const recipeEnabled = el<HTMLInputElement>("recipe-enabled");
+    const recipeRight = el<HTMLInputElement>("recipe-right");
+    const recipeDown = el<HTMLInputElement>("recipe-down");
+    const recipeGapX = el<HTMLInputElement>("recipe-gap-x");
+    const recipeGapY = el<HTMLInputElement>("recipe-gap-y");
+    const recipeError = el("recipe-error");
+    let selectedRecipeId: string | null = null;
+    let projectedRecipes: ReadonlyArray<GridRecipe> | null = null;
+    let projectedActiveRecipeId: string | null | undefined;
+    el("recipe-create").addEventListener("click", cb.onCreateRecipe);
+    el("recipe-apply").addEventListener("click", cb.onApplyRecipe);
+    const recipeInputs = [recipeEnabled, recipeRight, recipeDown, recipeGapX, recipeGapY];
+    recipeInputs.forEach(input => input.addEventListener("change", () => {
+        const id = selectedRecipeId;
+        if (!id) return;
+        cb.onRecipeChange(id, {
+            enabled: recipeEnabled.checked,
+            right: recipeRight.valueAsNumber,
+            down: recipeDown.valueAsNumber,
+            columnSpacing: recipeGapX.valueAsNumber,
+            rowSpacing: recipeGapY.valueAsNumber,
+        });
+    }));
+    function setRecipes(recipes: ReadonlyArray<GridRecipe>, activeId: string | null) {
+        if (recipes === projectedRecipes && activeId === projectedActiveRecipeId) return;
+        projectedRecipes = recipes;
+        projectedActiveRecipeId = activeId;
+        selectedRecipeId = activeId;
+        recipeList.replaceChildren(...recipes.map((recipe, index) => {
+            const row = document.createElement("div");
+            const activate = document.createElement("button");
+            activate.className = "btn";
+            activate.textContent = `Repeat ${index + 1}`;
+            activate.title = "Activate this saved repeat selection";
+            activate.dataset.recipeId = recipe.id;
+            activate.setAttribute("aria-pressed", String(recipe.id === activeId));
+            activate.addEventListener("click", () => cb.onActivateRecipe(recipe.id));
+            const remove = document.createElement("button");
+            remove.className = "btn btn--icon"; remove.textContent = "×";
+            remove.setAttribute("aria-label", `Delete repeat ${index + 1}`);
+            remove.title = `Delete repeat ${index + 1}`;
+            remove.addEventListener("click", () => cb.onDeleteRecipe(recipe.id));
+            row.append(activate, remove);
+            return row;
+        }));
+        const active = activeId === null ? null : recipes.find(recipe => recipe.id === activeId) ?? null;
+        recipeControls.hidden = active === null;
+        if (!active) return;
+        recipeEnabled.checked = active.enabled;
+        recipeRight.value = String(active.right);
+        recipeDown.value = String(active.down);
+        recipeGapX.value = String(active.columnSpacing);
+        recipeGapY.value = String(active.rowSpacing);
     }
+    function setRecipeError(message: string | null) { recipeError.textContent = message ?? ""; recipeError.hidden = message === null; }
 
-    function setRepeatGrid(repeat: RepeatGrid) {
-        repeatEnabled.checked = repeat.enabled;
-        repeatTileWidth.value = String(repeat.tileWidth);
-        repeatTileHeight.value = String(repeat.tileHeight);
-        repeatCopiesX.value = String(repeat.copiesX);
-        repeatCopiesY.value = String(repeat.copiesY);
-        setRepeatError(null);
-    }
-
-    function setRepeatError(message: string | null) {
-        repeatError.textContent = message ?? "";
-        repeatError.hidden = message === null;
-    }
 
     function formatPosition(a: Axis): string {
         switch (a.kind) {
@@ -1147,8 +1172,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setOverlayAction, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setAxes,
-        readRepeatGrid, setRepeatGrid, setRepeatError,
+        setTool, setOverlayAction, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setAxes, setRecipes, setRecipeError,
         setTransformState, setTransformError,
         setHistory, setCrochetProgress: (hasProgress) => {
             hasCrochetProgress = hasProgress;

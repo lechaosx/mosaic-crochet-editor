@@ -6,7 +6,7 @@
     "dev:rust": "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler --dev'",
     "dev:web": "bun run --cwd web dev",
     "dev": "bun run dev:rust & bun run dev:web",
-    "test:rust": "cargo test",
+    "test:rust": "cargo fmt --all -- --check && cargo clippy --workspace && cargo test",
     "test:logic":    "bun run build:wasm && bun run --cwd logic test",
     "test:mutation": "bun run build:wasm && bun run --cwd logic test:mutation",
     "test:web":      "bun run build:wasm && bun run --cwd web test",

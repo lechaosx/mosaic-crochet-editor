@@ -24,6 +24,13 @@ describe("packed transform grid prototype", () => {
         expect(() => evaluatePackedGrid([{ x: 0, y: 0 }], { ...noGrid, rowOffset: 0.5 })).toThrow(/offsets/i);
     });
 
+    test("accepts at most 1,048,576 source-position claims", () => {
+        const source = Array.from({ length: 1_024 }, () => ({ x: 0, y: 0 }));
+        expect(() => evaluatePackedGrid(source, { ...noGrid, right: 1_023 })).not.toThrow();
+        expect(() => evaluatePackedGrid([...source, { x: 0, y: 0 }], { ...noGrid, right: 1_023 }))
+            .toThrow(/1,048,576 claims/i);
+    });
+
     test("packs a sparse motif by occupied cells instead of its bounding box", () => {
         const result = evaluatePackedGrid(
             [{ x: 0, y: 0 }, { x: 2, y: 0 }],

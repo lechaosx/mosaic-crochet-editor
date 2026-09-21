@@ -5,10 +5,9 @@ import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indi
          instruction_start_row, instruction_start_round,
          instruction_wip_row, instruction_wip_round,
          InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey, Float, Axis } from "@mosaic/logic/types";
+import { Tool, PatternState, SymKey, Float, Axis, GridRecipe } from "@mosaic/logic/types";
 import { makeViewport, makeRendererState, observeCanvasResize,
-         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateCoordinates,
-         pickRepeatHandle, RepeatHandleAxis } from "./render";
+         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
@@ -16,7 +15,8 @@ import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitiali
 import { addAxis, removeAxis, toggleAxisActive,
          pickAxesAt, setAxisPosition, snapHalf, snapInt,
          axisOffCanvas, axisIsProjectValid } from "@mosaic/logic/symmetry";
-import { defaultRepeatGrid, repeatGridError, transformsToFlat } from "@mosaic/logic/repeat";
+import { axesToFlat } from "@mosaic/logic/symmetry";
+import { evaluateGridRecipe, gridRecipeError, recipeSourceCells } from "@mosaic/logic/grid-recipes";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
@@ -24,7 +24,8 @@ import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          previewSelectRectMask,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
-         deleteFloat, clipFloatToCanvas, replicateSelection } from "@mosaic/logic/selection";
+         deleteFloat, clipFloatToCanvas, replicateSelection, createGridRecipe,
+         activateGridRecipe, deleteGridRecipe, activeGridRecipe, syncActiveGridRecipe } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
@@ -71,11 +72,21 @@ function axesEqual(a: ReadonlyArray<Axis>, b: ReadonlyArray<Axis>): boolean {
     });
 }
 
+function recipesEqual(a: ReadonlyArray<GridRecipe>, b: ReadonlyArray<GridRecipe>): boolean {
+    return a.length === b.length && a.every((recipe, index) => {
+        const other = b[index];
+        return JSON.stringify({ ...recipe, source: { ...recipe.source, mask: undefined } })
+            === JSON.stringify({ ...other, source: { ...other.source, mask: undefined } })
+            && arraysEqual(recipe.source.mask, other.source.mask);
+    });
+}
+
 function sameProject(loaded: LoadedFile): boolean {
     return sameAuthoredPattern(loaded.pattern, loaded.pixels)
         && loaded.colorA === store.state.colorA
         && loaded.colorB === store.state.colorB
-        && axesEqual(loaded.axes, store.state.axes);
+        && axesEqual(loaded.axes, store.state.axes)
+        && recipesEqual(loaded.recipes, store.state.recipes);
 }
 
 // Minimal sensible defaults — only used when no saved session exists.
@@ -88,8 +99,9 @@ function defaultSession(): SessionState {
         activeTool:    "pencil",
         primaryColor:  1,
         axes:           [],
-        repeat:         defaultRepeatGrid(),
-        liveTransforms: true,
+        recipes:        [],
+        activeRecipeId: null,
+        liveMirrors:    true,
         float:           null,
         rotation:        0,
     };
@@ -98,13 +110,6 @@ function defaultSession(): SessionState {
 function exampleSession(): SessionState {
     const pattern: PatternState = { mode: "row", canvasWidth: 9, canvasHeight: 9 };
     const axes = addAxis([], "V", pattern.canvasWidth, pattern.canvasHeight);
-    const repeat = {
-        enabled: true,
-        tileWidth: 3,
-        tileHeight: 9,
-        copiesX: 1,
-        copiesY: 0,
-    };
     let pixels: Uint8Array = initialize_row_pattern(pattern.canvasWidth, pattern.canvasHeight).slice();
     for (const x of [1, 4, 7]) {
         const index = pattern.canvasWidth + x;
@@ -125,7 +130,6 @@ function exampleSession(): SessionState {
         colorA: "#264653",
         colorB: "#f4a261",
         axes,
-        repeat,
     };
 }
 
@@ -213,6 +217,8 @@ type Gesture =
         lastCell: { x: number; y: number } | null;
         prePixels: Uint8Array;
         preFloat: Float | null;
+        preRecipes: GridRecipe[];
+        preActiveRecipeId: string | null;
       }
     | { kind: "move";
         guidePickPending: boolean;
@@ -220,6 +226,8 @@ type Gesture =
         drag: { anchorX: number; anchorY: number; startDx: number; startDy: number } | null;
         prePixels: Uint8Array | null;
         preFloat: Float | null;
+        preRecipes: GridRecipe[];
+        preActiveRecipeId: string | null;
       }
     | { kind: "axis-drag";
         // One pick per kind: clicking an intersection grabs one of each
@@ -230,10 +238,7 @@ type Gesture =
         // Snapshot the axes list so cancel can revert without recomputing.
         preAxes: Axis[];
       }
-    | { kind: "repeat-drag";
-        axis: RepeatHandleAxis;
-        preRepeat: typeof store.state.repeat;
-      };
+    ;
 // Click within this many cell-units of an active axis guide starts an
 // axis-drag instead of float-move. ~0.4 keeps the affordance close to the
 // 1-cell-wide visual line without being so wide that float-move suffers.
@@ -328,8 +333,9 @@ store.addObserver(() => updateCoordinates(null, null));
 store.addObserver(() => ui.setCrochetErrors(crochetErrorCount()));
 store.addObserver(s => {
     if (!s.state.float && selectionMode === "remove") selectionMode = "replace";
+    ui.setRecipes(s.state.recipes, s.state.activeRecipeId);
     ui.setTransformState(
-        Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveTransforms,
+        Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveMirrors,
     );
     ui.setTransformError(null);
     ui.setSelectionMode(s.state.activeTool, selectionMode, Boolean(s.state.float));
@@ -351,6 +357,7 @@ interface PaintOutcome {
     after: Uint8Array;
     targets: Uint32Array;
     floatPixels: Uint8Array | null;
+    canvasPixels: Uint8Array | null;
     reason: string | null;
     protectedSkipped: boolean;
 }
@@ -372,14 +379,28 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
     const inCanvas = !outOfBounds(x, y, W, H);
     const shifted = s.float ? shiftedFloatMask(s) : null;
     const visible = visiblePixels(s);
+    const recipe = activeGridRecipe(s);
+    const evaluatedRecipe = recipe?.enabled ? evaluateGridRecipe(recipe) : null;
+    const recipeCell = evaluatedRecipe
+        ? evaluatedRecipe.cells.find(cell => cell.x === x && cell.y === y) ?? null
+        : null;
+    let paintMask = shifted;
+    if (evaluatedRecipe) {
+        paintMask = shifted?.slice() ?? new Uint8Array(W * H);
+        for (const cell of evaluatedRecipe.cells) {
+            if (outOfBounds(cell.x, cell.y, W, H)) continue;
+            const index = cell.y * W + cell.x;
+            if (visible[index] !== 0) paintMask[index] = 1;
+        }
+    }
     const blocked = (reason: string): PaintOutcome => ({
         before: visible, after: visible, targets: new Uint32Array(0),
-        floatPixels: null, reason, protectedSkipped: false,
+        floatPixels: null, canvasPixels: null, reason, protectedSkipped: false,
     });
 
     if (!inCanvas && tool !== "overlay") return blocked("Outside pattern");
     if (inCanvas && visible[y * W + x] === 0) return blocked("Outside pattern");
-    if (inCanvas && shifted && shifted[y * W + x] === 0) return blocked("Outside selection");
+    if (inCanvas && shifted && shifted[y * W + x] === 0 && !recipeCell) return blocked("Outside selection");
     const effectiveOverlayAction = tool === "overlay" && color !== s.primaryColor
         ? overlayAction === "place" ? "clear"
             : overlayAction === "clear" ? "place"
@@ -391,8 +412,8 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
             : "Overlay unavailable at this cell");
     }
 
-    const transforms = s.liveTransforms
-        ? transformsToFlat(s.axes, s.repeat)
+    const transforms = s.liveMirrors
+        ? axesToFlat(s.axes)
         : new Float64Array(0);
     const targets = transformed_target_indices(W, H, x, y, transforms);
     let next = paintOps[tool as PaintTool]({
@@ -400,8 +421,24 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
         color, primary: s.primaryColor,
         overlayAction: effectiveOverlayAction,
         invertVisited,
-        transforms, shifted,
+        transforms, shifted: paintMask,
     });
+    if (evaluatedRecipe) {
+        const clicked = recipeCell;
+        if (clicked) {
+            for (const cell of evaluatedRecipe.cells) {
+                if (cell.sourceIndex !== clicked.sourceIndex || (cell.x === x && cell.y === y)) continue;
+                next = paintOps[tool as PaintTool]({
+                    visible: next, pattern, x: cell.x, y: cell.y,
+                    color, primary: s.primaryColor,
+                    overlayAction: effectiveOverlayAction,
+                    invertVisited,
+                    transforms,
+                    shifted: paintMask,
+                });
+            }
+        }
+    }
     let protectedSkipped = false;
     if (preferences.lockInvalid) {
         const unlocked = next;
@@ -409,6 +446,7 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
         protectedSkipped = !arraysEqual(unlocked, next);
     }
     let floatPixels: Uint8Array | null = null;
+    let canvasPixels: Uint8Array | null = null;
     let after = next;
     if (s.float) {
         const f = s.float;
@@ -422,9 +460,15 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
             }
         }
         floatPixels = newFP;
+        canvasPixels = next.slice();
+        for (let ly = 0; ly < f.h; ly++) for (let lx = 0; lx < f.w; lx++) {
+            if (f.pixels[ly * f.w + lx] === 0) continue;
+            const cx = f.x + lx, cy = f.y + ly;
+            if (cx >= 0 && cx < W && cy >= 0 && cy < H) canvasPixels[cy * W + cx] = s.pixels[cy * W + cx];
+        }
         after = visiblePixels({ ...s, float: { ...f, pixels: newFP } });
     }
-    return { before: visible, after, targets, floatPixels, reason: null, protectedSkipped };
+    return { before: visible, after, targets, floatPixels, canvasPixels, reason: null, protectedSkipped };
 }
 
 function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "paint" }>) {
@@ -442,7 +486,8 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
     if (outcome.protectedSkipped) showGestureFeedback("Protected · Settings");
     if (outcome.floatPixels) {
         const pixels = outcome.floatPixels;
-        store.commit(state => { state.float = { ...state.float!, pixels }; }, { persist: false });
+        const base = outcome.canvasPixels;
+        store.commit(state => { state.float = { ...state.float!, pixels }; if (base) state.pixels = base; }, { persist: false });
     } else {
         const pixels = outcome.after;
         store.commit(state => { state.pixels = pixels; }, { persist: false });
@@ -465,14 +510,13 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 function refreshSymmetryUi() {
     ui.setAxes(store.state.axes);
     ui.setTransformState(
-        Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveTransforms,
+        Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveMirrors,
     );
+    ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
 }
 
 function hasConfiguredTransforms() {
-    const r = store.state.repeat;
-    return store.state.axes.some(a => a.active)
-        || (r.enabled && (r.copiesX > 0 || r.copiesY > 0));
+    return store.state.axes.some(a => a.active);
 }
 // Shortcuts and popover buttons append an active, canonically positioned
 // axis. Axis ids keep multiple entries of the same kind independent.
@@ -512,22 +556,8 @@ function onAxisPosition(id: string, position: { x?: number; y?: number; c?: numb
     return updated;
 }
 
-function onRepeatInput() {
-    const repeat = ui.readRepeatGrid();
-    const error = repeatGridError(repeat);
-    ui.setRepeatError(error);
-    if (error) return;
-    store.commit(s => { s.repeat = repeat; }, { recompute: false, persist: false });
-}
-
-function onRepeatCommit() {
-    const error = repeatGridError(ui.readRepeatGrid());
-    if (error) return;
-    store.commit(() => {}, { recompute: false, render: false, history: true });
-}
-
-function onLiveTransformsChange(enabled: boolean) {
-    store.commit(s => { s.liveTransforms = enabled; }, { recompute: false, render: false });
+function onLiveMirrorsChange(enabled: boolean) {
+    store.commit(s => { s.liveMirrors = enabled; }, { recompute: false, render: false });
 }
 
 function onTransformPopoverToggle(open: boolean) {
@@ -545,6 +575,59 @@ function onReplicateSelection() {
     } else {
         ui.setTransformError(null);
     }
+}
+
+function refreshRecipeUi(error: string | null = null) {
+    ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
+    ui.setRecipeError(error);
+}
+
+function onCreateRecipe() {
+    const result = createGridRecipe(store);
+    refreshRecipeUi(result === "no-selection" ? "Select work before saving a repeat." : result === "invalid" ? "That selection cannot form a repeat." : null);
+}
+
+function onActivateRecipe(id: string) {
+    if (!activateGridRecipe(store, id)) refreshRecipeUi("This recipe's source is not available on the chart.");
+    else refreshRecipeUi();
+}
+
+function onDeleteRecipe(id: string) {
+    deleteGridRecipe(store, id);
+    refreshRecipeUi();
+}
+
+function onRecipeChange(id: string, change: Partial<GridRecipe>) {
+    const recipe = store.state.recipes.find(candidate => candidate.id === id);
+    if (!recipe) return;
+    const updated = { ...recipe, ...change };
+    const error = gridRecipeError(updated);
+    if (error) { refreshRecipeUi(error); return; }
+    store.commit(s => { s.recipes = s.recipes.map(candidate => candidate.id === id ? updated : candidate); }, { history: true });
+    refreshRecipeUi();
+}
+
+function onApplyRecipe() {
+    const recipe = activeGridRecipe(store.state);
+    const float = store.state.float;
+    if (!recipe || !float) { refreshRecipeUi("Activate a saved repeat first."); return; }
+    const evaluated = evaluateGridRecipe(recipe);
+    const sources = recipeSourceCells(recipe);
+    if (evaluated.conflicts.length) { refreshRecipeUi("Repeat instances overlap."); return; }
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    const next = store.state.pixels.slice();
+    let changed = false;
+    for (const cell of evaluated.cells) {
+        const source = sources[cell.sourceIndex];
+        if (cell.x === source.x && cell.y === source.y) continue;
+        if (outOfBounds(cell.x, cell.y, W, H) || store.state.pixels[cell.y * W + cell.x] === 0) {
+            refreshRecipeUi("Repeat extends outside the chart."); return;
+        }
+        const value = float.pixels[(source.y - float.y) * float.w + source.x - float.x];
+        if (value !== 0 && next[cell.y * W + cell.x] !== value) { next[cell.y * W + cell.x] = value; changed = true; }
+    }
+    if (changed) store.commit(s => { s.pixels = next; }, { history: true });
+    refreshRecipeUi();
 }
 
 // ── Tool / colour / settings handlers ────────────────────────────────────────
@@ -687,7 +770,13 @@ function onDeselect() {
 }
 
 // ── Pattern inspector ───────────────────────────────────────────────────────
-let editBaseline: { pattern: PatternState; pixels: Uint8Array; float: Float | null; axes: Axis[] } | null = null;
+let editBaseline: {
+    pattern: PatternState;
+    pixels: Uint8Array;
+    float: Float | null;
+    axes: Axis[];
+    activeRecipeId: string | null;
+} | null = null;
 
 function onEditOpen() {
     editBaseline = null;
@@ -702,6 +791,7 @@ function captureEditBaseline() {
         pixels: store.state.pixels.slice(),
         float: store.state.float ? { ...store.state.float, pixels: store.state.float.pixels.slice() } : null,
         axes: [...store.state.axes],
+        activeRecipeId: store.state.activeRecipeId,
     };
 }
 function onEditChange(): boolean {
@@ -781,6 +871,7 @@ function onEditRevert() {
         pixels: baseline.pixels,
         float: baseline.float,
         axes: baseline.axes,
+        activeRecipeId: baseline.activeRecipeId,
     }, { persist: false });
     ui.syncEditInputs(baseline.pattern);
     refreshSymmetryUi();
@@ -798,13 +889,13 @@ function applyRestored(r: Restored) {
     }
     store.replace(
         { ...store.state, pattern: r.pattern, pixels: r.pixels, float: r.float,
-          axes: r.axes, repeat: r.repeat, colorA: r.colorA, colorB: r.colorB },
+          axes: r.axes, recipes: r.recipes, activeRecipeId: r.activeRecipeId,
+          colorA: r.colorA, colorB: r.colorB },
         { persist: true },
     );
     (document.getElementById("color-a") as HTMLInputElement).value = r.colorA;
     (document.getElementById("color-b") as HTMLInputElement).value = r.colorB;
     ui.setColors(r.colorA, r.colorB);
-    ui.setRepeatGrid(r.repeat);
     ui.syncEditInputs(r.pattern);
     refreshSymmetryUi();
 }
@@ -856,7 +947,8 @@ async function onLoad() {
     );
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
-          colorA: loaded.colorA, colorB: loaded.colorB, axes: loaded.axes, float: null },
+          colorA: loaded.colorA, colorB: loaded.colorB, axes: loaded.axes,
+          recipes: loaded.recipes, activeRecipeId: null, float: null },
         { history: true, persist: true },
     );
     closeAbout();
@@ -898,8 +990,7 @@ async function onInstructions() {
         ...store.state,
         pixels: exportPixels,
         axes: [],
-        repeat: defaultRepeatGrid(),
-        liveTransforms: false,
+        liveMirrors: false,
         float: null,
     });
     renderCanvas();
@@ -1074,9 +1165,12 @@ const ui: UIHandle = mountUI({
     onToggleAxis: toggleAxisById,
     onDeleteAxis: deleteAxisById,
     onAxisPosition,
-    onRepeatInput,
-    onRepeatCommit,
-    onLiveTransformsChange,
+    onCreateRecipe,
+    onActivateRecipe,
+    onDeleteRecipe,
+    onRecipeChange,
+    onApplyRecipe,
+    onLiveMirrorsChange,
     onTransformPopoverToggle,
     onReplicateSelection,
     onHighlightChange:         onHlOpacityInput,
@@ -1136,7 +1230,6 @@ function beginFreshPattern() {
     ui.setTool(fresh.activeTool);
     ui.setPrimary(fresh.primaryColor);
     ui.setColors(fresh.colorA, fresh.colorB);
-    ui.setRepeatGrid(fresh.repeat);
     ui.syncEditInputs(fresh.pattern);
     refreshSymmetryUi();
     ui.setHistory(false, false);
@@ -1156,7 +1249,6 @@ function useExample() {
     ui.setTool(example.activeTool);
     ui.setPrimary(example.primaryColor);
     ui.setColors(example.colorA, example.colorB);
-    ui.setRepeatGrid(example.repeat);
     ui.syncEditInputs(example.pattern);
     refreshSymmetryUi();
     closeAbout();
@@ -1191,6 +1283,8 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
             const mode: MoveMode = mods.alt ? "mask-only" : mods.ctrl ? "duplicate" : selectionMoveMode;
             let prePixels: Uint8Array | null = null;
             const preFloat = store.state.float;
+            const preRecipes = store.state.recipes;
+            const preActiveRecipeId = store.state.activeRecipeId;
             if (mode === "mask-only" && preFloat) {
                 const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
                 const clipped = clipFloatToCanvas(preFloat, W, H);
@@ -1202,7 +1296,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; s.float = clipped; }, { persist: false });
-                gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat: clipped };
+                gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat: clipped, preRecipes, preActiveRecipeId };
                 return;
             } else if (mode === "duplicate" && preFloat) {
                 // Pre-stamp the float into canvas so the duplicate is
@@ -1211,7 +1305,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; }, { persist: false });
             }
-            gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat };
+            gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
             return;
         }
         if (tool === "select") {
@@ -1234,6 +1328,8 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 lastCell: null,
                 prePixels: store.state.pixels.slice(),
                 preFloat:  store.state.float,
+                preRecipes: store.state.recipes,
+                preActiveRecipeId: store.state.activeRecipeId,
             };
             ui.setCanvasFeedback(`${mode === "remove" ? "Subtract" : mode === "add" ? "Add" : "Replace"} selection · release to commit`);
             return;
@@ -1257,14 +1353,6 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                     viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
                     store.state.pattern, cx, cy,
                 );
-                const handle = pickRepeatHandle(
-                    store.state.repeat, frac.x, frac.y,
-                    Math.max(0.4, 22 / viewport.view.zoom),
-                );
-                if (handle) {
-                    gesture = { kind: "repeat-drag", axis: handle, preRepeat: { ...store.state.repeat } };
-                    return;
-                }
                 if (gesture.kind !== "move") {
                     const hits = pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance());
                     if (hits.length > 0) {
@@ -1276,24 +1364,6 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                     }
                 }
             }
-        }
-        if (gesture.kind === "repeat-drag") {
-            const frac = screenToPatternFrac(
-                viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
-                store.state.pattern, cx, cy,
-            );
-            const distance = Math.max(1, Math.min(
-                MAX_CANVAS_DIMENSION,
-                Math.round((gesture.axis === "x" ? frac.x : frac.y) - 0.5),
-            ));
-            if (gesture.axis === "x" && distance !== store.state.repeat.tileWidth) {
-                store.commit(s => { s.repeat = { ...s.repeat, tileWidth: distance }; }, { recompute: false, persist: false });
-                ui.setRepeatGrid(store.state.repeat);
-            } else if (gesture.axis === "y" && distance !== store.state.repeat.tileHeight) {
-                store.commit(s => { s.repeat = { ...s.repeat, tileHeight: distance }; }, { recompute: false, persist: false });
-                ui.setRepeatGrid(store.state.repeat);
-            }
-            return;
         }
         if (gesture.kind === "move") {
             const p = screenToPattern(
@@ -1352,9 +1422,9 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                                 newFP[ly * pf.w + lx] = store.state.pixels[cy * W + cx];
                         }
                     }
-                    store.commit(s => { if (s.float) s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; }, { persist: false });
+                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; syncActiveGridRecipe(s); } }, { persist: false });
                 } else {
-                    store.commit(s => { if (s.float) s.float = { ...s.float, x: newX, y: newY }; }, { persist: false });
+                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY }; syncActiveGridRecipe(s); } }, { persist: false });
                 }
             }
             return;
@@ -1433,12 +1503,6 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     },
     onPaintEnd:   () => {
         if (!gesture) return;
-        if (gesture.kind === "repeat-drag") {
-            const changed = JSON.stringify(gesture.preRepeat) !== JSON.stringify(store.state.repeat);
-            if (changed) store.commit(() => {}, { recompute: false, render: false, history: true });
-            gesture = null;
-            return;
-        }
         if (gesture.kind === "move") {
             if (!gesture.drag) { gesture = null; return; }
             if (gesture.mode === "mask-only" && store.state.float) {
@@ -1446,13 +1510,14 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 // gives the correct lift shape directly.
                 const shifted = shiftedFloatMask(store.state);
                 const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
-                store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
+                store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; syncActiveGridRecipe(s); }, { history: true });
             } else {
                 // Move and duplicate converge here: the duplicate's pre-stamp
                 // already happened at paintdown, so release just records the
                 // final dx/dy.
                 store.commit(() => {}, { recompute: false, render: false, history: true });
             }
+            refreshSymmetryUi();
             gesture = null;
             return;
         }
@@ -1518,22 +1583,18 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
         if (!gesture) return;
-        if (gesture.kind === "repeat-drag") {
-            const { preRepeat } = gesture;
-            gesture = null;
-            store.commit(s => { s.repeat = preRepeat; }, { recompute: false });
-            ui.setRepeatGrid(store.state.repeat);
-            return;
-        }
         if (gesture.kind === "move") {
-            const { prePixels, preFloat } = gesture;
+            const { prePixels, preFloat, preRecipes, preActiveRecipeId } = gesture;
             gesture = null;
             // Restore pre-drag state: pixels (if paintdown pre-stamped) and
             // the entire float (offset, content, mask).
             store.commit(s => {
                 if (prePixels) s.pixels = prePixels;
                 s.float = preFloat;
+                s.recipes = preRecipes;
+                s.activeRecipeId = preActiveRecipeId;
             });
+            refreshSymmetryUi();
             return;
         }
         if (gesture.kind === "select") {
@@ -1545,9 +1606,14 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         }
         if (gesture.kind === "wand") {
             // Revert to pre-drag state — partial wand sweep is lost.
-            const { prePixels, preFloat } = gesture;
+            const { prePixels, preFloat, preRecipes, preActiveRecipeId } = gesture;
             gesture = null;
-            store.commit(s => { s.pixels = prePixels; s.float = preFloat; });
+            store.commit(s => {
+                s.pixels = prePixels;
+                s.float = preFloat;
+                s.recipes = preRecipes;
+                s.activeRecipeId = preActiveRecipeId;
+            });
             return;
         }
         if (gesture.kind === "axis-drag") {
@@ -1630,8 +1696,10 @@ document.addEventListener("keydown", e => {
                     state.pixels     = visiblePixels(state);
                     ctrlArrowStamped = true;
                 }
-                if (state.float)
+                if (state.float) {
                     state.float = { ...state.float, x: state.float.x + ddx, y: state.float.y + ddy };
+                    syncActiveGridRecipe(state);
+                }
             }, { history: !e.repeat });
         }
         return;
@@ -1668,6 +1736,7 @@ document.addEventListener("keydown", e => {
                         }
                     }
                     state.float = { ...state.float, x: newX, y: newY, pixels: newFP };
+                    syncActiveGridRecipe(state);
                 }
             }, { history: !e.repeat });
         }
@@ -1690,6 +1759,7 @@ document.addEventListener("keydown", e => {
         const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
         store.commit(state => {
             state.float = { ...state.float!, x: state.float!.x + ddx, y: state.float!.y + ddy };
+            syncActiveGridRecipe(state);
         }, { history: !e.repeat });
         return;
     }
@@ -1758,9 +1828,8 @@ ui.setOverlayAction(overlayAction);
 ui.setTool(store.state.activeTool);
 ui.setPrimary(store.state.primaryColor);
 ui.setColors(store.state.colorA, store.state.colorB);
-ui.setRepeatGrid(store.state.repeat);
 ui.setTransformState(
-    Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveTransforms,
+    Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveMirrors,
 );
 ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
 ui.setSelectionMode(store.state.activeTool, selectionMode, Boolean(store.state.float));

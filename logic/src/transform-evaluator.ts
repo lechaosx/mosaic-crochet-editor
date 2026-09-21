@@ -1,4 +1,5 @@
-import { MAX_REPEAT_POSITIONS } from "./repeat";
+export const MAX_REPEAT_POSITIONS = 4_096;
+export const MAX_TRANSFORM_CLAIMS = 1_048_576;
 
 export interface TransformSourceCell {
     x: number;
@@ -64,6 +65,10 @@ export function evaluatePackedGrid(
     if (columns > MAX_REPEAT_POSITIONS || rows > MAX_REPEAT_POSITIONS
         || columns * rows > MAX_REPEAT_POSITIONS) {
         throw new RangeError(`Transform grid cannot exceed ${MAX_REPEAT_POSITIONS.toLocaleString("en-US")} positions.`);
+    }
+    const positions = columns * rows;
+    if (source.length > Math.floor(MAX_TRANSFORM_CLAIMS / positions)) {
+        throw new RangeError(`Transform grid cannot exceed ${MAX_TRANSFORM_CLAIMS.toLocaleString("en-US")} claims.`);
     }
     const spacing = [recipe.columnSpacing, recipe.rowSpacing];
     if (spacing.some(value => !Number.isSafeInteger(value) || value < 0)) {

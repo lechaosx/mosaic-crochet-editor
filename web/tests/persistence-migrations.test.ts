@@ -16,8 +16,7 @@ describe("browser persistence migrations", () => {
         const stale = { id: "stale", kind: "H" as const, active: true, y: 0 };
         const session = rowSession(3, 3, {
             axes: [valid, stale],
-            repeat: { enabled: true, tileWidth: 3, tileHeight: 2, copiesX: 2, copiesY: 1 },
-            liveTransforms: false,
+            liveMirrors: false,
             float: makeFloat([{ x: 1, y: 1, v: 2 }]),
         });
         localStorage.setItem("mosaic-pattern-v4", JSON.stringify({
@@ -29,8 +28,7 @@ describe("browser persistence migrations", () => {
             activeTool: session.activeTool,
             primaryColor: session.primaryColor,
             axes: session.axes,
-            repeat: session.repeat,
-            liveTransforms: session.liveTransforms,
+            liveTransforms: session.liveMirrors,
             hlOpacity: 42,
             invalidIntensity: 17,
             float: packFloat(session.float!),
@@ -43,8 +41,8 @@ describe("browser persistence migrations", () => {
         expect(restored).toMatchObject({
             pattern: session.pattern,
             axes: [valid],
-            repeat: session.repeat,
-            liveTransforms: false,
+            recipes: [],
+            liveMirrors: false,
         });
         expect(restored!.float).toEqual(session.float);
 
@@ -53,7 +51,6 @@ describe("browser persistence migrations", () => {
         expect(migrated.document).toMatchObject({ state: session.pattern, colorA: session.colorA, colorB: session.colorB });
         expect(migrated.workspace).toMatchObject({
             axes: session.axes,
-            repeat: session.repeat,
             liveTransforms: false,
             rotation: session.rotation,
         });
@@ -74,7 +71,6 @@ describe("browser persistence migrations", () => {
                 pixels: packPixels(session.pixels),
                 float: null,
                 axes: session.axes,
-                repeat: session.repeat,
                 colorA: session.colorA,
                 colorB: session.colorB,
             }],
@@ -84,7 +80,6 @@ describe("browser persistence migrations", () => {
         expect(historyPeek()).toMatchObject({
             pattern: session.pattern,
             axes: session.axes,
-            repeat: session.repeat,
         });
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-history")!);
@@ -97,7 +92,7 @@ describe("browser persistence migrations", () => {
                 colorB: session.colorB,
             },
             selection: null,
-            transforms: { axes: session.axes, repeat: session.repeat },
+            transforms: { axes: session.axes },
         });
         expect(localStorage.getItem("mosaic-history-v4")).toBeNull();
     });
@@ -121,8 +116,7 @@ describe("browser persistence migrations", () => {
             activeTool: session.activeTool,
             primaryColor: session.primaryColor,
             axes: session.axes,
-            repeat: session.repeat,
-            liveTransforms: session.liveTransforms,
+            liveTransforms: session.liveMirrors,
             hlOpacity: 100,
             invalidIntensity: 65,
             float: null,

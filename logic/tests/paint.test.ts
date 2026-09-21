@@ -8,7 +8,6 @@ import { paintOps, PaintCtx, PaintTool } from "../src/paint";
 import { initialize_row_pattern, initialize_round_pattern, overlay_target_available_row } from "@mosaic/wasm";
 import type { PatternState } from "../src/types";
 import { filledPixels, rowPattern } from "./_helpers";
-import { transformsToFlat } from "../src/repeat";
 
 function ctx(tool: PaintTool, opts: Partial<PaintCtx> = {}): PaintCtx {
     const W = 3, H = 3;
@@ -34,35 +33,6 @@ describe("paintOps", () => {
         expect(out[1 * 3 + 1]).toBe(2);
     });
 
-    test("pencil paints repeat targets on both sides of the click", () => {
-        const out = paintOps.pencil(ctx("pencil", {
-            visible: filledPixels(7, 1, 1),
-            pattern: rowPattern(7, 1),
-            x: 3, y: 0, color: 2,
-            transforms: transformsToFlat([], {
-                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
-            }),
-        }));
-
-        expect(out).toEqual(new Uint8Array([1, 2, 1, 2, 1, 2, 1]));
-    });
-
-    test("pencil clips repeat targets to the active selection", () => {
-        const shifted = new Uint8Array(7);
-        shifted[3] = 1;
-        shifted[5] = 1;
-        const out = paintOps.pencil(ctx("pencil", {
-            visible: filledPixels(7, 1, 1),
-            pattern: rowPattern(7, 1),
-            x: 3, y: 0, color: 2,
-            transforms: transformsToFlat([], {
-                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
-            }),
-            shifted,
-        }));
-
-        expect(out).toEqual(new Uint8Array([1, 1, 1, 2, 1, 2, 1]));
-    });
 
     test("fill flood-fills a connected same-colour region (no selection)", () => {
         const out = paintOps.fill(ctx("fill", {
@@ -114,6 +84,35 @@ describe("paintOps", () => {
         expect(out).not.toBe(ctx("overlay").visible);
     });
 
+    test.each(["place", "clear", "invert"] as const)(
+        "overlay %s clips transformed click targets before resolving inward support",
+        (overlayAction) => {
+            const visible = filledPixels(5, 3, 1);
+            const transforms = new Float64Array([0, 2, 0]);
+            const shifted = new Uint8Array(15);
+            shifted[1 * 5 + 1] = 1;
+            const initial = overlayAction === "clear"
+                ? paintOps.overlay(ctx("overlay", {
+                    visible, pattern: rowPattern(5, 3), x: 1, y: 1, transforms,
+                }))
+                : visible;
+
+            const out = paintOps.overlay(ctx("overlay", {
+                visible: initial,
+                pattern: rowPattern(5, 3),
+                x: 1,
+                y: 1,
+                overlayAction,
+                invertVisited: overlayAction === "invert" ? new Set() : null,
+                transforms,
+                shifted,
+            }));
+
+            expect(out[2 * 5 + 1]).toBe(overlayAction === "clear" ? 1 : 2);
+            expect(out[2 * 5 + 3]).toBe(overlayAction === "clear" ? 2 : 1);
+        },
+    );
+
     test("invert toggles 1↔2 on each first-visit cell, tracks visited set", () => {
         const visited = new Set<number>();
         const out = paintOps.invert(ctx("invert", {
@@ -125,21 +124,6 @@ describe("paintOps", () => {
         expect(visited.has(1 * 3 + 1)).toBe(true);
     });
 
-    test("invert applies repeat targets and tracks each target as visited", () => {
-        const visited = new Set<number>();
-        const out = paintOps.invert(ctx("invert", {
-            visible: filledPixels(7, 1, 1),
-            pattern: rowPattern(7, 1),
-            x: 3, y: 0,
-            invertVisited: visited,
-            transforms: transformsToFlat([], {
-                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
-            }),
-        }));
-
-        expect(out).toEqual(new Uint8Array([1, 2, 1, 2, 1, 2, 1]));
-        expect(visited).toEqual(new Set([1, 3, 5]));
-    });
 
     test("eraser round mode restores round-mode natural baseline", () => {
         const W = 8, H = 8, rounds = 2;
@@ -211,24 +195,6 @@ describe("paintOps", () => {
         expect(Array.from(out)).toEqual(Array.from(visible));
     });
 
-    test("overlay invert toggles a transformed target at most once per stroke", () => {
-        const visible = filledPixels(7, 3, 1);
-        const visited = new Set<number>();
-        const options = {
-            pattern: rowPattern(7, 3),
-            x: 3,
-            y: 1,
-            overlayAction: "invert" as const,
-            invertVisited: visited,
-            transforms: transformsToFlat([], {
-                enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0,
-            }),
-        };
-        const once = paintOps.overlay(ctx("overlay", { visible, ...options }));
-        const twice = paintOps.overlay(ctx("overlay", { visible: once, ...options }));
-        expect(Array.from(twice)).toEqual(Array.from(once));
-        expect(visited.size).toBe(3);
-    });
 
     test("overlay round mode: clear undoes paint (round dispatch is self-consistent)", () => {
         const W = 8, H = 8, rounds = 2;

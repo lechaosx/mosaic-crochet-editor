@@ -11,7 +11,8 @@ import {
     build_highlight_plan_row,
     build_highlight_plan_round,
 } from "@mosaic/wasm";
-import { Tool, PatternState, Float, Axis, RepeatGrid } from "./types";
+import { Tool, PatternState, Float, Axis, GridRecipe } from "./types";
+import { normalizeActiveRecipeId } from "./grid-recipes";
 
 export interface SessionState {
     pattern:       PatternState;
@@ -21,8 +22,9 @@ export interface SessionState {
     activeTool:    Tool;
     primaryColor:  1 | 2;
     axes:          Axis[];               // user-added symmetry axes
-    repeat:        RepeatGrid;
-    liveTransforms: boolean;
+    recipes:       GridRecipe[];         // saved selection repeat definitions
+    activeRecipeId: string | null;       // source selection currently extended by a recipe
+    liveMirrors:   boolean;
     // The active lifted-selection layer (on or near canvas). When present,
     // `pixels` carries the canvas with the float's cells cut to natural
     // baseline; `float.pixels` stamps back on top at render. Commit writes
@@ -96,6 +98,7 @@ export class Store {
     private _observers: ObserverFn[] = [];
 
     constructor(state: SessionState) {
+        state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
         this._plan  = computePlan(state);
     }
@@ -110,6 +113,9 @@ export class Store {
 
     commit(mutate: (s: SessionState) => void, opts?: CommitOpts): void {
         mutate(this._state);
+        this._state.activeRecipeId = normalizeActiveRecipeId(
+            this._state.recipes, this._state.activeRecipeId, this._state.float,
+        );
         if (opts?.recompute !== false) this._plan = computePlan(this._state);
         if (opts?.history)             this._historyFn?.(this._state);
         if (opts?.render   !== false)  this._renderer?.(this);
@@ -121,6 +127,7 @@ export class Store {
     // and renders. `history`/`persist` default off because the typical caller
     // (undo/redo) is itself navigating history.
     replace(state: SessionState, opts?: { history?: boolean; persist?: boolean }): void {
+        state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
         this._plan  = computePlan(state);
         if (opts?.history) this._historyFn?.(state);

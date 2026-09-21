@@ -144,7 +144,7 @@ test("double-click and long-press invoke the chosen yarn picker from the dock", 
 
 test("dynamic symmetry actions name their axis and position", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await page.getByRole("button", { name: "Add vertical" }).click();
 
     const disable = page.getByRole("button", { name: "Disable vertical axis at x=4" });
@@ -157,7 +157,7 @@ test("dynamic symmetry actions name their axis and position", async ({ page }) =
 
 test("dynamic symmetry actions retain keyboard focus after rebuilding the axis list", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await page.getByRole("button", { name: "Add vertical" }).click();
     await page.getByRole("button", { name: "Add horizontal" }).click();
 
@@ -301,7 +301,7 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await expectHoverLabels("Pattern inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await page.getByRole("button", { name: "Add vertical" }).click();
     await expectHoverLabels("Transform inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
@@ -322,7 +322,7 @@ test("explicit inspector opening moves focus to its first available control", as
     await expect(page.getByRole("button", { name: "Move content" })).toBeFocused();
     await page.keyboard.press("Escape");
 
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await expect(page.getByRole("button", { name: "Add vertical" })).toBeFocused();
     await page.keyboard.press("Escape");
 

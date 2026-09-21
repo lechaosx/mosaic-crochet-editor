@@ -43,6 +43,7 @@ describe(".mcw codec", () => {
             colorA: "#010203",
             colorB: "#fafbfc",
             axes,
+            recipes: [],
         };
 
         const encoded = JSON.parse(encodeMcw(document));
@@ -53,9 +54,46 @@ describe(".mcw codec", () => {
             colorA: "#010203",
             colorB: "#fafbfc",
             axes,
+            recipes: [],
         });
         expect(encoded).not.toHaveProperty("workspace");
         expect(decodeMcw(JSON.stringify(encoded))).toEqual(document);
+    });
+
+    test("round-trips a sparse saved-recipe mask without filling its holes", () => {
+        const document = {
+            pattern: { mode: "row" as const, canvasWidth: 4, canvasHeight: 2 },
+            pixels: new Uint8Array([1, 2, 1, 2, 2, 1, 2, 1]),
+            colorA: "#000000", colorB: "#ffffff", axes: [],
+            recipes: [{
+                id: "sparse", enabled: true,
+                source: { x: 0, y: 0, w: 3, h: 1, mask: new Uint8Array([1, 0, 1]) },
+                left: 0, right: 1, up: 0, down: 0,
+                columnSpacing: 0, rowSpacing: 0, columnOffset: 0, rowOffset: 0,
+                columnOrientation: "same" as const, rowOrientation: "same" as const,
+            }],
+        };
+        expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(new Uint8Array([1, 0, 1]));
+    });
+
+    test("round-trips the largest valid saved-recipe mask without argument spreading", () => {
+        const mask = new Uint8Array(1_048_576);
+        mask[0] = 1;
+        mask[mask.length - 1] = 1;
+        const document = {
+            pattern: { mode: "row" as const, canvasWidth: mask.length, canvasHeight: 2 },
+            pixels: new Uint8Array(mask.length * 2).fill(1),
+            colorA: "#000000", colorB: "#ffffff", axes: [],
+            recipes: [{
+                id: "large-mask", enabled: true,
+                source: { x: 0, y: 0, w: mask.length, h: 1, mask },
+                left: 0, right: 0, up: 0, down: 0,
+                columnSpacing: 0, rowSpacing: 0, columnOffset: 0, rowOffset: 0,
+                columnOrientation: "same" as const, rowOrientation: "same" as const,
+            }],
+        };
+
+        expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(mask);
     });
 
     test.each<Axis>([

@@ -4,12 +4,77 @@
 import { wand_select,
          cut_to_natural_row, cut_to_natural_round,
          apply_transforms_to_selection, TransformApplicationStatus } from "@mosaic/wasm";
-import { PatternState, Float } from "./types";
+import { PatternState, Float, GridRecipe } from "./types";
 import { Store, SessionState, visiblePixels, outOfBounds } from "./store";
-import { transformsToFlat } from "./repeat";
+import { axesToFlat } from "./symmetry";
 import { devAssert, assertNever } from "./dev";
+import { gridRecipeError, gridRecipeFromFloat, withRecipeSource } from "./grid-recipes";
 
 export type SelectMode = "replace" | "add" | "remove";
+
+export function activeGridRecipe(s: Readonly<SessionState>): GridRecipe | null {
+    return s.activeRecipeId === null ? null : s.recipes.find(recipe => recipe.id === s.activeRecipeId) ?? null;
+}
+
+export function syncActiveGridRecipe(s: SessionState): void {
+    const active = activeGridRecipe(s);
+    if (!active || !s.float) return;
+    const updated = withRecipeSource(active, s.float);
+    if (gridRecipeError(updated) !== null) return;
+    s.recipes = s.recipes.map(recipe => recipe.id === active.id ? updated : recipe);
+}
+
+export function createGridRecipe(store: Store): "created" | "no-selection" | "invalid" {
+    const float = store.state.float;
+    if (!float) return "no-selection";
+    const recipe = gridRecipeFromFloat(float);
+    if (gridRecipeError(recipe) !== null) return "invalid";
+    store.commit(s => { s.recipes = [...s.recipes, recipe]; s.activeRecipeId = recipe.id; }, { history: true });
+    return "created";
+}
+
+export function deleteGridRecipe(store: Store, id: string): void {
+    const active = store.state.activeRecipeId === id;
+    const anchored = active ? anchorIntoCanvas(store.state) : null;
+    store.commit(s => {
+        if (anchored) { s.pixels = anchored.pixels; s.float = null; }
+        s.recipes = s.recipes.filter(recipe => recipe.id !== id);
+        if (active) s.activeRecipeId = null;
+    }, { history: true });
+}
+
+export function activateGridRecipe(store: Store, id: string): boolean {
+    const recipe = store.state.recipes.find(candidate => candidate.id === id);
+    if (!recipe) return false;
+    const s = store.state;
+    const base = visiblePixels(s);
+    const mask = new Uint8Array(base.length);
+    for (let y = 0; y < recipe.source.h; y++) {
+        for (let x = 0; x < recipe.source.w; x++) {
+            if (recipe.source.mask[y * recipe.source.w + x] === 0) continue;
+            const cx = recipe.source.x + x, cy = recipe.source.y + y;
+            if (outOfBounds(cx, cy, s.pattern.canvasWidth, s.pattern.canvasHeight) || base[cy * s.pattern.canvasWidth + cx] === 0) return false;
+            mask[cy * s.pattern.canvasWidth + cx] = 1;
+        }
+    }
+    const sourcePixels = new Uint8Array(recipe.source.w * recipe.source.h);
+    for (let y = 0; y < recipe.source.h; y++) {
+        for (let x = 0; x < recipe.source.w; x++) {
+            if (recipe.source.mask[y * recipe.source.w + x] === 0) continue;
+            sourcePixels[y * recipe.source.w + x] = base[
+                (recipe.source.y + y) * s.pattern.canvasWidth + recipe.source.x + x
+            ];
+        }
+    }
+    const pixels = cutCells(base, s.pattern, mask);
+    const float = {
+        x: recipe.source.x, y: recipe.source.y,
+        w: recipe.source.w, h: recipe.source.h,
+        pixels: sourcePixels,
+    };
+    store.commit(state => { state.pixels = pixels; state.float = float; state.activeRecipeId = id; }, { history: true });
+    return true;
+}
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -170,7 +235,7 @@ export function replicateSelection(store: Store): ReplicateSelectionResult {
     const s = store.state;
     if (!s.float) return "unchanged";
 
-    const transforms = transformsToFlat(s.axes, s.repeat);
+    const transforms = axesToFlat(s.axes);
     if (transforms.length === 0) return "unchanged";
 
     const { canvasWidth: W, canvasHeight: H } = s.pattern;
@@ -226,14 +291,14 @@ export function applySelectionMod(
     if (mode === "replace") {
         const base = s.float ? visiblePixels(s) : s.pixels;
         const lifted = liftCells(base, s.pattern, region);
-        store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, commitOpts);
+        store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; syncActiveGridRecipe(state); }, commitOpts);
         return;
     }
 
     if (!s.float) {
         if (mode === "add") {
             const lifted = liftCells(s.pixels, s.pattern, region);
-            store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; }, commitOpts);
+            store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; syncActiveGridRecipe(state); }, commitOpts);
         }
         return;
     }
@@ -280,6 +345,7 @@ export function applySelectionMod(
         store.commit(state => {
             state.pixels = newPixels;
             state.float  = { x: eMinX, y: eMinY, w: ew, h: eh, pixels: ep };
+            syncActiveGridRecipe(state);
         }, commitOpts);
         return;
     }
@@ -308,6 +374,7 @@ export function applySelectionMod(
     store.commit(state => {
         state.pixels = newCanvasPixels;
         state.float  = anyLeft ? { ...f, pixels: newFP } : null;
+        syncActiveGridRecipe(state);
     }, commitOpts);
 }
 
@@ -344,7 +411,7 @@ export function selectAll(store: Store): void {
 export function anchorFloat(store: Store): void {
     if (!store.state.float) return;
     const { pixels, float } = anchorIntoCanvas(store.state);
-    store.commit(s => { s.pixels = pixels; s.float = float; }, { history: true });
+    store.commit(s => { s.pixels = pixels; s.float = float; s.activeRecipeId = null; }, { history: true });
 }
 
 export function deselect(store: Store): void {

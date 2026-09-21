@@ -12,6 +12,7 @@ import {
 import { Store, visiblePixels } from "../src/store";
 import { initialize_row_pattern, initialize_round_pattern } from "@mosaic/wasm";
 import { filledPixels, maskOf, makeFloat, rowPattern, rowSession } from "./_helpers";
+import { gridRecipeFromFloat } from "../src/grid-recipes";
 
 // Helper: returns true if canvas cell (cx, cy) is in the float.
 function inFloat(f: { x: number; y: number; w: number; h: number; pixels: Uint8Array }, cx: number, cy: number): boolean {
@@ -716,12 +717,17 @@ describe("applySelectionMod / remove", () => {
     });
 
     test("remove that empties the float clears it", () => {
+        const float = makeFloat([{ x: 0, y: 0, v: 2 }]);
+        const recipe = gridRecipeFromFloat(float);
         const s = storeOf(3, 3, {
             pixels: filledPixels(3, 3, 1),
-            float: makeFloat([{ x: 0, y: 0, v: 2 }]),
+            float,
+            recipes: [recipe],
+            activeRecipeId: recipe.id,
         });
         applySelectionMod(s, maskOf(3, 3, [[0, 0]]), "remove");
         expect(s.state.float).toBeNull();
+        expect(s.state.activeRecipeId).toBeNull();
     });
 
     test("source-position bounds gate each of the four directions individually", () => {

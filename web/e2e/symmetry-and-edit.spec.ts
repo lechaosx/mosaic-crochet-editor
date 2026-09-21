@@ -43,7 +43,7 @@ test("dragging the V symmetry guide moves the mirror axis", async ({ page }) => 
 
 test("Mirror inspector lets Pencil drag a guide without painting", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await page.getByRole("button", { name: "Add vertical" }).click();
     const start = await cellCoord(page, 4, 4);
     const end = await cellCoord(page, 2, 4);
@@ -65,7 +65,7 @@ test("Mirror inspector lets Pencil drag a guide without painting", async ({ page
 
 test("exact symmetry position entry is one undoable edit", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await page.getByRole("button", { name: "Add vertical" }).click();
     const position = page.getByRole("spinbutton", { name: "Vertical axis x position" });
     await expect(position).toHaveValue("4");
@@ -96,17 +96,17 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
 test("transform toolbar shows whether configured transforms apply while drawing", async ({ page }) => {
     await bootApp(page);
     const transforms = page.locator("#btn-sym-toggle");
-    await expect(transforms).toHaveAttribute("aria-label", "Symmetry and repeat: no transforms configured");
+    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: no axes configured");
 
     await transforms.click();
     await page.locator("#add-sym-v").click();
-    await expect(transforms).toHaveAttribute("aria-label", "Symmetry and repeat: applying while drawing");
+    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: applying while drawing");
 
     await page.locator("label:has(#live-transforms)").click();
-    await expect(transforms).toHaveAttribute("aria-label", "Symmetry and repeat: drawing application paused");
+    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: drawing application paused");
 });
 
-test("Stamp transformed copies applies symmetry and keeps the source selected", async ({ page }) => {
+test("Apply Global Mirror applies symmetry and keeps the source selected", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
@@ -123,7 +123,7 @@ test("Stamp transformed copies applies symmetry and keeps the source selected", 
     const mirrored = await cellCoord(page, 8, 1);
     expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
 
-    await page.keyboard.press("m");
+    await page.getByRole("button", { name: "Move", exact: true }).click();
     await page.getByRole("img", { name: "Editable pattern chart" }).focus();
     await page.keyboard.press("ArrowRight");
     const oldSource = await cellCoord(page, 0, 1);
@@ -158,177 +158,285 @@ test("T reports stamp conflicts inline and recipe changes clear the error", asyn
     await expect(error).toBeHidden();
 });
 
-test("repeat grid copies live paint in both directions", async ({ page }) => {
+test("saved repeat extends the active selection and applies its instances", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-sym-toggle").click();
-    await page.locator("#repeat-tile-width").fill("2");
-    await page.locator("#repeat-tile-height").fill("1");
-    await page.locator("#repeat-copies-x").fill("1");
-    await page.locator("#repeat-copies-y").fill("0");
-    await page.locator("label:has(#repeat-enabled)").click();
-    await expect(page.locator("#repeat-enabled")).toBeChecked();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.repeat))
-        .toEqual({ enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0 });
-    await page.locator("#btn-sym-toggle").click();
-
-    await clickCell(page, 4, 1);
-
-    const repeated = await Promise.all([2, 4, 6].map(async x => {
-        const point = await cellCoord(page, x, 1);
-        return pixelRGB(page, point.cx, point.cy);
-    }));
-    expect(repeated).toEqual([[0, 0, 0], [0, 0, 0], [0, 0, 0]]);
-    const untouched = await cellCoord(page, 0, 1);
-    expect(await pixelRGB(page, untouched.cx, untouched.cy)).not.toEqual([0, 0, 0]);
-});
-
-test("configured transforms can stamp a selection while live drawing is off", async ({ page }) => {
-    await bootApp(page);
-    await page.locator("#btn-sym-toggle").click();
-    await page.locator("#add-sym-v").click();
-    await page.locator("#repeat-tile-width").fill("2");
-    await page.locator("#repeat-copies-x").fill("1");
-    await page.locator("#repeat-copies-y").fill("0");
-    await page.locator("label:has(#repeat-enabled)").click();
-    await expect(page.locator("#live-transforms")).toBeChecked();
-    await page.locator("label:has(#live-transforms)").click();
-    await page.locator("#btn-sym-toggle").click();
-
-    await clickCell(page, 0, 1);
-    const untouchedCopy = await cellCoord(page, 8, 1);
-    expect(await pixelRGB(page, untouchedCopy.cx, untouchedCopy.cy)).not.toEqual([0, 0, 0]);
-
+    await clickCell(page, 2, 1);
     await page.keyboard.press("s");
-    await clickCell(page, 0, 1);
-    await page.locator("#btn-sym-toggle").click();
-    const stamp = page.locator("#replicate-selection");
-    await expect(stamp).toHaveText("Stamp transformed copies");
-    await expect(stamp).toBeEnabled();
-    await stamp.click();
-
-    for (const x of [2, 6, 8]) {
-        const point = await cellCoord(page, x, 1);
-        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
+    await clickCell(page, 2, 1);
+    if (!await page.locator("#selection-popover").isVisible()) {
+        await page.getByRole("button", { name: /Selection actions/ }).click();
     }
-    await page.keyboard.press("m");
-    await page.getByRole("img", { name: "Editable pattern chart" }).focus();
-    await page.keyboard.press("ArrowRight");
-    const movedSource = await cellCoord(page, 1, 1);
-    expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").press("Enter");
+    await page.locator("#recipe-apply").click();
+    const copy = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([0, 0, 0]);
+    const source = await cellCoord(page, 2, 1);
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await page.keyboard.press("p");
+    await clickCell(page, 3, 1);
+    expect(await pixelRGB(page, source.cx, source.cy)).toEqual([255, 255, 255]);
+    expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([255, 255, 255]);
+    await page.locator("label:has(#recipe-enabled)").click();
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await clickCell(page, 2, 1);
+    expect(await pixelRGB(page, source.cx, source.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([255, 255, 255]);
+    await expect(page.locator("#recipe-list")).toContainText("Repeat 1");
 });
 
-test("repeat settings reject a grid above the position ceiling", async ({ page }) => {
+test("live paint keeps a packed repeat that lands in a sparse source hole", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-sym-toggle").click();
-    await page.locator("#repeat-copies-x").fill("32");
-    await page.locator("#repeat-copies-y").fill("32");
-
-    await expect(page.locator("#repeat-error")).toContainText("4,096");
-    await expect(page.locator("#repeat-error")).toBeVisible();
-});
-
-test("Stamp transformed copies applies repeat and keeps the source selected", async ({ page }) => {
-    await bootApp(page);
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await clickCell(page, 2, 1);
+    await clickCell(page, 3, 1);
     await clickCell(page, 4, 1);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: /^Add/ }).click();
+    await clickCell(page, 4, 1);
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await page.getByRole("button", { name: "Pencil" }).click();
+
+    await clickCell(page, 2, 1);
+
+    const packedCopy = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, packedCopy.cx, packedCopy.cy)).toEqual([255, 255, 255]);
+});
+
+for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
+    test(`Fill from a saved-repeat ${origin} stays inside the extended selection`, async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Select", exact: true }).click();
+        await clickCell(page, 2, 1);
+        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.locator("#recipe-create").click();
+        await page.locator("#recipe-right").fill("1");
+        await page.locator("#recipe-right").dispatchEvent("change");
+        await page.getByRole("button", { name: /Global Mirror/ }).click();
+        await page.getByRole("button", { name: "Add vertical" }).click();
+        await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+        await page.getByRole("button", { name: "Fill" }).click();
+
+        await clickCell(page, clickX, 1);
+
+        for (const x of [2, 3]) {
+            const selected = await cellCoord(page, x, 1);
+            expect(await pixelRGB(page, selected.cx, selected.cy)).toEqual([0, 0, 0]);
+        }
+        for (const x of [1, 4, 5, 6]) {
+            const outside = await cellCoord(page, x, 1);
+            expect(await pixelRGB(page, outside.cx, outside.cy), `cell ${x},1`).toEqual([255, 255, 255]);
+        }
+    });
+}
+
+for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
+    test(`Overlay from a saved-repeat ${origin} keeps Global Mirror inside the extended selection`, async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Select", exact: true }).click();
+        await clickCell(page, 2, 1);
+        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.locator("#recipe-create").click();
+        await page.locator("#recipe-right").fill("1");
+        await page.locator("#recipe-right").dispatchEvent("change");
+        await page.getByRole("button", { name: /Global Mirror/ }).click();
+        await page.getByRole("button", { name: "Add vertical" }).click();
+        await page.getByRole("button", { name: "Place overlay" }).click();
+
+        const supportCells = await Promise.all([2, 3, 5, 6].map(x => cellCoord(page, x, 2)));
+        const before = await Promise.all(supportCells.map(cell => pixelRGB(page, cell.cx, cell.cy)));
+        await clickCell(page, clickX, 1);
+
+        for (const [index, x] of [2, 3].entries()) {
+            const cell = supportCells[index];
+            expect(await pixelRGB(page, cell.cx, cell.cy), `selected support ${x},2`).not.toEqual(before[index]);
+        }
+        for (const [index, x] of [5, 6].entries()) {
+            const cellIndex = index + 2;
+            const cell = supportCells[cellIndex];
+            expect(await pixelRGB(page, cell.cx, cell.cy), `outside support ${x},2`).toEqual(before[cellIndex]);
+        }
+    });
+}
+
+test("saved repeat source follows moves and pointer cancel restores it", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 2, 1);
     await page.keyboard.press("s");
-    await clickCell(page, 4, 1);
-
-    await page.locator("#btn-sym-toggle").click();
-    await page.locator("#repeat-tile-width").fill("2");
-    await page.locator("#repeat-copies-x").fill("1");
-    await page.locator("#repeat-copies-y").fill("0");
-    await page.locator("label:has(#repeat-enabled)").click();
-    const replicate = page.locator("#replicate-selection");
-    await expect(replicate).toBeEnabled();
-    await replicate.click();
-
-    for (const x of [2, 6]) {
-        const point = await cellCoord(page, x, 1);
-        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
+    await clickCell(page, 2, 1);
+    if (!await page.locator("#selection-popover").isVisible()) {
+        await page.getByRole("button", { name: /Selection actions/ }).click();
     }
-    await page.keyboard.press("m");
-    await page.getByRole("img", { name: "Editable pattern chart" }).focus();
-    await page.keyboard.press("ArrowRight");
-    const oldSource = await cellCoord(page, 4, 1);
-    const movedSource = await cellCoord(page, 5, 1);
-    expect(await pixelRGB(page, oldSource.cx, oldSource.cy)).not.toEqual([0, 0, 0]);
-    expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
-});
-
-test("repeat previews the selected source before stamping", async ({ page }) => {
-    await bootApp(page);
-    const initialTarget = await cellCoord(page, 2, 1);
-    const natural = await pixelRGB(page, initialTarget.cx, initialTarget.cy);
-    await clickCell(page, 4, 1, { button: natural[0] < 128 ? "right" : "left" });
-    await clickCell(page, 6, 1, { button: natural[0] < 128 ? "right" : "left" });
-    await page.keyboard.press("s");
-    await clickCell(page, 4, 1);
-    await clickCell(page, 6, 1, { modifiers: ["Shift"] });
-
-    await page.locator("#btn-sym-toggle").click();
-    await page.locator("#repeat-tile-width").fill("2");
-    await page.locator("#repeat-copies-x").fill("1");
-    await page.locator("#repeat-copies-y").fill("0");
-    const target = await cellCoord(page, 2, 1);
-    const gap = await cellCoord(page, 3, 1);
-    const targetBefore = await pixelRGB(page, target.cx, target.cy);
-    const gapBefore = await pixelRGB(page, gap.cx, gap.cy);
-    await page.locator("label:has(#repeat-enabled)").click();
-
-    const previewTarget = await cellCoord(page, 2, 1);
-    const previewGap = await cellCoord(page, 3, 1);
-    expect(await pixelRGB(page, previewTarget.cx, previewTarget.cy)).not.toEqual(targetBefore);
-    expect(await pixelRGB(page, previewGap.cx, previewGap.cy)).toEqual(gapBefore);
-});
-
-test("repeat distance handles update exact fields as one undoable edit each", async ({ page }) => {
-    await bootApp(page);
-    await page.locator("#btn-sym-toggle").click();
-    await page.locator("#repeat-tile-width").fill("2");
-    await page.locator("#repeat-tile-height").fill("2");
-    await page.locator("#repeat-copies-x").fill("1");
-    await page.locator("#repeat-copies-y").fill("1");
-    await page.locator("label:has(#repeat-enabled)").click();
-
-    const start = await cellCoord(page, 2, 0);
-    const end = await cellCoord(page, 3, 0);
-    await page.mouse.move(start.cx, start.cy);
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").press("Enter");
+    await page.getByRole("button", { name: "Move", exact: true }).click();
+    await dragCells(page, 2, 1, 3, 1);
+    if (!await page.locator("#selection-popover").isVisible()) {
+        await page.getByRole("button", { name: /Selection actions/ }).click();
+    }
+    await page.locator("#recipe-apply").click();
+    const movedCopy = await cellCoord(page, 4, 1);
+    expect(await pixelRGB(page, movedCopy.cx, movedCopy.cy)).toEqual([0, 0, 0]);
+    const origin = await cellCoord(page, 3, 1);
+    await page.mouse.move(origin.cx, origin.cy);
     await page.mouse.down();
-    await page.mouse.move(end.cx, end.cy, { steps: 8 });
+    await page.mouse.move(movedCopy.cx, movedCopy.cy);
+    await page.getByRole("img", { name: "Editable pattern chart" }).dispatchEvent("pointercancel", {
+        pointerId: 1, pointerType: "mouse", button: 0, clientX: movedCopy.cx, clientY: movedCopy.cy,
+    });
     await page.mouse.up();
-
-    await expect(page.locator("#repeat-tile-width")).toHaveValue("3");
-    await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.locator("#repeat-tile-width")).toHaveValue("2");
-
-    const verticalStart = await cellCoord(page, 0, 2);
-    const verticalEnd = await cellCoord(page, 0, 3);
-    await page.mouse.move(verticalStart.cx, verticalStart.cy);
-    await page.mouse.down();
-    await page.mouse.move(verticalEnd.cx, verticalEnd.cy, { steps: 8 });
-    await page.mouse.up();
-
-    await expect(page.locator("#repeat-tile-height")).toHaveValue("3");
-    await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.locator("#repeat-tile-height")).toHaveValue("2");
+    if (!await page.locator("#selection-popover").isVisible()) {
+        await page.getByRole("button", { name: /Selection actions/ }).click();
+    }
+    await page.locator("#recipe-apply").click();
+    expect(await pixelRGB(page, movedCopy.cx, movedCopy.cy)).toEqual([0, 0, 0]);
 });
 
-test("repeat grid tiles the complete symmetry motif", async ({ page }) => {
+test("wand pointer cancel restores the saved repeat source transaction", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-sym-toggle").click();
-    await page.locator("#add-sym-v").click();
-    await page.locator("#repeat-tile-width").fill("2");
-    await page.locator("#repeat-copies-x").fill("1");
-    await page.locator("#repeat-copies-y").fill("0");
-    await page.locator("label:has(#repeat-enabled)").click();
-    await page.locator("#btn-sym-toggle").click();
-
-    await clickCell(page, 0, 1);
-
-    for (const x of [0, 2, 6, 8]) {
-        const point = await cellCoord(page, x, 1);
-        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await clickCell(page, 1, 1);
+    await clickCell(page, 3, 1);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    await page.getByRole("button", { name: "Magic wand" }).click();
+    const replacement = await cellCoord(page, 3, 1);
+    await page.mouse.move(replacement.cx, replacement.cy);
+    await page.mouse.down();
+    await page.getByRole("img", { name: "Editable pattern chart" }).dispatchEvent("pointercancel", {
+        pointerId: 1, pointerType: "mouse", button: 0,
+        clientX: replacement.cx, clientY: replacement.cy,
+    });
+    await page.mouse.up();
+    if (!await page.locator("#selection-popover").isVisible()) {
+        await page.getByRole("button", { name: /Selection actions/ }).click();
     }
+
+    await page.locator("#recipe-apply").click();
+
+    const originalTarget = await cellCoord(page, 2, 1);
+    const canceledTarget = await cellCoord(page, 4, 1);
+    expect(await pixelRGB(page, originalTarget.cx, originalTarget.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, canceledTarget.cx, canceledTarget.cy)).toEqual([255, 255, 255]);
+});
+
+test("saved repeat source follows an explicit duplicate move", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    const duplicate = page.getByRole("button", { name: /Duplicate/ });
+    await duplicate.click();
+    await expect(duplicate).toHaveAttribute("aria-pressed", "true");
+
+    await dragCells(page, 1, 1, 3, 1);
+    await page.locator("#recipe-apply").click();
+
+    const original = await cellCoord(page, 1, 1);
+    const staleTarget = await cellCoord(page, 2, 1);
+    const movedSource = await cellCoord(page, 3, 1);
+    const movedTarget = await cellCoord(page, 4, 1);
+    expect(await pixelRGB(page, original.cx, original.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, staleTarget.cx, staleTarget.cy)).not.toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, movedTarget.cx, movedTarget.cy)).toEqual([0, 0, 0]);
+});
+
+test("saved repeat source follows an explicit move-area move", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await clickCell(page, 1, 1);
+    await clickCell(page, 3, 1);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    const moveArea = page.getByRole("button", { name: /Move area/ });
+    await moveArea.click();
+    await expect(moveArea).toHaveAttribute("aria-pressed", "true");
+
+    await dragCells(page, 1, 1, 3, 1);
+    await page.locator("#recipe-apply").click();
+
+    const original = await cellCoord(page, 1, 1);
+    const staleTarget = await cellCoord(page, 2, 1);
+    const movedSource = await cellCoord(page, 3, 1);
+    const movedTarget = await cellCoord(page, 4, 1);
+    expect(await pixelRGB(page, original.cx, original.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, staleTarget.cx, staleTarget.cy)).not.toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, movedSource.cx, movedSource.cy)).toEqual([0, 0, 0]);
+    expect(await pixelRGB(page, movedTarget.cx, movedTarget.cy)).toEqual([0, 0, 0]);
+});
+
+test("Pattern resize deactivates a saved repeat when it removes the source selection", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await expect(page.getByRole("button", { name: "Repeat 1", exact: true })).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-width").fill("5");
+    await page.locator("#edit-width").press("Tab");
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+
+    await expect(page.getByRole("button", { name: "Repeat 1", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#recipe-controls")).toBeHidden();
+});
+
+for (const action of ["Cut", "Deselect"] as const) {
+    test(`${action} immediately clears the active saved-repeat projection`, async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Select", exact: true }).click();
+        await clickCell(page, 2, 1);
+        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.locator("#recipe-create").click();
+        const recipe = page.getByRole("button", { name: "Repeat 1", exact: true });
+        await expect(recipe).toHaveAttribute("aria-pressed", "true");
+        await expect(page.locator("#recipe-controls")).toBeVisible();
+
+        await page.getByRole("button", { name: action, exact: true }).click();
+
+        await expect(recipe).toHaveAttribute("aria-pressed", "false");
+        await expect(page.locator("#recipe-controls")).toBeHidden();
+    });
+}
+
+test("move-area into a round hole deactivates the saved repeat when nothing can be lifted", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 0, 6);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.getByRole("button", { name: /Move area/ }).click();
+
+    await dragCells(page, 0, 6, 6, 6);
+
+    const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
+    expect(recovery.workspace.float).toBeNull();
+    expect(recovery.workspace.activeRecipeId).toBeNull();
 });
 
 test("dragging an axis far off the canvas deletes it", async ({ page }) => {
@@ -398,6 +506,24 @@ test("invalid Pattern preview restores the global mirror baseline", async ({ pag
     await page.keyboard.press("Escape");
     await page.locator("#btn-sym-toggle").click();
     await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toBeVisible();
+});
+
+test("invalid Pattern preview restores the active saved-repeat source", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-width").fill("5");
+    await page.locator("#edit-width").fill("2000000");
+    await expect(page.locator("#edit-error")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+
+    await expect(page.getByRole("button", { name: "Repeat 1", exact: true }))
+        .toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#recipe-controls")).toBeVisible();
 });
 
 test("Pattern inspector rejects a canvas above the safety ceiling", async ({ page }) => {
@@ -486,9 +612,9 @@ test("Open restores a global mirror without resetting Crochet progress", async (
         })),
     });
 
-    await expect(page.getByRole("button", { name: /Symmetry and repeat/ })).toBeVisible();
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
-    await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Mirror and repeat");
+    await expect(page.getByRole("button", { name: /Global Mirror/ })).toBeVisible();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Global Mirror");
     await expect(page.getByText("Global mirrors", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Disable vertical axis at x=2" })).toBeVisible();
     await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");

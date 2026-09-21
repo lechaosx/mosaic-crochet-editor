@@ -35,8 +35,15 @@ export const paintOps: Record<PaintTool, PaintOp> = {
     pencil: ({ visible, pattern: p, x, y, color, transforms, shifted }) =>
         paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, transforms, shifted),
 
-    fill: ({ visible, pattern: p, x, y, color, transforms, shifted }) =>
-        flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, transforms, shifted),
+    fill: ({ visible, pattern: p, x, y, color, transforms, shifted }) => {
+        const filled = flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, transforms, shifted);
+        if (shifted) {
+            for (let i = 0; i < filled.length; i++) {
+                if (shifted[i] === 0) filled[i] = visible[i];
+            }
+        }
+        return filled;
+    },
 
     // Left click = primary = restore baseline; right click = secondary =
     // paint the *opposite* baseline (deliberately wrong placement).
@@ -52,7 +59,7 @@ export const paintOps: Record<PaintTool, PaintOp> = {
             );
     },
 
-    overlay: ({ visible, pattern: p, x, y, overlayAction = "place", invertVisited, transforms }) => {
+    overlay: ({ visible, pattern: p, x, y, overlayAction = "place", invertVisited, transforms, shifted }) => {
         const apply = (source: Uint8Array, tx: number, ty: number, action: "place" | "clear", activeTransforms: Float64Array) => {
             if (p.mode === "row") {
                 return action === "clear"
@@ -63,7 +70,7 @@ export const paintOps: Record<PaintTool, PaintOp> = {
                 ? clear_overlay_round(source, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, tx, ty, activeTransforms)
                 : paint_overlay_round(source, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, tx, ty, activeTransforms);
         };
-        if (overlayAction !== "invert") return apply(visible, x, y, overlayAction, transforms);
+        if (!shifted && overlayAction !== "invert") return apply(visible, x, y, overlayAction, transforms);
 
         const available = (tx: number, ty: number) => p.mode === "row"
             ? overlay_target_available_row(p.canvasWidth, p.canvasHeight, tx, ty)
@@ -76,10 +83,15 @@ export const paintOps: Record<PaintTool, PaintOp> = {
         let out: Uint8Array = visible.slice();
         const none = new Float64Array(0);
         for (const index of transformed_target_indices(p.canvasWidth, p.canvasHeight, x, y, transforms)) {
+            if (shifted && shifted[index] === 0) continue;
             if (invertVisited?.has(index)) continue;
             invertVisited?.add(index);
             const tx = index % p.canvasWidth;
             const ty = Math.floor(index / p.canvasWidth);
+            if (overlayAction !== "invert") {
+                out = apply(out, tx, ty, overlayAction, none);
+                continue;
+            }
             const cleared = apply(out, tx, ty, "clear", none);
             const markerWasPresent = cleared.some((pixel, i) => pixel !== out[i]);
             out = markerWasPresent ? cleared : available(tx, ty) ? apply(out, tx, ty, "place", none) : out;

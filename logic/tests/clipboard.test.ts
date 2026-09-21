@@ -8,6 +8,7 @@ import { Store } from "../src/store";
 import { copyFloat, cutFloat, pasteClipboard, hasClipboard, clipboardCellCount } from "../src/clipboard";
 import { filledPixels, makeFloat, rowSession } from "./_helpers";
 import type { Float } from "../src/types";
+import { gridRecipeFromFloat } from "../src/grid-recipes";
 
 function storeOf(opts: Parameters<typeof rowSession>[2] = {}): Store {
     return new Store(rowSession(3, 3, opts));
@@ -64,14 +65,19 @@ describe("copyFloat", () => {
 
 describe("cutFloat", () => {
     test("with float: clears canvas under the float, drops the float", () => {
+        const float = makeFloat([{ x: 0, y: 0, v: 2 }]);
+        const recipe = gridRecipeFromFloat(float);
         const s = storeOf({
             pixels: filledPixels(3, 3, 2),
-            float:  makeFloat([{ x: 0, y: 0, v: 2 }]),
+            float,
+            recipes: [recipe],
+            activeRecipeId: recipe.id,
         });
         cutFloat(s);
         // Row 0 baseline = A = 1, so cleared cell = 1.
         expect(s.state.pixels[0]).toBe(1);
         expect(s.state.float).toBeNull();
+        expect(s.state.activeRecipeId).toBeNull();
     });
 
     test("no float: no-op", () => {

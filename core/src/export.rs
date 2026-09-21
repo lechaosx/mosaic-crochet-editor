@@ -562,7 +562,11 @@ mod tests {
         finished[[1, 0]] = common::opposite_color(common::natural_color_row(size.y, 1));
 
         let before_row_1 = row_wip_pixels(&finished, size, 0);
-        assert!(before_row_1.iter().all(|pixel| *pixel == common::COLOR_TRANSPARENT));
+        assert!(
+            before_row_1
+                .iter()
+                .all(|pixel| *pixel == common::COLOR_TRANSPARENT)
+        );
 
         let after_row_1 = row_wip_pixels(&finished, size, 1);
         assert_eq!(after_row_1.row(0).to_vec(), [0, 0, 0]);
@@ -585,9 +589,11 @@ mod tests {
         });
         finished[[2, 1]] = common::opposite_color(finished[[2, 1]]);
 
-        assert!(round_wip_pixels(&finished, size, size, v(0, 0), 3, 0)
-            .iter()
-            .all(|pixel| *pixel == common::COLOR_TRANSPARENT));
+        assert!(
+            round_wip_pixels(&finished, size, size, v(0, 0), 3, 0)
+                .iter()
+                .all(|pixel| *pixel == common::COLOR_TRANSPARENT)
+        );
 
         let after_round_2 = round_wip_pixels(&finished, size, size, v(0, 0), 3, 2);
         assert_eq!(after_round_2[[2, 0]], common::COLOR_TRANSPARENT);

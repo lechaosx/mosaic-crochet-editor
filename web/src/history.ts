@@ -3,11 +3,11 @@
 // On QuotaExceededError we drop the oldest snapshot(s) and retry until the new
 // one fits — the freshly-added snapshot at the tail is always preserved.
 
-import { PatternState, Float, Axis, RepeatGrid } from "@mosaic/logic/types";
+import { PatternState, Float, Axis, GridRecipe } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { axisIsProjectValid, defaultAxes } from "@mosaic/logic/symmetry";
-import { defaultRepeatGrid, repeatGridError } from "@mosaic/logic/repeat";
+import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 
 const HISTORY_KEY        = "mosaic-history";
 const LEGACY_HISTORY_KEY = "mosaic-history-v4";
@@ -19,7 +19,6 @@ interface SnapshotV4 {
     pixels:  string;             // 1-bit-packed, base64
     float:   PackedFloat | null; // bbox-compact float (x/y/w/h + raw pixels)
     axes?:   Axis[];             // Phase-4 axis positions; optional for pre-upgrade blobs
-    repeat?: RepeatGrid;
     colorA:  string;
     colorB:  string;
 }
@@ -33,7 +32,8 @@ interface Snapshot {
     selection: PackedFloat | null;
     transforms: {
         axes?:   Axis[];
-        repeat?: RepeatGrid;
+        recipes?: unknown[];
+        activeRecipeId?: string | null;
     };
 }
 interface HistoryBlob {
@@ -62,7 +62,7 @@ function migrateHistory(value: unknown): HistoryBlob | null {
                 colorA: snapshot.colorA, colorB: snapshot.colorB,
             },
             selection: snapshot.float,
-            transforms: { axes: snapshot.axes, repeat: snapshot.repeat },
+            transforms: { axes: snapshot.axes },
         })),
         index: data.index,
     };
@@ -103,7 +103,7 @@ function snapshotFrom(s: Readonly<SessionState>): Snapshot {
             colorA: s.colorA, colorB: s.colorB,
         },
         selection: s.float ? packFloat(s.float) : null,
-        transforms: { axes: s.axes, repeat: s.repeat },
+        transforms: { axes: s.axes, recipes: storedGridRecipes(s.recipes), activeRecipeId: s.activeRecipeId },
     };
 }
 
@@ -164,25 +164,32 @@ export interface Restored {
     pixels:  Uint8Array;
     float:   Float | null;
     axes:    Axis[];
-    repeat:  RepeatGrid;
+    recipes: GridRecipe[];
+    activeRecipeId: string | null;
     colorA:  string;
     colorB:  string;
 }
 
 function restoredAt(h: HistoryBlob): Restored {
     const s = h.snapshots[h.index];
-    const repeat = s.transforms.repeat ?? defaultRepeatGrid();
     const axes = s.transforms.axes ?? defaultAxes(
         s.document.state.canvasWidth, s.document.state.canvasHeight,
     );
+    const recipes = restoreGridRecipes(s.transforms.recipes);
+    const float = s.selection ? unpackFloat(s.selection) : null;
     return {
         pattern: s.document.state,
         pixels:  unpackPixels(s.document.pixels, s.document.state),
-        float:   s.selection ? unpackFloat(s.selection) : null,
+        float,
         // Pre-upgrade snapshots have no axes; current fresh sessions also
         // default to an empty list.
         axes:    axes.filter(axis => axisIsProjectValid(axis, s.document.state)),
-        repeat:  repeatGridError(repeat) ? defaultRepeatGrid() : repeat,
+        recipes,
+        activeRecipeId: normalizeActiveRecipeId(
+            recipes,
+            typeof s.transforms.activeRecipeId === "string" ? s.transforms.activeRecipeId : null,
+            float,
+        ),
         colorA:  s.document.colorA,
         colorB:  s.document.colorB,
     };

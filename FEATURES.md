@@ -61,24 +61,25 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
   - Holding any arrow key produces one undo entry for the entire held sequence.
   — **your decision** (selection shortcut outcomes); **Agent's choice** (canvas cursor and Move scoping)
 
-## Symmetry and repeat
+## Global Mirror and saved repeats
 
-- Fresh sessions have no axes. The **Global mirrors** section in **Mirror & Repeat** and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
+- Fresh sessions have no axes. **Global Mirror** and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
 - Each Global Mirror axis is independently enabled or deleted. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
 - Pattern changes retain only Global Mirror axes that can still mirror two cells on the resulting grid. — **your decision**
 - Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
-- **Apply while drawing** independently controls whether the configured symmetry and repeat recipe applies to future pencil, fill, eraser, overlay, and invert operations. It defaults on, persists as session state, and is not part of undo history. — **your decision**
-- The transform dock button distinguishes no configured recipe, configured with live drawing, and configured with live drawing paused. — **Agent's choice**
-- A single repeat grid has tile width and height plus horizontal and vertical copy counts per side. Copies extend in both directions, their Cartesian product includes the source position, and symmetry completes before the grid tiles the motif. — **your decision**
-- Repeat state survives refresh and undo but is not stored in `.mcw`; file load and canvas resize retain it. — **your decision**
-- Repeat grids are limited to 4,096 configured positions. An operation aborts atomically when it would exceed 1,048,576 transformed claims. — **your decision**
-- Dotted tile guides preview while the transform inspector is open and remain visible while repeat is enabled. — **your decision**
-- An active selection previews its transformed copies while the transform inspector is open, using the same target evaluator as application and preserving sparse source masks. Enabled repeat directions expose direct distance handles paired with exact whole-cell fields; one handle drag is one undoable edit. — **your decision** (exact previews and direct manipulation); **Agent's choice** (distance-line handles)
-- **Stamp transformed copies** (`T`) applies the configured symmetry and repeat recipe to a floating selection regardless of the live-drawing toggle, without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours claiming one destination reject the whole action. — **your decision**
-- Stamp conflicts and safety-limit failures appear inline in the transform inspector; changing editor state or completing a stamp clears the transient message. — **Agent's choice**
+- Global Mirror's **Apply while drawing** controls axes for future pencil, fill, eraser, overlay, and invert operations. It defaults on, persists as session state, and is not part of undo history. — **your decision**
+- The Global Mirror button distinguishes no configured axes, axes applying during drawing, and axes paused during drawing. — **Agent's choice**
+- **Apply Global Mirror** (`T`) applies active axes to a floating selection regardless of the live-drawing toggle, without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours claiming one destination reject the whole action. — **your decision**
+- Global Mirror conflicts and safety-limit failures appear inline in its inspector; changing editor state or completing an application clears the transient message. — **Agent's choice**
+- Saved repeats belong to Selection. Saving captures the float's exact sparse mask; current controls add packed instances to the right and down with optional whole-cell gaps. — **your decision**
+- An active saved repeat follows Move content, Duplicate, and Move area. It deactivates when the float disappears or no longer exactly represents its source. — **your decision**
+- Each saved repeat independently controls **Repeat while drawing**. Source and instance edits use one extended selection mask, so Fill and Global Mirror targets cannot escape it. — **your decision**
+- **Apply current selection** copies the active source to every configured instance as one undoable edit and reports overlap or chart-boundary errors inline. — **your decision**
+- Saved repeats survive refresh, Undo/Redo, and `.mcw` save/load; the active source link remains workspace state and requires its matching float. — **your decision**
+- Saved-repeat grids are limited to 4,096 positions and 1,048,576 source-to-position claims. — **your decision**
 - Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
 - **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
-- Mirror & Repeat exposes editable guide handles and exact axis-position fields without requiring Move; outside that inspector, Move-based dragging remains available. — **Agent's choice**
+- Global Mirror exposes editable guides and exact axis-position fields without requiring Move; outside that inspector, Move-based dragging remains available. — **Agent's choice**
 - **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
 
 ## Highlights
@@ -118,12 +119,12 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - History survives page refresh — independently versioned snapshots persist to `localStorage` under the stable `mosaic-history` key. — **your decision** (persistence); **Agent's choice** (versioned envelope and key)
 - Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
 - Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
-- Symmetry-axis and repeat-grid state are part of undo. Undo restores the axis list, every axis position, and the repeat settings. — **your decision**
+- Global Mirror axes and saved selection recipes are part of undo. — **your decision**
 - Redundant snapshots (same packed pixels + same state + same colours as the head) are skipped. — **Agent's choice**
 
 ## Persistence
 
-- Editor session state, including Global Mirror axes, repeat settings, live-transform mode, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (transform lifetime)
+- Editor session state, including Global Mirror axes and live mode, saved repeats and their active source link, and an active float, auto-saves to `localStorage` and restores on refresh. The source link restores only with an exactly matching float. — **Agent's choice** (session persistence and validation); **your decision** (transform lifetime)
 - Guidance opacity, danger colour, canvas accent, number visibility, and invalid-placement protection are app-global preferences. They persist independently of project recovery and are excluded from `.mcw`, snapshots, and Undo/Redo; legacy recovery imports them once when no preference record exists. — **your decision** (lifetime); **Agent's choice** (migration boundary)
 - About opens on the first visit and once when the newest release-note heading or notes differ from the last acknowledged content, independently of browser recovery, dates, and release versioning. It presents concise product-facing release notes with project information and New/Open/Example actions; New resets to a blank row pattern and opens the modeless Pattern inspector. The dialog light-dismisses, has an explicit close action, and reopens from Settings. — **your decision**
 - A continuous paint stroke renders every update but writes session recovery once on release. — **Agent's choice**
@@ -133,7 +134,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Save / Load / Crochet
 
 - File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
-- `.mcw` v3 stores pattern geometry, pixels, colours, and Global Mirror axes. Repeat settings, tool state, selection, float, preferences, Crochet progress, and history remain outside the editable project; v1/v2 files restore no Global Mirror axes. — **your decision** (project and non-project boundaries); **Agent's choice** (v3 migration boundary)
+- `.mcw` v3 stores pattern geometry, pixels, colours, Global Mirror axes, and saved-repeat definitions. Tool state, the active recipe link, selection float, preferences, Crochet progress, and history remain outside the editable project; v1/v2 files restore no axes or saved repeats. — **your decision** (project and non-project boundaries); **Agent's choice** (v3 migration boundary)
 - Unreadable, invalid, or unsupported `.mcw` files report a dismissible inline document error and leave the active session unchanged. Starting another open clears the previous error; dismissal returns focus to Open or compact More. — **Agent's choice**
 - Cancelling a native save picker is quiet; picker or write failures use the dismissible document error and return focus to Save or compact More. — **Agent's choice**
 - One centred Crochet transition states whether to begin, continue, or return to Design; document and secondary commands stay at the left. One canvas remains fixed beneath mode-specific overlay panels, preserving its screen geometry, pan, zoom, and rotation; authoring is disabled in Crochet. — **your decision** (transition, command placement, and overlay-panel canvas model); **Agent's choice** (one persistent DOM canvas)
@@ -165,7 +166,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - A toolbar Selection action opens the labelled Selection inspector on every input type. It owns selection composition, Move outcomes, Copy, Cut, Paste, and Deselect with shortcut hints; its label reports selected or copied cell count when present. — **your decision**
 - The passive context strip shows one priority at a time: active-gesture details, a coalesced constraint, cursor coordinates, then selection or clipboard summary. It contains no panel-opening controls. — **your decision**
 - Mouse and pen hover show coordinates only; drawing has no speculative colour, rectangle, dot, or transformed-result preview. — **your decision**
-- Authoring tools, Mirror & Repeat, and Navigate use a consistent yarn-neutral visual language; accessible names and shortcuts remain stable, and the active action uses the shared filled-and-outlined state rather than an underline. — **your decision**
+- Authoring tools, Global Mirror, and Navigate use a consistent yarn-neutral visual language; accessible names and shortcuts remain stable, and the active action uses the shared filled-and-outlined state rather than an underline. — **your decision**
 - The Design canvas has no logical-cell keyboard cursor or Space-to-paint path. Arrow keys act only on an active Move selection; Space remains momentary navigation and form controls retain native keys. — **your decision**
 - Design and Crochet expose the shared canvas under a mode-appropriate accessible name; labelled controls and context remain the operable interface. — **Agent's choice**
 
@@ -174,7 +175,8 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 - Document and history commands occupy a top document bar; paint, transform, and yarn controls occupy a separate authoring dock without changing their established order. — **Agent's choice**
 - The wide-screen Design tool rail is only one control wide to preserve as much canvas space as possible. — **your decision**
 - Mode panels and inspectors overlay the canvas so their changing size never shifts its geometry. At 64rem and wider they occupy the left or right edge; constrained layouts use bottom sheets. — **your decision**
-- Pattern, Selection, Mirror & Repeat, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
+- Pattern, Selection, Global Mirror, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
+- Global Mirror axes remain separate from saved selection repeats. A saved repeat follows its active source selection, uses packed right/down instances for now, and can be paused without deleting its definition. — **your decision**
 - Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact, growing with increased root text size. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document commands and Settings move into More; when enlarged controls cannot fit a short viewport, the dock scrolls instead of collapsing the canvas. — **Agent's choice**
 - The compact document-bar breakpoint derives from its groups' measured intrinsic widths rather than device labels. — **Agent's choice**
 - A compact floating canvas context appears only for active-gesture details, rejected actions, hovered coordinates, or passive selection/clipboard summaries. Tool, yarn, transform, overlay, and panel-opening actions stay in their owning controls. Navigation and context follow the unobscured right/bottom edges around overlay panels without resizing the canvas. — **your decision** (content and visual anchoring); **Agent's choice** (measured insets)

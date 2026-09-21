@@ -7,8 +7,9 @@ import { describe, test, expect, vi } from "vitest";
 import { paintOps } from "../src/paint";
 import { axesToFlat, addAxis } from "../src/symmetry";
 import { Store } from "../src/store";
-import { replicateSelection } from "../src/selection";
+import { replicateSelection, activateGridRecipe, createGridRecipe, deleteGridRecipe } from "../src/selection";
 import { filledPixels, makeFloat, rowPattern, rowSession } from "./_helpers";
+import { gridRecipeFromFloat } from "../src/grid-recipes";
 
 describe("symmetry-aware paint inside selection", () => {
     test("with Vertical symmetry, painting (0, 1) clipped to a mask that doesn't include the mirrored cell only paints (0, 1)", () => {
@@ -121,33 +122,37 @@ describe("replicateSelection", () => {
         expect(history).not.toHaveBeenCalled();
     });
 
-    test("stamps a selection through a repeat grid without active symmetry", () => {
-        const source = makeFloat([{ x: 3, y: 0, v: 2 }]);
-        const store = new Store(rowSession(7, 1, {
-            pixels: filledPixels(7, 1, 1),
-            float: source,
-            repeat: { enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0 },
+});
+
+describe("saved recipe lifecycle", () => {
+    test("reactivating a sparse source preserves its exact saved bounds", () => {
+        const source = { x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([0, 1, 0]) };
+        const recipe = gridRecipeFromFloat(source);
+        const store = new Store(rowSession(5, 1, {
+            pixels: filledPixels(5, 1, 1),
+            recipes: [recipe],
         }));
 
-        expect(replicateSelection(store)).toBe("applied");
-        expect(store.state.pixels).toEqual(new Uint8Array([1, 2, 1, 1, 1, 2, 1]));
-        expect(store.state.float).toBe(source);
+        expect(activateGridRecipe(store, recipe.id)).toBe(true);
+        expect(store.state.activeRecipeId).toBe(recipe.id);
+        expect(store.state.float).toEqual(source);
     });
 
-    test("rejects different source colours whose repeat targets overlap", () => {
-        const pixels = filledPixels(7, 1, 1);
-        const source = makeFloat([
-            { x: 1, y: 0, v: 1 },
-            { x: 3, y: 0, v: 2 },
-        ]);
-        const store = new Store(rowSession(7, 1, {
-            pixels,
-            float: source,
-            repeat: { enabled: true, tileWidth: 2, tileHeight: 1, copiesX: 1, copiesY: 0 },
-        }));
-
-        expect(replicateSelection(store)).toBe("conflict");
-        expect(store.state.pixels).toBe(pixels);
-        expect(store.state.float).toBe(source);
+    test("activates, switches, reactivates, and deletes saved source selections", () => {
+        const first = makeFloat([{ x: 0, y: 0, v: 1 }]);
+        const store = new Store(rowSession(5, 1, { pixels: filledPixels(5, 1, 1), float: first }));
+        expect(createGridRecipe(store)).toBe("created");
+        const firstId = store.state.activeRecipeId!;
+        store.commit(s => { s.float = makeFloat([{ x: 2, y: 0, v: 2 }]); });
+        expect(createGridRecipe(store)).toBe("created");
+        const secondId = store.state.activeRecipeId!;
+        expect(activateGridRecipe(store, firstId)).toBe(true);
+        expect(store.state.activeRecipeId).toBe(firstId);
+        expect(activateGridRecipe(store, secondId)).toBe(true);
+        deleteGridRecipe(store, firstId);
+        expect(store.state.recipes.map(recipe => recipe.id)).toEqual([secondId]);
+        deleteGridRecipe(store, secondId);
+        expect(store.state.activeRecipeId).toBeNull();
+        expect(store.state.float).toBeNull();
     });
 });

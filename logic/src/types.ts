@@ -16,12 +16,28 @@ export interface AxisD2 { kind: "D2"; id: string; active: boolean; c: number }
 export interface AxisC  { kind: "C";  id: string; active: boolean; x: number; y: number }
 export type Axis = AxisV | AxisH | AxisD1 | AxisD2 | AxisC;
 
-export interface RepeatGrid {
-    enabled:    boolean;
-    tileWidth:  number;
-    tileHeight: number;
-    copiesX:    number;
-    copiesY:    number;
+export interface GridRecipeSource {
+    x:    number;
+    y:    number;
+    w:    number;
+    h:    number;
+    mask: Uint8Array;
+}
+
+export interface GridRecipe {
+    id:                  string;
+    enabled:             boolean;
+    source:              GridRecipeSource;
+    left:                number;
+    right:               number;
+    up:                  number;
+    down:                number;
+    columnSpacing:       number;
+    rowSpacing:          number;
+    columnOffset:        number;
+    rowOffset:           number;
+    columnOrientation:   "same" | "alternate-mirrored";
+    rowOrientation:      "same" | "alternate-mirrored";
 }
 
 // A "float" is a lifted selection layer positioned at absolute canvas-cell

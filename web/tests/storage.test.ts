@@ -6,6 +6,7 @@ import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } fr
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
 import { encodeMcw } from "@mosaic/logic/mcw";
+import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 
 beforeEach(() => { localStorage.clear(); });
 
@@ -31,7 +32,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
             activeTool: "fill",
             primaryColor: 2,
             axes: addAxis(addAxis([], "V", 3, 3), "H", 3, 3),
-            repeat: { enabled: true, tileWidth: 3, tileHeight: 2, copiesX: 2, copiesY: 1 },
+            recipes: [gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }]))],
             rotation: 90,
             pixels: filledPixels(3, 3, 2),
             float: makeFloat([{ x: 2, y: 0, v: 1 }]),
@@ -45,7 +46,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.axes).toHaveLength(2);
         expect(loaded!.axes.find(a => a.kind === "V")!.active).toBe(true);
         expect(loaded!.axes.find(a => a.kind === "H")!.active).toBe(true);
-        expect(loaded!.repeat).toEqual(s.repeat);
+        expect(loaded!.recipes).toEqual(s.recipes);
         expect(loaded!.rotation).toBe(90);
         expect(loaded!.pixels[0]).toBe(2);
         expect(loaded!.float).not.toBeNull();
@@ -67,33 +68,39 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loadFromLocalStorage()).toBeNull();
     });
 
-    test("saved sessions without repeat settings receive disabled defaults", () => {
+    test("saved sessions without recipes migrate to no saved repeats", () => {
         saveToLocalStorage(rowSession(3, 3));
         const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        delete raw.workspace.repeat;
+        delete raw.workspace.recipes;
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
-        expect(loadFromLocalStorage()!.repeat).toEqual({
-            enabled: false,
-            tileWidth: 1,
-            tileHeight: 1,
-            copiesX: 1,
-            copiesY: 1,
-        });
+        expect(loadFromLocalStorage()!.recipes).toEqual([]);
     });
 
-    test("live-transform mode round-trips and defaults on for older sessions", () => {
-        const session = rowSession(3, 3, { liveTransforms: false });
+    test("recovery clears an active recipe whose float does not match its source", () => {
+        const source = makeFloat([{ x: 0, y: 0, v: 1 }]);
+        const recipe = gridRecipeFromFloat(source);
+        saveToLocalStorage(rowSession(3, 3, {
+            recipes: [recipe],
+            activeRecipeId: recipe.id,
+            float: makeFloat([{ x: 1, y: 0, v: 1 }]),
+        }));
+
+        expect(loadFromLocalStorage()!.activeRecipeId).toBeNull();
+    });
+
+    test("global mirror mode round-trips and defaults on for older sessions", () => {
+        const session = rowSession(3, 3, { liveMirrors: false });
         saveToLocalStorage(session);
 
         const loaded = loadFromLocalStorage();
-        expect(loaded!.liveTransforms).toBe(false);
+        expect(loaded!.liveMirrors).toBe(false);
 
         const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         delete raw.workspace.liveTransforms;
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
         const migrated = loadFromLocalStorage();
-        expect(migrated!.liveTransforms).toBe(true);
+        expect(migrated!.liveMirrors).toBe(true);
     });
 
     test("current recovery drops stale axes before the restored project can save", () => {
@@ -174,7 +181,7 @@ describe("saveToFile", () => {
         });
         const session = rowSession(3, 3, {
             axes: addAxis([], "V", 3, 3),
-            repeat: { enabled: true, tileWidth: 2, tileHeight: 2, copiesX: 1, copiesY: 1 },
+            recipes: [gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 2 }]))],
             activeTool: "move",
             rotation: 45,
             float: makeFloat([{ x: 1, y: 1, v: 2 }]),
@@ -183,7 +190,7 @@ describe("saveToFile", () => {
         await expect(saveToFile(session)).resolves.toBe(true);
         const file = JSON.parse(written);
         expect(file).toMatchObject({ version: 3, axes: session.axes });
-        expect(file).not.toHaveProperty("repeat");
+        expect(file.recipes).toHaveLength(1);
         expect(file).not.toHaveProperty("activeTool");
         expect(file).not.toHaveProperty("rotation");
         expect(file).not.toHaveProperty("float");

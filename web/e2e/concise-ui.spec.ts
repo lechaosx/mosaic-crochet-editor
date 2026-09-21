@@ -106,7 +106,7 @@ test("contextual inspectors rely on controls and hover text", async ({ page }) =
     await expect(page.getByText("Nothing copied yet", { exact: false })).toHaveCount(0);
 
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await expect(page.getByText("Select cells and configure", { exact: false })).toHaveCount(0);
     await expect(page.getByText("No axes yet", { exact: false })).toHaveCount(0);
 });

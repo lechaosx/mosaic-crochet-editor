@@ -130,13 +130,13 @@ test("legacy browser recovery still shows About for unseen release notes", async
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
 });
 
-test("example is editable and demonstrates overlay, mirror, repeat, and Crochet", async ({ page }) => {
+test("example is editable and demonstrates overlay, global mirror, and Crochet", async ({ page }) => {
     await bootFresh(page);
     await page.getByRole("button", { name: "Example" }).click();
 
     const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
     expect(recovery.workspace.axes.length).toBeGreaterThan(0);
-    expect(recovery.workspace.repeat.enabled).toBe(true);
+    expect(recovery.workspace.recipes).toEqual([]);
 
     await page.locator("#btn-export").click();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();

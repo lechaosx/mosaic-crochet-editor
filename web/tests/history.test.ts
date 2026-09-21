@@ -8,6 +8,7 @@ import {
 } from "../src/history";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
+import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { encodeMcw } from "@mosaic/logic/mcw";
 
 beforeEach(() => { localStorage.clear(); });
@@ -71,40 +72,41 @@ describe("historySave / historyReset", () => {
         expect(canUndo()).toBe(true);
     });
 
-    test("repeat settings are part of history and survive undo", () => {
+    test("saved recipes are part of history and survive undo", () => {
         const s = rowSession(3, 3);
+        const float = makeFloat([{ x: 0, y: 0, v: 1 }]);
+        const recipe = gridRecipeFromFloat(float);
         historyReset(s);
         historySave({
             ...s,
-            repeat: { enabled: true, tileWidth: 3, tileHeight: 2, copiesX: 2, copiesY: 1 },
+            float, recipes: [recipe], activeRecipeId: recipe.id,
         });
 
         expect(canUndo()).toBe(true);
-        expect(historyUndo()!.repeat).toEqual(s.repeat);
-        expect(historyRedo()!.repeat).toEqual({
-            enabled: true,
-            tileWidth: 3,
-            tileHeight: 2,
-            copiesX: 2,
-            copiesY: 1,
-        });
+        expect(historyUndo()!.recipes).toEqual([]);
+        expect(historyRedo()!.recipes).toEqual([recipe]);
+        expect(historyPeek()!.activeRecipeId).toBe(recipe.id);
     });
 
-    test("invalid repeat settings in persisted history restore disabled defaults", () => {
+    test("history clears an active recipe whose restored float does not match its source", () => {
+        const source = makeFloat([{ x: 0, y: 0, v: 1 }]);
+        const recipe = gridRecipeFromFloat(source);
+        historyReset(rowSession(3, 3, {
+            recipes: [recipe],
+            activeRecipeId: recipe.id,
+            float: makeFloat([{ x: 1, y: 0, v: 1 }]),
+        }));
+
+        expect(historyPeek()!.activeRecipeId).toBeNull();
+    });
+
+    test("invalid persisted recipes are discarded", () => {
         historyReset(rowSession(3, 3));
         const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
-        raw.snapshots[0].transforms.repeat = {
-            enabled: true, tileWidth: 0, tileHeight: 1, copiesX: 1, copiesY: 1,
-        };
+        raw.snapshots[0].transforms.recipes = [{ id: "bad" }];
         localStorage.setItem("mosaic-history", JSON.stringify(raw));
 
-        expect(historyPeek()!.repeat).toEqual({
-            enabled: false,
-            tileWidth: 1,
-            tileHeight: 1,
-            copiesX: 1,
-            copiesY: 1,
-        });
+        expect(historyPeek()!.recipes).toEqual([]);
     });
 
     test("axis position survives undo: add V, drag to x=0, undo restores canonical", () => {

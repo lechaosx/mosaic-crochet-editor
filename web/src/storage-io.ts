@@ -1,10 +1,10 @@
-import { PatternState, Tool, Axis, RepeatGrid } from "@mosaic/logic/types";
+import { PatternState, Tool, Axis, GridRecipe } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { decodeMcw, encodeMcw, ProjectDocument } from "@mosaic/logic/mcw";
 import { axisIsProjectValid, defaultAxes } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
-import { assertRepeatGrid, defaultRepeatGrid } from "@mosaic/logic/repeat";
+import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 import {
     AppPreferences,
     DEFAULT_APP_PREFERENCES,
@@ -25,7 +25,6 @@ interface LocalSaveV4 {
     activeTool:       string;
     primaryColor:     number;
     axes:             Axis[];
-    repeat?:          RepeatGrid;
     liveTransforms?:  boolean;
     hlOpacity:        number;
     invalidIntensity: number;
@@ -47,7 +46,8 @@ interface RecoveryV5 {
         activeTool:      string;
         primaryColor:    number;
         axes:            Axis[];
-        repeat?:         RepeatGrid;
+        recipes?:        unknown[];
+        activeRecipeId?: string | null;
         liveTransforms?: boolean;
         float:           PackedFloat | null;
     };
@@ -91,7 +91,7 @@ function recoveryFromV4(data: LocalSaveV4): RecoveryV5 {
         },
         workspace: {
             activeTool: data.activeTool, primaryColor: data.primaryColor,
-            axes: data.axes, repeat: data.repeat,
+            axes: data.axes,
             liveTransforms: data.liveTransforms, float: data.float,
         },
         preferences: {
@@ -145,8 +145,9 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV6 {
         },
         workspace: {
             activeTool: s.activeTool, primaryColor: s.primaryColor,
-            axes: s.axes, repeat: s.repeat,
-            liveTransforms: s.liveTransforms,
+            axes: s.axes,
+            recipes: storedGridRecipes(s.recipes), activeRecipeId: s.activeRecipeId,
+            liveTransforms: s.liveMirrors,
             float: s.float ? packFloat(s.float) : null,
             rotation: s.rotation,
         },
@@ -175,11 +176,11 @@ export function loadFromLocalStorage(): SessionState | null {
         const { recovery, preferences } = migrated;
         const { document, workspace } = recovery;
         assertPatternDimensions(document.state);
-        const repeat = workspace.repeat ?? defaultRepeatGrid();
         const axes = workspace.axes ?? defaultAxes(
             document.state.canvasWidth, document.state.canvasHeight,
         );
-        assertRepeatGrid(repeat);
+        const recipes = restoreGridRecipes(workspace.recipes);
+        const float = workspace.float ? unpackFloat(workspace.float) : null;
         const restored: SessionState = {
             pattern:          document.state,
             pixels:           unpackPixels(document.pixels, document.state),
@@ -188,9 +189,14 @@ export function loadFromLocalStorage(): SessionState | null {
             activeTool:       workspace.activeTool as Tool,
             primaryColor:     workspace.primaryColor as 1 | 2,
             axes:             axes.filter(axis => axisIsProjectValid(axis, document.state)),
-            repeat,
-            liveTransforms:   workspace.liveTransforms ?? true,
-            float:            workspace.float ? unpackFloat(workspace.float) : null,
+            recipes,
+            activeRecipeId:   normalizeActiveRecipeId(
+                recipes,
+                typeof workspace.activeRecipeId === "string" ? workspace.activeRecipeId : null,
+                float,
+            ),
+            liveMirrors:      workspace.liveTransforms ?? true,
+            float,
             rotation:         workspace.rotation ?? 0,
         };
         if (preferences && !hasStoredAppPreferences()) saveAppPreferences(preferences);
@@ -218,6 +224,7 @@ function projectDocumentFrom(s: Readonly<SessionState>): ProjectDocument {
         colorA: s.colorA,
         colorB: s.colorB,
         axes: s.axes,
+        recipes: s.recipes,
     };
 }
 

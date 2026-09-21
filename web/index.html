@@ -93,7 +93,7 @@
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
         <button class="btn" id="selection-actions" title="Selection modes and actions" aria-label="Selection actions" aria-controls="inspector-host" aria-expanded="false">Selection</button>
-        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Symmetry and repeat: no transforms configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Symmetry and repeat: no transforms configured"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
+        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Global Mirror: no axes configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Global Mirror: no axes configured"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
       </div>
 
       <div class="dock-group g-colors" role="group" aria-label="Yarns">
@@ -217,6 +217,19 @@
       <button class="btn" id="selection-paste" type="button" aria-label="Paste" title="Paste copied cells (Ctrl+V)">Paste <kbd>Ctrl+V</kbd></button>
       <button class="btn" id="selection-deselect" type="button" aria-label="Deselect" title="Place content and remove the selection (Escape)">Deselect <kbd>Esc</kbd></button>
     </div>
+    <div class="selection-recipes">
+      <div class="popover-row"><span class="popover-label">Saved repeats</span><button class="btn" id="recipe-create" type="button" title="Save the current selection as a repeat">Save selection</button></div>
+      <div id="recipe-list" aria-label="Saved repeat recipes"></div>
+      <div id="recipe-controls" hidden>
+        <label class="toggle popover-row"><span class="popover-label">Repeat while drawing</span><input type="checkbox" id="recipe-enabled"><span class="toggle-track"></span></label>
+        <div class="field-row"><label for="recipe-right">Additional right</label><input id="recipe-right" type="number" min="0" value="0"></div>
+        <div class="field-row"><label for="recipe-down">Additional down</label><input id="recipe-down" type="number" min="0" value="0"></div>
+        <div class="field-row"><label for="recipe-gap-x">Horizontal gap</label><input id="recipe-gap-x" type="number" min="0" value="0"></div>
+        <div class="field-row"><label for="recipe-gap-y">Vertical gap</label><input id="recipe-gap-y" type="number" min="0" value="0"></div>
+        <button class="btn" id="recipe-apply" type="button" title="Copy the source selection to every repeat instance">Apply current selection</button>
+      </div>
+      <div id="recipe-error" class="warning" role="alert" hidden></div>
+    </div>
   </section>
 
   <!-- ── Settings inspector ───────────────────────────────────────────── -->
@@ -238,8 +251,8 @@
     <button class="btn settings-about" id="settings-about" type="button" title="About Mosaic Crochet Editor">About Mosaic Crochet Editor</button>
   </section>
 
-  <!-- ── Mirror & Repeat inspector ───────────────────────────────────── -->
-  <section id="sym-popover" class="inspector-panel" aria-label="Mirror and repeat" hidden>
+  <!-- ── Global Mirror inspector ───────────────────────────────────── -->
+  <section id="sym-popover" class="inspector-panel" aria-label="Global Mirror" hidden>
     <div class="popover-row">
       <span class="popover-label">Global mirrors</span>
       <div class="sym-add-row">
@@ -251,38 +264,14 @@
       </div>
     </div>
     <div id="sym-list" class="sym-list" aria-label="Axes"></div>
-    <div class="repeat-grid">
-      <label class="toggle popover-row" title="Include bounded tile offsets in the configured transformation.">
-        <span class="popover-label">Include repeat</span>
-        <input type="checkbox" id="repeat-enabled">
-        <span class="toggle-track"></span>
-      </label>
-      <div class="field-row">
-        <label for="repeat-tile-width">Tile width</label>
-        <input type="number" id="repeat-tile-width" value="1" min="1" max="1048576">
-      </div>
-      <div class="field-row">
-        <label for="repeat-tile-height">Tile height</label>
-        <input type="number" id="repeat-tile-height" value="1" min="1" max="1048576">
-      </div>
-      <div class="field-row">
-        <label for="repeat-copies-x">Horizontal copies / side</label>
-        <input type="number" id="repeat-copies-x" value="1" min="0">
-      </div>
-      <div class="field-row">
-        <label for="repeat-copies-y">Vertical copies / side</label>
-        <input type="number" id="repeat-copies-y" value="1" min="0">
-      </div>
-      <div id="repeat-error" class="warning" role="alert" hidden></div>
-    </div>
     <div class="transform-usage">
       <label class="toggle popover-row" title="Apply the configured transformation to future paint operations.">
-        <span class="popover-label">Apply while drawing</span>
+        <span class="popover-label">Mirror while drawing</span>
         <input type="checkbox" id="live-transforms" checked>
         <span class="toggle-track"></span>
       </label>
       <div class="popover-row">
-        <button class="btn" id="replicate-selection" title="Stamp transformed copies from the current selection (T)" disabled>Stamp transformed copies</button>
+        <button class="btn" id="replicate-selection" title="Stamp global mirror copies from the current selection (T)" disabled>Apply Global Mirror</button>
       </div>
       <div id="transform-error" class="warning" role="alert" hidden></div>
     </div>

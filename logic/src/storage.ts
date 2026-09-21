@@ -5,7 +5,7 @@ import { PatternState } from "./types";
 // On disk we pack to 1 bit per cell (A=0, B=1). Hole cells get an arbitrary
 // bit; the load path rebuilds the transparent sentinel from geometry.
 
-function u8ToB64(u8: Uint8Array): string {
+export function u8ToB64(u8: Uint8Array): string {
     let s = "";
     const chunk = 0x8000;
     for (let i = 0; i < u8.length; i += chunk) {
@@ -13,7 +13,7 @@ function u8ToB64(u8: Uint8Array): string {
     }
     return btoa(s);
 }
-function b64ToU8(s: string): Uint8Array {
+export function b64ToU8(s: string): Uint8Array {
     const bin = atob(s);
     const u8 = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
