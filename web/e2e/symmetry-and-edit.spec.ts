@@ -364,6 +364,42 @@ test("Pattern inspector changes the canvas dimensions", async ({ page }) => {
     await expect(page.locator("#canvas")).toBeVisible();
 });
 
+test("Pattern resize removes only global mirrors that become unusable", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("v");
+    await page.keyboard.press("h");
+    await page.locator("#btn-edit").click();
+    await page.locator("#edit-width").fill("5");
+    await page.locator("#edit-width").press("Tab");
+    await page.locator("#btn-sym-toggle").click();
+
+    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Disable horizontal axis at y=4" })).toBeVisible();
+});
+
+test("Pattern preview retains global mirrors valid in the final geometry", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("v");
+    await page.locator("#btn-edit").click();
+    await page.locator("#edit-width").fill("5");
+    await page.locator("#edit-width").fill("9");
+    await page.locator("#edit-width").press("Tab");
+    await page.locator("#btn-sym-toggle").click();
+    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toBeVisible();
+});
+
+test("invalid Pattern preview restores the global mirror baseline", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("v");
+    await page.locator("#btn-edit").click();
+    await page.locator("#edit-width").fill("5");
+    await page.locator("#edit-width").fill("2000000");
+    await expect(page.locator("#edit-error")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.locator("#btn-sym-toggle").click();
+    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toBeVisible();
+});
+
 test("Pattern inspector rejects a canvas above the safety ceiling", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-edit").click();
@@ -413,15 +449,165 @@ test("Load rejects a future file without replacing the active session", async ({
     await chooser.setFiles({
         name: "future.mcw",
         mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify({ version: 3 })),
+        buffer: Buffer.from(JSON.stringify({ version: 4 })),
     });
 
     const alert = page.getByRole("alert");
-    await expect(alert).toContainText("This pattern uses unsupported .mcw version 3.");
+    await expect(alert).toContainText("This pattern uses unsupported .mcw version 4.");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
 
     await page.setViewportSize({ width: 360, height: 740 });
     await page.getByRole("button", { name: "Dismiss document error" }).click();
     await expect(alert).toBeHidden();
     await expect(page.getByRole("button", { name: "More" })).toBeFocused();
+});
+
+test("Open restores a global mirror without resetting Crochet progress", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await page.getByRole("button", { name: "Forward one row" }).click();
+    await page.locator("#btn-export").click();
+    const project = await page.evaluate(() => {
+        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        return recovery.document;
+    });
+
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.locator("#btn-load").click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+        name: "global-mirror.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({
+            version: 3,
+            ...project,
+            axes: [{ id: "saved-v", kind: "V", active: true, x: 2 }],
+        })),
+    });
+
+    await expect(page.getByRole("button", { name: /Symmetry and repeat/ })).toBeVisible();
+    await page.getByRole("button", { name: /Symmetry and repeat/ }).click();
+    await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Mirror and repeat");
+    await expect(page.getByText("Global mirrors", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable vertical axis at x=2" })).toBeVisible();
+    await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
+
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    const mirrored = await cellCoord(page, 4, 1);
+    expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
+
+    const legacyProject = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
+    );
+    const legacyChooserPromise = page.waitForEvent("filechooser");
+    await page.locator("#btn-load").click();
+    const legacyChooser = await legacyChooserPromise;
+    await legacyChooser.setFiles({
+        name: "legacy-v2.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({ version: 2, ...legacyProject })),
+    });
+    await expect(page.locator(".sym-list-row")).toHaveCount(0);
+    await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
+});
+
+test("Open leaves an identical global-mirror project view unchanged", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("v");
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.axes.length,
+    )).toBe(1);
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.waitForTimeout(300);
+    const project = await page.evaluate(() => {
+        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        return { ...recovery.document, axes: recovery.workspace.axes };
+    });
+    const before = await page.evaluate(() => {
+        const matrix = window.__test_matrix__!;
+        return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
+    });
+
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.locator("#btn-load").click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+        name: "same-project.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({ version: 3, ...project })),
+    });
+
+    await expect.poll(() => page.evaluate(() => {
+        const matrix = window.__test_matrix__!;
+        return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
+    })).toEqual(before);
+});
+
+test("identical Open preserves Crochet progress and an active float", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await page.getByRole("button", { name: "Forward one row" }).click();
+    await page.locator("#btn-export").click();
+    await page.keyboard.press("s");
+    await dragCells(page, 1, 1, 1, 1);
+    await page.keyboard.press("m");
+    await dragCells(page, 1, 1, 1, 2);
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float?.y,
+    )).toBe(2);
+    await page.evaluate(() => {
+        const target = window as unknown as {
+            savedMcw?: string;
+            showSaveFilePicker?: () => Promise<{
+                createWritable: () => Promise<{
+                    write: (source: string) => Promise<void>;
+                    close: () => Promise<void>;
+                }>;
+            }>;
+        };
+        target.showSaveFilePicker = async () => ({
+            createWritable: async () => ({
+                write: async source => { target.savedMcw = source; },
+                close: async () => {},
+            }),
+        });
+    });
+    await page.locator("#btn-save").click();
+    await expect.poll(() => page.evaluate(() =>
+        (window as unknown as { savedMcw?: string }).savedMcw ?? null,
+    )).not.toBeNull();
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.waitForTimeout(300);
+    const before = await page.evaluate(() => {
+        const recovery = localStorage.getItem("mosaic-recovery")!;
+        const matrix = window.__test_matrix__!;
+        return {
+            savedMcw: (window as unknown as { savedMcw: string }).savedMcw,
+            recovery,
+            history: localStorage.getItem("mosaic-history"),
+            matrix: [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f],
+        };
+    });
+
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.locator("#btn-load").click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+        name: "same-with-float.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(before.savedMcw),
+    });
+
+    await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
+    await expect.poll(() => page.evaluate(() => ({
+        recovery: localStorage.getItem("mosaic-recovery"),
+        history: localStorage.getItem("mosaic-history"),
+        matrix: (() => {
+            const matrix = window.__test_matrix__!;
+            return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
+        })(),
+    }))).toEqual({ recovery: before.recovery, history: before.history, matrix: before.matrix });
 });

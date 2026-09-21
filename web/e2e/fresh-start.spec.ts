@@ -27,6 +27,9 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
     await expect(about).toBeHidden();
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.axes,
+    )).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem("mosaic-about-release-notes")))
         .toBe(currentReleaseHash);
 });

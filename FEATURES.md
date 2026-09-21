@@ -63,8 +63,9 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Symmetry and repeat
 
-- Fresh sessions have no axes. The **Mirror & Repeat** inspector and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
-- Each axis is independently enabled or deleted from the **Mirror & Repeat** inspector. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
+- Fresh sessions have no axes. The **Global mirrors** section in **Mirror & Repeat** and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
+- Each Global Mirror axis is independently enabled or deleted. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
+- Pattern changes retain only Global Mirror axes that can still mirror two cells on the resulting grid. — **your decision**
 - Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
 - **Apply while drawing** independently controls whether the configured symmetry and repeat recipe applies to future pencil, fill, eraser, overlay, and invert operations. It defaults on, persists as session state, and is not part of undo history. — **your decision**
 - The transform dock button distinguishes no configured recipe, configured with live drawing, and configured with live drawing paused. — **Agent's choice**
@@ -122,7 +123,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 
 ## Persistence
 
-- Editor session state, including axes, repeat settings, live-transform mode, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (transform lifetime)
+- Editor session state, including Global Mirror axes, repeat settings, live-transform mode, and an active float, auto-saves to `localStorage` and restores on refresh. — **Agent's choice** (session persistence); **your decision** (transform lifetime)
 - Guidance opacity, danger colour, canvas accent, number visibility, and invalid-placement protection are app-global preferences. They persist independently of project recovery and are excluded from `.mcw`, snapshots, and Undo/Redo; legacy recovery imports them once when no preference record exists. — **your decision** (lifetime); **Agent's choice** (migration boundary)
 - About opens on the first visit and once when the newest release-note heading or notes differ from the last acknowledged content, independently of browser recovery, dates, and release versioning. It presents concise product-facing release notes with project information and New/Open/Example actions; New resets to a blank row pattern and opens the modeless Pattern inspector. The dialog light-dismisses, has an explicit close action, and reopens from Settings. — **your decision**
 - A continuous paint stroke renders every update but writes session recovery once on release. — **Agent's choice**
@@ -132,7 +133,7 @@ This file records what the app does and (briefly) why. User-facing how-tos live 
 ## Save / Load / Crochet
 
 - File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
-- `.mcw` stores pattern geometry, pixels, and colours; symmetry axes, repeat settings, and floats remain session-only. Loading keeps the current transforms and drops the active float. — **your decision** (float and repeat boundaries); **Agent's choice** (axis boundary)
+- `.mcw` v3 stores pattern geometry, pixels, colours, and Global Mirror axes. Repeat settings, tool state, selection, float, preferences, Crochet progress, and history remain outside the editable project; v1/v2 files restore no Global Mirror axes. — **your decision** (project and non-project boundaries); **Agent's choice** (v3 migration boundary)
 - Unreadable, invalid, or unsupported `.mcw` files report a dismissible inline document error and leave the active session unchanged. Starting another open clears the previous error; dismissal returns focus to Open or compact More. — **Agent's choice**
 - Cancelling a native save picker is quiet; picker or write failures use the dismissible document error and return focus to Save or compact More. — **Agent's choice**
 - One centred Crochet transition states whether to begin, continue, or return to Design; document and secondary commands stay at the left. One canvas remains fixed beneath mode-specific overlay panels, preserving its screen geometry, pan, zoom, and rotation; authoring is disabled in Crochet. — **your decision** (transition, command placement, and overlay-panel canvas model); **Agent's choice** (one persistent DOM canvas)

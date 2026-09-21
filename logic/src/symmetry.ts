@@ -3,7 +3,7 @@
 // `kind`, `a`, `b`); `axesToFlat` compiles the active set down. Composition
 // of multiple reflections emerges from the BFS without implied axis records.
 
-import { Axis, SymKey } from "./types";
+import { Axis, PatternState, SymKey } from "./types";
 
 export type { Axis, SymKey };
 
@@ -108,6 +108,17 @@ export function axisOffCanvas(a: Axis, W: number, H: number): boolean {
         case "D1": return a.c <= -(H - 1) || a.c >= W - 1;
         case "D2": return a.c <= 0 || a.c >= W + H - 2;
     }
+}
+
+export function axisIsProjectValid(axis: Axis, pattern: PatternState): boolean {
+    const half = (value: number) => Number.isSafeInteger(value * 2);
+    const whole = (value: number) => Number.isSafeInteger(value);
+    const gridRepresentable = axis.kind === "V" ? half(axis.x)
+        : axis.kind === "H" ? half(axis.y)
+            : axis.kind === "C" ? half(axis.x) && half(axis.y)
+                : whole(axis.c);
+    return gridRepresentable
+        && !axisOffCanvas(axis, pattern.canvasWidth, pattern.canvasHeight);
 }
 
 // Pick at most ONE active axis per kind whose guide is within `tolerance`

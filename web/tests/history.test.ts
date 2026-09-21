@@ -8,6 +8,7 @@ import {
 } from "../src/history";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
+import { encodeMcw } from "@mosaic/logic/mcw";
 
 beforeEach(() => { localStorage.clear(); });
 
@@ -120,6 +121,18 @@ describe("historySave / historyReset", () => {
         expect(r).not.toBeNull();
         const v = r!.axes.find(a => a.kind === "V")!;
         expect(v.kind === "V" && v.x === 1).toBe(true);
+    });
+
+    test("undo drops stale axes but retains valid disabled axes", () => {
+        const valid = { id: "valid", kind: "V" as const, active: false, x: 1 };
+        const stale = { id: "stale", kind: "H" as const, active: true, y: 0 };
+        const baseline = rowSession(3, 3, { axes: [valid, stale] });
+        historyReset(baseline);
+        historySave({ ...baseline, colorA: "#abcdef" });
+
+        const restored = historyUndo()!;
+        expect(restored.axes).toEqual([valid]);
+        expect(() => encodeMcw(restored)).not.toThrow();
     });
 });
 

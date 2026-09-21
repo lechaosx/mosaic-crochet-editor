@@ -12,8 +12,10 @@ beforeEach(() => { localStorage.clear(); });
 
 describe("browser persistence migrations", () => {
     test("migrates recovery v4 into the versioned recovery envelope", () => {
+        const valid = { id: "valid", kind: "V" as const, active: false, x: 1 };
+        const stale = { id: "stale", kind: "H" as const, active: true, y: 0 };
         const session = rowSession(3, 3, {
-            axes: addAxis([], "V", 3, 3),
+            axes: [valid, stale],
             repeat: { enabled: true, tileWidth: 3, tileHeight: 2, copiesX: 2, copiesY: 1 },
             liveTransforms: false,
             float: makeFloat([{ x: 1, y: 1, v: 2 }]),
@@ -40,7 +42,7 @@ describe("browser persistence migrations", () => {
         const restored = loadFromLocalStorage();
         expect(restored).toMatchObject({
             pattern: session.pattern,
-            axes: session.axes,
+            axes: [valid],
             repeat: session.repeat,
             liveTransforms: false,
         });

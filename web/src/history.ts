@@ -6,7 +6,7 @@
 import { PatternState, Float, Axis, RepeatGrid } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
-import { defaultAxes } from "@mosaic/logic/symmetry";
+import { axisIsProjectValid, defaultAxes } from "@mosaic/logic/symmetry";
 import { defaultRepeatGrid, repeatGridError } from "@mosaic/logic/repeat";
 
 const HISTORY_KEY        = "mosaic-history";
@@ -172,13 +172,16 @@ export interface Restored {
 function restoredAt(h: HistoryBlob): Restored {
     const s = h.snapshots[h.index];
     const repeat = s.transforms.repeat ?? defaultRepeatGrid();
+    const axes = s.transforms.axes ?? defaultAxes(
+        s.document.state.canvasWidth, s.document.state.canvasHeight,
+    );
     return {
         pattern: s.document.state,
         pixels:  unpackPixels(s.document.pixels, s.document.state),
         float:   s.selection ? unpackFloat(s.selection) : null,
         // Pre-upgrade snapshots have no axes; current fresh sessions also
         // default to an empty list.
-        axes:    s.transforms.axes ?? defaultAxes(s.document.state.canvasWidth, s.document.state.canvasHeight),
+        axes:    axes.filter(axis => axisIsProjectValid(axis, s.document.state)),
         repeat:  repeatGridError(repeat) ? defaultRepeatGrid() : repeat,
         colorA:  s.document.colorA,
         colorB:  s.document.colorB,

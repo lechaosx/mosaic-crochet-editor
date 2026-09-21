@@ -1,8 +1,8 @@
 import { PatternState, Tool, Axis, RepeatGrid } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
-import { decodeMcw, encodeMcw, McwDocument } from "@mosaic/logic/mcw";
-import { defaultAxes } from "@mosaic/logic/symmetry";
+import { decodeMcw, encodeMcw, ProjectDocument } from "@mosaic/logic/mcw";
+import { axisIsProjectValid, defaultAxes } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
 import { assertRepeatGrid, defaultRepeatGrid } from "@mosaic/logic/repeat";
 import {
@@ -176,6 +176,9 @@ export function loadFromLocalStorage(): SessionState | null {
         const { document, workspace } = recovery;
         assertPatternDimensions(document.state);
         const repeat = workspace.repeat ?? defaultRepeatGrid();
+        const axes = workspace.axes ?? defaultAxes(
+            document.state.canvasWidth, document.state.canvasHeight,
+        );
         assertRepeatGrid(repeat);
         const restored: SessionState = {
             pattern:          document.state,
@@ -184,7 +187,7 @@ export function loadFromLocalStorage(): SessionState | null {
             colorB:           document.colorB,
             activeTool:       workspace.activeTool as Tool,
             primaryColor:     workspace.primaryColor as 1 | 2,
-            axes:             workspace.axes ?? defaultAxes(document.state.canvasWidth, document.state.canvasHeight),
+            axes:             axes.filter(axis => axisIsProjectValid(axis, document.state)),
             repeat,
             liveTransforms:   workspace.liveTransforms ?? true,
             float:            workspace.float ? unpackFloat(workspace.float) : null,
@@ -206,10 +209,20 @@ export function loadFromLocalStorage(): SessionState | null {
 
 // ── File save / load ──────────────────────────────────────────────────────────
 
-export type LoadedFile = McwDocument;
+export type LoadedFile = ProjectDocument;
+
+function projectDocumentFrom(s: Readonly<SessionState>): ProjectDocument {
+    return {
+        pattern: s.pattern,
+        pixels: s.pixels,
+        colorA: s.colorA,
+        colorB: s.colorB,
+        axes: s.axes,
+    };
+}
 
 export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
-    const json = encodeMcw(s);
+    const json = encodeMcw(projectDocumentFrom(s));
 
     if ("showSaveFilePicker" in window) {
         try {

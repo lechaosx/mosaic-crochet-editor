@@ -7,7 +7,7 @@ import { describe, test, expect } from "vitest";
 import {
     axesToFlat, defaultAxes,
     pickAxesAt, distanceToAxis, setAxisPosition, snapHalf, snapInt,
-    addAxis, removeAxis, toggleAxisActive, axisOffCanvas,
+    addAxis, removeAxis, toggleAxisActive, axisOffCanvas, axisIsProjectValid,
 } from "../src/symmetry";
 import type { Axis } from "../src/types";
 import { SymKey } from "../src/types";
@@ -302,6 +302,38 @@ describe("axisOffCanvas", () => {
         expect(axisOffCanvas(d2(0.5), 9, 7)).toBe(false);
         expect(axisOffCanvas(d2(13.5), 9, 7)).toBe(false);
         expect(axisOffCanvas(d2(14), 9, 7)).toBe(true);
+    });
+});
+
+describe("axisIsProjectValid", () => {
+    const pattern = { mode: "row" as const, canvasWidth: 9, canvasHeight: 7 };
+
+    test("accepts useful grid-representable axes regardless of active state", () => {
+        expect(axisIsProjectValid({ id: "v", kind: "V", active: false, x: 0.5 }, pattern)).toBe(true);
+        expect(axisIsProjectValid({ id: "h", kind: "H", active: true, y: 0.5 }, pattern)).toBe(true);
+        expect(axisIsProjectValid({ id: "c", kind: "C", active: false, x: 4.5, y: 3.5 }, pattern)).toBe(true);
+        expect(axisIsProjectValid({ id: "d1", kind: "D1", active: true, c: -5 }, pattern)).toBe(true);
+        expect(axisIsProjectValid({ id: "d2", kind: "D2", active: false, c: 13 }, pattern)).toBe(true);
+    });
+
+    test.each<Axis>([
+        { id: "v", kind: "V", active: true, x: 0.25 },
+        { id: "h", kind: "H", active: true, y: 1.25 },
+        { id: "c", kind: "C", active: true, x: 4.5, y: 1.25 },
+        { id: "d1", kind: "D1", active: true, c: 0.5 },
+        { id: "d2", kind: "D2", active: true, c: 0.5 },
+        { id: "v-edge", kind: "V", active: false, x: 0 },
+        { id: "h-edge", kind: "H", active: false, y: 0 },
+        { id: "c-edge", kind: "C", active: false, x: 0, y: 0.5 },
+        { id: "d1-edge", kind: "D1", active: false, c: 8 },
+        { id: "d2-edge", kind: "D2", active: false, c: 14 },
+        { id: "v-huge", kind: "V", active: false, x: Number.MAX_SAFE_INTEGER },
+        { id: "h-huge", kind: "H", active: false, y: Number.MAX_SAFE_INTEGER },
+        { id: "c-huge", kind: "C", active: false, x: Number.MAX_SAFE_INTEGER, y: 0.5 },
+        { id: "d1-huge", kind: "D1", active: false, c: Number.MAX_SAFE_INTEGER },
+        { id: "d2-huge", kind: "D2", active: false, c: Number.MAX_SAFE_INTEGER },
+    ])("rejects non-grid or unusable %s", axis => {
+        expect(axisIsProjectValid(axis, pattern)).toBe(false);
     });
 });
 

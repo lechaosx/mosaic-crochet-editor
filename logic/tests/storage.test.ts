@@ -4,6 +4,7 @@ import {
     packPixels, unpackPixels, packFloat, unpackFloat,
 } from "../src/storage";
 import { decodeMcw, encodeMcw } from "../src/mcw";
+import type { Axis } from "../src/types";
 import { filledPixels } from "./_helpers";
 
 function mcwFixture(name: string): string {
@@ -11,30 +12,83 @@ function mcwFixture(name: string): string {
 }
 
 describe(".mcw codec", () => {
-    test("loads a v1 fixture and upgrades it through a v2 round-trip", () => {
+    test("migrates v1 files to the empty global mirror project boundary", () => {
         const legacy = decodeMcw(mcwFixture("pattern-v1.mcw"));
         expect(legacy.pattern).toEqual({ mode: "row", canvasWidth: 2, canvasHeight: 2 });
         expect(Array.from(legacy.pixels)).toEqual([1, 2, 2, 1]);
         expect(legacy.colorA).toBe("#112233");
         expect(legacy.colorB).toBe("#ddeeff");
+        expect(legacy.axes).toEqual([]);
 
         const upgraded = decodeMcw(encodeMcw(legacy));
         expect(upgraded).toEqual(legacy);
     });
 
-    test("loads a v2 fixture and preserves it through a v2 round-trip", () => {
+    test("migrates v2 files to the empty global mirror project boundary", () => {
         const current = decodeMcw(mcwFixture("pattern-v2.mcw"));
         expect(Array.from(current.pixels)).toEqual([1, 2, 1, 2]);
+        expect(current.axes).toEqual([]);
 
-        const encoded = JSON.parse(encodeMcw(current));
+        expect(decodeMcw(encodeMcw(current))).toEqual(current);
+    });
+
+    test("round-trips global mirrors without serializing workspace state", () => {
+        const axes: Axis[] = [
+            { id: "saved-v", kind: "V", active: true, x: 0.5 },
+            { id: "saved-d", kind: "D1", active: false, c: 0 },
+        ];
+        const document = {
+            pattern: { mode: "row" as const, canvasWidth: 2, canvasHeight: 2 },
+            pixels: new Uint8Array([1, 2, 1, 2]),
+            colorA: "#010203",
+            colorB: "#fafbfc",
+            axes,
+        };
+
+        const encoded = JSON.parse(encodeMcw(document));
         expect(encoded).toEqual({
-            version: 2,
+            version: 3,
             state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
             pixels: "Cg==",
             colorA: "#010203",
             colorB: "#fafbfc",
+            axes,
         });
-        expect(decodeMcw(JSON.stringify(encoded))).toEqual(current);
+        expect(encoded).not.toHaveProperty("workspace");
+        expect(decodeMcw(JSON.stringify(encoded))).toEqual(document);
+    });
+
+    test.each<Axis>([
+        { id: "v", kind: "V", active: true, x: 0.25 },
+        { id: "h", kind: "H", active: true, y: 0.25 },
+        { id: "c", kind: "C", active: true, x: 0.5, y: 0.25 },
+        { id: "d1", kind: "D1", active: true, c: 0.5 },
+        { id: "d2", kind: "D2", active: true, c: 0.5 },
+        { id: "v-edge", kind: "V", active: false, x: 0 },
+        { id: "h-edge", kind: "H", active: false, y: 0 },
+        { id: "c-edge", kind: "C", active: false, x: 0, y: 0.5 },
+        { id: "d1-edge", kind: "D1", active: false, c: 1 },
+        { id: "d2-edge", kind: "D2", active: false, c: 2 },
+        { id: "v-huge", kind: "V", active: false, x: Number.MAX_SAFE_INTEGER },
+        { id: "h-huge", kind: "H", active: false, y: Number.MAX_SAFE_INTEGER },
+        { id: "c-huge", kind: "C", active: false, x: Number.MAX_SAFE_INTEGER, y: 0.5 },
+        { id: "d1-huge", kind: "D1", active: false, c: Number.MAX_SAFE_INTEGER },
+        { id: "d2-huge", kind: "D2", active: false, c: Number.MAX_SAFE_INTEGER },
+    ])("rejects invalid project axis %o on encode and decode", axis => {
+        const document = {
+            pattern: { mode: "row" as const, canvasWidth: 2, canvasHeight: 2 },
+            pixels: new Uint8Array([1, 2, 1, 2]),
+            colorA: "#000000", colorB: "#ffffff", axes: [axis],
+        };
+        expect(() => encodeMcw(document)).toThrow("Invalid pattern file.");
+        expect(() => decodeMcw(JSON.stringify({
+            version: 3,
+            state: document.pattern,
+            pixels: "Cg==",
+            colorA: document.colorA,
+            colorB: document.colorB,
+            axes: document.axes,
+        }))).toThrow("Invalid pattern file.");
     });
 
     test.each([
@@ -54,13 +108,32 @@ describe(".mcw codec", () => {
             colorA: "#000000",
             colorB: "#ffffff",
         })],
+        ["invalid v3 axes", JSON.stringify({
+            version: 3,
+            state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
+            pixels: "Cg==",
+            colorA: "#000000",
+            colorB: "#ffffff",
+            axes: [{ id: "bad", kind: "V", active: true, x: "centre" }],
+        })],
+        ["duplicate v3 axis ids", JSON.stringify({
+            version: 3,
+            state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
+            pixels: "Cg==",
+            colorA: "#000000",
+            colorB: "#ffffff",
+            axes: [
+                { id: "same", kind: "V", active: true, x: 0.5 },
+                { id: "same", kind: "H", active: true, y: 0.5 },
+            ],
+        })],
     ])("rejects %s", (_name, source) => {
         expect(() => decodeMcw(source)).toThrow("Invalid pattern file.");
     });
 
     test("identifies a future file version", () => {
-        expect(() => decodeMcw(JSON.stringify({ version: 3 })))
-            .toThrow("This pattern uses unsupported .mcw version 3.");
+        expect(() => decodeMcw(JSON.stringify({ version: 4 })))
+            .toThrow("This pattern uses unsupported .mcw version 4.");
     });
 });
 

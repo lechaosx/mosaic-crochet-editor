@@ -4,6 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 21 September 2026
 
+- Global Mirror axes now save with editable `.mcw` projects and restore on open; older project files open without mirrors, and resizing removes axes that no longer fit.
 - Crochet now keeps unchanged instruction rows or rounds cached while regenerating only changed work, and keeps the generation space stable.
 - Crochet flags invalid work before opening, marks affected instructions, and shows each row or round’s start direction on the chart.
 - Crochet instruction number badges now use the corresponding yarn colour.

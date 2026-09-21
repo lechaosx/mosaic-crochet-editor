@@ -5,6 +5,7 @@ import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
+import { encodeMcw } from "@mosaic/logic/mcw";
 
 beforeEach(() => { localStorage.clear(); });
 
@@ -95,6 +96,16 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(migrated!.liveTransforms).toBe(true);
     });
 
+    test("current recovery drops stale axes before the restored project can save", () => {
+        const valid = { id: "valid", kind: "V" as const, active: false, x: 1 };
+        const stale = { id: "stale", kind: "H" as const, active: true, y: 0 };
+        saveToLocalStorage(rowSession(3, 3, { axes: [valid, stale] }));
+
+        const restored = loadFromLocalStorage()!;
+        expect(restored.axes).toEqual([valid]);
+        expect(() => encodeMcw(restored)).not.toThrow();
+    });
+
     test("missing state → null", () => {
         localStorage.setItem("mosaic-recovery", JSON.stringify({ version: 5 }));
         expect(loadFromLocalStorage()).toBeNull();
@@ -149,6 +160,33 @@ describe("saveToFile", () => {
         });
 
         await expect(saveToFile(rowSession(3, 3))).rejects.toThrow("Disk full.");
+    });
+
+    test("writes only project fields, including global mirror axes", async () => {
+        let written = "";
+        Object.assign(window, {
+            showSaveFilePicker: async () => ({
+                createWritable: async () => ({
+                    write: async (source: string) => { written = source; },
+                    close: async () => {},
+                }),
+            }),
+        });
+        const session = rowSession(3, 3, {
+            axes: addAxis([], "V", 3, 3),
+            repeat: { enabled: true, tileWidth: 2, tileHeight: 2, copiesX: 1, copiesY: 1 },
+            activeTool: "move",
+            rotation: 45,
+            float: makeFloat([{ x: 1, y: 1, v: 2 }]),
+        });
+
+        await expect(saveToFile(session)).resolves.toBe(true);
+        const file = JSON.parse(written);
+        expect(file).toMatchObject({ version: 3, axes: session.axes });
+        expect(file).not.toHaveProperty("repeat");
+        expect(file).not.toHaveProperty("activeTool");
+        expect(file).not.toHaveProperty("rotation");
+        expect(file).not.toHaveProperty("float");
     });
 });
 

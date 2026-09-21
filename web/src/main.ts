@@ -15,7 +15,7 @@ import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitiali
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
 import { addAxis, removeAxis, toggleAxisActive,
          pickAxesAt, setAxisPosition, snapHalf, snapInt,
-         axisOffCanvas } from "@mosaic/logic/symmetry";
+         axisOffCanvas, axisIsProjectValid } from "@mosaic/logic/symmetry";
 import { defaultRepeatGrid, repeatGridError, transformsToFlat } from "@mosaic/logic/repeat";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit } from "./ui";
@@ -56,6 +56,26 @@ function sameAuthoredPattern(pattern: PatternState, pixels: Uint8Array): boolean
             || current.offsetY !== pattern.offsetY
             || current.rounds !== pattern.rounds)) return false;
     return arraysEqual(visiblePixels(store.state), pixels);
+}
+
+function axesEqual(a: ReadonlyArray<Axis>, b: ReadonlyArray<Axis>): boolean {
+    return a.length === b.length && a.every((axis, index) => {
+        const other = b[index];
+        if (axis.id !== other.id || axis.kind !== other.kind || axis.active !== other.active) return false;
+        if (axis.kind === "V" && other.kind === "V") return axis.x === other.x;
+        if (axis.kind === "H" && other.kind === "H") return axis.y === other.y;
+        if (axis.kind === "C" && other.kind === "C") return axis.x === other.x && axis.y === other.y;
+        if (axis.kind === "D1" && other.kind === "D1") return axis.c === other.c;
+        if (axis.kind === "D2" && other.kind === "D2") return axis.c === other.c;
+        return false;
+    });
+}
+
+function sameProject(loaded: LoadedFile): boolean {
+    return sameAuthoredPattern(loaded.pattern, loaded.pixels)
+        && loaded.colorA === store.state.colorA
+        && loaded.colorB === store.state.colorB
+        && axesEqual(loaded.axes, store.state.axes);
 }
 
 // Minimal sensible defaults — only used when no saved session exists.
@@ -667,7 +687,7 @@ function onDeselect() {
 }
 
 // ── Pattern inspector ───────────────────────────────────────────────────────
-let editBaseline: { pattern: PatternState; pixels: Uint8Array; float: Float | null } | null = null;
+let editBaseline: { pattern: PatternState; pixels: Uint8Array; float: Float | null; axes: Axis[] } | null = null;
 
 function onEditOpen() {
     editBaseline = null;
@@ -681,6 +701,7 @@ function captureEditBaseline() {
         pattern: store.state.pattern,
         pixels: store.state.pixels.slice(),
         float: store.state.float ? { ...store.state.float, pixels: store.state.float.pixels.slice() } : null,
+        axes: [...store.state.axes],
     };
 }
 function onEditChange(): boolean {
@@ -709,6 +730,7 @@ function onEditChange(): boolean {
     store.commit(s => {
         s.pattern  = pattern;
         s.pixels   = pixels;
+        s.axes     = baseline.axes.filter(axis => axisIsProjectValid(axis, pattern));
         // Float coords no longer match the new geometry; the content (if any)
         // was baked into the source pixels above before the resize.
         s.float    = null;
@@ -728,7 +750,8 @@ function onEditCommit() {
         || baseline.float?.h !== store.state.float?.h
         || (baseline.float === null) !== (store.state.float === null)
         || (baseline.float !== null && store.state.float !== null
-            && !arraysEqual(baseline.float.pixels, store.state.float.pixels));
+            && !arraysEqual(baseline.float.pixels, store.state.float.pixels))
+        || !axesEqual(baseline.axes, store.state.axes);
     if (changed && patternHistorySession) {
         store.commit(() => {}, { recompute: false, render: false });
         patternHistorySession = historyReplaceCurrent(store.state);
@@ -757,6 +780,7 @@ function onEditRevert() {
         pattern: baseline.pattern,
         pixels: baseline.pixels,
         float: baseline.float,
+        axes: baseline.axes,
     }, { persist: false });
     ui.syncEditInputs(baseline.pattern);
     refreshSymmetryUi();
@@ -821,6 +845,10 @@ async function onLoad() {
         return;
     }
     if (!loaded) return;
+    if (sameProject(loaded)) {
+        closeAbout();
+        return;
+    }
     if (!sameAuthoredPattern(loaded.pattern, loaded.pixels)) clearCrochetProgress();
     fitToView(
         viewport.canvas, viewport.view, loaded.pattern, store.state.rotation,
@@ -828,7 +856,7 @@ async function onLoad() {
     );
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
-          colorA: loaded.colorA, colorB: loaded.colorB, float: null },
+          colorA: loaded.colorA, colorB: loaded.colorB, axes: loaded.axes, float: null },
         { history: true, persist: true },
     );
     closeAbout();
