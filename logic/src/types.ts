@@ -28,16 +28,22 @@ export interface GridRecipe {
     id:                  string;
     enabled:             boolean;
     source:              GridRecipeSource;
+    mode:                "grid" | "rotation";
     left:                number;
     right:               number;
     up:                  number;
     down:                number;
     columnSpacing:       number;
     rowSpacing:          number;
+    columnSpacingAlternate: number;
+    rowSpacingAlternate: number;
     columnOffset:        number;
     rowOffset:           number;
     columnOrientation:   "same" | "alternate-mirrored";
     rowOrientation:      "same" | "alternate-mirrored";
+    rotationCentreX:     number;
+    rotationCentreY:     number;
+    rotationTurns:       (90 | 180 | 270)[];
 }
 
 // A "float" is a lifted selection layer positioned at absolute canvas-cell

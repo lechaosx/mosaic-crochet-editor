@@ -101,11 +101,15 @@ Active Global Mirror axes are drawn as dashed guides; central rotation is shown 
 
 Active axes compose automatically: for example, vertical and horizontal mirrors together produce the corresponding four-cell orbit without adding a separate central-axis entry.
 
-Saved repeats live in **Selection**, separately from Global Mirror. Lift the source cells, choose **Save selection**, then set additional copies to the right and down and optional horizontal or vertical gaps. Packing uses occupied source cells, so sparse selections keep their holes instead of reserving the whole bounding box. The active recipe follows Move content, Duplicate, and Move area; it deactivates when its source selection no longer exists.
+Saved repeats live in **Selection**, separately from Global Mirror. Lift the source cells and choose **Save selection**. One recipe is active at a time, follows Move content, Duplicate, and Move area, and deactivates when its source selection no longer exists.
+
+In **Grid** mode, set additional copies independently to the left, right, up, and down. Columns advance by the packed source width plus the horizontal gap and can shift vertically; rows advance by the packed source height plus the vertical gap and can shift horizontally. These two offsets make diagonal and 45° grids possible. Either direction can keep the same orientation or mirror every other instance. Mirrored directions alternate the primary and alternate gap symmetrically outward from the source. Packing uses occupied source cells, so sparse selections keep their holes instead of reserving the whole bounding box.
+
+In **Rotation** mode, enter a centre and select any combination of 90°, 180°, and 270° copies. Rotation and Grid are mutually exclusive within a recipe. The rotation centre accepts whole- or half-cell coordinates when the selected turns map cells exactly. It stays at that absolute chart position when cells are added to or removed from the selection, and follows explicit Move, Duplicate, and Move area translations. This saved-repeat rotation is distinct from Global Mirror’s **⊕ Central** point mirror and its live global axes.
 
 Enable **Repeat while drawing** to apply edits made at the source or any repeat instance across the active saved repeat. Fill and mirror targets remain clipped to the complete extended selection. **Apply current selection** copies the source selection to all configured instances as one undoable edit; it reports overlaps or out-of-chart instances inline and leaves the source selected.
 
-Each saved-repeat grid accepts at most 4,096 positions and 1,048,576 source-to-position claims.
+Each saved-repeat grid accepts at most 4,096 positions. Every recipe is limited to 1,048,576 source-to-destination claims, including selected rotation copies, before it can render or paint.
 
 Global Mirror's **Apply while drawing** affects future pencil, fill, eraser, overlay, and invert operations only. **Apply Global Mirror** applies the active axes to content already in the floating selection even when live mirroring is paused. Choose it or press **T**; the source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict in Global Mirror and leaves the canvas unchanged.
 

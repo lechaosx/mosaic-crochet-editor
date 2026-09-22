@@ -2,6 +2,12 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 22 September 2026
+
+- Saved selection repeats now extend independently in every direction, support angled row and column vectors, and can alternate mirrored instances with two alternating gaps.
+- A saved repeat can instead rotate the selection around an editable centre with any combination of 90°, 180°, and 270° copies; rotation remains separate from Global Mirror.
+- Repeat controls reject unsafe or invalid retained settings without leaving stale values selected, and rotation centres stay fixed through selection shape edits while following explicit moves.
+
 ## 21 September 2026
 
 - Saved repeats now live with the source selection: save, activate, pause, adjust packed right/down copies and gaps, or apply the selection across its instances. Global Mirror has its own controls.

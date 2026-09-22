@@ -186,6 +186,142 @@ test("saved repeat extends the active selection and applies its instances", asyn
     await expect(page.locator("#recipe-list")).toContainText("Repeat 1");
 });
 
+test("saved grid repeats apply independent directions, angled vectors, and alternating gaps", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await clickCell(page, 3, 3);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 3, 3);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-left").fill("1");
+    await page.locator("#recipe-right").fill("2");
+    await page.locator("#recipe-up").fill("1");
+    await page.locator("#recipe-down").fill("1");
+    await page.locator("#recipe-column-offset").fill("1");
+    await page.locator("#recipe-row-offset").fill("2");
+    await page.locator("label:has(#recipe-column-mirrored)").click();
+    await page.locator("#recipe-gap-x-alternate").fill("1");
+    await page.locator("#recipe-gap-x-alternate").dispatchEvent("change");
+    await page.locator("#recipe-apply").click();
+
+    for (const [x, y] of [[0, 1], [8, 6]] as const) {
+        const cell = await cellCoord(page, x, y);
+        expect(await pixelRGB(page, cell.cx, cell.cy), `${x},${y}`).toEqual([0, 0, 0]);
+    }
+});
+
+test("rotation repeat applies selected quarters and live drawing from an instance", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    for (const [x, y] of [[4, 4], [3, 3], [4, 2]] as const) await clickCell(page, x, y);
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await clickCell(page, 5, 3);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 5, 3);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("2");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    await page.locator("label:has(#recipe-mode-rotation)").click();
+    await page.locator("#recipe-centre-x").fill("4");
+    await page.locator("#recipe-centre-y").fill("3");
+    for (const turn of [90, 180, 270]) await page.locator(`label:has(#recipe-turn-${turn})`).click();
+    await page.locator("#recipe-turn-270").dispatchEvent("change");
+    await page.locator("#recipe-apply").click();
+
+    for (const [x, y] of [[5, 3], [4, 4], [3, 3], [4, 2]] as const) {
+        const cell = await cellCoord(page, x, y);
+        expect(await pixelRGB(page, cell.cx, cell.cy), `${x},${y}`).toEqual([0, 0, 0]);
+    }
+    const retainedGridTarget = await cellCoord(page, 6, 3);
+    expect(await pixelRGB(page, retainedGridTarget.cx, retainedGridTarget.cy)).toEqual([255, 255, 255]);
+
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await page.getByRole("button", { name: "Pencil" }).click();
+    await clickCell(page, 4, 4);
+    for (const [x, y] of [[5, 3], [4, 4], [3, 3], [4, 2]] as const) {
+        const cell = await cellCoord(page, x, y);
+        expect(await pixelRGB(page, cell.cx, cell.cy), `${x},${y}`).toEqual([255, 255, 255]);
+    }
+});
+
+test("saved-repeat instances drive Invert and Eraser across the extended selection", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    await page.getByRole("button", { name: "Invert colours" }).click();
+    await clickCell(page, 3, 1);
+
+    for (const x of [2, 3]) {
+        const cell = await cellCoord(page, x, 1);
+        expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual([0, 0, 0]);
+    }
+
+    await page.getByRole("button", { name: "Eraser" }).click();
+    await clickCell(page, 3, 1);
+    for (const x of [2, 3]) {
+        const cell = await cellCoord(page, x, 1);
+        expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual([255, 255, 255]);
+    }
+});
+
+test("saved repeat controls reject overlap and claim-limit configurations before commit", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: /^Add/ }).click();
+    await clickCell(page, 3, 2);
+    await page.locator("#recipe-create").click();
+    await page.locator("#recipe-right").fill("1");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    await page.locator("#recipe-down").fill("1");
+    await page.locator("#recipe-down").dispatchEvent("change");
+    await expect(page.locator("#recipe-error")).toContainText(/overlap/i);
+
+    await page.locator("#recipe-right").fill("4096");
+    await page.locator("#recipe-right").dispatchEvent("change");
+    await expect(page.locator("#recipe-error")).toContainText("4,096");
+});
+
+test("rejected saved-repeat values, modes, and turns return controls to stored state", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: /^Add/ }).click();
+    await clickCell(page, 3, 1);
+    await page.locator("#recipe-create").click();
+
+    const left = page.locator("#recipe-left");
+    await left.fill("-1");
+    await left.dispatchEvent("change");
+    await expect(page.locator("#recipe-error")).toContainText(/counts/i);
+    await expect(left).toHaveValue("0");
+
+    await page.locator("#recipe-mode-rotation").evaluate(input => { input.value = "unsupported"; });
+    await page.locator("label:has(#recipe-mode-rotation)").click();
+    await expect(page.locator("#recipe-error")).toContainText(/mode/i);
+    await expect(page.locator("#recipe-mode-grid")).toBeChecked();
+    await expect(page.locator("#recipe-mode-rotation")).not.toBeChecked();
+
+    await page.locator("#recipe-mode-rotation").evaluate(input => { input.value = "rotation"; });
+    await page.locator("label:has(#recipe-mode-rotation)").click();
+    await page.locator("label:has(#recipe-turn-180)").click();
+    await expect(page.locator("#recipe-error")).toContainText(/overlap/i);
+    await expect(page.locator("#recipe-turn-180")).not.toBeChecked();
+
+    const stored = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0],
+    );
+    expect(stored).toMatchObject({ left: 0, mode: "rotation", rotationTurns: [] });
+});
+
 test("live paint keeps a packed repeat that lands in a sparse source hole", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pencil" }).click();
@@ -278,6 +414,9 @@ test("saved repeat source follows moves and pointer cancel restores it", async (
     await page.locator("#recipe-right").press("Enter");
     await page.getByRole("button", { name: "Move", exact: true }).click();
     await dragCells(page, 2, 1, 3, 1);
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
+    )).toBe(3);
     if (!await page.locator("#selection-popover").isVisible()) {
         await page.getByRole("button", { name: /Selection actions/ }).click();
     }
@@ -346,6 +485,9 @@ test("saved repeat source follows an explicit duplicate move", async ({ page }) 
     await expect(duplicate).toHaveAttribute("aria-pressed", "true");
 
     await dragCells(page, 1, 1, 3, 1);
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
+    )).toBe(3);
     await page.locator("#recipe-apply").click();
 
     const original = await cellCoord(page, 1, 1);
@@ -374,6 +516,9 @@ test("saved repeat source follows an explicit move-area move", async ({ page }) 
     await expect(moveArea).toHaveAttribute("aria-pressed", "true");
 
     await dragCells(page, 1, 1, 3, 1);
+    expect(await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
+    )).toBe(3);
     await page.locator("#recipe-apply").click();
 
     const original = await cellCoord(page, 1, 1);

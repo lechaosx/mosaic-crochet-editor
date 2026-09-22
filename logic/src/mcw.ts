@@ -63,6 +63,10 @@ function readRecipes(value: unknown): GridRecipe[] {
             if (typeof item[key] !== "number") throw invalidFile();
             return item[key] as number;
         };
+        const optionalNumber = (key: string, fallback: number) => {
+            if (item[key] === undefined) return fallback;
+            return number(key);
+        };
         const string = (key: string) => {
             if (typeof item[key] !== "string") throw invalidFile();
             return item[key] as string;
@@ -70,14 +74,27 @@ function readRecipes(value: unknown): GridRecipe[] {
         let mask: Uint8Array;
         try { mask = unpackMask(item.source.mask, item.source.w * item.source.h); }
         catch { throw invalidFile(); }
+        const columnSpacing = number("columnSpacing");
+        const rowSpacing = number("rowSpacing");
+        const mode = item.mode ?? "grid";
+        if (mode !== "grid" && mode !== "rotation") throw invalidFile();
+        const rotationTurns = item.rotationTurns ?? [];
+        if (!Array.isArray(rotationTurns)
+            || rotationTurns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) throw invalidFile();
         const recipe: GridRecipe = {
             id: item.id, enabled: item.enabled,
             source: { x: item.source.x, y: item.source.y, w: item.source.w, h: item.source.h, mask },
+            mode,
             left: number("left"), right: number("right"), up: number("up"), down: number("down"),
-            columnSpacing: number("columnSpacing"), rowSpacing: number("rowSpacing"),
+            columnSpacing, rowSpacing,
+            columnSpacingAlternate: optionalNumber("columnSpacingAlternate", columnSpacing),
+            rowSpacingAlternate: optionalNumber("rowSpacingAlternate", rowSpacing),
             columnOffset: number("columnOffset"), rowOffset: number("rowOffset"),
             columnOrientation: string("columnOrientation") as GridRecipe["columnOrientation"],
             rowOrientation: string("rowOrientation") as GridRecipe["rowOrientation"],
+            rotationCentreX: optionalNumber("rotationCentreX", item.source.x + (item.source.w - 1) / 2),
+            rotationCentreY: optionalNumber("rotationCentreY", item.source.y + (item.source.h - 1) / 2),
+            rotationTurns: rotationTurns as GridRecipe["rotationTurns"],
         };
         if (gridRecipeError(recipe) !== null) throw invalidFile();
         return recipe;

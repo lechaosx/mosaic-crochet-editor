@@ -1422,9 +1422,9 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                                 newFP[ly * pf.w + lx] = store.state.pixels[cy * W + cx];
                         }
                     }
-                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; syncActiveGridRecipe(s); } }, { persist: false });
+                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }); } }, { persist: false });
                 } else {
-                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY }; syncActiveGridRecipe(s); } }, { persist: false });
+                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }); } }, { persist: false });
                 }
             }
             return;
@@ -1698,7 +1698,7 @@ document.addEventListener("keydown", e => {
                 }
                 if (state.float) {
                     state.float = { ...state.float, x: state.float.x + ddx, y: state.float.y + ddy };
-                    syncActiveGridRecipe(state);
+                    syncActiveGridRecipe(state, { x: ddx, y: ddy });
                 }
             }, { history: !e.repeat });
         }
@@ -1735,8 +1735,9 @@ document.addEventListener("keydown", e => {
                                 newFP[ly * pf.w + lx] = state.pixels[cy * W + cx];
                         }
                     }
+                    const translation = { x: newX - state.float.x, y: newY - state.float.y };
                     state.float = { ...state.float, x: newX, y: newY, pixels: newFP };
-                    syncActiveGridRecipe(state);
+                    syncActiveGridRecipe(state, translation);
                 }
             }, { history: !e.repeat });
         }
@@ -1759,7 +1760,7 @@ document.addEventListener("keydown", e => {
         const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
         store.commit(state => {
             state.float = { ...state.float!, x: state.float!.x + ddx, y: state.float!.y + ddy };
-            syncActiveGridRecipe(state);
+            syncActiveGridRecipe(state, { x: ddx, y: ddy });
         }, { history: !e.repeat });
         return;
     }

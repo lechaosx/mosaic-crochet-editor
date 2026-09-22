@@ -77,6 +77,44 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loadFromLocalStorage()!.recipes).toEqual([]);
     });
 
+    test("recovery defaults optional v3 recipe extensions", () => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
+        recipe.columnSpacing = 2;
+        recipe.rowSpacing = 3;
+        saveToLocalStorage(rowSession(3, 3, { recipes: [recipe] }));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        const stored = raw.workspace.recipes[0];
+        delete stored.mode;
+        delete stored.columnSpacingAlternate;
+        delete stored.rowSpacingAlternate;
+        delete stored.rotationCentreX;
+        delete stored.rotationCentreY;
+        delete stored.rotationTurns;
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
+
+        expect(loadFromLocalStorage()!.recipes[0]).toMatchObject({
+            mode: "grid",
+            columnSpacingAlternate: 2,
+            rowSpacingAlternate: 3,
+            rotationCentreX: 1,
+            rotationCentreY: 1,
+            rotationTurns: [],
+        });
+    });
+
+    test.each([
+        ["grid", { mode: "rotation", left: -1 }],
+        ["rotation", { mode: "grid", rotationCentreX: 0.25 }],
+    ])("recovery drops a recipe with malformed retained %s settings", (_field, malformed) => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
+        saveToLocalStorage(rowSession(3, 3, { recipes: [recipe] }));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        Object.assign(raw.workspace.recipes[0], malformed);
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
+
+        expect(loadFromLocalStorage()!.recipes).toEqual([]);
+    });
+
     test("recovery clears an active recipe whose float does not match its source", () => {
         const source = makeFloat([{ x: 0, y: 0, v: 1 }]);
         const recipe = gridRecipeFromFloat(source);

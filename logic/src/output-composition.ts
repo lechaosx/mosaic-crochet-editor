@@ -33,6 +33,8 @@ const noGrid: PackedGridRecipe = {
     down: 0,
     columnSpacing: 0,
     rowSpacing: 0,
+    columnSpacingAlternate: 0,
+    rowSpacingAlternate: 0,
     columnOffset: 0,
     rowOffset: 0,
     columnOrientation: "same",

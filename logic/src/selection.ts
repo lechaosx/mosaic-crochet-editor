@@ -16,10 +16,12 @@ export function activeGridRecipe(s: Readonly<SessionState>): GridRecipe | null {
     return s.activeRecipeId === null ? null : s.recipes.find(recipe => recipe.id === s.activeRecipeId) ?? null;
 }
 
-export function syncActiveGridRecipe(s: SessionState): void {
+export function syncActiveGridRecipe(
+    s: SessionState, translation?: { x: number; y: number },
+): void {
     const active = activeGridRecipe(s);
     if (!active || !s.float) return;
-    const updated = withRecipeSource(active, s.float);
+    const updated = withRecipeSource(active, s.float, translation);
     if (gridRecipeError(updated) !== null) return;
     s.recipes = s.recipes.map(recipe => recipe.id === active.id ? updated : recipe);
 }

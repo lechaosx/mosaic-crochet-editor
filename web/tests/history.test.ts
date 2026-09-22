@@ -109,6 +109,31 @@ describe("historySave / historyReset", () => {
         expect(historyPeek()!.recipes).toEqual([]);
     });
 
+    test("history defaults optional v3 recipe extensions", () => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
+        recipe.columnSpacing = 2;
+        recipe.rowSpacing = 3;
+        historyReset(rowSession(3, 3, { recipes: [recipe] }));
+        const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
+        const stored = raw.snapshots[0].transforms.recipes[0];
+        delete stored.mode;
+        delete stored.columnSpacingAlternate;
+        delete stored.rowSpacingAlternate;
+        delete stored.rotationCentreX;
+        delete stored.rotationCentreY;
+        delete stored.rotationTurns;
+        localStorage.setItem("mosaic-history", JSON.stringify(raw));
+
+        expect(historyPeek()!.recipes[0]).toMatchObject({
+            mode: "grid",
+            columnSpacingAlternate: 2,
+            rowSpacingAlternate: 3,
+            rotationCentreX: 1,
+            rotationCentreY: 1,
+            rotationTurns: [],
+        });
+    });
+
     test("axis position survives undo: add V, drag to x=0, undo restores canonical", () => {
         const s = rowSession(3, 3);
         historyReset(s);

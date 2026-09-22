@@ -717,6 +717,20 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-size: var(--font-xs);
 }
 
+.selection-recipes,
+#recipe-controls,
+#recipe-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+#recipe-grid-controls,
+#recipe-rotation-controls {
+  padding-block: var(--space-2);
+  border-block: var(--border);
+}
+
 .setting-color {
   display: flex;
   align-items: center;

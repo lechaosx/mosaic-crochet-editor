@@ -222,10 +222,41 @@
       <div id="recipe-list" aria-label="Saved repeat recipes"></div>
       <div id="recipe-controls" hidden>
         <label class="toggle popover-row"><span class="popover-label">Repeat while drawing</span><input type="checkbox" id="recipe-enabled"><span class="toggle-track"></span></label>
-        <div class="field-row"><label for="recipe-right">Additional right</label><input id="recipe-right" type="number" min="0" value="0"></div>
-        <div class="field-row"><label for="recipe-down">Additional down</label><input id="recipe-down" type="number" min="0" value="0"></div>
-        <div class="field-row"><label for="recipe-gap-x">Horizontal gap</label><input id="recipe-gap-x" type="number" min="0" value="0"></div>
-        <div class="field-row"><label for="recipe-gap-y">Vertical gap</label><input id="recipe-gap-y" type="number" min="0" value="0"></div>
+        <div class="segmented" role="radiogroup" aria-label="Repeat type">
+          <label><input id="recipe-mode-grid" type="radio" name="recipe-mode" value="grid" checked> Grid</label>
+          <label><input id="recipe-mode-rotation" type="radio" name="recipe-mode" value="rotation"> Rotation</label>
+        </div>
+        <div id="recipe-grid-controls" class="field-group">
+          <div class="field-row"><label for="recipe-left">Additional left</label><input id="recipe-left" type="number" min="0" value="0"></div>
+          <div class="field-row"><label for="recipe-right">Additional right</label><input id="recipe-right" type="number" min="0" value="0"></div>
+          <div class="field-row"><label for="recipe-up">Additional up</label><input id="recipe-up" type="number" min="0" value="0"></div>
+          <div class="field-row"><label for="recipe-down">Additional down</label><input id="recipe-down" type="number" min="0" value="0"></div>
+          <span class="popover-label">Columns</span>
+          <div class="segmented" role="radiogroup" aria-label="Column orientation">
+            <label><input id="recipe-column-same" type="radio" name="recipe-column-orientation" value="same" checked> Same</label>
+            <label><input id="recipe-column-mirrored" type="radio" name="recipe-column-orientation" value="alternate-mirrored"> Mirrored</label>
+          </div>
+          <div class="field-row"><label for="recipe-gap-x">Horizontal gap</label><input id="recipe-gap-x" type="number" min="0" value="0"></div>
+          <div class="field-row" id="recipe-gap-x-alternate-row" hidden><label for="recipe-gap-x-alternate">Alternate horizontal gap</label><input id="recipe-gap-x-alternate" type="number" min="0" value="0"></div>
+          <div class="field-row"><label for="recipe-column-offset">Vertical offset</label><input id="recipe-column-offset" type="number" value="0"></div>
+          <span class="popover-label">Rows</span>
+          <div class="segmented" role="radiogroup" aria-label="Row orientation">
+            <label><input id="recipe-row-same" type="radio" name="recipe-row-orientation" value="same" checked> Same</label>
+            <label><input id="recipe-row-mirrored" type="radio" name="recipe-row-orientation" value="alternate-mirrored"> Mirrored</label>
+          </div>
+          <div class="field-row"><label for="recipe-gap-y">Vertical gap</label><input id="recipe-gap-y" type="number" min="0" value="0"></div>
+          <div class="field-row" id="recipe-gap-y-alternate-row" hidden><label for="recipe-gap-y-alternate">Alternate vertical gap</label><input id="recipe-gap-y-alternate" type="number" min="0" value="0"></div>
+          <div class="field-row"><label for="recipe-row-offset">Horizontal offset</label><input id="recipe-row-offset" type="number" value="0"></div>
+        </div>
+        <div id="recipe-rotation-controls" class="field-group" hidden>
+          <div class="field-row"><label for="recipe-centre-x">Centre x</label><input id="recipe-centre-x" type="number" step="0.5" value="0"></div>
+          <div class="field-row"><label for="recipe-centre-y">Centre y</label><input id="recipe-centre-y" type="number" step="0.5" value="0"></div>
+          <div class="segmented" role="group" aria-label="Quarter turns">
+            <label><input id="recipe-turn-90" type="checkbox" value="90"> 90°</label>
+            <label><input id="recipe-turn-180" type="checkbox" value="180"> 180°</label>
+            <label><input id="recipe-turn-270" type="checkbox" value="270"> 270°</label>
+          </div>
+        </div>
         <button class="btn" id="recipe-apply" type="button" title="Copy the source selection to every repeat instance">Apply current selection</button>
       </div>
       <div id="recipe-error" class="warning" role="alert" hidden></div>

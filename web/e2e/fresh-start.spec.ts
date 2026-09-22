@@ -10,7 +10,7 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
 
     const about = page.getByRole("dialog", { name: "Mosaic Crochet Editor" });
     await expect(about).toBeVisible();
-    await expect(about.getByText("Latest release 21 September 2026")).toBeVisible();
+    await expect(about.getByText("Latest release 22 September 2026")).toBeVisible();
     await expect(about.locator("#about-version")).toHaveCount(0);
     await expect(about.getByRole("heading", { name: "Release notes" })).toBeVisible();
     await expect(about.locator("#about-release-notes")).toContainText("May 2026");

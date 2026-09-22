@@ -13,6 +13,8 @@ export interface PackedGridRecipe {
     down: number;
     columnSpacing: number;
     rowSpacing: number;
+    columnSpacingAlternate: number;
+    rowSpacingAlternate: number;
     columnOffset: number;
     rowOffset: number;
     columnOrientation: GridOrientation;
@@ -42,7 +44,9 @@ export interface TransformConflict {
 
 export interface PackedGridEvaluation {
     columnStep: { x: number; y: number };
+    columnStepAlternate: { x: number; y: number };
     rowStep: { x: number; y: number };
+    rowStepAlternate: { x: number; y: number };
     cells: EvaluatedTransformCell[];
     conflicts: TransformConflict[];
 }
@@ -60,17 +64,25 @@ export function evaluatePackedGrid(
     if (counts.some(value => !Number.isSafeInteger(value) || value < 0)) {
         throw new RangeError("Grid counts must be whole numbers that are zero or positive.");
     }
-    const columns = recipe.left + recipe.right + 1;
-    const rows = recipe.up + recipe.down + 1;
+    const columns = safeAdd(safeAdd(recipe.left, recipe.right), 1);
+    const rows = safeAdd(safeAdd(recipe.up, recipe.down), 1);
     if (columns > MAX_REPEAT_POSITIONS || rows > MAX_REPEAT_POSITIONS
         || columns * rows > MAX_REPEAT_POSITIONS) {
         throw new RangeError(`Transform grid cannot exceed ${MAX_REPEAT_POSITIONS.toLocaleString("en-US")} positions.`);
     }
     const positions = columns * rows;
-    if (source.length > Math.floor(MAX_TRANSFORM_CLAIMS / positions)) {
+    const turns = aroundCentre ? [...new Set(aroundCentre.turns)] : [];
+    if (turns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) {
+        throw new RangeError("Rotation supports only quarter turns.");
+    }
+    const transformPositions = positions * (turns.length + 1);
+    if (source.length > Math.floor(MAX_TRANSFORM_CLAIMS / transformPositions)) {
         throw new RangeError(`Transform grid cannot exceed ${MAX_TRANSFORM_CLAIMS.toLocaleString("en-US")} claims.`);
     }
-    const spacing = [recipe.columnSpacing, recipe.rowSpacing];
+    const spacing = [
+        recipe.columnSpacing, recipe.rowSpacing,
+        recipe.columnSpacingAlternate, recipe.rowSpacingAlternate,
+    ];
     if (spacing.some(value => !Number.isSafeInteger(value) || value < 0)) {
         throw new RangeError("Grid spacing must be whole numbers that are zero or positive.");
     }
@@ -85,33 +97,51 @@ export function evaluatePackedGrid(
 
     const input = expandQuarterTurns(source, aroundCentre);
 
+    const columnPacked = packedDistance(
+        input, "x", recipe.columnOffset,
+        recipe.columnOrientation === "alternate-mirrored",
+    );
+    const rowPacked = packedDistance(
+        input, "y", recipe.rowOffset,
+        recipe.rowOrientation === "alternate-mirrored",
+    );
     const columnStep = {
-        x: packedDistance(
-            input, "x", recipe.columnOffset,
-            recipe.columnOrientation === "alternate-mirrored",
-        ) + recipe.columnSpacing,
+        x: safeAdd(columnPacked, recipe.columnSpacing),
+        y: recipe.columnOffset,
+    };
+    const columnStepAlternate = {
+        x: safeAdd(columnPacked, recipe.columnOrientation === "alternate-mirrored"
+            ? recipe.columnSpacingAlternate : recipe.columnSpacing),
         y: recipe.columnOffset,
     };
     const rowStep = {
         x: recipe.rowOffset,
-        y: packedDistance(
-            input, "y", recipe.rowOffset,
-            recipe.rowOrientation === "alternate-mirrored",
-        ) + recipe.rowSpacing,
+        y: safeAdd(rowPacked, recipe.rowSpacing),
+    };
+    const rowStepAlternate = {
+        x: recipe.rowOffset,
+        y: safeAdd(rowPacked, recipe.rowOrientation === "alternate-mirrored"
+            ? recipe.rowSpacingAlternate : recipe.rowSpacing),
     };
     const bounds = cellBounds(input);
     const claims = new Map<string, CellClaim>();
 
     for (let row = -recipe.up; row <= recipe.down; row++) {
         for (let column = -recipe.left; column <= recipe.right; column++) {
-            const dx = column * columnStep.x + row * rowStep.x;
-            const dy = column * columnStep.y + row * rowStep.y;
+            const dx = safeAdd(
+                repeatDistance(column, columnStep.x, columnStepAlternate.x),
+                safeMultiply(row, rowStep.x),
+            );
+            const dy = safeAdd(
+                safeMultiply(column, columnStep.y),
+                repeatDistance(row, rowStep.y, rowStepAlternate.y),
+            );
             const mirrorX = recipe.columnOrientation === "alternate-mirrored" && isOdd(column);
             const mirrorY = recipe.rowOrientation === "alternate-mirrored" && isOdd(row);
             for (const cell of input) {
                 const oriented = orientCell(cell, bounds, mirrorX, mirrorY);
                 for (const sourceIndex of cell.sourceIndices) {
-                    addClaim(claims, oriented.x + dx, oriented.y + dy, sourceIndex);
+                    addClaim(claims, safeAdd(oriented.x, dx), safeAdd(oriented.y, dy), sourceIndex);
                 }
             }
         }
@@ -120,7 +150,9 @@ export function evaluatePackedGrid(
     const ordered = [...claims.values()].sort((a, b) => a.y - b.y || a.x - b.x);
     return {
         columnStep,
+        columnStepAlternate,
         rowStep,
+        rowStepAlternate,
         cells: ordered
             .filter(claim => claim.sourceIndices.size === 1)
             .map(claim => ({
@@ -175,7 +207,7 @@ function expandQuarterTurns(
         throw new RangeError("Rotation supports only quarter turns.");
     }
     if (turns.length === 0) return [...claims.values()];
-    if (!Number.isSafeInteger(aroundCentre.x * 2) || !Number.isSafeInteger(aroundCentre.y * 2)) {
+    if (!isSafeGridCoordinate(aroundCentre.x) || !isSafeGridCoordinate(aroundCentre.y)) {
         throw new RangeError("Rotation centre must be grid-compatible.");
     }
     if (turns.some(turn => turn !== 180)
@@ -200,11 +232,20 @@ function rotateCell(
     centre: Pick<AroundCentreRecipe, "x" | "y">,
     turn: QuarterTurn,
 ): TransformSourceCell {
-    const dx = cell.x - centre.x;
-    const dy = cell.y - centre.y;
-    if (turn === 90) return { x: centre.x - dy, y: centre.y + dx };
-    if (turn === 180) return { x: centre.x - dx, y: centre.y - dy };
-    return { x: centre.x + dy, y: centre.y - dx };
+    const dx = safeGridSubtract(cell.x, centre.x);
+    const dy = safeGridSubtract(cell.y, centre.y);
+    if (turn === 90) return {
+        x: safeGridSubtract(centre.x, dy),
+        y: safeGridAdd(centre.y, dx),
+    };
+    if (turn === 180) return {
+        x: safeGridSubtract(centre.x, dx),
+        y: safeGridSubtract(centre.y, dy),
+    };
+    return {
+        x: safeGridAdd(centre.x, dy),
+        y: safeGridSubtract(centre.y, dx),
+    };
 }
 
 function cellBounds(source: ReadonlyArray<TransformSourceCell>): CellBounds {
@@ -229,13 +270,22 @@ function orientCell(
     mirrorY: boolean,
 ): TransformSourceCell {
     return {
-        x: mirrorX ? bounds.minX + bounds.maxX - cell.x : cell.x,
-        y: mirrorY ? bounds.minY + bounds.maxY - cell.y : cell.y,
+        x: mirrorX ? safeAdd(bounds.minX, safeSubtract(bounds.maxX, cell.x)) : cell.x,
+        y: mirrorY ? safeAdd(bounds.minY, safeSubtract(bounds.maxY, cell.y)) : cell.y,
     };
 }
 
 function isOdd(value: number): boolean {
     return value % 2 !== 0;
+}
+
+function repeatDistance(index: number, primary: number, alternate: number): number {
+    const magnitude = Math.abs(index);
+    const distance = safeAdd(
+        safeMultiply(Math.ceil(magnitude / 2), primary),
+        safeMultiply(Math.floor(magnitude / 2), alternate),
+    );
+    return safeMultiply(Math.sign(index), distance);
 }
 
 function packedDistance(
@@ -248,8 +298,8 @@ function packedDistance(
     for (const cell of source) occupied.add(coordKey(cell.x, cell.y));
     const bounds = cellBounds(source);
     const span = primary === "x"
-        ? bounds.maxX - bounds.minX + 1
-        : bounds.maxY - bounds.minY + 1;
+        ? safeAdd(safeSubtract(bounds.maxX, bounds.minX), 1)
+        : safeAdd(safeSubtract(bounds.maxY, bounds.minY), 1);
 
     for (let distance = 1; distance <= span; distance++) {
         const overlaps = [-1, 1].some(direction => source.some(cell => {
@@ -259,11 +309,51 @@ function packedDistance(
                 alternateMirrored && primary === "x",
                 alternateMirrored && primary === "y",
             );
-            const x = oriented.x + direction * (primary === "x" ? distance : crossOffset);
-            const y = oriented.y + direction * (primary === "y" ? distance : crossOffset);
+            const x = safeAdd(oriented.x, safeMultiply(direction, primary === "x" ? distance : crossOffset));
+            const y = safeAdd(oriented.y, safeMultiply(direction, primary === "y" ? distance : crossOffset));
             return occupied.has(coordKey(x, y));
         }));
         if (!overlaps) return distance;
     }
     return span;
+}
+
+function safeAdd(a: number, b: number): number {
+    const result = a + b;
+    if (!Number.isSafeInteger(result)) throw unsafeGeometry();
+    return result;
+}
+
+function safeSubtract(a: number, b: number): number {
+    const result = a - b;
+    if (!Number.isSafeInteger(result)) throw unsafeGeometry();
+    return result;
+}
+
+function safeMultiply(a: number, b: number): number {
+    const result = a * b;
+    if (!Number.isSafeInteger(result)) throw unsafeGeometry();
+    return result;
+}
+
+function isSafeGridCoordinate(value: number): boolean {
+    return Number.isSafeInteger(value)
+        || (Number.isFinite(value) && Math.abs(value) <= Number.MAX_SAFE_INTEGER
+            && Math.abs(value % 1) === 0.5);
+}
+
+function safeGridAdd(a: number, b: number): number {
+    const result = a + b;
+    if (!isSafeGridCoordinate(result)) throw unsafeGeometry();
+    return result;
+}
+
+function safeGridSubtract(a: number, b: number): number {
+    const result = a - b;
+    if (!isSafeGridCoordinate(result)) throw unsafeGeometry();
+    return result;
+}
+
+function unsafeGeometry(): RangeError {
+    return new RangeError("Transform geometry must stay within safe integer coordinates.");
 }

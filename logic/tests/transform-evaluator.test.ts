@@ -8,6 +8,8 @@ const noGrid: PackedGridRecipe = {
     down: 0,
     columnSpacing: 0,
     rowSpacing: 0,
+    columnSpacingAlternate: 0,
+    rowSpacingAlternate: 0,
     columnOffset: 0,
     rowOffset: 0,
     columnOrientation: "same",
@@ -24,11 +26,59 @@ describe("packed transform grid prototype", () => {
         expect(() => evaluatePackedGrid([{ x: 0, y: 0 }], { ...noGrid, rowOffset: 0.5 })).toThrow(/offsets/i);
     });
 
+    test("accepts exact safe-coordinate boundaries and rejects unsafe derived steps", () => {
+        const max = Number.MAX_SAFE_INTEGER;
+        expect(evaluatePackedGrid(
+            [{ x: 0, y: 0 }],
+            { ...noGrid, right: 1, columnSpacing: max - 1 },
+        ).cells.at(-1)).toMatchObject({ x: max, y: 0 });
+        expect(() => evaluatePackedGrid(
+            [{ x: 0, y: 0 }],
+            { ...noGrid, right: 1, columnSpacing: max },
+        )).toThrow(/safe integer/i);
+    });
+
+    test("rejects unsafe alternating, cross-offset, combined, and final coordinates", () => {
+        const max = Number.MAX_SAFE_INTEGER;
+        const halfUp = Math.floor(max / 2) + 1;
+        expect(() => evaluatePackedGrid(
+            [{ x: 0, y: 0 }],
+            {
+                ...noGrid,
+                right: 2,
+                columnSpacing: halfUp - 1,
+                columnSpacingAlternate: halfUp - 1,
+                columnOrientation: "alternate-mirrored",
+            },
+        )).toThrow(/safe integer/i);
+        expect(() => evaluatePackedGrid(
+            [{ x: 0, y: 0 }],
+            { ...noGrid, right: 2, columnOffset: max },
+        )).toThrow(/safe integer/i);
+        expect(() => evaluatePackedGrid(
+            [{ x: 0, y: 0 }],
+            { ...noGrid, right: 1, down: 1, columnSpacing: max - 1, rowOffset: 1 },
+        )).toThrow(/safe integer/i);
+        expect(() => evaluatePackedGrid(
+            [{ x: max, y: 0 }],
+            { ...noGrid, right: 1 },
+        )).toThrow(/safe integer/i);
+    });
+
     test("accepts at most 1,048,576 source-position claims", () => {
         const source = Array.from({ length: 1_024 }, () => ({ x: 0, y: 0 }));
         expect(() => evaluatePackedGrid(source, { ...noGrid, right: 1_023 })).not.toThrow();
         expect(() => evaluatePackedGrid([...source, { x: 0, y: 0 }], { ...noGrid, right: 1_023 }))
             .toThrow(/1,048,576 claims/i);
+    });
+
+    test("counts independently selected rotations before allocating transform claims", () => {
+        const source = Array.from({ length: 257 }, () => ({ x: 0, y: 0 }));
+        expect(() => evaluatePackedGrid(
+            source,
+            { ...noGrid, right: 1_023 },
+            { x: 0, y: 0, turns: [90, 180, 270] },
+        )).toThrow(/1,048,576 claims/i);
     });
 
     test("packs a sparse motif by occupied cells instead of its bounding box", () => {
@@ -169,6 +219,27 @@ describe("packed transform grid prototype", () => {
         expect(result.cells).toContainEqual({ x: -1, y: 1, sourceIndex: 2 });
         expect(result.cells).toContainEqual({ x: 3, y: 1, sourceIndex: 2 });
         expect(result.cells).toContainEqual({ x: 4, y: 1, sourceIndex: 2 });
+    });
+
+    test("alternates primary and alternate mirrored gaps symmetrically in both directions", () => {
+        const result = evaluatePackedGrid(
+            [{ x: 0, y: 0 }],
+            {
+                ...noGrid,
+                left: 3,
+                right: 3,
+                columnSpacing: 1,
+                columnSpacingAlternate: 3,
+                columnOffset: 1,
+                columnOrientation: "alternate-mirrored",
+            },
+        );
+
+        expect(result.columnStep).toEqual({ x: 2, y: 1 });
+        expect(result.columnStepAlternate).toEqual({ x: 4, y: 1 });
+        expect(result.cells.map(cell => [cell.x, cell.y])).toEqual([
+            [-8, -3], [-6, -2], [-2, -1], [0, 0], [2, 1], [6, 2], [8, 3],
+        ]);
     });
 
     test("composes alternate row and column mirrors at odd/odd instances", () => {

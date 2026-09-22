@@ -5,6 +5,7 @@ import {
 } from "../src/storage";
 import { decodeMcw, encodeMcw } from "../src/mcw";
 import type { Axis } from "../src/types";
+import { gridRecipeFromFloat } from "../src/grid-recipes";
 import { filledPixels } from "./_helpers";
 
 function mcwFixture(name: string): string {
@@ -68,9 +69,12 @@ describe(".mcw codec", () => {
             recipes: [{
                 id: "sparse", enabled: true,
                 source: { x: 0, y: 0, w: 3, h: 1, mask: new Uint8Array([1, 0, 1]) },
+                mode: "grid" as const,
                 left: 0, right: 1, up: 0, down: 0,
                 columnSpacing: 0, rowSpacing: 0, columnOffset: 0, rowOffset: 0,
+                columnSpacingAlternate: 0, rowSpacingAlternate: 0,
                 columnOrientation: "same" as const, rowOrientation: "same" as const,
+                rotationCentreX: 1, rotationCentreY: 0, rotationTurns: [],
             }],
         };
         expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(new Uint8Array([1, 0, 1]));
@@ -87,13 +91,82 @@ describe(".mcw codec", () => {
             recipes: [{
                 id: "large-mask", enabled: true,
                 source: { x: 0, y: 0, w: mask.length, h: 1, mask },
+                mode: "grid" as const,
                 left: 0, right: 0, up: 0, down: 0,
                 columnSpacing: 0, rowSpacing: 0, columnOffset: 0, rowOffset: 0,
+                columnSpacingAlternate: 0, rowSpacingAlternate: 0,
                 columnOrientation: "same" as const, rowOrientation: "same" as const,
+                rotationCentreX: (mask.length - 1) / 2, rotationCentreY: 0, rotationTurns: [],
             }],
         };
 
         expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(mask);
+    });
+
+    test("defaults optional v3 recipe extensions when opening an earlier v3 file", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 1, y: 0, w: 1, h: 1, pixels: new Uint8Array([1]),
+        });
+        recipe.columnSpacing = 2;
+        recipe.rowSpacing = 3;
+        const encoded = JSON.parse(encodeMcw({
+            pattern: { mode: "row", canvasWidth: 3, canvasHeight: 2 },
+            pixels: new Uint8Array(6).fill(1),
+            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+        }));
+        delete encoded.recipes[0].mode;
+        delete encoded.recipes[0].columnSpacingAlternate;
+        delete encoded.recipes[0].rowSpacingAlternate;
+        delete encoded.recipes[0].rotationCentreX;
+        delete encoded.recipes[0].rotationCentreY;
+        delete encoded.recipes[0].rotationTurns;
+
+        expect(decodeMcw(JSON.stringify(encoded)).recipes[0]).toMatchObject({
+            mode: "grid",
+            columnSpacingAlternate: 2,
+            rowSpacingAlternate: 3,
+            rotationCentreX: 1,
+            rotationCentreY: 0,
+            rotationTurns: [],
+        });
+    });
+
+    test("round-trips a rotation recipe without activating its retained grid", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 2, y: 1, w: 1, h: 1, pixels: new Uint8Array([1]),
+        });
+        Object.assign(recipe, {
+            mode: "rotation",
+            rotationCentreX: 1,
+            rotationCentreY: 1,
+            rotationTurns: [90, 270],
+            left: 2,
+            right: 2,
+        });
+        const document = {
+            pattern: { mode: "row" as const, canvasWidth: 4, canvasHeight: 4 },
+            pixels: new Uint8Array(16).fill(1),
+            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+        };
+
+        expect(decodeMcw(encodeMcw(document)).recipes).toEqual([recipe]);
+    });
+
+    test.each([
+        ["grid", { mode: "rotation", left: -1 }],
+        ["rotation", { mode: "grid", rotationCentreX: 0.25 }],
+    ])("rejects malformed retained %s settings in a v3 recipe", (_field, malformed) => {
+        const recipe = gridRecipeFromFloat({
+            x: 1, y: 1, w: 1, h: 1, pixels: new Uint8Array([1]),
+        });
+        const encoded = JSON.parse(encodeMcw({
+            pattern: { mode: "row", canvasWidth: 3, canvasHeight: 3 },
+            pixels: new Uint8Array(9).fill(1),
+            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+        }));
+        Object.assign(encoded.recipes[0], malformed);
+
+        expect(() => decodeMcw(JSON.stringify(encoded))).toThrow("Invalid pattern file.");
     });
 
     test.each<Axis>([
