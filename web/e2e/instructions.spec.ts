@@ -203,9 +203,12 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await expect(invalidUnit).toContainText("oc");
     await expect(invalidUnit).toHaveClass(/instructions-unit--invalid/);
     await expect(invalidUnit).toHaveAccessibleName(/contains invalid stitches/);
+    await expect(invalidUnit.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(0, 0, 0)");
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
+    await invalidUnit.click();
+    await expect(invalidUnit).toHaveCSS("box-shadow", /rgb\(255, 116, 116\)/);
 });
 
 test("Crochet advances by whole rows and resumes the exact instruction plan", async ({ page }) => {
@@ -410,6 +413,49 @@ test("Crochet canvas arrows start every unit in its actual alternate direction",
     expect(forward![1].nextX).toBeGreaterThan(forward![1].x);
     expect(alternate![1].nextX).toBeLessThan(alternate![1].x);
     expect(alternate![1].y).toBe(forward![1].y);
+});
+
+test("Crochet canvas arrows stay visible and rotate with the chart", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-height").fill("1");
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+
+    const accentBounds = async () => {
+        const start = await page.evaluate(() => window.__test_instruction_starts__?.[0]);
+        if (!start) throw new Error("instruction arrow hook missing");
+        const centre = await cellCoord(page, start.x, start.y);
+        return page.evaluate(({ cx, cy }) => {
+            const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+            const rect = canvas.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            const left = Math.max(0, Math.round((cx - rect.left) * dpr) - 24);
+            const top = Math.max(0, Math.round((cy - rect.top) * dpr) - 24);
+            const width = Math.min(49, canvas.width - left), height = Math.min(49, canvas.height - top);
+            const pixels = canvas.getContext("2d", { willReadFrequently: true })!
+                .getImageData(left, top, width, height).data;
+            let minX = width, minY = height, maxX = -1, maxY = -1;
+            for (let i = 0; i < pixels.length; i += 4) {
+                if (pixels[i] > 160 && pixels[i + 2] > 120 && pixels[i] - pixels[i + 1] > 50) {
+                    const pixel = i / 4;
+                    const x = pixel % width, y = Math.floor(pixel / width);
+                    minX = Math.min(minX, x); minY = Math.min(minY, y);
+                    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+                }
+            }
+            return { width: maxX - minX + 1, height: maxY - minY + 1 };
+        }, centre);
+    };
+
+    const before = await accentBounds();
+    expect(before.width).toBeGreaterThan(before.height);
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+    const after = await accentBounds();
+    expect(after.height).toBeGreaterThan(after.width);
 });
 
 test("a one-cell quarter round has a canvas start arrow", async ({ page }) => {

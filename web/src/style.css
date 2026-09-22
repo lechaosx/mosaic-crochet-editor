@@ -1027,7 +1027,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   box-shadow: inset 3px 0 var(--accent);
 }
 .instructions-unit--complete { opacity: 0.72; }
-.instructions-unit--invalid { box-shadow: inset 3px 0 var(--danger); }
+.instructions-unit.instructions-unit--invalid { box-shadow: inset 3px 0 var(--danger); }
 
 .instructions-unit-number {
   min-width: 2ch;
