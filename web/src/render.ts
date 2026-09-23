@@ -351,7 +351,9 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
 
 function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
     const { pattern, pixels, float, axes, recipes, activeRecipeId } = store.state;
-    const { guidanceOpacity, dangerColor, accentColor, labelsVisible } = rs.preferences;
+    const { guidanceOpacity, labelsVisible } = rs.preferences;
+    const dangerColor = store.state.dangerColorOverride ?? rs.preferences.dangerColor;
+    const accentColor = store.state.accentColorOverride ?? rs.preferences.accentColor;
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { canvas, view, dpr } = vp;
 

@@ -20,6 +20,8 @@ describe(".mcw codec", () => {
         expect(legacy.colorA).toBe("#112233");
         expect(legacy.colorB).toBe("#ddeeff");
         expect(legacy.axes).toEqual([]);
+        expect(legacy.dangerColorOverride).toBeNull();
+        expect(legacy.accentColorOverride).toBeNull();
 
         const upgraded = decodeMcw(encodeMcw(legacy));
         expect(upgraded).toEqual(legacy);
@@ -29,6 +31,8 @@ describe(".mcw codec", () => {
         const current = decodeMcw(mcwFixture("pattern-v2.mcw"));
         expect(Array.from(current.pixels)).toEqual([1, 2, 1, 2]);
         expect(current.axes).toEqual([]);
+        expect(current.dangerColorOverride).toBeNull();
+        expect(current.accentColorOverride).toBeNull();
 
         expect(decodeMcw(encodeMcw(current))).toEqual(current);
     });
@@ -45,6 +49,8 @@ describe(".mcw codec", () => {
             colorB: "#fafbfc",
             axes,
             recipes: [],
+            dangerColorOverride: "#123456",
+            accentColorOverride: "#abcdef",
         };
 
         const encoded = JSON.parse(encodeMcw(document));
@@ -56,10 +62,44 @@ describe(".mcw codec", () => {
             colorB: "#fafbfc",
             axes,
             recipes: [],
+            dangerColorOverride: "#123456",
+            accentColorOverride: "#abcdef",
         });
         expect(encoded).not.toHaveProperty("workspace");
         expect(decodeMcw(JSON.stringify(encoded))).toEqual(document);
     });
+
+    test.each(["dangerColorOverride", "accentColorOverride"])(
+        "rejects a malformed optional %s",
+        field => {
+            const encoded = JSON.parse(encodeMcw({
+                pattern: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
+                pixels: new Uint8Array([1, 2, 1, 2]),
+                colorA: "#010203", colorB: "#fafbfc", axes: [], recipes: [],
+                dangerColorOverride: null, accentColorOverride: null,
+            }));
+            encoded[field] = "red";
+            expect(() => decodeMcw(JSON.stringify(encoded))).toThrow("Invalid pattern file.");
+        },
+    );
+
+    test.each(["colorA", "colorB"] as const)(
+        "rejects a non-six-digit yarn %s on encode and decode",
+        field => {
+            const document = {
+                pattern: { mode: "row" as const, canvasWidth: 2, canvasHeight: 2 },
+                pixels: new Uint8Array([1, 2, 1, 2]),
+                colorA: "#010203", colorB: "#fafbfc", axes: [], recipes: [],
+            };
+            expect(() => encodeMcw({ ...document, [field]: "red" }))
+                .toThrow("Invalid pattern file.");
+
+            const encoded = JSON.parse(encodeMcw(document));
+            encoded[field] = "#fff";
+            expect(() => decodeMcw(JSON.stringify(encoded)))
+                .toThrow("Invalid pattern file.");
+        },
+    );
 
     test("round-trips a sparse saved-recipe mask without filling its holes", () => {
         const document = {

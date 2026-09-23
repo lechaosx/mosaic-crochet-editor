@@ -13,6 +13,8 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         pixels: initialize_row_pattern(W, H),
         colorA: "#000000",
         colorB: "#ffffff",
+        dangerColorOverride: null,
+        accentColorOverride: null,
         activeTool: "pencil",
         primaryColor: 1,
         axes: defaultAxes(W, H),

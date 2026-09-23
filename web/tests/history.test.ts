@@ -72,6 +72,17 @@ describe("historySave / historyReset", () => {
         expect(canUndo()).toBe(true);
     });
 
+    test("project contrast overrides stay outside undo history", () => {
+        const baseline = rowSession(3, 3);
+        historyReset(baseline);
+        historySave({ ...baseline, dangerColorOverride: "#123456" });
+
+        expect(canUndo()).toBe(false);
+        expect(historyPeek()).not.toHaveProperty("dangerColorOverride");
+        expect(JSON.parse(localStorage.getItem("mosaic-history")!).snapshots[0].document)
+            .not.toHaveProperty("dangerColorOverride");
+    });
+
     test("saved recipes are part of history and survive undo", () => {
         const s = rowSession(3, 3);
         const float = makeFloat([{ x: 0, y: 0, v: 1 }]);

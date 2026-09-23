@@ -103,10 +103,10 @@ test("Crochet keeps the orientation reset control operable", async ({ page }) =>
 test("workspace switch remains direct in the compact toolbar", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
-    await expect(page.getByRole("button", { name: "More" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
     const canvasBefore = await page.locator(".canvas-area").boundingBox();
     await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "More" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
     expect(await page.locator(".canvas-area").boundingBox()).toEqual(canvasBefore);
     await page.locator("#btn-export").click();
     await expect(page.locator("#btn-export")).toBeFocused();

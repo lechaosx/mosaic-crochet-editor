@@ -752,6 +752,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
   display: flex;
   justify-content: flex-end;
 }
+.pattern-contrast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
 
 /* "Add axis" row pushes the 5 +V/+H/+C/+D1/+D2 buttons to the right edge
    so they form a tidy cluster opposite the label. */

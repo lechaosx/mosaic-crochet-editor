@@ -189,18 +189,18 @@ test("closing an inspector restores focus to the available authoring context", a
     await expect(page.getByRole("button", { name: "Pencil" })).toBeFocused();
 
     await page.setViewportSize({ width: 360, height: 740 });
-    const more = page.getByRole("button", { name: "More" });
+    const more = page.getByRole("button", { name: "Menu" });
     await more.click();
     await page.getByRole("menuitem", { name: "Pattern" }).click();
     await page.keyboard.press("Escape");
     await expect(more).toBeFocused();
 });
 
-test("compact More exposes and navigates a keyboard menu", async ({ page }) => {
+test("compact Menu exposes and navigates a keyboard menu", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
 
-    const more = page.getByRole("button", { name: "More" });
+    const more = page.getByRole("button", { name: "Menu" });
     await more.focus();
     await page.keyboard.press("Enter");
 
@@ -222,11 +222,11 @@ test("compact More exposes and navigates a keyboard menu", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
 });
 
-test("Tab leaves and closes the compact More menu", async ({ page }) => {
+test("Tab leaves and closes the compact Menu menu", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
 
-    const more = page.getByRole("button", { name: "More" });
+    const more = page.getByRole("button", { name: "Menu" });
     await more.click();
     await page.keyboard.press("Tab");
     await expect(page.locator("#more-popover")).toBeHidden();
@@ -246,7 +246,7 @@ test("compact menu navigation does not move selected canvas content", async ({ p
     await page.mouse.click(selectedCell.cx, selectedCell.cy);
     await expect(page.getByRole("button", { name: /selected/ })).toBeVisible();
 
-    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
     await page.keyboard.press("ArrowDown");
     await page.locator("#more-popover").evaluate((popover: HTMLElement) => popover.hidePopover());
     await page.getByRole("button", { name: /selected/ }).click();
@@ -331,7 +331,7 @@ test("explicit inspector opening moves focus to its first available control", as
 
     await page.keyboard.press("Escape");
     await page.setViewportSize({ width: 360, height: 740 });
-    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("menuitem", { name: "Pattern" }).click();
     await expect(page.getByRole("radio", { name: "Rows" })).toBeFocused();
 });

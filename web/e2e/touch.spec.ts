@@ -133,7 +133,7 @@ test("Yarn selection stays direct while phone colour editing lives in Pattern", 
     await expect(page.getByRole("button", { name: "Yarn A", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Yarn B", exact: true })).toBeVisible();
     await expect(page.locator("#edit-yarn")).toHaveCount(0);
-    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("menuitem", { name: "Pattern" }).click();
     await expect(page.getByRole("button", { name: "Swap yarn colours" })).toBeVisible();
     expect(await page.locator("#authoring-dock").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);

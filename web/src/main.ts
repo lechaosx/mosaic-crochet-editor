@@ -32,9 +32,9 @@ import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/patter
 import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress,
          clearLiveProgress, hasLiveProgress } from "./live-progress";
 import { copyrightNotice, markAboutSeen, shouldShowAbout } from "./about";
+import { contrastingProjectColors } from "./contrast-colors";
 import {
     AppPreferences,
-    DEFAULT_APP_PREFERENCES,
     loadAppPreferences,
     saveAppPreferences,
 } from "./preferences";
@@ -85,6 +85,8 @@ function sameProject(loaded: LoadedFile): boolean {
     return sameAuthoredPattern(loaded.pattern, loaded.pixels)
         && loaded.colorA === store.state.colorA
         && loaded.colorB === store.state.colorB
+        && (loaded.dangerColorOverride ?? null) === store.state.dangerColorOverride
+        && (loaded.accentColorOverride ?? null) === store.state.accentColorOverride
         && axesEqual(loaded.axes, store.state.axes)
         && recipesEqual(loaded.recipes, store.state.recipes);
 }
@@ -96,6 +98,8 @@ function defaultSession(): SessionState {
         pixels:        new Uint8Array(81),
         colorA:        "#000000",
         colorB:        "#ffffff",
+        dangerColorOverride: null,
+        accentColorOverride: null,
         activeTool:    "pencil",
         primaryColor:  1,
         axes:           [],
@@ -129,6 +133,8 @@ function exampleSession(): SessionState {
         pixels,
         colorA: "#264653",
         colorB: "#f4a261",
+        dangerColorOverride: null,
+        accentColorOverride: null,
         axes,
     };
 }
@@ -331,6 +337,7 @@ store.addObserver(s => ui.setViewState(
 ));
 store.addObserver(() => updateCoordinates(null, null));
 store.addObserver(() => ui.setCrochetErrors(crochetErrorCount()));
+store.addObserver(s => syncProjectColorInputs(s.state));
 store.addObserver(s => {
     if (!s.state.float && selectionMode === "remove") selectionMode = "replace";
     ui.setRecipes(s.state.recipes, s.state.activeRecipeId);
@@ -691,21 +698,34 @@ function onHlOpacityInput() {
     renderCanvas();
 }
 function onDangerColorInput() {
-    preferences.dangerColor = (document.getElementById("danger-color") as HTMLInputElement).value;
-    saveAppPreferences(preferences);
-    renderCanvas();
+    const value = (document.getElementById("danger-color") as HTMLInputElement).value;
+    store.commit(s => { s.dangerColorOverride = value; }, { recompute: false });
 }
 function onAccentColorInput() {
-    preferences.accentColor = (document.getElementById("accent-color") as HTMLInputElement).value;
-    saveAppPreferences(preferences);
-    renderCanvas();
+    const value = (document.getElementById("accent-color") as HTMLInputElement).value;
+    store.commit(s => { s.accentColorOverride = value; }, { recompute: false });
 }
-function resetPreferenceColor(kind: "danger" | "accent") {
-    if (kind === "danger") preferences.dangerColor = DEFAULT_APP_PREFERENCES.dangerColor;
-    else preferences.accentColor = DEFAULT_APP_PREFERENCES.accentColor;
-    syncPreferenceInputs();
+function resetProjectColor(kind: "danger" | "accent") {
+    store.commit(s => {
+        if (kind === "danger") s.dangerColorOverride = null;
+        else s.accentColorOverride = null;
+    }, { recompute: false });
+}
+function findContrastColors() {
+    const colors = contrastingProjectColors(store.state.colorA, store.state.colorB);
+    store.commit(s => {
+        s.dangerColorOverride = colors.danger;
+        s.accentColorOverride = colors.accent;
+    }, { recompute: false });
+}
+function useContrastColorsForNewPatterns() {
+    preferences.dangerColor = store.state.dangerColorOverride ?? preferences.dangerColor;
+    preferences.accentColor = store.state.accentColorOverride ?? preferences.accentColor;
     saveAppPreferences(preferences);
-    renderCanvas();
+    store.commit(s => {
+        if (s.dangerColorOverride === preferences.dangerColor) s.dangerColorOverride = null;
+        if (s.accentColorOverride === preferences.accentColor) s.accentColorOverride = null;
+    }, { recompute: false });
 }
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
@@ -948,6 +968,8 @@ async function onLoad() {
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
           colorA: loaded.colorA, colorB: loaded.colorB, axes: loaded.axes,
+          dangerColorOverride: loaded.dangerColorOverride ?? null,
+          accentColorOverride: loaded.accentColorOverride ?? null,
           recipes: loaded.recipes, activeRecipeId: null, float: null },
         { history: true, persist: true },
     );
@@ -1176,8 +1198,10 @@ const ui: UIHandle = mountUI({
     onHighlightChange:         onHlOpacityInput,
     onDangerColorChange:       onDangerColorInput,
     onAccentColorChange:       onAccentColorInput,
-    onDangerColorReset:        () => resetPreferenceColor("danger"),
-    onAccentColorReset:        () => resetPreferenceColor("accent"),
+    onDangerColorReset:        () => resetProjectColor("danger"),
+    onAccentColorReset:        () => resetProjectColor("accent"),
+    onFindContrastColors:      findContrastColors,
+    onUseContrastDefaults:     useContrastColorsForNewPatterns,
     onLabelsVisibleChange:     onLabelsToggle,
     onLockInvalidChange:   onLockInvalidToggle,
     onUndo: undo,
@@ -1817,14 +1841,20 @@ function syncDomInputs(s: Readonly<SessionState>) {
 
 function syncPreferenceInputs() {
     (document.getElementById("hl-opacity") as HTMLInputElement).value = String(preferences.guidanceOpacity);
-    (document.getElementById("danger-color") as HTMLInputElement).value = preferences.dangerColor;
-    (document.getElementById("accent-color") as HTMLInputElement).value = preferences.accentColor;
     (document.getElementById("labels-on") as HTMLInputElement).checked = preferences.labelsVisible;
     (document.getElementById("lock-invalid") as HTMLInputElement).checked = preferences.lockInvalid;
 }
 
+function syncProjectColorInputs(s: Readonly<SessionState>) {
+    (document.getElementById("danger-color") as HTMLInputElement).value =
+        s.dangerColorOverride ?? preferences.dangerColor;
+    (document.getElementById("accent-color") as HTMLInputElement).value =
+        s.accentColorOverride ?? preferences.accentColor;
+}
+
 syncDomInputs(store.state);
 syncPreferenceInputs();
+syncProjectColorInputs(store.state);
 ui.setOverlayAction(overlayAction);
 ui.setTool(store.state.activeTool);
 ui.setPrimary(store.state.primaryColor);

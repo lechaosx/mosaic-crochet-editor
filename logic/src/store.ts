@@ -19,6 +19,8 @@ export interface SessionState {
     pixels:        Uint8Array;
     colorA:        string;               // hex
     colorB:        string;               // hex
+    dangerColorOverride: string | null;
+    accentColorOverride: string | null;
     activeTool:    Tool;
     primaryColor:  1 | 2;
     axes:          Axis[];               // user-added symmetry axes

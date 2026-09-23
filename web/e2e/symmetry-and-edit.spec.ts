@@ -183,7 +183,7 @@ test("saved repeat extends the active selection and applies its instances", asyn
     await clickCell(page, 2, 1);
     expect(await pixelRGB(page, source.cx, source.cy)).toEqual([0, 0, 0]);
     expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([255, 255, 255]);
-    await expect(page.locator("#recipe-list")).toContainText("Repeat 1");
+    await expect(page.locator("#recipe-list")).toContainText("Repeat 1 · 1\u00a0×\u00a01");
 });
 
 test("saved grid repeats apply independent directions, angled vectors, and alternating gaps", async ({ page }) => {
@@ -537,14 +537,14 @@ test("Pattern resize deactivates a saved repeat when it removes the source selec
     await clickCell(page, 2, 1);
     await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
-    await expect(page.getByRole("button", { name: "Repeat 1", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: /^Repeat 1 ·/ })).toHaveAttribute("aria-pressed", "true");
 
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").press("Tab");
     await page.getByRole("button", { name: /Selection actions/ }).click();
 
-    await expect(page.getByRole("button", { name: "Repeat 1", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByRole("button", { name: /^Repeat 1 ·/ })).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator("#recipe-controls")).toBeHidden();
 });
 
@@ -555,7 +555,7 @@ for (const action of ["Cut", "Deselect"] as const) {
         await clickCell(page, 2, 1);
         await page.getByRole("button", { name: /Selection actions/ }).click();
         await page.locator("#recipe-create").click();
-        const recipe = page.getByRole("button", { name: "Repeat 1", exact: true });
+        const recipe = page.getByRole("button", { name: /^Repeat 1 ·/ });
         await expect(recipe).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator("#recipe-controls")).toBeVisible();
 
@@ -568,9 +568,9 @@ for (const action of ["Cut", "Deselect"] as const) {
 
 test("move-area into a round hole deactivates the saved repeat when nothing can be lifted", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 0, 6);
     await page.getByRole("button", { name: /Selection actions/ }).click();
@@ -666,7 +666,7 @@ test("invalid Pattern preview restores the active saved-repeat source", async ({
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /Selection actions/ }).click();
 
-    await expect(page.getByRole("button", { name: "Repeat 1", exact: true }))
+    await expect(page.getByRole("button", { name: /^Repeat 1 ·/ }))
         .toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("#recipe-controls")).toBeVisible();
 });
@@ -730,7 +730,7 @@ test("Load rejects a future file without replacing the active session", async ({
     await page.setViewportSize({ width: 360, height: 740 });
     await page.getByRole("button", { name: "Dismiss document error" }).click();
     await expect(alert).toBeHidden();
-    await expect(page.getByRole("button", { name: "More" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
 });
 
 test("Open restores a global mirror without resetting Crochet progress", async ({ page }) => {

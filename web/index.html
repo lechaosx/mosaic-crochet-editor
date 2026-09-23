@@ -51,7 +51,7 @@
         <button class="btn" id="btn-save"   title="Save editable pattern as an .mcw file">Save</button>
         <button class="btn" id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
         <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
-        <button class="btn" id="btn-more" title="More commands" aria-haspopup="menu" aria-expanded="false" hidden>More</button>
+        <button class="btn" id="btn-more" title="Menu" aria-haspopup="menu" aria-expanded="false" hidden>Menu</button>
         <span id="recovery-status" class="document-status" role="status" aria-label="Browser recovery" aria-live="polite" hidden></span>
       </div>
       <div class="document-actions g-mode" role="group" aria-label="Crochet workspace">
@@ -66,7 +66,7 @@
       </div>
   </header>
 
-  <div id="more-popover" popover role="menu" aria-label="More commands">
+  <div id="more-popover" popover role="menu" aria-label="Menu">
     <div id="more-actions"></div>
   </div>
 
@@ -364,18 +364,22 @@
         <button class="btn btn--icon" id="swap-yarns" type="button" aria-label="Swap yarn colours" title="Swap Yarn A and Yarn B colours">⇄</button>
       </div>
       <div class="popover-row" title="Colour used for invalid ! markers.">
-        <label class="popover-label" for="danger-color">Danger colour</label>
+        <label class="popover-label" for="danger-color">Project danger colour</label>
         <div class="setting-color">
-          <input type="color" id="danger-color" value="#ff7474" aria-label="Danger colour">
-          <button class="btn" id="danger-color-reset" type="button" title="Reset danger colour">Reset</button>
+          <input type="color" id="danger-color" value="#ff7474" aria-label="Project danger colour">
+          <button class="btn" id="danger-color-reset" type="button" aria-label="Use default danger colour" title="Use the app default danger colour">Use default</button>
         </div>
       </div>
       <div class="popover-row" title="Colour used for selections and transform guides.">
-        <label class="popover-label" for="accent-color">Accent colour</label>
+        <label class="popover-label" for="accent-color">Project accent colour</label>
         <div class="setting-color">
-          <input type="color" id="accent-color" value="#d653a3" aria-label="Accent colour">
-          <button class="btn" id="accent-color-reset" type="button" title="Reset accent colour">Reset</button>
+          <input type="color" id="accent-color" value="#d653a3" aria-label="Project accent colour">
+          <button class="btn" id="accent-color-reset" type="button" aria-label="Use default accent colour" title="Use the app default accent colour">Use default</button>
         </div>
+      </div>
+      <div class="pattern-contrast-actions">
+        <button class="btn" id="find-contrast-colors" type="button" title="Choose distinct danger and accent colours that contrast with both yarns">Find contrasting colors</button>
+        <button class="btn" id="contrast-colors-default" type="button" aria-label="Use current contrast colors for new patterns" title="Save these danger and accent colours as the app defaults">Use for new patterns</button>
       </div>
     </div>
   </section>

@@ -15,6 +15,18 @@ import {
 const RECOVERY_KEY        = "mosaic-recovery";
 const LEGACY_RECOVERY_KEY = "mosaic-pattern-v4";
 const RECOVERY_VERSION    = 6;
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+
+function recoveryColorOverride(value: unknown): string | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string" || !HEX_COLOR.test(value)) throw new TypeError("Invalid recovery colour.");
+    return value;
+}
+
+function recoveryYarnColor(value: unknown): string {
+    if (typeof value !== "string" || !HEX_COLOR.test(value)) throw new TypeError("Invalid recovery colour.");
+    return value;
+}
 
 interface LocalSaveV4 {
     version:          4;
@@ -63,7 +75,10 @@ interface RecoveryV5 {
 
 interface RecoveryV6 {
     version: 6;
-    document: RecoveryV5["document"];
+    document: RecoveryV5["document"] & {
+        dangerColorOverride?: string | null;
+        accentColorOverride?: string | null;
+    };
     workspace: RecoveryV5["workspace"] & { rotation: number };
 }
 
@@ -141,7 +156,9 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV6 {
         version: RECOVERY_VERSION,
         document: {
             state: s.pattern, pixels: packPixels(s.pixels),
-            colorA: s.colorA, colorB: s.colorB,
+            colorA: recoveryYarnColor(s.colorA), colorB: recoveryYarnColor(s.colorB),
+            dangerColorOverride: s.dangerColorOverride,
+            accentColorOverride: s.accentColorOverride,
         },
         workspace: {
             activeTool: s.activeTool, primaryColor: s.primaryColor,
@@ -184,8 +201,10 @@ export function loadFromLocalStorage(): SessionState | null {
         const restored: SessionState = {
             pattern:          document.state,
             pixels:           unpackPixels(document.pixels, document.state),
-            colorA:           document.colorA,
-            colorB:           document.colorB,
+            colorA:           recoveryYarnColor(document.colorA),
+            colorB:           recoveryYarnColor(document.colorB),
+            dangerColorOverride: recoveryColorOverride(document.dangerColorOverride),
+            accentColorOverride: recoveryColorOverride(document.accentColorOverride),
             activeTool:       workspace.activeTool as Tool,
             primaryColor:     workspace.primaryColor as 1 | 2,
             axes:             axes.filter(axis => axisIsProjectValid(axis, document.state)),
@@ -225,6 +244,8 @@ function projectDocumentFrom(s: Readonly<SessionState>): ProjectDocument {
         colorB: s.colorB,
         axes: s.axes,
         recipes: s.recipes,
+        dangerColorOverride: s.dangerColorOverride,
+        accentColorOverride: s.accentColorOverride,
     };
 }
 

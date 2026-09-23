@@ -49,7 +49,7 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
   - Share the latched choice between Select and Wand, restore Replace after leaving that group, and keep Shift/Ctrl as temporary overrides whose result is visible before the gesture commits.
   - Keep Add usable without an existing selection and explain unavailable Subtract instead of allowing a silent no-op.
   - Verify pointer, touch, and keyboard-accessible controls without changing the established float semantics.
-- [x] Make symmetry guides directly editable while Mirror & Repeat is open.
+- [x] Make symmetry guides directly editable while Global Mirror is open.
   - Let a guide be selected and dragged without first choosing Move, show the active handle/cursor before contact, and provide an exact position field in its axis row.
   - Keep Move-based dragging and existing shortcuts as accelerators; outside the transform inspector, the active drawing tool continues to own the canvas.
   - Verify snapping, intersecting-guide selection, continuous-edit Undo coalescing, keyboard entry, and deletion.
@@ -66,13 +66,12 @@ Review artifact: [independent plan audit](doc/ux-plan-audit.md). Shipped product
 
 ### Stage 7 — Close access and first-use gaps
 
-- [x] Add one logical keyboard cell cursor to the canvas.
-  - Arrow keys move it, Space applies the active tool, and the context strip exposes coordinates, yarn, overlay, and validity without creating a DOM element per cell.
-  - Scope canvas shortcuts to canvas focus, keep form-field keys native, announce deliberate cursor movement to assistive technology, and preserve the existing Move nudge behavior.
-  - Verify inspection and drawing across Rows and Centre-out, including holes and blocked cells.
+- [x] Reserve canvas keyboard navigation for moving an active selection.
+  - Keep form-field keys native and leave drawing or inspection at a cell to pointer and touch input.
+  - Preserve Move nudging while ensuring an unfloated canvas has no hidden keyboard cursor or Space-to-paint state.
 - [x] Add a lightweight fresh-session start surface over the existing session model.
   - Offer Row pattern, Centre-out pattern, Open `.mcw`, and Try an example only when no meaningful browser recovery exists. Route creation into the existing Pattern inspector and restore returning users directly.
-  - Bundle one small editable example that demonstrates Colour, Overlay, Mirror & Repeat, and Instructions without adding a tutorial carousel or nullable-document architecture.
+  - Bundle one small editable example that demonstrates Colour, Overlay, Global Mirror, and Instructions without adding a tutorial carousel or nullable-document architecture.
   - Verify untouched loads, intentionally created blank patterns, legacy recovery, canceled file opening, and compact layouts.
 
 ### Stage 8 — Make Crochet a trustworthy view of the work
@@ -168,21 +167,21 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
 - Switching strategy never mutates existing pattern data; it changes only how the next edit is interpreted.
 - Keep transform geometry strategy-neutral while interpreting its edits through the active authoring strategy: Colour Design preserves intended finished yarn appearance, while Stitch Placement preserves crochet-construction intent.
 - When transform outcomes differ by strategy, update the preview immediately and label it `Preserve finished colours` or `Preserve stitch placement`.
-- Keep the reference tablet workspace's document bar limited to pattern summary, local-save state, Undo, Redo, Instructions, and More.
-- Provide one adaptive Help sheet from More and the `?` shortcut. Lead with the current tool or inspector stage, then global actions, and list each action once with its touch, pen, mouse, and platform-appropriate keyboard equivalents.
+- Keep the reference tablet workspace's document bar limited to pattern summary, local-save state, Undo, Redo, Instructions, and Menu.
+- Provide one adaptive Help sheet from Menu and the `?` shortcut. Lead with the current tool or inspector stage, then global actions, and list each action once with its touch, pen, mouse, and platform-appropriate keyboard equivalents.
 - Include filterable gesture diagrams for canvas navigation, selection modifiers, Move outcomes, and transform handles. Use visible contextual Help for touch and name-plus-shortcut tooltips for pointer or focus users.
 - Link coach marks and useful disabled-state explanations to the relevant Help section, and allow coach marks to be reset there. Opening Help must resolve an active pointer gesture without changing selection or committed edits.
 - Keep Help focused on current user-facing behavior rather than design rationale or implementation terminology.
-- Keep Colour Design, Stitch Placement, Arrange, Yarn A/B, and Mirror & Repeat directly accessible in the reference tablet's tool dock; reflow the same groups into a desktop rail and a reduced phone dock with More.
+- Keep Colour Design, Stitch Placement, Arrange, Yarn A/B, Global Mirror, and Selection directly accessible in the reference tablet's tool dock; reflow the same groups into a desktop rail and a reduced phone dock with Menu.
 - Show all eight tools directly on desktop and tablet, grouped as Colour Design, Stitch Placement, and Arrange.
-- Show Paint, Overlay, Select, Move, and More in the primary phone dock; More exposes the complete tool collection with the same grouping and order.
+- Show Paint, Overlay, Select, Move, and Menu in the primary phone dock; Menu exposes the complete tool collection with the same grouping and order.
 - Keep Fill, Restore, Invert, and Wand reachable through visible controls rather than requiring long-press or nested tool gestures.
 - Keep Move visible but disabled until a selection exists. Keep `Move selection area` contextual to an active selection rather than presenting it as another tool.
 - Keep stable actions with unmet prerequisites visible and focusable in an unavailable state, including Move, invalid Apply, and structurally unavailable composition presets. Activating them or their shortcuts explains the prerequisite locally and in the context strip without performing the action.
 - Omit actions that are contextually meaningless rather than merely unavailable, such as Fit selection with no selection or Finish this group outside a nested group.
 - Use explicit accessible disabled semantics when explanation needs focus, retain readable non-colour state styling, and treat hover tooltips as supplementary to touch/focus feedback.
 - Keep a context strip visible for the active tool, interaction hint, selection summary, transform state, and validation count.
-- On narrow layouts, distribute persistent state to its owning affordance rather than crowding the context strip: active tool in the dock, active yarn in the split selector, transform status on Mirror & Repeat, zoom in canvas controls, validation and selection in the context strip, and recovery/file state in the document bar.
+- On narrow layouts, distribute persistent state to its owning affordance rather than crowding the context strip: active tool in the dock, active yarn in the split selector, transform status on Global Mirror and Selection, zoom in canvas controls, validation and selection in the context strip, and recovery/file state in the document bar.
 - Reserve the context strip's main text for coordinates and immediate interaction feedback. Permit two compact lines at phone width but never horizontal scrolling or clipped status; activating any state indicator opens its corresponding controls or card.
 - Split validation into Blockers, where the editor cannot derive the requested trustworthy operation or output, and Warnings, which never prevent Instructions generation. Do not classify unusual work as blocking merely because it is unusual.
 - Show separate persistent counts and open a Validation card ordered by crochet traversal, filterable by severity and Source/Output. Give every issue a plain reason, exact location, consequence, corrective action, and Previous/Next navigation.
@@ -204,7 +203,7 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
 - Let dragging the navigator viewport pan and tapping it recenter without editing or changing progress. Fade it after use, allow local pinning on wide layouts, and replace the persistent overlay with an `Overview` button on phone.
 - Base navigator visibility on viewport-to-pattern scale rather than document dimensions, place it in an occlusion-aware corner, and retain state independently for Design, Source/Output, and Live views.
 - Show the current pattern type and dimensions in the document bar; activating that summary opens the same Pattern section used in the inspector.
-- Build the inspector from a stable stack of collapsible Current Context, Yarns, Mirror & Repeat, and Pattern cards, with one card expanded at a time.
+- Build the inspector from a stable stack of collapsible Current Context, Yarns, Global Mirror, Selection, and Pattern cards, with one card expanded at a time.
 - Expand the relevant inspector card when its corresponding tool, yarn, transform indicator, or pattern summary is activated.
 - Replace Current Context with selection actions while a selection exists; keep the active tool visible in the dock and context strip.
 - Make that replacement a Selection card headed by selected-cell count, bounds, and off-pattern status. Keep Move, Duplicate, and Deselect primary; keep Copy, Cut, Paste, Clear selected cells, and Apply transforms directly available as secondary actions.
@@ -275,12 +274,12 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
 - In download-only environments, report `Last downloaded as …` without implying a persistent connection and let later saves download again. Normalize only suggested filenames, never the visible name.
 - Display an empty name as `Untitled pattern` and use a safe timestamped save name. Load current `.mcw` names from project data, derive a starting name from the filename for legacy files, and disclose both project and file names when they differ.
 - Evolve `.mcw` into a backward-compatible, versioned project format containing the authored crochet product: pattern name, geometry, pixels, yarn definitions, and settings that affect its instructions or intended output.
-- Exclude workspace tools and recovery state from `.mcw`: mirror axes, repeat grids and recipes, live-transform state, active selection, history, active tool, view state, inspector state, and personal display preferences. Anchor the visible selection into the file snapshot without changing the live session.
-- Keep mirror/repeat recipes in the workspace's chronological Undo/Redo history even though they are excluded from `.mcw`. Browser recovery restores both the recipe and its recoverable history.
+- Store Global Mirror axes and saved-repeat definitions in `.mcw`; exclude live-transform state, the active source link and selection, history, active tool, view state, inspector state, and app-global display preferences. Anchor the visible selection into the file snapshot without changing the live session.
+- Keep Global Mirror and saved-repeat edits in chronological Undo/Redo as well as `.mcw`. Browser recovery additionally restores their recoverable workspace state and active source link.
 - Keep project Undo/Redo and Live progress history strictly separate. Project history covers authored data, selections, yarns, traversal/output settings, and workspace transforms but never changes confirmed physical-work progress; Live Back changes only confirmed progress boundaries.
 - Treat preview-cursor movement as inspection in neither history. Expose descriptive project labels such as `Undo: Move selection`; keep project Undo/Redo available for settings in Instructions Overview but hide it from Live Focus, where progress Back remains.
 - Revalidate Live progress automatically when a project undo or redo restores its matching instruction sequence.
-- On New or Open, retain the current mirror/repeat recipe as paused workspace-tool state, clear its previous-pattern source mask, and turn off live application. Do not import, replace, or activate transforms from `.mcw`.
+- New starts without project transforms. Open replaces Global Mirror and saved-repeat definitions from `.mcw`; a saved repeat has no active source link until its matching selection exists.
 - Mark retained spatial stages that do not fit the new pattern as `Needs adjustment` rather than silently moving or deleting them. Adopting a new selection as the source re-runs packing and preview; Reset transforms discards the retained setup explicitly.
 - Make Instructions a derived workspace with Copy, Download text, and later Print rather than presenting it as a document-save action.
 - Derive later Print support from the same structured plan with Pattern booklet, Chart only, and Instructions only layouts. Keep Copy and Download Text as the initial export scope.
@@ -427,7 +426,7 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
 - Represent continuous composition as grid-preserving source instances using translation, quarter-turn rotation, and optional reflection; let presets create the instances without exposing a custom composition editor initially.
 - Initially provide As authored, Mirror to full, and Rotate to full where valid. Defer alternating-mirror and custom arrangements until concrete patterns demonstrate their need.
 - Validate continuous compositions for supported output geometry, agreeing overlaps, yarn phase across seams, hole/boundary geometry, overlay support, and one valid crochet walk. Show conflicts spatially and never choose a winning source silently.
-- Put New pattern, Open pattern, Save project, Save project as, and Help/shortcuts under More. Let supported browsers update a chosen file and describe fallback downloads explicitly.
+- Put New pattern, Open pattern, Save project, Save project as, and Help/shortcuts under Menu. Let supported browsers update a chosen file and describe fallback downloads explicitly.
 - Present colours as Yarn A and Yarn B throughout the UI, with a strong colour-independent marker for the active yarn.
 - Keep a split Yarn A/B selector directly accessible in every layout. Selecting a swatch changes the active yarn immediately; a separate chevron or the Yarns summary opens its inspector card.
 - Keep `1` and `2`, right-click, pen barrel input, double-click, and long-press as accelerators without making any of them the only path to an action.
@@ -441,13 +440,11 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
 - Preserve chosen yarn colours faithfully and never reject or alter a low-distinction pair. Show a non-blocking Yarns warning when the pair may be difficult to distinguish.
 - Offer a local `Differentiate yarns` accessibility preference. Add stable, lightweight non-colour textures at normal zoom and A/B identifiers at detailed zoom across Design, Overview, Live, yarn selectors, and the Instructions legend.
 - Keep yarn-identification marks distinct from overlay, selection, clipping, replacement, and transform-conflict symbols. Suggest the preference for similar colours without enabling it automatically; never store it in `.mcw` or change exported yarn colours.
-- Make the canvas keyboard-focusable with one strongly outlined logical cell cursor rather than a DOM element per cell. Arrow keys move it for drawing or inspection tools, Space applies the active tool, and the context strip exposes coordinate, yarn, overlay, and validity state.
-- Announce cell details to screen readers after deliberate keyboard movement, not pointer hover. Permit inspection of invalid or non-paintable geometry and use the same contextual explanation when an edit is blocked.
-- With Select active, let Space anchor a rectangle, arrows move its endpoint, and a second Space commit; Escape cancels the pending keyboard selection first. With Move active, retain Arrow and Shift+Arrow selection nudges at one and five cells.
+- Keep the canvas free of a synthetic keyboard cell cursor. Arrow keys change authored state only when moving an active selection; form controls retain native key behavior.
 - Scope selection nudge shortcuts to Move so content cannot shift unexpectedly under another tool. Keep form-field arrows native and apply canvas shortcuts only while canvas focus or an explicit canvas manipulation context is active.
 
 ### Exploration notes
-- The transform inspector should retain its recipe in browser workspace recovery, not in `.mcw`, and expose its two uses clearly: `Apply while drawing` and, when a selection exists, `Apply transforms to selection`. Applying to a selection stamps the derived copies as one undo step and leaves the original source selected.
+- Global Mirror and Selection expose project transforms separately. **Mirror while drawing** and **Repeat while drawing** gate live edits, while each panel's Apply action stamps its configured destinations as one undo step and leaves the source selected. `.mcw` stores definitions; only recovery and history retain the active source link.
 - For linear/grid repeat, derive the packed default from the actual selected cells. Express adjustments as additional horizontal and vertical spacing, with on-canvas handles and exact cell fields, rather than asking users to calculate a tile width or height.
 - Re-evaluate packing and collisions across all configured instances when the source mask, count, spacing, or offsets change; sparse masks can collide with a non-adjacent copy even when neighbouring copies do not.
 - Use an axis-aligned packed grid by default. Let Column offset produce vertical displacement between columns and Row offset produce horizontal displacement between rows for staggered and diagonal layouts.
@@ -526,7 +523,7 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
 - Explain blocked or clipped actions instead of silently ignoring them.
   - Verify: painting outside a selection, painting a protected cell, and invalid Overlay targets produce concise contextual feedback.
 - Correct control semantics and keyboard behavior.
-  - Add a logical canvas cell cursor with Arrow navigation, Space tool application, keyboard rectangular selection, contextual Move nudging, coordinate/state feedback, and deliberate screen-reader announcements.
+  - Keep canvas Arrow navigation limited to contextual Move nudging, with no synthetic cell cursor or Space-to-paint interaction.
   - Verify: tool selection exposes its selected state; switches and segmented controls are keyboard-focusable; swatches activate with Enter and Space; transient status uses an appropriate live region; canvas authoring does not require a pointer or thousands of focusable cells.
 - Distinguish visible prerequisite-bound actions from contextually irrelevant actions.
   - Keep the former focusable with local explanations and shortcut parity; omit the latter, and preserve readable non-colour unavailable styling across input modes.
@@ -555,7 +552,7 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
   - Expose independent browser-recovery and project-file freshness states through one compact document status with clear labels and relevant actions.
   - Add editable pattern naming and derive project/instruction filenames from it.
   - Track available file association separately from internal naming and download-only history; migrate legacy names from filenames without changing user-visible names during normalization.
-  - Put New pattern, Open pattern, Save project, Save project as, and Help/shortcuts under More.
+  - Put New pattern, Open pattern, Save project, Save project as, and Help/shortcuts under Menu.
   - Upgrade `.mcw` compatibly to store authored product state while excluding mirror/repeat tools, active selections, transient workspace state, and personal display state.
   - Replace Export with an Instructions workspace containing Copy and Download text.
   - Replace browser alerts with appropriately anchored inline, contextual, or global feedback and confirm copy/download completion non-modally.
@@ -634,12 +631,12 @@ The cross-device principles promoted to [FEATURES.md](FEATURES.md#adaptive-works
   - Offer rotational repetition around a draggable, grid-compatible centre using exact quarter turns, with no approximate-angle fallback.
   - Provide direct +90°, 180°, and −90° destination toggles on the canvas and in the inspector, with snapping rules that admit only exact cell mappings.
   - Replace the separate Central symmetry axis with the rotational stage's 180° destination while retaining the `C` shortcut and centre-dot affordance.
-  - Keep `Apply while drawing` independent from `Apply transforms to selection`; both use the same configured recipe and destination preview.
+  - Keep **Mirror while drawing** and **Repeat while drawing** independent from the corresponding selection Apply actions; live edits and stamping use the same configured destinations.
   - Keep the selected motif as the source after application and commit all copies as one undo step.
-  - Include transform-recipe edits in chronological Undo/Redo, coalescing each continuous adjustment into one step while keeping the recipe outside `.mcw`.
+  - Include transform-definition edits in chronological Undo/Redo, coalescing each continuous adjustment into one step while also persisting the definitions in `.mcw`.
   - Capture a repeat source mask from selection and allow atomic live editing through any inverse-mappable generated instance while the source persists as workspace tool state.
   - Use one source for every transform workflow: adopt the active selection when configuration or application begins, retain its guide after deselection, and make every replacement undoable.
-  - On New/Open, retain the recipe without its old source, pause live application, and require an explicit new source before source-dependent stages can resume.
+  - On New, clear project transforms. On Open, import project transform definitions without restoring an active saved-repeat source link.
   - Verify: editing corresponding cells through the source, a mirrored grid instance, and a rotated instance produces the same destination set; cells outside the configured instances remain unchanged with actionable feedback.
   - Require complete selection instances within the valid pattern shape by default, conditionally offer explicit shape cropping, and automatically disclose skipped off-pattern destinations during live drawing.
   - Deduplicate repeated paths for one source cell, reject destinations claimed by different source cells, and suspend invalid live recipes without losing the user's requested live state.

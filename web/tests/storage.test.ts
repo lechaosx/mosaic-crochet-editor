@@ -7,6 +7,7 @@ import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addAxis } from "@mosaic/logic/symmetry";
 import { encodeMcw } from "@mosaic/logic/mcw";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
+import { contrastingProjectColors } from "../src/contrast-colors";
 
 beforeEach(() => { localStorage.clear(); });
 
@@ -36,6 +37,8 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
             rotation: 90,
             pixels: filledPixels(3, 3, 2),
             float: makeFloat([{ x: 2, y: 0, v: 1 }]),
+            dangerColorOverride: "#123456",
+            accentColorOverride: "#abcdef",
         });
         saveToLocalStorage(s);
         const loaded = loadFromLocalStorage();
@@ -53,7 +56,45 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.float!.x).toBe(2);
         expect(loaded!.float!.y).toBe(0);
         expect(loaded!.float!.pixels[0]).toBe(1);
+        expect(loaded!.dangerColorOverride).toBe("#123456");
+        expect(loaded!.accentColorOverride).toBe("#abcdef");
+        expect(() => contrastingProjectColors(loaded!.colorA, loaded!.colorB)).not.toThrow();
     });
+
+    test("older recovery defaults project contrast overrides to app defaults", () => {
+        saveToLocalStorage(rowSession(3, 3));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        delete raw.document.dangerColorOverride;
+        delete raw.document.accentColorOverride;
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
+
+        expect(loadFromLocalStorage()).toMatchObject({
+            dangerColorOverride: null,
+            accentColorOverride: null,
+        });
+    });
+
+    test("malformed project contrast overrides invalidate recovery", () => {
+        saveToLocalStorage(rowSession(3, 3));
+        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        raw.document.dangerColorOverride = "red";
+        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
+
+        expect(loadFromLocalStorage()).toBeNull();
+    });
+
+    test.each(["colorA", "colorB"] as const)(
+        "malformed recovered yarn %s invalidates and clears recovery",
+        field => {
+            saveToLocalStorage(rowSession(3, 3));
+            const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+            raw.document[field] = "red";
+            localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
+
+            expect(loadFromLocalStorage()).toBeNull();
+            expect(localStorage.getItem("mosaic-recovery")).toBeNull();
+        },
+    );
 
     test("nothing in localStorage → null", () => {
         expect(loadFromLocalStorage()).toBeNull();
@@ -223,12 +264,18 @@ describe("saveToFile", () => {
             activeTool: "move",
             rotation: 45,
             float: makeFloat([{ x: 1, y: 1, v: 2 }]),
+            dangerColorOverride: "#123456",
+            accentColorOverride: "#abcdef",
         });
 
         await expect(saveToFile(session)).resolves.toBe(true);
         const file = JSON.parse(written);
         expect(file).toMatchObject({ version: 3, axes: session.axes });
         expect(file.recipes).toHaveLength(1);
+        expect(file).toMatchObject({
+            dangerColorOverride: "#123456",
+            accentColorOverride: "#abcdef",
+        });
         expect(file).not.toHaveProperty("activeTool");
         expect(file).not.toHaveProperty("rotation");
         expect(file).not.toHaveProperty("float");

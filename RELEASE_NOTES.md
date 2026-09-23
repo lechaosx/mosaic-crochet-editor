@@ -4,6 +4,9 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 22 September 2026
 
+- Projects can carry their own danger and accent colours without changing the app defaults, and Pattern can find a distinct pair with at least 3:1 contrast against both yarns when possible or make the current pair the defaults for new patterns.
+- The compact document control is named Menu, and saved repeats show their source dimensions without splitting the multiplication label across lines.
+- Canvas arrow keys remain reserved for moving a selection; there is no keyboard cell cursor.
 - Saved selection repeats now extend independently in every direction, support angled row and column vectors, and can alternate mirrored instances with two alternating gaps.
 - A saved repeat can instead rotate the selection around an editable centre with any combination of 90°, 180°, and 270° copies; rotation remains separate from Global Mirror.
 - Repeat controls reject unsafe or invalid retained settings without leaving stale values selected, and rotation centres stay fixed through selection shape edits while following explicit moves.
@@ -37,10 +40,6 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Pattern settings stay open while you work, with live, undoable changes.
 - Design and Crochet share one chart view, including a preview of completed work.
-
-## 16 September 2026
-
-- Edit the chart from the keyboard with a visible cell cursor.
 
 ## 15 September 2026
 

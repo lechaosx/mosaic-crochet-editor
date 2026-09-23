@@ -80,6 +80,8 @@ export interface UICallbacks {
     onAccentColorChange:      () => void;
     onDangerColorReset:       () => void;
     onAccentColorReset:       () => void;
+    onFindContrastColors:     () => void;
+    onUseContrastDefaults:    () => void;
     onLabelsVisibleChange:    () => void;
     onLockInvalidChange: () => void;
     onUndo:            () => void;
@@ -619,7 +621,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 const row = document.createElement("div");
                 const activate = document.createElement("button");
                 activate.className = "btn";
-                activate.textContent = `Repeat ${index + 1}`;
+                activate.textContent = `Repeat ${index + 1} · ${recipe.source.w}\u00a0×\u00a0${recipe.source.h}`;
                 activate.title = "Activate this saved repeat selection";
                 activate.dataset.recipeId = recipe.id;
                 activate.setAttribute("aria-pressed", String(recipe.id === activeId));
@@ -790,6 +792,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el<HTMLInputElement>("accent-color")      .addEventListener("input",  cb.onAccentColorChange);
     el("danger-color-reset").addEventListener("click", cb.onDangerColorReset);
     el("accent-color-reset").addEventListener("click", cb.onAccentColorReset);
+    el("find-contrast-colors").addEventListener("click", cb.onFindContrastColors);
+    el("contrast-colors-default").addEventListener("click", cb.onUseContrastDefaults);
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
     el("settings-about").addEventListener("click", () => {

@@ -55,7 +55,7 @@ test("turning row numbers on reframes the phone canvas and updates cell size", a
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
     const openSettings = async () => {
-        await page.getByRole("button", { name: "More" }).click();
+        await page.getByRole("button", { name: "Menu" }).click();
         await page.getByRole("menuitem", { name: "Settings" }).click();
     };
     await openSettings();
@@ -184,7 +184,7 @@ test("Fit keeps rotated half-round numbers inside a phone canvas", async ({ page
     expect(bounds.maxY).toBeLessThanOrEqual(bounds.height - 5);
 });
 
-test("phone toolbar keeps authoring tools full-size and moves secondary commands to More", async ({ page }) => {
+test("phone toolbar keeps authoring tools full-size and moves secondary commands to Menu", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
 
@@ -197,11 +197,11 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
         expect(box!.height).toBeGreaterThanOrEqual(44);
     }
     expect(await page.locator(".canvas-controls").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
-    await expect(page.getByRole("button", { name: "More" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Pattern" })).toBeHidden();
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 
-    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
     await expect(page.getByRole("menuitem", { name: "Pattern" })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Open", exact: true })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
@@ -227,7 +227,7 @@ test("phone contextual, Settings, and Pattern colour controls keep 44px targets"
     const selection = await page.locator("#selection-actions").boundingBox();
     expect(selection!.height).toBeGreaterThanOrEqual(44);
 
-    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("menuitem", { name: "Settings" }).click();
     for (const target of [
         page.locator("#hl-opacity"),
@@ -238,7 +238,7 @@ test("phone contextual, Settings, and Pattern colour controls keep 44px targets"
         expect(box!.height).toBeGreaterThanOrEqual(44);
     }
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("menuitem", { name: "Pattern" }).click();
     for (const target of [
         page.locator("#color-a"),

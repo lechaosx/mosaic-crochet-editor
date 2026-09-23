@@ -15,6 +15,8 @@ export interface ProjectDocument {
     colorB:  string;
     axes:    Axis[];
     recipes: GridRecipe[];
+    dangerColorOverride?: string | null;
+    accentColorOverride?: string | null;
 }
 
 interface McwV2 {
@@ -29,7 +31,11 @@ interface McwV3 extends Omit<McwV2, "version"> {
     version: 3;
     axes: Axis[];
     recipes?: unknown[];
+    dangerColorOverride?: string;
+    accentColorOverride?: string;
 }
+
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 function packMask(mask: Uint8Array): string {
     const packed = new Uint8Array(Math.ceil(mask.length / 8));
@@ -123,12 +129,23 @@ function readCommon(data: Record<string, unknown>): {
     colorA: string;
     colorB: string;
 } {
-    if (!isRecord(data.state) || typeof data.colorA !== "string" || typeof data.colorB !== "string") {
+    if (!isRecord(data.state)) {
         throw invalidFile();
     }
     const pattern = data.state as unknown as PatternState;
     assertPatternDimensions(pattern);
-    return { pattern, colorA: data.colorA, colorB: data.colorB };
+    return { pattern, colorA: readYarnColor(data.colorA), colorB: readYarnColor(data.colorB) };
+}
+
+function readYarnColor(value: unknown): string {
+    if (typeof value !== "string" || !HEX_COLOR.test(value)) throw invalidFile();
+    return value;
+}
+
+function readColorOverride(value: unknown): string | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== "string" || !HEX_COLOR.test(value)) throw invalidFile();
+    return value;
 }
 
 function readAxes(value: unknown, pattern: PatternState): Axis[] {
@@ -156,19 +173,22 @@ function readAxes(value: unknown, pattern: PatternState): Axis[] {
 
 export function encodeMcw(document: Readonly<ProjectDocument>): string {
     assertPatternDimensions(document.pattern);
-    if (document.pixels.length !== document.pattern.canvasWidth * document.pattern.canvasHeight
-        || typeof document.colorA !== "string" || typeof document.colorB !== "string") {
+    if (document.pixels.length !== document.pattern.canvasWidth * document.pattern.canvasHeight) {
         throw invalidFile();
     }
     const file: McwV3 = {
         version: MCW_VERSION,
         state: document.pattern,
         pixels: packPixels(document.pixels),
-        colorA: document.colorA,
-        colorB: document.colorB,
+        colorA: readYarnColor(document.colorA),
+        colorB: readYarnColor(document.colorB),
         axes: readAxes(document.axes, document.pattern),
         recipes: writeRecipes(document.recipes),
     };
+    const dangerColorOverride = readColorOverride(document.dangerColorOverride);
+    const accentColorOverride = readColorOverride(document.accentColorOverride);
+    if (dangerColorOverride !== null) file.dangerColorOverride = dangerColorOverride;
+    if (accentColorOverride !== null) file.accentColorOverride = accentColorOverride;
     return JSON.stringify(file);
 }
 
@@ -192,7 +212,10 @@ export function decodeMcw(source: string): ProjectDocument {
             || !parsed.pixels.every(pixel => Number.isInteger(pixel) && pixel >= 0 && pixel <= 2)) {
             throw invalidFile();
         }
-        return { ...common, pixels: new Uint8Array(parsed.pixels), axes: [], recipes: [] };
+        return {
+            ...common, pixels: new Uint8Array(parsed.pixels), axes: [], recipes: [],
+            dangerColorOverride: null, accentColorOverride: null,
+        };
     }
     if (typeof parsed.pixels !== "string") throw invalidFile();
     try {
@@ -202,6 +225,8 @@ export function decodeMcw(source: string): ProjectDocument {
             pixels: unpackPixels(parsed.pixels, common.pattern),
             axes: parsed.version === 3 ? readAxes(parsed.axes, common.pattern) : [],
             recipes,
+            dangerColorOverride: parsed.version === 3 ? readColorOverride(parsed.dangerColorOverride) : null,
+            accentColorOverride: parsed.version === 3 ? readColorOverride(parsed.accentColorOverride) : null,
         };
     } catch {
         throw invalidFile();
