@@ -139,6 +139,7 @@ export interface InstructionsView {
     setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
                   onProgress: (completedUnits: number) => boolean) => void;
     setErrors:   (count: number) => void;
+    setYarnColors: (a: string, b: string) => void;
     alternate:   () => boolean;
     setBusy:     (busy: boolean) => void;
     onAlternate: (cb: () => void) => void;
@@ -416,8 +417,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const hasSelection = selectedCount > 0;
         const hasClip = clipboardCount > 0;
         const statusVisibilityChanged = selectionStatus.hidden === (hasSelection || hasClip);
-        selectionTrigger.disabled = !hasSelection && !hasClip
-            && currentTool !== "select" && currentTool !== "wand";
+        selectionTrigger.disabled = false;
         if (hasSelection) {
             selectionTrigger.textContent = `Selection · ${selectedCount}`;
             selectionTrigger.setAttribute("aria-label", `Selection actions, ${selectedCount} selected`);
@@ -452,7 +452,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
             modeButtons[key].classList.toggle("btn--active", active);
             modeButtons[key].setAttribute("aria-pressed", String(active));
         });
-        if (selectionTrigger.disabled && isInspectorOpen("selection")) closeInspector();
         if (statusVisibilityChanged) syncCanvasChromeInsets();
     }
 
@@ -1233,6 +1232,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
             setErrors: (count) => {
                 instructionErrors.textContent = count === 1 ? "1 error" : `${count} errors`;
                 instructionErrors.hidden = count === 0;
+            },
+            setYarnColors: (a, b) => {
+                unitElements.forEach(item => {
+                    const marker = item.querySelector<HTMLElement>(".instructions-unit-yarn");
+                    if (marker) marker.style.backgroundColor = marker.textContent === "A" ? a : b;
+                });
             },
             alternate: () => alternateChk.checked,
             setBusy: (busy) => {

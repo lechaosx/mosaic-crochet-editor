@@ -49,7 +49,7 @@ describe("saved grid recipes", () => {
         expect(restoreGridRecipes([legacy])[0].enabled).toBe(true);
     });
 
-    test("restores legacy alternate gaps with their original packed geometry until the gap is edited", () => {
+    test("normalizes legacy alternate gaps to the visible single-gap values", () => {
         const recipe = gridRecipeFromFloat({
             x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([1, 0, 1]),
         });
@@ -65,26 +65,28 @@ describe("saved grid recipes", () => {
         expect(restored).toMatchObject({
             id: recipe.id,
             columnSpacing: 0,
-            columnSpacingAlternate: 1,
+            columnSpacingAlternate: 0,
         });
         expect(evaluateGridRecipe(restored)).toMatchObject({
             columnStep: { x: 1, y: 0 },
-            columnStepAlternate: { x: 2, y: 0 },
-            conflicts: [],
+            columnStepAlternate: { x: 1, y: 0 },
         });
-        expect(evaluateGridRecipe(restored).cells.map(cell => [cell.x, cell.sourceIndex])).toEqual([
-            [0, 0], [1, 1], [2, 1], [3, 0], [5, 1],
-        ]);
+    });
 
-        const synchronized = { ...restored, columnSpacing: 1, columnSpacingAlternate: 1 };
-        expect(evaluateGridRecipe(synchronized)).toMatchObject({
-            columnStep: { x: 2, y: 0 },
-            columnStepAlternate: { x: 2, y: 0 },
-            conflicts: [],
+    test("can ignore recipe conflicts outside a paintable chart", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 0, y: 0, w: 1, h: 2, pixels: new Uint8Array([1, 1]),
         });
-        expect(evaluateGridRecipe(synchronized).instances.map(instance => instance.map(cell => cell.x))).toEqual([
-            [0, 2], [2, 4], [4, 6],
-        ]);
+        Object.assign(recipe, {
+            mode: "rotation",
+            rotationCentreX: 1.5,
+            rotationCentreY: 0.5,
+            rotationTurns: [180, 270],
+            mirrorHorizontal: true,
+        });
+
+        expect(gridRecipeError(recipe, () => true)).toMatch(/overlap/i);
+        expect(gridRecipeError(recipe, (x, y) => x >= 0 && x < 2 && y >= 0 && y < 3)).toBeNull();
     });
 
     test("uses a sparse active selection as an absolute packed source", () => {

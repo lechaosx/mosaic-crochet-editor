@@ -27,7 +27,11 @@ export function syncActiveGridRecipe(
     const active = currentGridRecipe(s);
     if (!active || !s.float) return;
     const updated = withRecipeSource(active, s.float, translation);
-    if (gridRecipeError(updated) !== null) return;
+    const visible = visiblePixels(s);
+    const { canvasWidth: W, canvasHeight: H } = s.pattern;
+    if (gridRecipeError(updated, (x, y) =>
+        !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0
+    ) !== null) return;
     s.recipes = s.recipes.map(recipe => recipe.id === active.id ? updated : recipe);
     s.activeRecipeId = active.id;
 }
@@ -102,9 +106,11 @@ export function applyGridRecipe(store: Store): ApplyGridRecipeResult {
     const float = store.state.float;
     if (!recipe || !float || !recipeHasSource(recipe)) return "no-selection";
     const evaluated = evaluateGridRecipe(recipe);
-    if (evaluated.conflicts.length > 0) return "conflict";
     const sources = recipeSourceCells(recipe);
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    if (evaluated.conflicts.some(cell =>
+        !outOfBounds(cell.x, cell.y, W, H) && store.state.pixels[cell.y * W + cell.x] !== 0
+    )) return "conflict";
     const next = store.state.pixels.slice();
     let changed = false;
     for (const cell of evaluated.cells) {

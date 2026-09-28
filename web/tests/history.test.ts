@@ -147,15 +147,15 @@ describe("historySave / historyReset", () => {
         });
     });
 
-    test("history retains distinct legacy alternate gaps", () => {
+    test("history normalizes distinct legacy alternate gaps", () => {
         const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
         recipe.columnSpacingAlternate = 7;
         recipe.rowSpacingAlternate = 8;
         historyReset(rowSession(3, 3, { recipes: [recipe] }));
 
         expect(historyPeek()!.recipes[0]).toMatchObject({
-            columnSpacingAlternate: 7,
-            rowSpacingAlternate: 8,
+            columnSpacingAlternate: 0,
+            rowSpacingAlternate: 0,
         });
     });
 

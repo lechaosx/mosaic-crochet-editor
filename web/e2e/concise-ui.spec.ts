@@ -211,6 +211,14 @@ test("app preferences survive reload and are not part of undo or recovery snapsh
 
 test("status is passive and Selection actions live in the authoring dock", async ({ page }) => {
     await bootApp(page);
+
+    const emptySelection = page.getByRole("button", { name: "Selection actions" });
+    await expect(emptySelection).toBeEnabled();
+    await emptySelection.click();
+    await expect(page.getByRole("button", { name: "Selection 1 · Empty" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New selection" })).toBeVisible();
+    await page.keyboard.press("Escape");
+
     await page.keyboard.press("Control+a");
 
     const status = page.getByLabel("Canvas context");

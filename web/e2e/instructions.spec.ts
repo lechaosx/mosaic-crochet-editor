@@ -163,6 +163,54 @@ test("Crochet retains Pattern and Settings inspectors across the mode switch", a
     }
 });
 
+test("Pattern palette edits refresh the open Crochet chart and yarn markers", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 0, 2);
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await clickCell(page, 0, 1);
+    await clickCell(page, 0, 8);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+
+    const chartCell = await cellCoord(page, 0, 8);
+    expect(await pixelRGB(page, chartCell.cx, chartCell.cy)).toEqual([0, 0, 0]);
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#color-a").evaluate((input: HTMLInputElement) => {
+        input.value = "#123456";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.locator("#accent-color").evaluate((input: HTMLInputElement) => {
+        input.value = "#00ff00";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.locator("#danger-color").evaluate((input: HTMLInputElement) => {
+        input.value = "#ff00ff";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"] .instructions-unit-yarn'))
+        .toHaveCSS("background-color", "rgb(18, 52, 86)");
+    expect(await pixelRGB(page, chartCell.cx, chartCell.cy)).toEqual([18, 52, 86]);
+    await page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]').click();
+    const palettePixels = await page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
+        const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+        let accent = 0;
+        let danger = 0;
+        for (let i = 0; i < pixels.length; i += 4) {
+            if (pixels[i] === 0 && pixels[i + 1] === 255 && pixels[i + 2] === 0) accent++;
+            if (pixels[i] === 255 && pixels[i + 1] === 0 && pixels[i + 2] === 255) danger++;
+        }
+        return { accent, danger };
+    });
+    expect(palettePixels.accent).toBeGreaterThan(0);
+    expect(palettePixels.danger).toBeGreaterThan(0);
+});
+
 test("Fit uses the whole canvas width while an inspector is open", async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await bootApp(page);

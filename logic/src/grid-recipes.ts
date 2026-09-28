@@ -56,7 +56,10 @@ export function recipeSourceCells(recipe: GridRecipe): TransformSourceCell[] {
     return cells;
 }
 
-export function gridRecipeError(recipe: GridRecipe): string | null {
+export function gridRecipeError(
+    recipe: GridRecipe,
+    paintable?: (x: number, y: number) => boolean,
+): string | null {
     const { source } = recipe;
     if (typeof recipe.id !== "string" || recipe.id.length === 0) return "Recipe id is required.";
     if (typeof recipe.enabled !== "boolean") return "Recipe enabled state is required.";
@@ -85,7 +88,7 @@ export function gridRecipeError(recipe: GridRecipe): string | null {
             mirrorHorizontal: recipe.mirrorHorizontal,
             mirrorVertical: recipe.mirrorVertical,
         });
-        return grid.conflicts.length === 0 && rotation.conflicts.length === 0
+        return !paintable || ![...grid.conflicts, ...rotation.conflicts].some(cell => paintable(cell.x, cell.y))
             ? null : "Recipe instances overlap.";
     } catch (error) {
         return error instanceof Error ? error.message : "Recipe is invalid.";
@@ -171,8 +174,8 @@ export function restoreGridRecipes(value: unknown): GridRecipe[] {
             ...recipe,
             enabled: true,
             mode: recipe.mode ?? "grid",
-            columnSpacingAlternate: recipe.columnSpacingAlternate ?? recipe.columnSpacing,
-            rowSpacingAlternate: recipe.rowSpacingAlternate ?? recipe.rowSpacing,
+            columnSpacingAlternate: recipe.columnSpacing,
+            rowSpacingAlternate: recipe.rowSpacing,
             rotationCentreX: recipe.rotationCentreX ?? Number(source.x) + (Number(source.w) - 1) / 2,
             rotationCentreY: recipe.rotationCentreY ?? Number(source.y) + (Number(source.h) - 1) / 2,
             rotationTurns: recipe.rotationTurns ?? [],

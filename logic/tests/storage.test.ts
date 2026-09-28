@@ -226,7 +226,7 @@ describe(".mcw codec", () => {
         expect(decodeMcw(encodeMcw(document)).recipes).toEqual([recipe]);
     });
 
-    test("round-trips a legacy alternate gap whose original geometry avoids a conflict", () => {
+    test("normalizes legacy alternate gaps to the visible single gap", () => {
         const recipe = gridRecipeFromFloat({
             x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([1, 0, 1]),
         });
@@ -244,12 +244,8 @@ describe(".mcw codec", () => {
         expect(restored).toMatchObject({
             id: recipe.id,
             columnSpacing: 0,
-            columnSpacingAlternate: 1,
+            columnSpacingAlternate: 0,
         });
-        expect(evaluateGridRecipe(restored).conflicts).toEqual([]);
-        expect(evaluateGridRecipe(restored).cells.map(cell => [cell.x, cell.sourceIndex])).toEqual([
-            [0, 0], [1, 1], [2, 1], [3, 0], [5, 1],
-        ]);
     });
 
     test.each([

@@ -171,6 +171,7 @@ aboutDialog.addEventListener("click", event => {
 });
 document.getElementById("about-close")!.addEventListener("click", closeAbout);
 let instructionsPreviewStore: Store | null = null;
+let instructionsView: ReturnType<UIHandle["openInstructions"]> | null = null;
 let instructionsOpen = false;
 let instructionCache: InstructionCache | null = null;
 let overlayAction: OverlayAction = "place";
@@ -312,9 +313,16 @@ observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);
 store.setRenderer(s => {
     if (instructionsPreviewStore) {
         instructionsPreviewStore.commit(
-            preview => { preview.rotation = s.state.rotation; },
+            preview => {
+                preview.rotation = s.state.rotation;
+                preview.colorA = s.state.colorA;
+                preview.colorB = s.state.colorB;
+                preview.dangerColorOverride = s.state.dangerColorOverride;
+                preview.accentColorOverride = s.state.accentColorOverride;
+            },
             { recompute: false, render: false, persist: false },
         );
+        instructionsView?.setYarnColors(s.state.colorA, s.state.colorB);
     }
     renderCanvas();
 });
@@ -612,7 +620,11 @@ function onRecipeChange(id: string, change: Partial<GridRecipe>) {
         columnSpacingAlternate: change.columnSpacingAlternate ?? recipe.columnSpacingAlternate,
         rowSpacingAlternate: change.rowSpacingAlternate ?? recipe.rowSpacingAlternate,
     };
-    const error = gridRecipeError(updated);
+    const visible = visiblePixels(store.state);
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    const error = gridRecipeError(updated, (x, y) =>
+        !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0
+    );
     if (error) { refreshRecipeUi(error); return; }
     store.commit(s => { s.recipes = s.recipes.map(candidate => candidate.id === id ? updated : candidate); }, { history: true });
     refreshRecipeUi();
@@ -1034,10 +1046,12 @@ async function onInstructions() {
     instructionsOpen = true;
     ui.setViewState(store.state.rotation, true);
     const dlg = ui.openInstructions();
+    instructionsView = dlg;
     let cancelled = false;
     dlg.onClose(() => {
         instructionsOpen = false;
         cancelled = true;
+        if (instructionsView === dlg) instructionsView = null;
         instructionsPreviewStore = null;
         rs.instructionStarts = [];
         rs.instructionGuidanceCoords = null;

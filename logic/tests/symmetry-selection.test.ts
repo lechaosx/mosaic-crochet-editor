@@ -126,6 +126,30 @@ describe("replicateSelection", () => {
 });
 
 describe("saved recipe lifecycle", () => {
+    test("apply ignores transform conflicts that only land outside the chart", () => {
+        const source = makeFloat([
+            { x: 0, y: 0, v: 1 },
+            { x: 0, y: 1, v: 2 },
+        ]);
+        const recipe = gridRecipeFromFloat(source);
+        Object.assign(recipe, {
+            mode: "rotation",
+            rotationCentreX: 1.5,
+            rotationCentreY: 0.5,
+            rotationTurns: [180, 270],
+            mirrorHorizontal: true,
+        });
+        const store = new Store(rowSession(2, 3, {
+            pixels: filledPixels(2, 3, 2),
+            float: source,
+            recipes: [recipe],
+            activeRecipeId: recipe.id,
+        }));
+
+        expect(applyGridRecipe(store)).toBe("applied");
+        expect(store.state.pixels[2 * 2 + 1]).toBe(1);
+    });
+
     test("apply clips destinations outside the chart instead of rejecting valid instances", () => {
         const source = makeFloat([{ x: 0, y: 0, v: 2 }]);
         const recipe = gridRecipeFromFloat(source);

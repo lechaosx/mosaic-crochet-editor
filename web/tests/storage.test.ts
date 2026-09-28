@@ -145,15 +145,15 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         });
     });
 
-    test("recovery retains distinct legacy alternate gaps", () => {
+    test("recovery normalizes distinct legacy alternate gaps", () => {
         const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
         recipe.columnSpacingAlternate = 7;
         recipe.rowSpacingAlternate = 8;
         saveToLocalStorage(rowSession(3, 3, { recipes: [recipe] }));
 
         expect(loadFromLocalStorage()!.recipes[0]).toMatchObject({
-            columnSpacingAlternate: 7,
-            rowSpacingAlternate: 8,
+            columnSpacingAlternate: 0,
+            rowSpacingAlternate: 0,
         });
     });
 
