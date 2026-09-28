@@ -8,7 +8,7 @@ import { Store } from "../src/store";
 import { copyFloat, cutFloat, pasteClipboard, hasClipboard, clipboardCellCount } from "../src/clipboard";
 import { filledPixels, makeFloat, rowSession } from "./_helpers";
 import type { Float } from "../src/types";
-import { gridRecipeFromFloat } from "../src/grid-recipes";
+import { emptyGridRecipe, gridRecipeFromFloat } from "../src/grid-recipes";
 
 function storeOf(opts: Parameters<typeof rowSession>[2] = {}): Store {
     return new Store(rowSession(3, 3, opts));
@@ -77,7 +77,7 @@ describe("cutFloat", () => {
         // Row 0 baseline = A = 1, so cleared cell = 1.
         expect(s.state.pixels[0]).toBe(1);
         expect(s.state.float).toBeNull();
-        expect(s.state.activeRecipeId).toBeNull();
+        expect(s.state.activeRecipeId).toBe(recipe.id);
     });
 
     test("no float: no-op", () => {
@@ -171,6 +171,39 @@ describe("cutFloat with offset", () => {
 });
 
 describe("pasteClipboard", () => {
+    test("paste populates the active empty selection slot", () => {
+        const copied = makeFloat([{ x: 1, y: 1, v: 2 }]);
+        copyFloat(storeOf({ pixels: filledPixels(3, 3, 1), float: copied }));
+        const slot = emptyGridRecipe();
+        const dest = storeOf({
+            pixels: filledPixels(3, 3, 1),
+            recipes: [slot],
+            activeRecipeId: slot.id,
+        });
+
+        expect(pasteClipboard(dest)).toBe(true);
+        expect(dest.state.activeRecipeId).toBe(slot.id);
+        expect(dest.state.recipes[0].source).toMatchObject({ x: 1, y: 1, w: 1, h: 1 });
+        expect(dest.state.recipes[0].source.mask).toEqual(new Uint8Array([1]));
+    });
+
+    test("paste updates the populated current selection slot", () => {
+        const copied = makeFloat([{ x: 2, y: 1, v: 2 }]);
+        copyFloat(storeOf({ pixels: filledPixels(3, 3, 1), float: copied }));
+        const original = makeFloat([{ x: 0, y: 0, v: 1 }]);
+        const recipe = gridRecipeFromFloat(original);
+        const dest = storeOf({
+            pixels: filledPixels(3, 3, 1),
+            float: original,
+            recipes: [recipe],
+            activeRecipeId: recipe.id,
+        });
+
+        expect(pasteClipboard(dest)).toBe(true);
+        expect(dest.state.activeRecipeId).toBe(recipe.id);
+        expect(dest.state.recipes[0].source).toMatchObject({ x: 2, y: 1, w: 1, h: 1 });
+    });
+
     test("pastes back at the original canvas position as a non-destructive float", () => {
         // First populate the clipboard via copy.
         const src = storeOf({

@@ -109,13 +109,15 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loadFromLocalStorage()).toBeNull();
     });
 
-    test("saved sessions without recipes migrate to no saved repeats", () => {
+    test("saved sessions without recipes migrate to one empty selection", () => {
         saveToLocalStorage(rowSession(3, 3));
         const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         delete raw.workspace.recipes;
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
-        expect(loadFromLocalStorage()!.recipes).toEqual([]);
+        const restored = loadFromLocalStorage()!;
+        expect(restored.recipes).toHaveLength(1);
+        expect(restored.recipes[0].source.mask).toHaveLength(0);
     });
 
     test("recovery defaults optional v3 recipe extensions", () => {
@@ -143,6 +145,18 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         });
     });
 
+    test("recovery retains distinct legacy alternate gaps", () => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
+        recipe.columnSpacingAlternate = 7;
+        recipe.rowSpacingAlternate = 8;
+        saveToLocalStorage(rowSession(3, 3, { recipes: [recipe] }));
+
+        expect(loadFromLocalStorage()!.recipes[0]).toMatchObject({
+            columnSpacingAlternate: 7,
+            rowSpacingAlternate: 8,
+        });
+    });
+
     test.each([
         ["grid", { mode: "rotation", left: -1 }],
         ["rotation", { mode: "grid", rotationCentreX: 0.25 }],
@@ -153,7 +167,9 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         Object.assign(raw.workspace.recipes[0], malformed);
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
-        expect(loadFromLocalStorage()!.recipes).toEqual([]);
+        const restored = loadFromLocalStorage()!;
+        expect(restored.recipes).toHaveLength(1);
+        expect(restored.recipes[0].source.mask).toHaveLength(0);
     });
 
     test("recovery clears an active recipe whose float does not match its source", () => {

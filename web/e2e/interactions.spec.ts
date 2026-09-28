@@ -258,7 +258,6 @@ test("Pattern construction round-trip restores associated selection and mirror s
     await page.keyboard.press("v");
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.locator("#recipe-create").click();
     const baseline = await page.evaluate(() => {
         const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         return {

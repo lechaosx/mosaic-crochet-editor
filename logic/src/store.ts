@@ -12,7 +12,7 @@ import {
     build_highlight_plan_round,
 } from "@mosaic/wasm";
 import { Tool, PatternState, Float, Axis, GridRecipe } from "./types";
-import { normalizeActiveRecipeId } from "./grid-recipes";
+import { emptyGridRecipe, normalizeActiveRecipeId } from "./grid-recipes";
 
 export interface SessionState {
     pattern:       PatternState;
@@ -100,6 +100,7 @@ export class Store {
     private _observers: ObserverFn[] = [];
 
     constructor(state: SessionState) {
+        if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
         this._plan  = computePlan(state);
@@ -129,6 +130,7 @@ export class Store {
     // and renders. `history`/`persist` default off because the typical caller
     // (undo/redo) is itself navigating history.
     replace(state: SessionState, opts?: { history?: boolean; persist?: boolean }): void {
+        if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
         this._plan  = computePlan(state);

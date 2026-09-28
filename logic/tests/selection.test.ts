@@ -727,7 +727,7 @@ describe("applySelectionMod / remove", () => {
         });
         applySelectionMod(s, maskOf(3, 3, [[0, 0]]), "remove");
         expect(s.state.float).toBeNull();
-        expect(s.state.activeRecipeId).toBeNull();
+        expect(s.state.activeRecipeId).toBe(recipe.id);
     });
 
     test("source-position bounds gate each of the four directions individually", () => {

@@ -41,9 +41,10 @@ describe("browser persistence migrations", () => {
         expect(restored).toMatchObject({
             pattern: session.pattern,
             axes: [valid],
-            recipes: [],
             liveMirrors: true,
         });
+        expect(restored!.recipes).toHaveLength(1);
+        expect(restored!.recipes[0].source.mask).toHaveLength(0);
         expect(restored!.float).toEqual(session.float);
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-recovery")!);

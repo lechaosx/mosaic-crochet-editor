@@ -94,7 +94,8 @@ describe("historySave / historyReset", () => {
         });
 
         expect(canUndo()).toBe(true);
-        expect(historyUndo()!.recipes).toEqual([]);
+        expect(historyUndo()!.recipes).toHaveLength(1);
+        expect(historyPeek()!.recipes[0].source.mask).toHaveLength(0);
         expect(historyRedo()!.recipes).toEqual([recipe]);
         expect(historyPeek()!.activeRecipeId).toBe(recipe.id);
     });
@@ -117,7 +118,8 @@ describe("historySave / historyReset", () => {
         raw.snapshots[0].transforms.recipes = [{ id: "bad" }];
         localStorage.setItem("mosaic-history", JSON.stringify(raw));
 
-        expect(historyPeek()!.recipes).toEqual([]);
+        expect(historyPeek()!.recipes).toHaveLength(1);
+        expect(historyPeek()!.recipes[0].source.mask).toHaveLength(0);
     });
 
     test("history defaults optional v3 recipe extensions", () => {
@@ -142,6 +144,18 @@ describe("historySave / historyReset", () => {
             rotationCentreX: 1,
             rotationCentreY: 1,
             rotationTurns: [],
+        });
+    });
+
+    test("history retains distinct legacy alternate gaps", () => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
+        recipe.columnSpacingAlternate = 7;
+        recipe.rowSpacingAlternate = 8;
+        historyReset(rowSession(3, 3, { recipes: [recipe] }));
+
+        expect(historyPeek()!.recipes[0]).toMatchObject({
+            columnSpacingAlternate: 7,
+            rowSpacingAlternate: 8,
         });
     });
 

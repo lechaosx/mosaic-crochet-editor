@@ -65,8 +65,8 @@ test("Move area mode supports a modifier-free touch drag", async ({ page }) => {
     const painted = await cellCoord(page, 1, 1);
     await page.touchscreen.tap(painted.cx, painted.cy);
     await page.getByRole("button", { name: "Select", exact: true }).tap();
-    await page.touchscreen.tap(painted.cx, painted.cy);
     await page.getByRole("button", { name: "Close inspector" }).tap();
+    await page.touchscreen.tap(painted.cx, painted.cy);
     await page.getByRole("button", { name: "Move", exact: true }).tap();
     await page.getByRole("button", { name: /Move area/ }).tap();
     await page.keyboard.press("Escape");
@@ -84,10 +84,12 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     const painted = await cellCoord(page, 1, 1);
     await page.touchscreen.tap(painted.cx, painted.cy);
     await page.getByRole("button", { name: "Select", exact: true }).tap();
+    await page.getByRole("button", { name: "Close inspector" }).tap();
     await page.touchscreen.tap(painted.cx, painted.cy);
 
     const summary = page.getByRole("button", { name: /1 selected/ });
     await expect(summary).toBeVisible();
+    await summary.tap();
 
     const card = page.getByRole("dialog", { name: "Selection" });
     await expect(card).toBeVisible();

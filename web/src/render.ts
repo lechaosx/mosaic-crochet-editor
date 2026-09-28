@@ -279,6 +279,10 @@ function startRaf(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D
     rs.rafId = requestAnimationFrame(now => frame(rs, vp, ctx, now));
 }
 
+function reducedMotion(): boolean {
+    return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, now: number) {
     let active = false;
     if (rs.rotAnim) {
@@ -297,7 +301,7 @@ function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, n
     // bounded so floating-point precision holds over long sessions.
     const antsVisible = rs.dragRect !== null
         || (rs.lastStore && !rs.hideCommittedSelection && rs.lastStore.state.float !== null);
-    if (antsVisible) {
+    if (antsVisible && !reducedMotion()) {
         const advance = (ANTS_SCREEN_PX_PER_SEC * dtSec) / (vp.view.zoom * vp.dpr);
         rs.selectionDashOffset = (rs.selectionDashOffset + advance) % 1000;
         active = true;
@@ -344,7 +348,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
     // `frame()` advances the dash offset each tick and stops on its own.
     const antsVisible = rs.dragRect !== null
         || (!rs.hideCommittedSelection && store.state.float !== null);
-    if (antsVisible) startRaf(rs, vp, ctx);
+    if (antsVisible && !reducedMotion()) startRaf(rs, vp, ctx);
     updateFavicon(rs.faviconCanvas, rs.faviconCtx, rs.colors, store.state.pattern, store.state.pixels);
     rerender(vp, ctx, rs, store);
 }
@@ -399,19 +403,19 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         guidanceOpacity / 100);
     renderInstructionStarts(ctx, view, dpr, rs.instructionStarts, accentColor, dangerColor, m);
     (window as unknown as { __test_instruction_starts__?: typeof rs.instructionStarts }).__test_instruction_starts__ = rs.instructionStarts;
+    const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
+    const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
     const activeRecipe = activeRecipeId === null ? null : recipes.find(recipe => recipe.id === activeRecipeId) ?? null;
     if (activeRecipe && float
         && float.x === activeRecipe.source.x && float.y === activeRecipe.source.y
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
-        renderRecipeInstances(ctx, view, dpr, pattern, activeRecipe, accentColor);
+        renderRecipeInstances(ctx, view, dpr, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
     }
     renderSymmetryGuides(ctx, view, dpr, pattern, axes, accentColor, rs.axesInDeleteZone, rs.previewRepeatGuides);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
     // tick rather than glide.
-    const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
-    const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
     if (float && !rs.hideCommittedSelection) {
         const shifted = new Uint8Array(W * H);
         for (let ly = 0; ly < float.h; ly++) {
@@ -442,21 +446,90 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 
 function renderRecipeInstances(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number, pattern: PatternState,
-    recipe: GridRecipe, color: string,
+    pixels: Uint8Array, recipe: GridRecipe, color: string, dashOffset: number,
 ) {
-    const { canvasWidth: W, canvasHeight: H } = pattern;
-    const mask = new Uint8Array(W * H);
-    for (const cell of evaluateGridRecipe(recipe).cells) {
-        if (cell.x < 0 || cell.x >= W || cell.y < 0 || cell.y >= H) continue;
-        if (cell.x >= recipe.source.x && cell.x < recipe.source.x + recipe.source.w
-            && cell.y >= recipe.source.y && cell.y < recipe.source.y + recipe.source.h
-            && recipe.source.mask[(cell.y - recipe.source.y) * recipe.source.w + cell.x - recipe.source.x] !== 0) continue;
-        mask[cell.y * W + cell.x] = 1;
-    }
+    const paths = recipeInstancePaths(pattern, pixels, recipe);
     ctx.save();
     ctx.globalAlpha = 0.42;
-    renderSelection(ctx, view, dpr, pattern, mask, color, 0);
+    for (const instance of paths) renderSelectionPaths(ctx, view, dpr, instance, color, dashOffset);
     ctx.restore();
+    (window as unknown as { __test_repeat_outlines__?: { paths: number[][][]; dashOffset: number } })
+        .__test_repeat_outlines__ = { paths, dashOffset };
+}
+
+export function recipeInstancePaths(
+    pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe,
+): number[][][] {
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    const sourceCells = new Set<string>();
+    for (let y = 0; y < recipe.source.h; y++) {
+        for (let x = 0; x < recipe.source.w; x++) {
+            if (recipe.source.mask[y * recipe.source.w + x] !== 0) {
+                sourceCells.add(`${recipe.source.x + x},${recipe.source.y + y}`);
+            }
+        }
+    }
+    return evaluateGridRecipe(recipe).instances.flatMap(instance => {
+        const cells = new Set<string>();
+        for (const cell of instance) {
+            if (cell.x < 0 || cell.x >= W || cell.y < 0 || cell.y >= H) continue;
+            if (pixels[cell.y * W + cell.x] === 0) continue;
+            if (sourceCells.has(`${cell.x},${cell.y}`)) continue;
+            cells.add(`${cell.x},${cell.y}`);
+        }
+        const paths = tracedSparseBoundary(cells);
+        return paths.length > 0 ? [paths] : [];
+    });
+}
+
+function tracedSparseBoundary(selection: ReadonlySet<string>): number[][] {
+    type Edge = [number, number, number, number] & { used?: boolean };
+    const edges: Edge[] = [];
+    const edgeFrom = new Map<string, Edge[]>();
+    const addEdge = (x1: number, y1: number, x2: number, y2: number) => {
+        const edge: Edge = [x1, y1, x2, y2];
+        edges.push(edge);
+        const key = `${x1},${y1}`;
+        const outgoing = edgeFrom.get(key);
+        if (outgoing) outgoing.push(edge);
+        else edgeFrom.set(key, [edge]);
+    };
+    for (const key of selection) {
+        const [x, y] = key.split(",").map(Number);
+        if (!selection.has(`${x},${y - 1}`)) addEdge(x, y, x + 1, y);
+        if (!selection.has(`${x + 1},${y}`)) addEdge(x + 1, y, x + 1, y + 1);
+        if (!selection.has(`${x},${y + 1}`)) addEdge(x + 1, y + 1, x, y + 1);
+        if (!selection.has(`${x - 1},${y}`)) addEdge(x, y + 1, x, y);
+    }
+    const paths: number[][] = [];
+    const direction = (edge: Edge) => {
+        const dx = edge[2] - edge[0], dy = edge[3] - edge[1];
+        if (dx === 1) return 0;
+        if (dy === 1) return 1;
+        if (dx === -1) return 2;
+        return 3;
+    };
+    for (const start of edges) {
+        if (start.used) continue;
+        const startKey = `${start[0]},${start[1]}`;
+        const path: number[] = [];
+        let edge: Edge | undefined = start;
+        while (edge && !edge.used) {
+            edge.used = true;
+            if (path.length === 0) path.push(edge[0], edge[1]);
+            path.push(edge[2], edge[3]);
+            const key: string = `${edge[2]},${edge[3]}`;
+            if (key === startKey) break;
+            const previousDirection = direction(edge);
+            edge = edgeFrom.get(key)
+                ?.filter(candidate => !candidate.used)
+                .sort((a, b) =>
+                    (direction(a) - previousDirection + 4) % 4
+                    - (direction(b) - previousDirection + 4) % 4)[0];
+        }
+        if (path.length >= 4) paths.push(path);
+    }
+    return paths;
 }
 
 function renderInstructionStarts(
@@ -542,6 +615,13 @@ function renderSelection(
 ) {
     if (!selection) return;
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
+    renderSelectionPaths(ctx, view, dpr, tracedBoundary(selection, W, H), color, dashOffset);
+}
+
+function renderSelectionPaths(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    paths: ReadonlyArray<ReadonlyArray<number>>, color: string, dashOffset: number,
+) {
     const lw   = 3.0 / (view.zoom * dpr);
     const dash = 6   / (view.zoom * dpr);
 
@@ -551,7 +631,7 @@ function renderSelection(
     ctx.lineDashOffset = dashOffset;
     ctx.strokeStyle    = color;
     ctx.beginPath();
-    for (const path of tracedBoundary(selection, W, H)) {
+    for (const path of paths) {
         ctx.moveTo(path[0], path[1]);
         for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
     }

@@ -5,7 +5,7 @@ import {
 } from "../src/storage";
 import { decodeMcw, encodeMcw } from "../src/mcw";
 import type { Axis } from "../src/types";
-import { gridRecipeFromFloat } from "../src/grid-recipes";
+import { evaluateGridRecipe, gridRecipeFromFloat } from "../src/grid-recipes";
 import { filledPixels } from "./_helpers";
 
 function mcwFixture(name: string): string {
@@ -70,19 +70,23 @@ describe(".mcw codec", () => {
         };
 
         const encoded = JSON.parse(encodeMcw(document));
-        expect(encoded).toEqual({
+        expect(encoded).toMatchObject({
             version: 3,
             state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
             pixels: "Cg==",
             colorA: "#010203",
             colorB: "#fafbfc",
             axes,
-            recipes: [],
             dangerColorOverride: "#123456",
             accentColorOverride: "#abcdef",
         });
+        expect(encoded.recipes).toHaveLength(1);
+        expect(encoded.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: "" });
         expect(encoded).not.toHaveProperty("workspace");
-        expect(decodeMcw(JSON.stringify(encoded))).toEqual(document);
+        const decoded = decodeMcw(JSON.stringify(encoded));
+        expect({ ...decoded, recipes: [] }).toEqual(document);
+        expect(decoded.recipes).toHaveLength(1);
+        expect(decoded.recipes[0].source.mask).toEqual(new Uint8Array());
     });
 
     test.each(["dangerColorOverride", "accentColorOverride"])(
@@ -220,6 +224,32 @@ describe(".mcw codec", () => {
         };
 
         expect(decodeMcw(encodeMcw(document)).recipes).toEqual([recipe]);
+    });
+
+    test("round-trips a legacy alternate gap whose original geometry avoids a conflict", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([1, 0, 1]),
+        });
+        recipe.right = 2;
+        recipe.columnSpacing = 0;
+        recipe.columnSpacingAlternate = 1;
+        recipe.columnOrientation = "alternate-mirrored";
+        const document = {
+            pattern: { mode: "row" as const, canvasWidth: 6, canvasHeight: 1 },
+            pixels: new Uint8Array(6).fill(1),
+            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+        };
+
+        const restored = decodeMcw(encodeMcw(document)).recipes[0];
+        expect(restored).toMatchObject({
+            id: recipe.id,
+            columnSpacing: 0,
+            columnSpacingAlternate: 1,
+        });
+        expect(evaluateGridRecipe(restored).conflicts).toEqual([]);
+        expect(evaluateGridRecipe(restored).cells.map(cell => [cell.x, cell.sourceIndex])).toEqual([
+            [0, 0], [1, 1], [2, 1], [3, 0], [5, 1],
+        ]);
     });
 
     test.each([

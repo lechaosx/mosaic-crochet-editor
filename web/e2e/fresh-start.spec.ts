@@ -136,7 +136,8 @@ test("example is editable and demonstrates overlay, global mirror, and Crochet",
 
     const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
     expect(recovery.workspace.axes.length).toBeGreaterThan(0);
-    expect(recovery.workspace.recipes).toEqual([]);
+    expect(recovery.workspace.recipes).toHaveLength(1);
+    expect(recovery.workspace.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: [] });
 
     await page.locator("#btn-export").click();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();

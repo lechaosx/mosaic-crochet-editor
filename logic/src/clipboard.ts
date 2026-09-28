@@ -5,7 +5,7 @@
 
 import { Float } from "./types";
 import { Store, outOfBounds } from "./store";
-import { cutCells, matchedCutMask, anchorFloat, deleteFloat } from "./selection";
+import { cutCells, matchedCutMask, anchorFloat, deleteFloat, syncActiveGridRecipe } from "./selection";
 
 // The clipboard is just a Float snapshot.
 let clipboard: Float | null = null;
@@ -39,6 +39,7 @@ export function cutFloat(store: Store): void {
 // float first. Cells that land on holes are dropped.
 export function pasteClipboard(store: Store): boolean {
     if (!clipboard) return false;
+    const currentRecipeId = store.state.activeRecipeId ?? store.state.recipes[0]?.id ?? null;
     if (store.state.float) anchorFloat(store);
 
     const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
@@ -57,7 +58,11 @@ export function pasteClipboard(store: Store): boolean {
     }
     if (!any) return false;
     const newFloat: Float = { x: clipboard.x, y: clipboard.y, w: clipboard.w, h: clipboard.h, pixels: fp };
-    store.commit(s => { s.float = newFloat; }, { history: true });
+    store.commit(s => {
+        s.float = newFloat;
+        s.activeRecipeId = currentRecipeId;
+        syncActiveGridRecipe(s);
+    }, { history: true });
     return true;
 }
 

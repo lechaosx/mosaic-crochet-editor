@@ -1,7 +1,7 @@
 import { assertPatternDimensions } from "./pattern";
 import { b64ToU8, packPixels, u8ToB64, unpackPixels } from "./storage";
 import { axisIsProjectValid } from "./symmetry";
-import { gridRecipeError } from "./grid-recipes";
+import { emptyGridRecipe, gridRecipeError } from "./grid-recipes";
 import type { Axis, GridRecipe, PatternState } from "./types";
 
 export const MCW_VERSION = 3;
@@ -54,7 +54,7 @@ function unpackMask(source: string, length: number): Uint8Array {
 }
 
 function readRecipes(value: unknown): GridRecipe[] {
-    if (value === undefined) return [];
+    if (value === undefined) return [emptyGridRecipe()];
     if (!Array.isArray(value)) throw invalidFile();
     const ids = new Set<string>();
     const recipes = value.map(item => {
@@ -64,7 +64,8 @@ function readRecipes(value: unknown): GridRecipe[] {
             || typeof item.source.h !== "number" || typeof item.source.mask !== "string") throw invalidFile();
         ids.add(item.id);
         if (!Number.isSafeInteger(item.source.w) || !Number.isSafeInteger(item.source.h)
-            || item.source.w <= 0 || item.source.h <= 0) throw invalidFile();
+            || item.source.w < 0 || item.source.h < 0
+            || (item.source.w === 0) !== (item.source.h === 0)) throw invalidFile();
         const number = (key: string) => {
             if (typeof item[key] !== "number") throw invalidFile();
             return item[key] as number;
@@ -87,6 +88,8 @@ function readRecipes(value: unknown): GridRecipe[] {
         const rotationTurns = item.rotationTurns ?? [];
         if (!Array.isArray(rotationTurns)
             || rotationTurns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) throw invalidFile();
+        if ((item.mirrorHorizontal !== undefined && typeof item.mirrorHorizontal !== "boolean")
+            || (item.mirrorVertical !== undefined && typeof item.mirrorVertical !== "boolean")) throw invalidFile();
         const recipe: GridRecipe = {
             id: item.id, enabled: true,
             source: { x: item.source.x, y: item.source.y, w: item.source.w, h: item.source.h, mask },
@@ -101,11 +104,13 @@ function readRecipes(value: unknown): GridRecipe[] {
             rotationCentreX: optionalNumber("rotationCentreX", item.source.x + (item.source.w - 1) / 2),
             rotationCentreY: optionalNumber("rotationCentreY", item.source.y + (item.source.h - 1) / 2),
             rotationTurns: rotationTurns as GridRecipe["rotationTurns"],
+            mirrorHorizontal: item.mirrorHorizontal === undefined ? false : item.mirrorHorizontal === true,
+            mirrorVertical: item.mirrorVertical === undefined ? false : item.mirrorVertical === true,
         };
         if (gridRecipeError(recipe) !== null) throw invalidFile();
         return recipe;
     });
-    return recipes;
+    return recipes.length > 0 ? recipes : [emptyGridRecipe()];
 }
 
 function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV3["recipes"] {
@@ -213,13 +218,13 @@ export function decodeMcw(source: string): ProjectDocument {
             throw invalidFile();
         }
         return {
-            ...common, pixels: new Uint8Array(parsed.pixels), axes: [], recipes: [],
+            ...common, pixels: new Uint8Array(parsed.pixels), axes: [], recipes: [emptyGridRecipe()],
             dangerColorOverride: null, accentColorOverride: null,
         };
     }
     if (typeof parsed.pixels !== "string") throw invalidFile();
     try {
-        const recipes = parsed.version === 3 ? readRecipes(parsed.recipes) : [];
+        const recipes = parsed.version === 3 ? readRecipes(parsed.recipes) : [emptyGridRecipe()];
         return {
             ...common,
             pixels: unpackPixels(parsed.pixels, common.pattern),

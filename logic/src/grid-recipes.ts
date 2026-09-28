@@ -27,7 +27,22 @@ export function gridRecipeFromFloat(float: Float): GridRecipe {
         rotationCentreX: float.x + (float.w - 1) / 2,
         rotationCentreY: float.y + (float.h - 1) / 2,
         rotationTurns: [],
+        mirrorHorizontal: false,
+        mirrorVertical: false,
     };
+}
+
+export function emptyGridRecipe(): GridRecipe {
+    return {
+        ...gridRecipeFromFloat({ x: 0, y: 0, w: 1, h: 1, pixels: new Uint8Array([1]) }),
+        source: { x: 0, y: 0, w: 0, h: 0, mask: new Uint8Array() },
+        rotationCentreX: 0,
+        rotationCentreY: 0,
+    };
+}
+
+export function recipeHasSource(recipe: GridRecipe): boolean {
+    return recipe.source.mask.length > 0;
 }
 
 export function recipeSourceCells(recipe: GridRecipe): TransformSourceCell[] {
@@ -45,24 +60,30 @@ export function gridRecipeError(recipe: GridRecipe): string | null {
     const { source } = recipe;
     if (typeof recipe.id !== "string" || recipe.id.length === 0) return "Recipe id is required.";
     if (typeof recipe.enabled !== "boolean") return "Recipe enabled state is required.";
+    const emptySource = source.w === 0 && source.h === 0 && source.mask.length === 0;
     if (!Number.isSafeInteger(source.x) || !Number.isSafeInteger(source.y)
         || !Number.isSafeInteger(source.w) || !Number.isSafeInteger(source.h)
-        || source.w <= 0 || source.h <= 0 || source.mask.length !== source.w * source.h
+        || (!emptySource && (source.w <= 0 || source.h <= 0)) || source.mask.length !== source.w * source.h
         || source.mask.some(value => value !== 0 && value !== 1)
-        || !source.mask.some(value => value !== 0)) return "Recipe source must be a non-empty whole-cell selection.";
+        || (!emptySource && !source.mask.some(value => value !== 0))) return "Recipe source must be an empty slot or a whole-cell selection.";
     if (recipe.mode !== "grid" && recipe.mode !== "rotation") return "Recipe mode is not supported.";
     if (!Number.isSafeInteger(recipe.rotationCentreX)
         && Math.abs(recipe.rotationCentreX % 1) !== 0.5) return "Rotation centre must be grid-compatible.";
     if (!Number.isSafeInteger(recipe.rotationCentreY)
         && Math.abs(recipe.rotationCentreY % 1) !== 0.5) return "Rotation centre must be grid-compatible.";
     if (!Array.isArray(recipe.rotationTurns)) return "Rotation supports only quarter turns.";
+    if (typeof recipe.mirrorHorizontal !== "boolean" || typeof recipe.mirrorVertical !== "boolean") {
+        return "Mirror copy state is required.";
+    }
     try {
-        const sourceCells = recipeSourceCells(recipe);
+        const sourceCells = emptySource ? [{ x: source.x, y: source.y }] : recipeSourceCells(recipe);
         const grid = evaluatePackedGrid(sourceCells, recipe);
         const rotation = evaluatePackedGrid(sourceCells, noGrid, {
             x: recipe.rotationCentreX,
             y: recipe.rotationCentreY,
             turns: recipe.rotationTurns,
+            mirrorHorizontal: recipe.mirrorHorizontal,
+            mirrorVertical: recipe.mirrorVertical,
         });
         return grid.conflicts.length === 0 && rotation.conflicts.length === 0
             ? null : "Recipe instances overlap.";
@@ -73,11 +94,18 @@ export function gridRecipeError(recipe: GridRecipe): string | null {
 
 export function evaluateGridRecipe(recipe: GridRecipe): PackedGridEvaluation {
     const source = recipeSourceCells(recipe);
+    if (source.length === 0) return {
+        columnStep: { x: 0, y: 0 }, columnStepAlternate: { x: 0, y: 0 },
+        rowStep: { x: 0, y: 0 }, rowStepAlternate: { x: 0, y: 0 },
+        cells: [], conflicts: [], instances: [],
+    };
     return recipe.mode === "rotation"
         ? evaluatePackedGrid(source, noGrid, {
             x: recipe.rotationCentreX,
             y: recipe.rotationCentreY,
             turns: recipe.rotationTurns,
+            mirrorHorizontal: recipe.mirrorHorizontal,
+            mirrorVertical: recipe.mirrorVertical,
         })
         : evaluatePackedGrid(source, recipe);
 }
@@ -85,36 +113,51 @@ export function evaluateGridRecipe(recipe: GridRecipe): PackedGridEvaluation {
 export function withRecipeSource(
     recipe: GridRecipe, float: Float, translation = { x: 0, y: 0 },
 ): GridRecipe {
+    const wasEmpty = !recipeHasSource(recipe);
     return {
         ...recipe,
         source: { x: float.x, y: float.y, w: float.w, h: float.h,
             mask: Uint8Array.from(float.pixels, value => value === 0 ? 0 : 1) },
-        rotationCentreX: recipe.rotationCentreX + translation.x,
-        rotationCentreY: recipe.rotationCentreY + translation.y,
+        rotationCentreX: wasEmpty ? float.x + (float.w - 1) / 2 : recipe.rotationCentreX + translation.x,
+        rotationCentreY: wasEmpty ? float.y + (float.h - 1) / 2 : recipe.rotationCentreY + translation.y,
     };
 }
 
 export function normalizeActiveRecipeId(
     recipes: ReadonlyArray<GridRecipe>, activeRecipeId: string | null, float: Float | null,
 ): string | null {
-    if (activeRecipeId === null || float === null) return null;
-    const recipe = recipes.find(candidate => candidate.id === activeRecipeId);
+    const recipe = recipes.find(candidate => candidate.id === activeRecipeId) ?? recipes[0];
     if (!recipe) return null;
+    if (float === null) return recipe.id;
+    if (!recipeHasSource(recipe)) return recipe.id;
     const source = recipe.source;
     if (source.x !== float.x || source.y !== float.y || source.w !== float.w || source.h !== float.h) return null;
     if (float.pixels.length !== source.mask.length) return null;
     for (let i = 0; i < source.mask.length; i++) {
         if ((source.mask[i] !== 0) !== (float.pixels[i] !== 0)) return null;
     }
-    return activeRecipeId;
+    return recipe.id;
 }
 
 export function storedGridRecipes(recipes: ReadonlyArray<GridRecipe>): unknown[] {
     return recipes.map(recipe => ({ ...recipe, enabled: true, source: { ...recipe.source, mask: Array.from(recipe.source.mask) } }));
 }
 
+export function gridRecipesEqual(a: ReadonlyArray<GridRecipe>, b: ReadonlyArray<GridRecipe>): boolean {
+    return a.length === b.length && a.every((recipe, index) => {
+        const other = b[index];
+        const bothEmpty = recipe.source.mask.length === 0 && other.source.mask.length === 0;
+        if (JSON.stringify({ ...recipe, id: bothEmpty ? undefined : recipe.id,
+            source: { ...recipe.source, mask: undefined } })
+            !== JSON.stringify({ ...other, id: bothEmpty ? undefined : other.id,
+                source: { ...other.source, mask: undefined } })) return false;
+        return recipe.source.mask.length === other.source.mask.length
+            && recipe.source.mask.every((value, maskIndex) => value === other.source.mask[maskIndex]);
+    });
+}
+
 export function restoreGridRecipes(value: unknown): GridRecipe[] {
-    if (!Array.isArray(value)) return [];
+    if (!Array.isArray(value)) return [emptyGridRecipe()];
     const ids = new Set<string>();
     const recipes: GridRecipe[] = [];
     for (const raw of value) {
@@ -133,11 +176,13 @@ export function restoreGridRecipes(value: unknown): GridRecipe[] {
             rotationCentreX: recipe.rotationCentreX ?? Number(source.x) + (Number(source.w) - 1) / 2,
             rotationCentreY: recipe.rotationCentreY ?? Number(source.y) + (Number(source.h) - 1) / 2,
             rotationTurns: recipe.rotationTurns ?? [],
+            mirrorHorizontal: recipe.mirrorHorizontal ?? false,
+            mirrorVertical: recipe.mirrorVertical ?? false,
             source: { ...source, mask },
         } as GridRecipe;
         if (gridRecipeError(restored) !== null) continue;
         ids.add(restored.id);
         recipes.push(restored);
     }
-    return recipes;
+    return recipes.length > 0 ? recipes : [emptyGridRecipe()];
 }

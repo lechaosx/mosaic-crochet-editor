@@ -81,6 +81,32 @@ describe("packed transform grid prototype", () => {
         )).toThrow(/1,048,576 claims/i);
     });
 
+    test.each([
+        ["horizontal mirror", { mirrorHorizontal: true }, 513],
+        ["vertical mirror", { mirrorVertical: true }, 513],
+        ["both mirrors", { mirrorHorizontal: true, mirrorVertical: true }, 342],
+    ])("counts %s copies before expanding claims", (_label, mirrors, sourceSize) => {
+        const source = Array.from({ length: sourceSize }, () => ({ x: 0, y: 0 }));
+        expect(() => evaluatePackedGrid(
+            source,
+            { ...noGrid, right: 1_023 },
+            { x: 10, y: 10, turns: [], ...mirrors },
+        )).toThrow(/1,048,576 claims/i);
+    });
+
+    test.each([
+        [{ mirrorHorizontal: true }, 512],
+        [{ mirrorVertical: true }, 512],
+        [{ mirrorHorizontal: true, mirrorVertical: true }, 341],
+    ])("accepts the source boundary for mirror claims", (mirrors, sourceSize) => {
+        const source = Array.from({ length: sourceSize }, (_, x) => ({ x, y: 0 }));
+        expect(() => evaluatePackedGrid(
+            source,
+            { ...noGrid, right: 1_023 },
+            { x: 100_000, y: 100_000, turns: [], ...mirrors },
+        )).not.toThrow();
+    });
+
     test("packs a sparse motif by occupied cells instead of its bounding box", () => {
         const result = evaluatePackedGrid(
             [{ x: 0, y: 0 }, { x: 2, y: 0 }],
@@ -103,7 +129,9 @@ describe("packed transform grid prototype", () => {
                 right: 2,
                 up: 1,
                 columnSpacing: 2,
+                columnSpacingAlternate: 2,
                 rowSpacing: 1,
+                rowSpacingAlternate: 1,
                 columnOffset: 1,
                 rowOffset: 1,
             },
@@ -221,7 +249,7 @@ describe("packed transform grid prototype", () => {
         expect(result.cells).toContainEqual({ x: 4, y: 1, sourceIndex: 2 });
     });
 
-    test("alternates primary and alternate mirrored gaps symmetrically in both directions", () => {
+    test("retains unequal legacy gaps for alternating mirrored columns", () => {
         const result = evaluatePackedGrid(
             [{ x: 0, y: 0 }],
             {

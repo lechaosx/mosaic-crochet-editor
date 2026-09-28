@@ -4,12 +4,13 @@
 // test fails loudly.
 
 import { describe, test, expect, vi } from "vitest";
+import { initialize_round_pattern } from "@mosaic/wasm";
 import { paintOps } from "../src/paint";
 import { axesToFlat, addAxis } from "../src/symmetry";
 import { Store } from "../src/store";
-import { replicateSelection, activateGridRecipe, createGridRecipe, deleteGridRecipe } from "../src/selection";
+import { applyGridRecipe, replicateSelection, activateGridRecipe, createGridRecipe, deleteGridRecipe, commitSelectRect } from "../src/selection";
 import { filledPixels, makeFloat, rowPattern, rowSession } from "./_helpers";
-import { gridRecipeFromFloat } from "../src/grid-recipes";
+import { gridRecipeFromFloat, restoreGridRecipes } from "../src/grid-recipes";
 
 describe("symmetry-aware paint inside selection", () => {
     test("with Vertical symmetry, painting (0, 1) clipped to a mask that doesn't include the mirrored cell only paints (0, 1)", () => {
@@ -125,6 +126,101 @@ describe("replicateSelection", () => {
 });
 
 describe("saved recipe lifecycle", () => {
+    test("apply clips destinations outside the chart instead of rejecting valid instances", () => {
+        const source = makeFloat([{ x: 0, y: 0, v: 2 }]);
+        const recipe = gridRecipeFromFloat(source);
+        recipe.right = 3;
+        const store = new Store(rowSession(2, 1, {
+            pixels: filledPixels(2, 1, 1),
+            float: source,
+            recipes: [recipe],
+            activeRecipeId: recipe.id,
+        }));
+
+        expect(applyGridRecipe(store)).toBe("applied");
+        expect(store.state.pixels).toEqual(new Uint8Array([1, 2]));
+    });
+
+    test("apply skips round holes while retaining later valid destinations", () => {
+        const W = 8, H = 8;
+        const pattern = {
+            mode: "round" as const,
+            canvasWidth: W, canvasHeight: H,
+            virtualWidth: W, virtualHeight: H,
+            offsetX: 0, offsetY: 0, rounds: 2,
+        };
+        const pixels = initialize_round_pattern(W, H, W, H, 0, 0, 2);
+        let sourceX = -1, sourceY = -1, step = -1;
+        for (let y = 0; y < H && sourceX < 0; y++) {
+            for (let distance = 1; distance < W / 2; distance++) {
+                for (let x = 0; x + distance * 2 < W; x++) {
+                    if (pixels[y * W + x] !== 0 && pixels[y * W + x + distance] === 0
+                        && pixels[y * W + x + distance * 2] !== 0) {
+                        sourceX = x;
+                        sourceY = y;
+                        step = distance;
+                        break;
+                    }
+                }
+            }
+        }
+        expect(sourceX).toBeGreaterThanOrEqual(0);
+        const source = makeFloat([{ x: sourceX, y: sourceY, v: 2 }]);
+        const recipe = gridRecipeFromFloat(source);
+        recipe.right = 2;
+        recipe.columnSpacing = step - 1;
+        recipe.columnSpacingAlternate = step - 1;
+        const store = new Store(rowSession(W, H, {
+            pattern, pixels, float: source, recipes: [recipe], activeRecipeId: recipe.id,
+        }));
+
+        expect(applyGridRecipe(store)).toBe("applied");
+        expect(store.state.pixels[sourceY * W + sourceX + step]).toBe(0);
+        expect(store.state.pixels[sourceY * W + sourceX + step * 2]).toBe(2);
+    });
+
+    test("the initial empty slot is filled by the next selection operation", () => {
+        const [slot] = restoreGridRecipes(undefined);
+        const store = new Store(rowSession(3, 1, {
+            pixels: filledPixels(3, 1, 1),
+            recipes: [slot],
+            activeRecipeId: slot.id,
+        }));
+
+        commitSelectRect(store, 1, 0, 1, 0, "replace");
+
+        expect(store.state.recipes).toHaveLength(1);
+        expect(store.state.activeRecipeId).toBe(slot.id);
+        expect(store.state.recipes[0].source).toMatchObject({ x: 1, y: 0, w: 1, h: 1 });
+    });
+
+    test("new selection creates and selects an empty slot while preserving earlier selections", () => {
+        const first = gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }]));
+        const store = new Store(rowSession(3, 1, {
+            pixels: filledPixels(3, 1, 1),
+            recipes: [first],
+            activeRecipeId: first.id,
+            float: makeFloat([{ x: 0, y: 0, v: 1 }]),
+        }));
+
+        expect(createGridRecipe(store)).toBe("created");
+
+        expect(store.state.recipes).toHaveLength(2);
+        expect(store.state.recipes[0]).toEqual(first);
+        expect(store.state.recipes[1].source.mask).toHaveLength(0);
+        expect(store.state.activeRecipeId).toBe(store.state.recipes[1].id);
+        expect(store.state.float).toBeNull();
+    });
+
+    test("the only saved selection cannot be deleted", () => {
+        const [only] = restoreGridRecipes(undefined);
+        const store = new Store(rowSession(3, 1, { recipes: [only], activeRecipeId: only.id }));
+
+        deleteGridRecipe(store, only.id);
+
+        expect(store.state.recipes).toEqual([only]);
+        expect(store.state.activeRecipeId).toBe(only.id);
+    });
     test("reactivating a sparse source preserves its exact saved bounds", () => {
         const source = { x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([0, 1, 0]) };
         const recipe = gridRecipeFromFloat(source);
@@ -150,9 +246,9 @@ describe("saved recipe lifecycle", () => {
         expect(store.state.activeRecipeId).toBe(firstId);
         expect(activateGridRecipe(store, secondId)).toBe(true);
         deleteGridRecipe(store, firstId);
-        expect(store.state.recipes.map(recipe => recipe.id)).toEqual([secondId]);
+        expect(store.state.recipes.map(recipe => recipe.id)).toContain(secondId);
         deleteGridRecipe(store, secondId);
-        expect(store.state.activeRecipeId).toBeNull();
-        expect(store.state.float).toBeNull();
+        expect(store.state.recipes).toHaveLength(1);
+        expect(store.state.activeRecipeId).toBe(store.state.recipes[0].id);
     });
 });

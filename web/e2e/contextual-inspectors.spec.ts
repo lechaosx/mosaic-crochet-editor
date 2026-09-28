@@ -72,7 +72,6 @@ test("live repeat and mirror controls are always on", async ({ page }) => {
     await clickCell(page, 2, 2);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 2);
-    await page.locator("#recipe-create").click();
     await expect(page.locator("#recipe-enabled")).toHaveCount(0);
     await expect(page.getByText("Repeat while drawing", { exact: true })).toHaveCount(0);
 });

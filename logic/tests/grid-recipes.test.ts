@@ -1,7 +1,41 @@
 import { describe, expect, test } from "vitest";
-import { evaluateGridRecipe, gridRecipeFromFloat, gridRecipeError, restoreGridRecipes, withRecipeSource } from "../src/grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeFromFloat, gridRecipeError, gridRecipesEqual, restoreGridRecipes, withRecipeSource } from "../src/grid-recipes";
 
 describe("saved grid recipes", () => {
+    test("missing saved selections migrate to one editable empty slot", () => {
+        const recipes = restoreGridRecipes(undefined);
+
+        expect(recipes).toHaveLength(1);
+        expect(recipes[0]).toMatchObject({
+            mode: "grid",
+            source: { x: 0, y: 0, w: 0, h: 0 },
+        });
+        expect(recipes[0].source.mask).toEqual(new Uint8Array());
+        expect(gridRecipeError(recipes[0])).toBeNull();
+        expect(evaluateGridRecipe(recipes[0])).toMatchObject({ cells: [], conflicts: [], instances: [] });
+    });
+
+    test("an explicitly empty saved selection round-trips without replacing its id", () => {
+        const empty = emptyGridRecipe();
+        const [restored] = restoreGridRecipes([{ ...empty, source: { ...empty.source, mask: [] } }]);
+
+        expect(restored.id).toBe(empty.id);
+        expect(restored.source.mask).toEqual(new Uint8Array());
+    });
+
+    test("compares generated empty slots by configuration but populated selections by id", () => {
+        const empty = emptyGridRecipe();
+        const otherEmpty = { ...emptyGridRecipe(), source: { ...empty.source } };
+        expect(gridRecipesEqual([empty], [otherEmpty])).toBe(true);
+        expect(gridRecipesEqual([empty], [{ ...otherEmpty, right: 1 }])).toBe(false);
+        expect(gridRecipesEqual([empty], [otherEmpty, emptyGridRecipe()])).toBe(false);
+
+        const populated = gridRecipeFromFloat({
+            x: 0, y: 0, w: 1, h: 1, pixels: new Uint8Array([1]),
+        });
+        expect(gridRecipesEqual([populated], [{ ...populated, id: "different" }])).toBe(false);
+    });
+
     test("legacy disabled recipes are restored as live", () => {
         const recipe = gridRecipeFromFloat({
             x: 1, y: 1, w: 1, h: 1, pixels: new Uint8Array([1]),
@@ -13,6 +47,44 @@ describe("saved grid recipes", () => {
         };
 
         expect(restoreGridRecipes([legacy])[0].enabled).toBe(true);
+    });
+
+    test("restores legacy alternate gaps with their original packed geometry until the gap is edited", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([1, 0, 1]),
+        });
+        const restored = restoreGridRecipes([{
+            ...recipe,
+            right: 2,
+            columnSpacing: 0,
+            columnSpacingAlternate: 1,
+            columnOrientation: "alternate-mirrored",
+            source: { ...recipe.source, mask: [1, 0, 1] },
+        }])[0];
+
+        expect(restored).toMatchObject({
+            id: recipe.id,
+            columnSpacing: 0,
+            columnSpacingAlternate: 1,
+        });
+        expect(evaluateGridRecipe(restored)).toMatchObject({
+            columnStep: { x: 1, y: 0 },
+            columnStepAlternate: { x: 2, y: 0 },
+            conflicts: [],
+        });
+        expect(evaluateGridRecipe(restored).cells.map(cell => [cell.x, cell.sourceIndex])).toEqual([
+            [0, 0], [1, 1], [2, 1], [3, 0], [5, 1],
+        ]);
+
+        const synchronized = { ...restored, columnSpacing: 1, columnSpacingAlternate: 1 };
+        expect(evaluateGridRecipe(synchronized)).toMatchObject({
+            columnStep: { x: 2, y: 0 },
+            columnStepAlternate: { x: 2, y: 0 },
+            conflicts: [],
+        });
+        expect(evaluateGridRecipe(synchronized).instances.map(instance => instance.map(cell => cell.x))).toEqual([
+            [0, 2], [2, 4], [4, 6],
+        ]);
     });
 
     test("uses a sparse active selection as an absolute packed source", () => {
@@ -72,6 +144,44 @@ describe("saved grid recipes", () => {
         expect(evaluated.cells).toHaveLength(6);
         expect(evaluated.cells.every(cell => cell.x >= 0 && cell.x <= 2 && cell.y >= 0 && cell.y <= 2)).toBe(true);
         expect(gridRecipeError(recipe)).toBeNull();
+    });
+
+    test("whole-selection horizontal and vertical mirror copies share the transformation centre", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 2, y: 2, w: 2, h: 1, pixels: new Uint8Array([1, 1]),
+        });
+        Object.assign(recipe, {
+            mode: "rotation",
+            rotationCentreX: 4,
+            rotationCentreY: 3,
+            mirrorHorizontal: true,
+            mirrorVertical: true,
+        });
+
+        expect(evaluateGridRecipe(recipe).cells.map(({ x, y, sourceIndex }) => ({ x, y, sourceIndex }))).toEqual([
+            { x: 2, y: 2, sourceIndex: 0 },
+            { x: 3, y: 2, sourceIndex: 1 },
+            { x: 5, y: 2, sourceIndex: 1 },
+            { x: 6, y: 2, sourceIndex: 0 },
+            { x: 2, y: 4, sourceIndex: 0 },
+            { x: 3, y: 4, sourceIndex: 1 },
+        ]);
+    });
+
+    test("mirrored grid copies use the one configured gap in every step", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 0, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 1]),
+        });
+        Object.assign(recipe, {
+            right: 2,
+            columnSpacing: 1,
+            columnSpacingAlternate: 1,
+            columnOrientation: "alternate-mirrored",
+        });
+
+        expect(evaluateGridRecipe(recipe).instances.map(instance => instance.map(cell => cell.x))).toEqual([
+            [0, 1], [3, 4], [6, 7],
+        ]);
     });
 
     test("validates retained grid and rotation settings in either mode", () => {

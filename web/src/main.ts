@@ -16,7 +16,7 @@ import { addAxis, removeAxis, toggleAxisActive,
          pickAxesAt, setAxisPosition, snapHalf, snapInt,
          axisOffCanvas, axisIsProjectValid } from "@mosaic/logic/symmetry";
 import { axesToFlat } from "@mosaic/logic/symmetry";
-import { evaluateGridRecipe, gridRecipeError, recipeSourceCells } from "@mosaic/logic/grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual } from "@mosaic/logic/grid-recipes";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
@@ -25,7 +25,8 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          previewSelectRectMask,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection, createGridRecipe,
-         activateGridRecipe, deleteGridRecipe, activeGridRecipe, syncActiveGridRecipe } from "@mosaic/logic/selection";
+         activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe,
+         syncActiveGridRecipe } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, PaintTool, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
@@ -76,15 +77,6 @@ function axesEqual(a: ReadonlyArray<Axis>, b: ReadonlyArray<Axis>): boolean {
     });
 }
 
-function recipesEqual(a: ReadonlyArray<GridRecipe>, b: ReadonlyArray<GridRecipe>): boolean {
-    return a.length === b.length && a.every((recipe, index) => {
-        const other = b[index];
-        return JSON.stringify({ ...recipe, source: { ...recipe.source, mask: undefined } })
-            === JSON.stringify({ ...other, source: { ...other.source, mask: undefined } })
-            && arraysEqual(recipe.source.mask, other.source.mask);
-    });
-}
-
 function sameProject(loaded: LoadedFile): boolean {
     return sameAuthoredPattern(loaded.pattern, loaded.pixels)
         && loaded.colorA === store.state.colorA
@@ -92,11 +84,12 @@ function sameProject(loaded: LoadedFile): boolean {
         && (loaded.dangerColorOverride ?? null) === store.state.dangerColorOverride
         && (loaded.accentColorOverride ?? null) === store.state.accentColorOverride
         && axesEqual(loaded.axes, store.state.axes)
-        && recipesEqual(loaded.recipes, store.state.recipes);
+        && gridRecipesEqual(loaded.recipes, store.state.recipes);
 }
 
 // Minimal sensible defaults — only used when no saved session exists.
 function defaultSession(): SessionState {
+    const recipe = emptyGridRecipe();
     return {
         pattern:       { mode: "row", canvasWidth: 9, canvasHeight: 9 },
         pixels:        new Uint8Array(81),
@@ -107,8 +100,8 @@ function defaultSession(): SessionState {
         activeTool:    "pencil",
         primaryColor:  1,
         axes:           [],
-        recipes:        [],
-        activeRecipeId: null,
+        recipes:        [recipe],
+        activeRecipeId: recipe.id,
         liveMirrors:    true,
         float:           null,
         rotation:        0,
@@ -594,8 +587,8 @@ function refreshRecipeUi(error: string | null = null) {
 }
 
 function onCreateRecipe() {
-    const result = createGridRecipe(store);
-    refreshRecipeUi(result === "no-selection" ? "Select work before saving a repeat." : result === "invalid" ? "That selection cannot form a repeat." : null);
+    createGridRecipe(store);
+    refreshRecipeUi();
 }
 
 function onActivateRecipe(id: string) {
@@ -611,7 +604,13 @@ function onDeleteRecipe(id: string) {
 function onRecipeChange(id: string, change: Partial<GridRecipe>) {
     const recipe = store.state.recipes.find(candidate => candidate.id === id);
     if (!recipe) return;
-    const updated = { ...recipe, ...change, enabled: true };
+    const updated = {
+        ...recipe,
+        ...change,
+        enabled: true,
+        columnSpacingAlternate: change.columnSpacingAlternate ?? recipe.columnSpacingAlternate,
+        rowSpacingAlternate: change.rowSpacingAlternate ?? recipe.rowSpacingAlternate,
+    };
     const error = gridRecipeError(updated);
     if (error) { refreshRecipeUi(error); return; }
     store.commit(s => { s.recipes = s.recipes.map(candidate => candidate.id === id ? updated : candidate); }, { history: true });
@@ -619,26 +618,9 @@ function onRecipeChange(id: string, change: Partial<GridRecipe>) {
 }
 
 function onApplyRecipe() {
-    const recipe = activeGridRecipe(store.state);
-    const float = store.state.float;
-    if (!recipe || !float) { refreshRecipeUi("Activate a saved repeat first."); return; }
-    const evaluated = evaluateGridRecipe(recipe);
-    const sources = recipeSourceCells(recipe);
-    if (evaluated.conflicts.length) { refreshRecipeUi("Repeat instances overlap."); return; }
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    const next = store.state.pixels.slice();
-    let changed = false;
-    for (const cell of evaluated.cells) {
-        const source = sources[cell.sourceIndex];
-        if (cell.x === source.x && cell.y === source.y) continue;
-        if (outOfBounds(cell.x, cell.y, W, H) || store.state.pixels[cell.y * W + cell.x] === 0) {
-            refreshRecipeUi("Repeat extends outside the chart."); return;
-        }
-        const value = float.pixels[(source.y - float.y) * float.w + source.x - float.x];
-        if (value !== 0 && next[cell.y * W + cell.x] !== value) { next[cell.y * W + cell.x] = value; changed = true; }
-    }
-    if (changed) store.commit(s => { s.pixels = next; }, { history: true });
-    refreshRecipeUi();
+    const result = applyGridRecipe(store);
+    refreshRecipeUi(result === "no-selection" ? "Select cells for this selection first."
+        : result === "conflict" ? "Repeat instances overlap." : null);
 }
 
 // ── Tool / colour / settings handlers ────────────────────────────────────────

@@ -28,6 +28,8 @@ export interface AroundCentreRecipe {
     x: number;
     y: number;
     turns: QuarterTurn[];
+    mirrorHorizontal?: boolean;
+    mirrorVertical?: boolean;
 }
 
 export interface EvaluatedTransformCell {
@@ -49,6 +51,7 @@ export interface PackedGridEvaluation {
     rowStepAlternate: { x: number; y: number };
     cells: EvaluatedTransformCell[];
     conflicts: TransformConflict[];
+    instances: EvaluatedTransformCell[][];
 }
 
 export function evaluatePackedGrid(
@@ -75,7 +78,9 @@ export function evaluatePackedGrid(
     if (turns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) {
         throw new RangeError("Rotation supports only quarter turns.");
     }
-    const transformPositions = positions * (turns.length + 1);
+    const mirrorCopies = Number(aroundCentre?.mirrorHorizontal === true)
+        + Number(aroundCentre?.mirrorVertical === true);
+    const transformPositions = positions * (turns.length + mirrorCopies + 1);
     if (source.length > Math.floor(MAX_TRANSFORM_CLAIMS / transformPositions)) {
         throw new RangeError(`Transform grid cannot exceed ${MAX_TRANSFORM_CLAIMS.toLocaleString("en-US")} claims.`);
     }
@@ -95,7 +100,7 @@ export function evaluatePackedGrid(
         throw new RangeError("Grid orientation is not supported.");
     }
 
-    const input = expandQuarterTurns(source, aroundCentre);
+    const input = expandAroundCentre(source, aroundCentre);
 
     const columnPacked = packedDistance(
         input, "x", recipe.columnOffset,
@@ -110,8 +115,7 @@ export function evaluatePackedGrid(
         y: recipe.columnOffset,
     };
     const columnStepAlternate = {
-        x: safeAdd(columnPacked, recipe.columnOrientation === "alternate-mirrored"
-            ? recipe.columnSpacingAlternate : recipe.columnSpacing),
+        x: safeAdd(columnPacked, recipe.columnSpacingAlternate),
         y: recipe.columnOffset,
     };
     const rowStep = {
@@ -120,11 +124,11 @@ export function evaluatePackedGrid(
     };
     const rowStepAlternate = {
         x: recipe.rowOffset,
-        y: safeAdd(rowPacked, recipe.rowOrientation === "alternate-mirrored"
-            ? recipe.rowSpacingAlternate : recipe.rowSpacing),
+        y: safeAdd(rowPacked, recipe.rowSpacingAlternate),
     };
     const bounds = cellBounds(input);
     const claims = new Map<string, CellClaim>();
+    const instances: EvaluatedTransformCell[][] = [];
 
     for (let row = -recipe.up; row <= recipe.down; row++) {
         for (let column = -recipe.left; column <= recipe.right; column++) {
@@ -138,12 +142,22 @@ export function evaluatePackedGrid(
             );
             const mirrorX = recipe.columnOrientation === "alternate-mirrored" && isOdd(column);
             const mirrorY = recipe.rowOrientation === "alternate-mirrored" && isOdd(row);
+            const instanceClaims = new Map<string, CellClaim>();
             for (const cell of input) {
                 const oriented = orientCell(cell, bounds, mirrorX, mirrorY);
                 for (const sourceIndex of cell.sourceIndices) {
                     addClaim(claims, safeAdd(oriented.x, dx), safeAdd(oriented.y, dy), sourceIndex);
+                    addClaim(instanceClaims, safeAdd(oriented.x, dx), safeAdd(oriented.y, dy), sourceIndex);
                 }
             }
+            instances.push([...instanceClaims.values()]
+                .filter(claim => claim.sourceIndices.size === 1)
+                .sort((a, b) => a.y - b.y || a.x - b.x)
+                .map(claim => ({
+                    x: claim.x,
+                    y: claim.y,
+                    sourceIndex: claim.sourceIndices.values().next().value!,
+                })));
         }
     }
 
@@ -167,6 +181,7 @@ export function evaluatePackedGrid(
                 y: claim.y,
                 sourceIndices: [...claim.sourceIndices].sort((a, b) => a - b),
             })),
+        instances,
     };
 }
 
@@ -194,7 +209,7 @@ function addClaim(claims: Map<string, CellClaim>, x: number, y: number, sourceIn
     else claims.set(key, { x, y, sourceIndices: new Set([sourceIndex]) });
 }
 
-function expandQuarterTurns(
+function expandAroundCentre(
     source: ReadonlyArray<TransformSourceCell>,
     aroundCentre: AroundCentreRecipe | undefined,
 ): CellClaim[] {
@@ -206,7 +221,9 @@ function expandQuarterTurns(
     if (turns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) {
         throw new RangeError("Rotation supports only quarter turns.");
     }
-    if (turns.length === 0) return [...claims.values()];
+    if (turns.length === 0 && !aroundCentre.mirrorHorizontal && !aroundCentre.mirrorVertical) {
+        return [...claims.values()];
+    }
     if (!isSafeGridCoordinate(aroundCentre.x) || !isSafeGridCoordinate(aroundCentre.y)) {
         throw new RangeError("Rotation centre must be grid-compatible.");
     }
@@ -222,6 +239,12 @@ function expandQuarterTurns(
                 throw new RangeError("Rotation centre is not grid-compatible with quarter turns.");
             }
             addClaim(claims, rotated.x, rotated.y, sourceIndex);
+        }
+        if (aroundCentre.mirrorHorizontal) {
+            addClaim(claims, safeGridSubtract(aroundCentre.x * 2, cell.x), cell.y, sourceIndex);
+        }
+        if (aroundCentre.mirrorVertical) {
+            addClaim(claims, cell.x, safeGridSubtract(aroundCentre.y * 2, cell.y), sourceIndex);
         }
     });
     return [...claims.values()];
