@@ -73,7 +73,6 @@ export interface UICallbacks {
     onDeleteRecipe:    (id: string) => void;
     onRecipeChange:    (id: string, change: Partial<GridRecipe>) => void;
     onApplyRecipe:     () => void;
-    onLiveMirrorsChange: (enabled: boolean) => void;
     onTransformPopoverToggle: (open: boolean) => void;
     onReplicateSelection: () => void;
     onHighlightChange:        () => void;
@@ -113,7 +112,7 @@ export interface UIHandle {
     setAxes:            (axes: ReadonlyArray<Axis>) => void;
     setRecipes:         (recipes: ReadonlyArray<GridRecipe>, activeId: string | null) => void;
     setRecipeError:     (message: string | null) => void;
-    setTransformState:  (hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) => void;
+    setTransformState:  (hasSelection: boolean, hasTransforms: boolean) => void;
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setCrochetProgress: (hasProgress: boolean) => void;
@@ -157,22 +156,25 @@ export interface InstructionsView {
 
 // ─── Mount ────────────────────────────────────────────────────────────────────
 export function mountUI(cb: UICallbacks): UIHandle {
-    type InspectorPanel = "selection" | "settings" | "transforms" | "pattern";
+    type InspectorPanel = "selection" | "move" | "settings" | "transforms" | "pattern";
     const inspectorHost = el("inspector-host");
     const inspectorTitle = el("inspector-title");
     const inspectorPanels: Record<InspectorPanel, HTMLElement> = {
         selection: el("selection-popover"),
+        move: el("move-popover"),
         settings: el("hl-popover"),
         transforms: el("sym-popover"),
         pattern: el("edit-pattern-widget"),
     };
     const inspectorTriggers: Record<InspectorPanel, HTMLElement> = {
         selection: el("selection-actions"),
+        move: el("tool-move"),
         settings: el("btn-hl-toggle"),
         transforms: el("btn-sym-toggle"),
         pattern: el("btn-edit"),
     };
     let activeInspector: InspectorPanel | null = null;
+    let activeInspectorTrigger: HTMLElement | null = null;
     let closeInstructionsWorkspace: ((restoreFocus: boolean) => void) | null = null;
     let finishPatternEdit = () => {};
     const enterDesignForCommand = () => closeInstructionsWorkspace?.(false);
@@ -239,17 +241,29 @@ export function mountUI(cb: UICallbacks): UIHandle {
         return !inspectorHost.hidden && activeInspector === panel;
     }
 
-    function openInspector(panel: InspectorPanel, title: string) {
+    const panelTriggers: Record<InspectorPanel, HTMLElement[]> = {
+        selection: [el("selection-actions"), el("tool-select"), el("tool-wand")],
+        move: [el("tool-move")],
+        settings: [el("btn-hl-toggle")],
+        transforms: [el("btn-sym-toggle")],
+        pattern: [el("btn-edit")],
+    };
+
+    function openInspector(panel: InspectorPanel, title: string, trigger = inspectorTriggers[panel]) {
         if (activeInspector === "pattern" && panel !== "pattern") finishPatternEdit();
         if (activeInspector === "transforms" && panel !== "transforms") {
             cb.onTransformPopoverToggle(false);
         }
         activeInspector = panel;
+        activeInspectorTrigger = trigger;
         inspectorHost.hidden = false;
         inspectorTitle.textContent = title;
         (Object.keys(inspectorPanels) as InspectorPanel[]).forEach(key => {
             inspectorPanels[key].hidden = key !== panel;
-            inspectorTriggers[key].setAttribute("aria-expanded", String(key === panel));
+            panelTriggers[key].forEach(candidate => candidate.setAttribute(
+                "aria-expanded",
+                String(key === panel && (candidate === inspectorTriggers[key] || candidate === trigger)),
+            ));
         });
         if (panel === "transforms") cb.onTransformPopoverToggle(true);
         syncCanvasChromeInsets();
@@ -270,13 +284,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
         inspectorHost.hidden = true;
         (Object.keys(inspectorPanels) as InspectorPanel[]).forEach(key => {
             inspectorPanels[key].hidden = true;
-            inspectorTriggers[key].setAttribute("aria-expanded", "false");
+            panelTriggers[key].forEach(candidate => candidate.setAttribute("aria-expanded", "false"));
         });
         activeInspector = null;
+        const trigger = activeInspectorTrigger;
+        activeInspectorTrigger = null;
         syncCanvasChromeInsets();
         queueCanvasChromeSync();
 
-        const trigger = panel === null ? null : inspectorTriggers[panel];
         const more = el<HTMLButtonElement>("btn-more");
         const activeTool = document.querySelector<HTMLButtonElement>(
             ".authoring-dock .btn[aria-pressed='true']",
@@ -341,6 +356,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
             overlayButtons[action].classList.toggle("btn--active", active);
             overlayButtons[action].setAttribute("aria-pressed", String(active));
         }
+        if (t === "select" || t === "wand") openInspector("selection", "Selection", toolButtons[t]);
+        else if (t === "move") openInspector("move", "Move", toolButtons.move);
     }
     function setOverlayAction(action: OverlayAction) {
         overlayAction = action;
@@ -404,6 +421,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setSelectionState(selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) {
         const hasSelection = selectedCount > 0;
         const hasClip = clipboardCount > 0;
+        const statusVisibilityChanged = selectionStatus.hidden === (hasSelection || hasClip);
         selectionTrigger.disabled = !hasSelection && !hasClip
             && currentTool !== "select" && currentTool !== "wand";
         if (hasSelection) {
@@ -427,7 +445,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         selectionClipboard.textContent = hasSelection && hasClip
             ? `${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"} copied`
             : "";
-        selectionModes.hidden = !hasSelection;
+        (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(key => {
+            modeButtons[key].disabled = !hasSelection;
+        });
         selectionCopy.hidden = !hasSelection;
         selectionCut.hidden = !hasSelection;
         selectionDeselect.hidden = !hasSelection;
@@ -439,12 +459,15 @@ export function mountUI(cb: UICallbacks): UIHandle {
             modeButtons[key].setAttribute("aria-pressed", String(active));
         });
         if (selectionTrigger.disabled && isInspectorOpen("selection")) closeInspector();
+        if (statusVisibilityChanged) syncCanvasChromeInsets();
     }
 
     function setCanvasFeedback(message: string | null) {
         const feedback = el("status-feedback");
+        const visibilityChanged = feedback.hidden === (message !== null);
         feedback.textContent = message ?? "";
         feedback.hidden = message === null;
+        if (visibilityChanged) syncCanvasChromeInsets();
     }
 
     /* ── Colour swatches ──────────────────────────────────────────────── */
@@ -521,22 +544,15 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const replicateSelection = el<HTMLButtonElement>("replicate-selection");
     const transformError = el("transform-error");
     replicateSelection.addEventListener("click", cb.onReplicateSelection);
-    const liveTransforms = el<HTMLInputElement>("live-transforms");
-    liveTransforms.addEventListener("input", () => cb.onLiveMirrorsChange(liveTransforms.checked));
-
-    function setTransformState(hasSelection: boolean, hasTransforms: boolean, liveEnabled: boolean) {
+    function setTransformState(hasSelection: boolean, hasTransforms: boolean) {
         replicateSelection.disabled = !hasSelection || !hasTransforms;
         replicateSelection.title = !hasTransforms
             ? "Add a Global Mirror axis first"
             : !hasSelection ? "Select cells to apply Global Mirror" : "Apply Global Mirror (T)";
-        liveTransforms.checked = liveEnabled;
-
-        const state = !hasTransforms ? "none" : liveEnabled ? "live" : "paused";
+        const state = !hasTransforms ? "none" : "live";
         const label = state === "none"
             ? "Global Mirror: no axes configured"
-            : state === "live"
-                ? "Global Mirror: applying while drawing"
-                : "Global Mirror: drawing application paused";
+            : "Global Mirror: applying while drawing";
         symToggle.dataset.transformState = state;
         symToggle.title = label;
         symToggle.setAttribute("aria-label", label);
@@ -554,7 +570,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const recipeControls = el("recipe-controls");
     const recipeGridControls = el("recipe-grid-controls");
     const recipeRotationControls = el("recipe-rotation-controls");
-    const recipeEnabled = el<HTMLInputElement>("recipe-enabled");
     const recipeLeft = el<HTMLInputElement>("recipe-left");
     const recipeRight = el<HTMLInputElement>("recipe-right");
     const recipeUp = el<HTMLInputElement>("recipe-up");
@@ -577,7 +592,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el("recipe-create").addEventListener("click", cb.onCreateRecipe);
     el("recipe-apply").addEventListener("click", cb.onApplyRecipe);
     const recipeInputs = [
-        recipeEnabled, recipeLeft, recipeRight, recipeUp, recipeDown,
+        recipeLeft, recipeRight, recipeUp, recipeDown,
         recipeGapX, recipeGapXAlternate, recipeGapY, recipeGapYAlternate,
         recipeColumnOffset, recipeRowOffset, recipeCentreX, recipeCentreY,
         ...recipeTurns,
@@ -603,7 +618,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         }
         syncRecipeSections();
         cb.onRecipeChange(id, {
-            enabled: recipeEnabled.checked,
             mode: radioValue("recipe-mode") as GridRecipe["mode"],
             left: recipeLeft.valueAsNumber,
             right: recipeRight.valueAsNumber,
@@ -648,7 +662,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const active = activeId === null ? null : recipes.find(recipe => recipe.id === activeId) ?? null;
         recipeControls.hidden = active === null;
         if (!active) return;
-        recipeEnabled.checked = active.enabled;
         setRadio("recipe-mode", active.mode);
         recipeLeft.value = String(active.left);
         recipeRight.value = String(active.right);

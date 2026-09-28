@@ -250,10 +250,7 @@ input  { font: inherit; color: inherit; }
   }
 
   .authoring-dock .btn { width: var(--hit); padding-inline: 0; }
-  .authoring-dock :is(#tool-overlay, #overlay-clear, #overlay-invert, #selection-actions) { font-size: 0; }
-  #tool-overlay::before { content: "+×"; font-size: var(--font-sm); }
-  #overlay-clear::before { content: "−×"; font-size: var(--font-sm); }
-  #overlay-invert::before { content: "±×"; font-size: var(--font-sm); }
+  #selection-actions { font-size: 0; }
   #selection-actions::before { content: "⋯"; font-size: 1.1rem; }
 
   .dock-group + .dock-group {
@@ -338,8 +335,7 @@ input  { font: inherit; color: inherit; }
   border-color: var(--accent);
   color: var(--fg-0);
 }
-#btn-sym-toggle[data-transform-state="live"]::after,
-#btn-sym-toggle[data-transform-state="paused"]::after {
+#btn-sym-toggle[data-transform-state="live"]::after {
   position: absolute;
   right: 0.15rem;
   bottom: 0.15rem;
@@ -351,21 +347,6 @@ input  { font: inherit; color: inherit; }
   background: var(--accent);
   content: "";
 }
-#btn-sym-toggle[data-transform-state="paused"] {
-  background: var(--bg-4);
-  border-color: var(--fg-2);
-  color: var(--fg-0);
-}
-#btn-sym-toggle[data-transform-state="paused"]::after {
-  width: 0.75rem;
-  height: 0.75rem;
-  background: var(--bg-0);
-  color: var(--fg-1);
-  content: "Ⅱ";
-  font-size: 0.45rem;
-  line-height: 1;
-}
-
 .btn--danger {
   background: rgba(160, 32, 32, 0.55);
   border-color: rgba(200, 60, 60, 0.6);
@@ -688,8 +669,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
   pointer-events: auto;
 }
 .selection-mode-controls .btn {
+  flex: 1 1 6rem;
   min-height: var(--hit-sm);
   padding-inline: var(--space-2);
+  justify-content: space-between;
 }
 .selection-mode-controls [aria-disabled="true"] { opacity: 0.55; }
 
@@ -706,8 +689,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
   display: grid;
   gap: var(--space-1);
 }
-.selection-modes { grid-template-columns: repeat(3, 1fr); }
-.selection-actions { grid-template-columns: repeat(4, 1fr); }
+.selection-modes { grid-template-columns: 1fr; }
+.selection-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .selection-modes .btn,
 .selection-actions .btn { width: 100%; }
 .selection-modes kbd,

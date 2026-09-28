@@ -42,7 +42,7 @@ describe("browser persistence migrations", () => {
             pattern: session.pattern,
             axes: [valid],
             recipes: [],
-            liveMirrors: false,
+            liveMirrors: true,
         });
         expect(restored!.float).toEqual(session.float);
 
@@ -51,7 +51,7 @@ describe("browser persistence migrations", () => {
         expect(migrated.document).toMatchObject({ state: session.pattern, colorA: session.colorA, colorB: session.colorB });
         expect(migrated.workspace).toMatchObject({
             axes: session.axes,
-            liveTransforms: false,
+            liveTransforms: true,
             rotation: session.rotation,
         });
         expect(migrated.preferences).toBeUndefined();

@@ -22,8 +22,14 @@
     <symbol id="icon-invert" viewBox="0 0 24 24">
       <path d="M4 7h16m-4-3 4 3-4 3M20 17H4m4-3-4 3 4 3"/>
     </symbol>
-    <symbol id="icon-overlay" viewBox="0 0 24 24">
+    <symbol id="icon-overlay-place" viewBox="0 0 24 24">
       <rect x="4.5" y="4.5" width="15" height="15" rx="1"/><path d="m8 8 8 8m0-8-8 8"/>
+    </symbol>
+    <symbol id="icon-overlay-clear" viewBox="0 0 24 24">
+      <rect x="4.5" y="4.5" width="15" height="15" rx="1"/>
+    </symbol>
+    <symbol id="icon-overlay-invert" viewBox="0 0 24 24">
+      <rect x="4.5" y="4.5" width="15" height="15" rx="1"/><path d="M5 19 19 5M5 15l4 4m-4-8 8 8M5 7l12 12M9 5l10 10m-6-10 6 6m-2-6 2 2"/>
     </symbol>
     <symbol id="icon-select" viewBox="0 0 24 24">
       <rect x="4.5" y="5" width="15" height="14" rx="1" stroke-dasharray="3 2"/>
@@ -82,16 +88,16 @@
 
       <div class="dock-group g-overlay" role="group" aria-label="Overlay tools">
         <span class="dock-group-label" aria-hidden="true">Overlay</span>
-        <button class="btn" id="tool-overlay" title="Place an overlay (O); right-click clears" aria-label="Place overlay">Place</button>
-        <button class="btn" id="overlay-clear" title="Clear an overlay (Shift+O); right-click places" aria-label="Clear overlay">Clear</button>
-        <button class="btn" id="overlay-invert" title="Invert overlay presence" aria-label="Invert overlay">Invert</button>
+        <button class="btn btn--icon" id="tool-overlay" title="Place an overlay (O); right-click clears" aria-label="Place overlay"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-overlay-place"/></svg></button>
+        <button class="btn btn--icon" id="overlay-clear" title="Clear an overlay (Shift+O); right-click places" aria-label="Clear overlay"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-overlay-clear"/></svg></button>
+        <button class="btn btn--icon" id="overlay-invert" title="Invert overlay presence" aria-label="Invert overlay"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-overlay-invert"/></svg></button>
       </div>
 
       <div class="dock-group g-transform" role="group" aria-label="Arrange tools">
         <span class="dock-group-label" aria-hidden="true">Arrange</span>
-        <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-select"/></svg></button>
-        <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
-        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
+        <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-select"/></svg></button>
+        <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
+        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
         <button class="btn" id="selection-actions" title="Selection modes and actions" aria-label="Selection actions" aria-controls="inspector-host" aria-expanded="false">Selection</button>
         <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Global Mirror: no axes configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Global Mirror: no axes configured"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
       </div>
@@ -206,11 +212,6 @@
       <button class="btn" id="selection-add" type="button" aria-pressed="false" title="Add cells to the current selection (Shift)">Add <kbd>Shift</kbd></button>
       <button class="btn" id="selection-subtract" type="button" aria-pressed="false" aria-disabled="true" title="Subtract cells from the current selection (Ctrl)">Subtract <kbd>Ctrl</kbd></button>
     </div>
-    <div id="selection-modes" class="selection-modes" role="group" aria-label="Move outcome">
-      <button class="btn" id="selection-mode-move" type="button" aria-pressed="true" title="Move the selected cells when dragging">Move content</button>
-      <button class="btn" id="selection-mode-duplicate" type="button" aria-pressed="false" title="Leave the original cells and move a copy (Ctrl)">Duplicate <kbd>Ctrl</kbd></button>
-      <button class="btn" id="selection-mode-area" type="button" aria-pressed="false" title="Move the selection boundary without moving content (Alt)">Move area <kbd>Alt</kbd></button>
-    </div>
     <div class="selection-actions">
       <button class="btn" id="selection-copy" type="button" aria-label="Copy" title="Copy selected cells (Ctrl+C)">Copy <kbd>Ctrl+C</kbd></button>
       <button class="btn" id="selection-cut" type="button" aria-label="Cut" title="Cut selected cells (Ctrl+X)">Cut <kbd>Ctrl+X</kbd></button>
@@ -221,7 +222,6 @@
       <div class="popover-row"><span class="popover-label">Saved repeats</span><button class="btn" id="recipe-create" type="button" title="Save the current selection as a repeat">Save selection</button></div>
       <div id="recipe-list" aria-label="Saved repeat recipes"></div>
       <div id="recipe-controls" hidden>
-        <label class="toggle popover-row"><span class="popover-label">Repeat while drawing</span><input type="checkbox" id="recipe-enabled"><span class="toggle-track"></span></label>
         <div class="segmented" role="radiogroup" aria-label="Repeat type">
           <label><input id="recipe-mode-grid" type="radio" name="recipe-mode" value="grid" checked> Grid</label>
           <label><input id="recipe-mode-rotation" type="radio" name="recipe-mode" value="rotation"> Rotation</label>
@@ -263,6 +263,14 @@
     </div>
   </section>
 
+  <section id="move-popover" class="inspector-panel" role="dialog" aria-label="Move" hidden>
+    <div id="selection-modes" class="selection-modes" role="group" aria-label="Move outcome">
+      <button class="btn" id="selection-mode-move" type="button" aria-pressed="true" title="Move the selected cells when dragging">Move content</button>
+      <button class="btn" id="selection-mode-duplicate" type="button" aria-pressed="false" title="Leave the original cells and move a copy (Ctrl)">Duplicate <kbd>Ctrl</kbd></button>
+      <button class="btn" id="selection-mode-area" type="button" aria-pressed="false" title="Move the selection boundary without moving content (Alt)">Move area <kbd>Alt</kbd></button>
+    </div>
+  </section>
+
   <!-- ── Settings inspector ───────────────────────────────────────────── -->
   <section id="hl-popover" class="inspector-panel" aria-label="Settings" hidden>
     <div class="popover-row" title="Fade the visible ✕ overlay marks and ! invalid marks.">
@@ -296,11 +304,6 @@
     </div>
     <div id="sym-list" class="sym-list" aria-label="Axes"></div>
     <div class="transform-usage">
-      <label class="toggle popover-row" title="Apply the configured transformation to future paint operations.">
-        <span class="popover-label">Mirror while drawing</span>
-        <input type="checkbox" id="live-transforms" checked>
-        <span class="toggle-track"></span>
-      </label>
       <div class="popover-row">
         <button class="btn" id="replicate-selection" title="Stamp global mirror copies from the current selection (T)" disabled>Apply Global Mirror</button>
       </div>

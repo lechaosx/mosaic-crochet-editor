@@ -168,12 +168,12 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loadFromLocalStorage()!.activeRecipeId).toBeNull();
     });
 
-    test("global mirror mode round-trips and defaults on for older sessions", () => {
+    test("legacy paused global mirror mode is normalized on", () => {
         const session = rowSession(3, 3, { liveMirrors: false });
         saveToLocalStorage(session);
 
         const loaded = loadFromLocalStorage();
-        expect(loaded!.liveMirrors).toBe(false);
+        expect(loaded!.liveMirrors).toBe(true);
 
         const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         delete raw.workspace.liveTransforms;

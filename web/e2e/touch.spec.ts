@@ -66,7 +66,8 @@ test("Move area mode supports a modifier-free touch drag", async ({ page }) => {
     await page.touchscreen.tap(painted.cx, painted.cy);
     await page.getByRole("button", { name: "Select", exact: true }).tap();
     await page.touchscreen.tap(painted.cx, painted.cy);
-    await page.getByRole("button", { name: /1 selected/ }).tap();
+    await page.getByRole("button", { name: "Close inspector" }).tap();
+    await page.getByRole("button", { name: "Move", exact: true }).tap();
     await page.getByRole("button", { name: /Move area/ }).tap();
     await page.keyboard.press("Escape");
 
@@ -87,13 +88,10 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
 
     const summary = page.getByRole("button", { name: /1 selected/ });
     await expect(summary).toBeVisible();
-    await summary.tap();
 
     const card = page.getByRole("dialog", { name: "Selection" });
     await expect(card).toBeVisible();
-    await expect(card.getByRole("button", { name: "Move content" })).toHaveAttribute("aria-pressed", "true");
-    await expect(card.getByRole("button", { name: /Duplicate/ })).toBeVisible();
-    await expect(card.getByRole("button", { name: /Move area/ })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Move content" })).toHaveCount(0);
     await expect(card.getByRole("button", { name: "Copy" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Cut" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Paste" })).toBeDisabled();
@@ -101,9 +99,12 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
 
     await card.getByRole("button", { name: "Copy" }).tap();
     await expect(card.getByRole("button", { name: "Paste" })).toBeEnabled();
-    await card.getByRole("button", { name: /Duplicate/ }).tap();
+    await page.getByRole("button", { name: "Close inspector" }).tap();
+    await page.getByRole("button", { name: "Move", exact: true }).tap();
+    const moveCard = page.getByRole("dialog", { name: "Move" });
+    await moveCard.getByRole("button", { name: /Duplicate/ }).tap();
     await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(card).toBeVisible();
+    await expect(moveCard).toBeVisible();
     await page.keyboard.press("Escape");
 
     await touchDragCells(page, 1, 1, 3, 1);
@@ -113,7 +114,11 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     expect(await pixelRGB(page, destination.cx, destination.cy)).toEqual([0, 0, 0]);
     await summary.click();
     await expect(card).toBeVisible();
-    await expect(card.getByRole("button", { name: /Duplicate/ })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await page.getByRole("button", { name: "Move", exact: true }).click();
+    await expect(moveCard.getByRole("button", { name: /Duplicate/ })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await summary.click();
 
     await card.getByRole("button", { name: "Cut" }).click();
     const clipboardSummary = page.getByRole("button", { name: /clipboard has 1 cell/i });

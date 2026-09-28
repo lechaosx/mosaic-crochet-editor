@@ -4,6 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 28 September 2026
 
+- Select and Magic wand now open their selection modes automatically, Move has its own outcome inspector, overlay actions use accessible icons, and active mirrors and saved repeats always apply while drawing.
 - Returning to the source construction or centre-out extent during a Pattern edit restores cells and selection state that an intermediate Rows, Centre-out, Full, Half, or Quarter preview could not represent; drawing while Pattern remains open advances that source.
 - Pattern now has fixed icon-reset defaults for all four colours, uses pure red as the default danger colour, and previews yarn, grid, selection, mirror, and overlay colours together in a miniature chart.
 

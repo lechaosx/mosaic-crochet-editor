@@ -93,7 +93,7 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
-test("transform toolbar shows whether configured transforms apply while drawing", async ({ page }) => {
+test("transform toolbar shows whether transforms are configured", async ({ page }) => {
     await bootApp(page);
     const transforms = page.locator("#btn-sym-toggle");
     await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: no axes configured");
@@ -101,9 +101,7 @@ test("transform toolbar shows whether configured transforms apply while drawing"
     await transforms.click();
     await page.locator("#add-sym-v").click();
     await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: applying while drawing");
-
-    await page.locator("label:has(#live-transforms)").click();
-    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: drawing application paused");
+    await expect(page.locator("#live-transforms")).toHaveCount(0);
 });
 
 test("Apply Global Mirror applies symmetry and keeps the source selected", async ({ page }) => {
@@ -178,11 +176,10 @@ test("saved repeat extends the active selection and applies its instances", asyn
     await clickCell(page, 3, 1);
     expect(await pixelRGB(page, source.cx, source.cy)).toEqual([255, 255, 255]);
     expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([255, 255, 255]);
-    await page.locator("label:has(#recipe-enabled)").click();
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
     await clickCell(page, 2, 1);
     expect(await pixelRGB(page, source.cx, source.cy)).toEqual([0, 0, 0]);
-    expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([255, 255, 255]);
+    expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([0, 0, 0]);
     await expect(page.locator("#recipe-list")).toContainText("Repeat 1 · 1\u00a0×\u00a01");
 });
 
@@ -192,7 +189,6 @@ test("saved grid repeats apply independent directions, angled vectors, and alter
     await clickCell(page, 3, 3);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 3, 3);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await page.locator("#recipe-left").fill("1");
     await page.locator("#recipe-right").fill("2");
@@ -219,7 +215,6 @@ test("rotation repeat applies selected quarters and live drawing from an instanc
     await clickCell(page, 5, 3);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 5, 3);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await page.locator("#recipe-right").fill("2");
     await page.locator("#recipe-right").dispatchEvent("change");
@@ -250,7 +245,6 @@ test("saved-repeat instances drive Invert and Eraser across the extended selecti
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
@@ -274,7 +268,6 @@ test("saved repeat controls reject overlap and claim-limit configurations before
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.getByRole("button", { name: /^Add/ }).click();
     await clickCell(page, 3, 2);
     await page.locator("#recipe-create").click();
@@ -293,7 +286,6 @@ test("rejected saved-repeat values, modes, and turns return controls to stored s
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.getByRole("button", { name: /^Add/ }).click();
     await clickCell(page, 3, 1);
     await page.locator("#recipe-create").click();
@@ -330,7 +322,6 @@ test("live paint keeps a packed repeat that lands in a sparse source hole", asyn
     await clickCell(page, 4, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.getByRole("button", { name: /^Add/ }).click();
     await clickCell(page, 4, 1);
     await page.locator("#recipe-create").click();
@@ -350,7 +341,6 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
         await bootApp(page);
         await page.getByRole("button", { name: "Select", exact: true }).click();
         await clickCell(page, 2, 1);
-        await page.getByRole("button", { name: /Selection actions/ }).click();
         await page.locator("#recipe-create").click();
         await page.locator("#recipe-right").fill("1");
         await page.locator("#recipe-right").dispatchEvent("change");
@@ -377,7 +367,6 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
         await bootApp(page);
         await page.getByRole("button", { name: "Select", exact: true }).click();
         await clickCell(page, 2, 1);
-        await page.getByRole("button", { name: /Selection actions/ }).click();
         await page.locator("#recipe-create").click();
         await page.locator("#recipe-right").fill("1");
         await page.locator("#recipe-right").dispatchEvent("change");
@@ -445,7 +434,6 @@ test("wand pointer cancel restores the saved repeat source transaction", async (
     await clickCell(page, 3, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 1, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
@@ -476,10 +464,10 @@ test("saved repeat source follows an explicit duplicate move", async ({ page }) 
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 1, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
+    await page.getByRole("button", { name: "Move", exact: true }).click();
     const duplicate = page.getByRole("button", { name: /Duplicate/ });
     await duplicate.click();
     await expect(duplicate).toHaveAttribute("aria-pressed", "true");
@@ -488,6 +476,7 @@ test("saved repeat source follows an explicit duplicate move", async ({ page }) 
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
     )).toBe(3);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-apply").click();
 
     const original = await cellCoord(page, 1, 1);
@@ -507,10 +496,10 @@ test("saved repeat source follows an explicit move-area move", async ({ page }) 
     await clickCell(page, 3, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 1, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
+    await page.getByRole("button", { name: "Move", exact: true }).click();
     const moveArea = page.getByRole("button", { name: /Move area/ });
     await moveArea.click();
     await expect(moveArea).toHaveAttribute("aria-pressed", "true");
@@ -519,6 +508,7 @@ test("saved repeat source follows an explicit move-area move", async ({ page }) 
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
     )).toBe(3);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-apply").click();
 
     const original = await cellCoord(page, 1, 1);
@@ -535,7 +525,6 @@ test("Pattern resize deactivates a saved repeat when it removes the source selec
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await expect(page.getByRole("button", { name: /^Repeat 1 ·/ })).toHaveAttribute("aria-pressed", "true");
 
@@ -553,7 +542,6 @@ for (const action of ["Cut", "Deselect"] as const) {
         await bootApp(page);
         await page.getByRole("button", { name: "Select", exact: true }).click();
         await clickCell(page, 2, 1);
-        await page.getByRole("button", { name: /Selection actions/ }).click();
         await page.locator("#recipe-create").click();
         const recipe = page.getByRole("button", { name: /^Repeat 1 ·/ });
         await expect(recipe).toHaveAttribute("aria-pressed", "true");
@@ -573,8 +561,8 @@ test("move-area into a round hole deactivates the saved repeat when nothing can 
     await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 0, 6);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
+    await page.getByRole("button", { name: "Move", exact: true }).click();
     await page.getByRole("button", { name: /Move area/ }).click();
 
     await dragCells(page, 0, 6, 6, 6);
@@ -657,7 +645,6 @@ test("invalid Pattern preview restores the active saved-repeat source", async ({
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
     await page.locator("#recipe-create").click();
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("5");

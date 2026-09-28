@@ -355,9 +355,7 @@ store.addObserver(s => {
 store.addObserver(s => {
     if (!s.state.float && selectionMode === "remove") selectionMode = "replace";
     ui.setRecipes(s.state.recipes, s.state.activeRecipeId);
-    ui.setTransformState(
-        Boolean(s.state.float), hasConfiguredTransforms(), s.state.liveMirrors,
-    );
+    ui.setTransformState(Boolean(s.state.float), hasConfiguredTransforms());
     ui.setTransformError(null);
     ui.setSelectionMode(s.state.activeTool, selectionMode, Boolean(s.state.float));
     ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
@@ -401,7 +399,7 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
     const shifted = s.float ? shiftedFloatMask(s) : null;
     const visible = visiblePixels(s);
     const recipe = activeGridRecipe(s);
-    const evaluatedRecipe = recipe?.enabled ? evaluateGridRecipe(recipe) : null;
+    const evaluatedRecipe = recipe ? evaluateGridRecipe(recipe) : null;
     const recipeCell = evaluatedRecipe
         ? evaluatedRecipe.cells.find(cell => cell.x === x && cell.y === y) ?? null
         : null;
@@ -433,9 +431,7 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
             : "Overlay unavailable at this cell");
     }
 
-    const transforms = s.liveMirrors
-        ? axesToFlat(s.axes)
-        : new Float64Array(0);
+    const transforms = axesToFlat(s.axes);
     const targets = transformed_target_indices(W, H, x, y, transforms);
     let next = paintOps[tool as PaintTool]({
         visible, pattern, x, y,
@@ -530,9 +526,7 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
     ui.setAxes(store.state.axes);
-    ui.setTransformState(
-        Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveMirrors,
-    );
+    ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
     ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
 }
 
@@ -577,10 +571,6 @@ function onAxisPosition(id: string, position: { x?: number; y?: number; c?: numb
     return updated;
 }
 
-function onLiveMirrorsChange(enabled: boolean) {
-    store.commit(s => { s.liveMirrors = enabled; }, { recompute: false, render: false });
-}
-
 function onTransformPopoverToggle(open: boolean) {
     rs.previewRepeatGuides = open;
     if (!open) viewport.canvas.style.cursor = "";
@@ -621,7 +611,7 @@ function onDeleteRecipe(id: string) {
 function onRecipeChange(id: string, change: Partial<GridRecipe>) {
     const recipe = store.state.recipes.find(candidate => candidate.id === id);
     if (!recipe) return;
-    const updated = { ...recipe, ...change };
+    const updated = { ...recipe, ...change, enabled: true };
     const error = gridRecipeError(updated);
     if (error) { refreshRecipeUi(error); return; }
     store.commit(s => { s.recipes = s.recipes.map(candidate => candidate.id === id ? updated : candidate); }, { history: true });
@@ -1269,7 +1259,6 @@ const ui: UIHandle = mountUI({
     onDeleteRecipe,
     onRecipeChange,
     onApplyRecipe,
-    onLiveMirrorsChange,
     onTransformPopoverToggle,
     onReplicateSelection,
     onHighlightChange:         onHlOpacityInput,
@@ -1936,9 +1925,7 @@ ui.setOverlayAction(overlayAction);
 ui.setTool(store.state.activeTool);
 ui.setPrimary(store.state.primaryColor);
 ui.setColors(store.state.colorA, store.state.colorB);
-ui.setTransformState(
-    Boolean(store.state.float), hasConfiguredTransforms(), store.state.liveMirrors,
-);
+ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
 ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
 ui.setSelectionMode(store.state.activeTool, selectionMode, Boolean(store.state.float));
 ui.syncEditInputs(store.state.pattern);

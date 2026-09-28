@@ -70,9 +70,6 @@ test("context strip only shows information not visible in controls", async ({ pa
     await page.locator("#btn-sym-toggle").click();
     await page.locator("#add-sym-v").click();
     await expect(status).not.toContainText("Transforms live");
-
-    await page.locator("label:has(#live-transforms)").click();
-    await expect(status).not.toContainText("Transforms paused");
 });
 
 test("yarn controls expose direct selection and Pattern owns editing actions", async ({ page }) => {
@@ -249,7 +246,6 @@ test("compact menu navigation does not move selected canvas content", async ({ p
     await page.getByRole("button", { name: "Menu" }).click();
     await page.keyboard.press("ArrowDown");
     await page.locator("#more-popover").evaluate((popover: HTMLElement) => popover.hidePopover());
-    await page.getByRole("button", { name: /selected/ }).click();
     await page.getByRole("button", { name: "Deselect" }).click();
 
     const original = await cellCoord(page, 0, 1);
@@ -319,7 +315,7 @@ test("explicit inspector opening moves focus to its first available control", as
 
     await page.keyboard.press("Control+a");
     await page.getByRole("button", { name: /selected/ }).click();
-    await expect(page.getByRole("button", { name: "Move content" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Copy" })).toBeFocused();
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", { name: /Global Mirror/ }).click();

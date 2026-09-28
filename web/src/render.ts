@@ -400,7 +400,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     renderInstructionStarts(ctx, view, dpr, rs.instructionStarts, accentColor, dangerColor, m);
     (window as unknown as { __test_instruction_starts__?: typeof rs.instructionStarts }).__test_instruction_starts__ = rs.instructionStarts;
     const activeRecipe = activeRecipeId === null ? null : recipes.find(recipe => recipe.id === activeRecipeId) ?? null;
-    if (activeRecipe && activeRecipe.enabled && float
+    if (activeRecipe && float
         && float.x === activeRecipe.source.x && float.y === activeRecipe.source.y
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
         renderRecipeInstances(ctx, view, dpr, pattern, activeRecipe, accentColor);

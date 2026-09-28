@@ -1,7 +1,20 @@
 import { describe, expect, test } from "vitest";
-import { evaluateGridRecipe, gridRecipeFromFloat, gridRecipeError, withRecipeSource } from "../src/grid-recipes";
+import { evaluateGridRecipe, gridRecipeFromFloat, gridRecipeError, restoreGridRecipes, withRecipeSource } from "../src/grid-recipes";
 
 describe("saved grid recipes", () => {
+    test("legacy disabled recipes are restored as live", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 1, y: 1, w: 1, h: 1, pixels: new Uint8Array([1]),
+        });
+        const legacy = {
+            ...recipe,
+            enabled: false,
+            source: { ...recipe.source, mask: Array.from(recipe.source.mask) },
+        };
+
+        expect(restoreGridRecipes([legacy])[0].enabled).toBe(true);
+    });
+
     test("uses a sparse active selection as an absolute packed source", () => {
         const recipe = gridRecipeFromFloat({
             x: 2, y: 3, w: 3, h: 1, pixels: new Uint8Array([1, 0, 1]),

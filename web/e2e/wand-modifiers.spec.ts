@@ -61,7 +61,6 @@ test("one wand sweep creates one undoable selection edit", async ({ page }) => {
 test("visible Select and Wand modes latch within the group and reset after leaving", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: "Selection actions" }).click();
     const modes = page.getByRole("group", { name: "Selection mode" });
     await expect(modes).toBeVisible();
     await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
@@ -74,14 +73,12 @@ test("visible Select and Wand modes latch within the group and reset after leavi
     await page.getByRole("button", { name: "Pencil" }).click();
     await expect(modes).toBeHidden();
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: "Selection actions" }).click();
     await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("visible Add and Subtract change the lifted selection without modifiers", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: "Selection actions" }).click();
     const modes = page.getByRole("group", { name: "Selection mode" });
     await clickCell(page, 1, 1);
     await modes.getByRole("button", { name: "Add" }).click();
@@ -95,7 +92,6 @@ test("visible Add and Subtract change the lifted selection without modifiers", a
 test("Shift temporarily overrides visible Subtract and restores its latched state", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: "Selection actions" }).click();
     const modes = page.getByRole("group", { name: "Selection mode" });
     await clickCell(page, 1, 1);
     await modes.getByRole("button", { name: "Subtract" }).click();
@@ -107,7 +103,6 @@ test("Shift temporarily overrides visible Subtract and restores its latched stat
 test("Subtract resets when its final selected cell is removed", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: "Selection actions" }).click();
     const modes = page.getByRole("group", { name: "Selection mode" });
     await clickCell(page, 1, 1);
     await modes.getByRole("button", { name: "Subtract" }).click();

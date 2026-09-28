@@ -218,7 +218,7 @@ test("status is passive and Selection actions live in the authoring dock", async
     const selection = page.getByRole("button", { name: /Selection actions/ });
     await expect(selection).toContainText("81");
     await selection.click();
-    await expect(page.getByRole("group", { name: "Move outcome" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Copy" })).toBeVisible();
 });
 
 test("contextual inspectors rely on controls and hover text", async ({ page }) => {

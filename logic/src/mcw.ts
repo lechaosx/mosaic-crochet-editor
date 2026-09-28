@@ -88,7 +88,7 @@ function readRecipes(value: unknown): GridRecipe[] {
         if (!Array.isArray(rotationTurns)
             || rotationTurns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) throw invalidFile();
         const recipe: GridRecipe = {
-            id: item.id, enabled: item.enabled,
+            id: item.id, enabled: true,
             source: { x: item.source.x, y: item.source.y, w: item.source.w, h: item.source.h, mask },
             mode,
             left: number("left"), right: number("right"), up: number("up"), down: number("down"),

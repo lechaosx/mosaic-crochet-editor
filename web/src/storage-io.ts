@@ -107,7 +107,7 @@ function recoveryFromV4(data: LocalSaveV4): RecoveryV5 {
         workspace: {
             activeTool: data.activeTool, primaryColor: data.primaryColor,
             axes: data.axes,
-            liveTransforms: data.liveTransforms, float: data.float,
+            liveTransforms: true, float: data.float,
         },
         preferences: {
             hlOpacity: data.hlOpacity, invalidIntensity: data.invalidIntensity,
@@ -124,6 +124,7 @@ function recoveryFromV5(data: RecoveryV5): MigratedRecovery {
             document: data.document,
             workspace: {
                 ...data.workspace,
+                liveTransforms: true,
                 rotation: data.preferences.canvasRotation,
             },
         },
@@ -137,7 +138,8 @@ function migrateRecovery(value: unknown): MigratedRecovery | null {
     if (data.version === RECOVERY_VERSION) {
         if (typeof data.document !== "object" || data.document === null
             || typeof data.workspace !== "object" || data.workspace === null) return null;
-        return { recovery: data as unknown as RecoveryV6 };
+        const recovery = data as unknown as RecoveryV6;
+        return { recovery: { ...recovery, workspace: { ...recovery.workspace, liveTransforms: true } } };
     }
     if (data.version === 5) {
         if (typeof data.document !== "object" || data.document === null
@@ -164,7 +166,7 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV6 {
             activeTool: s.activeTool, primaryColor: s.primaryColor,
             axes: s.axes,
             recipes: storedGridRecipes(s.recipes), activeRecipeId: s.activeRecipeId,
-            liveTransforms: s.liveMirrors,
+            liveTransforms: true,
             float: s.float ? packFloat(s.float) : null,
             rotation: s.rotation,
         },
@@ -214,7 +216,7 @@ export function loadFromLocalStorage(): SessionState | null {
                 typeof workspace.activeRecipeId === "string" ? workspace.activeRecipeId : null,
                 float,
             ),
-            liveMirrors:      workspace.liveTransforms ?? true,
+            liveMirrors:      true,
             float,
             rotation:         workspace.rotation ?? 0,
         };

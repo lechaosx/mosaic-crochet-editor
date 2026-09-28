@@ -110,7 +110,7 @@ export function normalizeActiveRecipeId(
 }
 
 export function storedGridRecipes(recipes: ReadonlyArray<GridRecipe>): unknown[] {
-    return recipes.map(recipe => ({ ...recipe, source: { ...recipe.source, mask: Array.from(recipe.source.mask) } }));
+    return recipes.map(recipe => ({ ...recipe, enabled: true, source: { ...recipe.source, mask: Array.from(recipe.source.mask) } }));
 }
 
 export function restoreGridRecipes(value: unknown): GridRecipe[] {
@@ -126,6 +126,7 @@ export function restoreGridRecipes(value: unknown): GridRecipe[] {
         if (mask.length !== source.mask.length || mask.some(value => value !== 0 && value !== 1)) continue;
         const restored = {
             ...recipe,
+            enabled: true,
             mode: recipe.mode ?? "grid",
             columnSpacingAlternate: recipe.columnSpacingAlternate ?? recipe.columnSpacing,
             rowSpacingAlternate: recipe.rowSpacingAlternate ?? recipe.rowSpacing,

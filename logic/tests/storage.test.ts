@@ -136,6 +136,20 @@ describe(".mcw codec", () => {
         expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(new Uint8Array([1, 0, 1]));
     });
 
+    test("opens a legacy paused saved repeat as live", () => {
+        const recipe = gridRecipeFromFloat({
+            x: 0, y: 0, w: 1, h: 1, pixels: new Uint8Array([1]),
+        });
+        const encoded = JSON.parse(encodeMcw({
+            pattern: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
+            pixels: new Uint8Array([1, 2, 2, 1]),
+            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+        }));
+        encoded.recipes[0].enabled = false;
+
+        expect(decodeMcw(JSON.stringify(encoded)).recipes[0].enabled).toBe(true);
+    });
+
     test("round-trips the largest valid saved-recipe mask without argument spreading", () => {
         const mask = new Uint8Array(1_048_576);
         mask[0] = 1;
