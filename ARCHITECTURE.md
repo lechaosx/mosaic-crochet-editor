@@ -1,235 +1,48 @@
-# Technical Decisions
+# Architecture
 
-This file records the technical decisions behind the codebase: structure, module boundaries, algorithm choices, library/runtime picks. Implementation specifics (math formulas, function signatures, step-by-step algorithms) live in source-code comments. User-facing behaviour and product decisions live in [FEATURES.md](FEATURES.md). Setup and usage are in [README.md](README.md).
+This document records the durable technical constraints that define the system. It stays intentionally small: implementation details belong near the code, operational instructions belong in [README.md](README.md), and product behaviour belongs in [FEATURES.md](FEATURES.md).
+
+An entry here is a constraint, not a historical note. Changing or removing one requires explicit user approval before implementation.
 
 **your decision** = decided by the user. **Agent's choice** = proposed and implemented without explicit instruction. **joint** = discussed and decided together.
 
----
+## System shape
 
-## Repo Structure
+Mosaic Crochet Editor is a client-side browser application designed for static hosting. Editing, recovery, file conversion, and crochet-instruction generation do not depend on an application server. — **Agent's choice**
 
-```
-mosaic-crochet-web/
-├── core/   pure Rust logic (walk, pattern compression, highlight, drawing tools, export)
-├── wasm/   Rust → WASM binding layer (src/lib.rs only; pkg/ is internal output)
-├── logic/  pure TypeScript logic (@mosaic/logic) — no DOM, lib: ["ESNext"] enforces the boundary
-├── web/    Vite + TypeScript application — I/O shell, imports @mosaic/logic and @mosaic/wasm
-└── flake.nix, Cargo.toml, package.json
+```text
+web (DOM, canvas, browser I/O)
+ ├── logic (browser-independent editor and document logic)
+ └── wasm (thin interop boundary)
+       └── core (Rust crochet and chart domain logic)
 ```
 
-Workspace membership is source-driven. — **your correction**
+- Rust compiled to WebAssembly owns geometry-sensitive chart operations and crochet-instruction derivation. TypeScript owns editor state, interaction composition, and presentation. A domain rule has one authoritative implementation rather than parallel Rust and TypeScript versions. — **your decision**
+- `core` is independent of WebAssembly and browser APIs. `wasm` adapts it for JavaScript without becoming a second domain layer. — **Agent's choice**
+- `logic` is independent of the DOM, while `web` owns all browser effects and UI. The dependency direction is enforced by package boundaries and TypeScript configuration. — **joint**
+- Domain layers return structured data; user-facing text and graphics are produced at the presentation boundary. This keeps crochet semantics usable independently of the current interface. — **your decision**
 
-Dependency direction is enforced structurally: `logic/tsconfig.json` uses `lib: ["ESNext"]` with no DOM, so any accidental import of browser APIs causes a compile-time error. `web/` imports from `logic/`; `logic/` never imports from `web/`. — **joint**
+## State boundaries
 
----
+State is classified by meaning, not by whichever storage mechanism currently holds it.
 
-## Language & Runtime
-
-- **Rust → WASM** for computation; **TypeScript** for the browser. — **your decision**
-- **Nightly Rust, edition 2024** for `gen` blocks. — **your decision**
-- **Vite** dev server (in-memory TS, no disk artifacts during dev). — **joint**
-- **Bun** for package management. — **your decision**
-- **wasm-pack `--target bundler`** + `vite-plugin-wasm`. — **Agent's choice**
-- **`base: "./"` in vite.config.ts** so GitHub Pages can serve relative assets. — **Agent's choice**
-
----
-
-## Package Boundaries
-
-### `core` (Rust)
-Pure logic, no WASM deps, testable with `cargo test`. Each source file's `//!` doc comment explains its own algorithm:
-- `walk.rs` — row/round walk generators (gen blocks, 5-segment round structure).
-- `pattern.rs` — DP-based stitch-sequence compression (LCE table, period-first + branch-and-bound splits).
-- `export.rs` — 4-stage per-line export (virtual→physical, window, classify, group-by-parent).
-- `tools.rs` — transformed paint / fill / eraser / overlay / lock-invalid / pixel-preservation transfer on resize (`transfer_preserved_row` / `transfer_preserved_round`), plus the shared symmetry-and-repeat target generator. Each tool is a self-contained function that takes pixels in, returns new pixels out.
-- `common.rs` — geometry primitives (`min_dist_axes`, `step_toward_center`, `inward_cell_*`, `outward_cells_*`, `is_always_invalid_*`), highlight computation, render-plan emission, colour utilities.
-
-— **your decision** (typed end-to-end, line-at-a-time streaming, no strings in the export pipeline). **Agent's choice** (LCE table, target-based tools, row-eraser fix that uses each target cell's own y).
-
-### `wasm`
-Thin binding layer — `src/lib.rs` only. — **Agent's choice**
-
-- **`InstructionSession`** — `#[wasm_bindgen]` struct; JS owns it, scans bounded indexed signatures before requesting full typed units only where compression is needed, then calls `.free()`. Optional indexed results keep valid empty round windows representable without a boundary trap. — **Agent's choice**
-- **`transformed_target_indices`** — exposes the shared target generator so the TS Invert tool can dedupe symmetry and repeat targets per stroke without re-implementing the transform logic in JS. — **Agent's choice**
-- **`overlay_target_available_*`** — exposes Rust's inward-cell geometry so the web layer can explain unavailable Overlay targets without duplicating row/round rules. — **Agent's choice**
-
-### `logic` (`@mosaic/logic`)
-Pure TypeScript — no DOM, `lib: ["ESNext"]` enforced. All modules are free functions; `Store` is the only class (justified by the commit-chain invariant).
-
-| Module | Owns | Shape |
+| Scope | Durable boundary | Attribution |
 |---|---|---|
-| `store.ts` | `SessionState` + derived highlight plan + `visiblePixels`, `outOfBounds`, `forEachCell` helpers | **class** (`Store`) — `commit(mutate, opts?)` is the only mutation path |
-| `selection.ts` | Float lift/cut/anchor/delete, transform replication, and `applySelectionMod` (rect / wand / select-all / deselect wrappers) | free functions |
-| `clipboard.ts` | In-memory clipboard + `copyFloat` / `cutFloat` / `pasteClipboard` | free functions |
-| `paint.ts` | `paintOps: Record<PaintTool, PaintFn>` — per-tool dispatch table | free functions + data |
-| `symmetry.ts` | Axis list operations, Rust-boundary encoding, guide picking, snapping, and delete-zone geometry | free functions |
-| `grid-recipes.ts` | Saved-repeat creation, source masks, validation, persistence, and active-source normalization | free functions |
-| `transform-evaluator.ts` | Exact quarter-turn expansion, mask-packed directional-grid evaluation, mirrored addressing, collision reporting, and source mapping | free functions |
-| `pattern.ts` | `applyEditSettings(settings: EditSettings, source?)` — pure; DOM-reading adapter lives in `web/src/pattern.ts` | free functions |
-| `storage.ts` | Packed pixel/float byte encodings | free functions |
-| `mcw.ts` | Pure, versioned `.mcw` encode/decode and validation | free functions |
-| `types.ts` | `PatternState`, `Float`, `GridRecipe`, `Tool`, `SymKey`, `Axis` (discriminated union: V / H / D1 / D2 / C) | types |
-| `dev.ts` | `devAssert` / `assertNever` — dead-code-eliminated in production | free functions |
+| Project document | Pattern geometry and cells, yarn definitions, global mirror axes, saved repeat definitions, and project-specific display overrides travel in `.mcw`. | **your decision** |
+| Editor workspace | Active tools, live selection, current repeat source, and other resume-editing context may be recovered locally but are not part of the portable project. | **your decision** |
+| Undo and redo | Reversible authored edits and relevant editing context have their own browser-local history; view-only state and crochet progress are excluded. | **your decision** |
+| Preferences | App-wide display defaults are browser-local and remain separate from both project documents and recovery snapshots. | **your decision** |
+| Crochet progress | Progress is browser-local, keyed to compatible pattern geometry, and is neither project content nor an authored edit. | **your decision** |
 
-### `web`
-Vite + TypeScript I/O shell. Imports `@mosaic/logic` and `@mosaic/wasm`.
+File formats and browser records are versioned and validated before replacing live state. Supported older project data is migrated at the boundary rather than leaking compatibility cases through editor logic. — **joint**
 
-| Module | Owns | Shape |
-|---|---|---|
-| `main.ts` | Boot + orchestration: constructs `Store` + `RendererState`, wires renderer/history/persistence/observers, mounts UI + gestures, dispatches keyboard. Owns the per-gesture `Gesture` union for the duration of one pointerdown→up. | free functions |
-| `render.ts` | `RendererState` struct (canvas, ctx, view pan/zoom, animation state, colour cache) + `render`, `screenToPattern`, `fitToView`, `clampZoom`, `updateStatus` | free functions + state struct |
-| `gesture.ts` | Pointer-event state machine. `mountGestures(r, callbacks)` takes renderer state explicitly. | free function |
-| `ui.ts` | Document bar, Design/Crochet overlay panels, shared inspector, canvas-chrome occlusion insets, and transient menus | `mountUI` returns `UIHandle` |
-| `history.ts` | Undo/redo snapshot stack, localStorage-backed (`mosaic-history`); takes/returns bounded `SessionState` slices | free functions |
-| `storage-io.ts` | Browser recovery storage plus file-picker/download I/O; delegates `.mcw` content to `@mosaic/logic/mcw` | free functions |
-| `pattern.ts` | DOM adapter: reads Pattern inspector inputs, calls `@mosaic/logic/pattern.applyEditSettings` | free function |
-| `dom.ts` | Small DOM helpers (`el`, `radioValue`, `readClampedInt`) | free functions |
+## Editor and presentation boundaries
 
-— **your decision** (single-owner Store + free functions everywhere else); **Agent's choice** (specific shape of `Store.commit` opts and `RendererState`).
+- The UI uses ordinary DOM controls around a Canvas 2D chart. Design and Crochet share one persistent canvas and view, while mode-specific controls and inspectors overlay the workspace without changing the chart's screen geometry. — **your decision**
+- A single state owner governs committed editor state; derived render data is recomputed from that state rather than maintained as an independently mutable model. — **your decision**
+- Pointer types share one interaction model. Mouse, touch, and pen may have different accelerators, but they do not have separate editing semantics. — **Agent's choice**
+- A floating selection is an editor layer over the chart. Saving and instruction generation consume a composed snapshot without mutating that live editing state. — **your decision**
 
-**Object policy:** an object (class) is only justified by an **invariant** (constraint on state that must be enforced — `Store.commit` is the only path for state mutation) or **RAII** (resource lifetime). Without one of those, prefer free functions with an explicit state argument. No module-level mutable singletons; no factory closures.
+## Safety and scale
 
-**Guard policy:** asserts are the default; `if`-guards are the exception. A function's preconditions live at the *caller*, not as silent defensive returns inside. Use `devAssert` / `assertNever` (`src/dev.ts`) for anything the caller must satisfy; functions read cleaner when the body assumes a valid input and the guarantee is documented up-front. Plain `if`-guards are reserved for **documented runtime drops** that fire on legitimate user actions — off-canvas float cells, hole-cell skips, rect fully outside, paste cells past the destination canvas edge, "no clipboard / no float" early returns. Anything else is an invariant: assert it. — **your decision**
-
----
-
-## Cross-Cutting Decisions
-
-### Render & coordinate model
-- Canvas is sized to the viewport; the pattern is positioned via `ctx.setTransform`, not via CSS transforms on the element. — **Agent's choice**
-- UI measures overlay-panel and canvas-chrome occlusion and supplies the remaining rectangular workspace to fit calculations; the canvas backing surface stays unchanged. — **Agent's choice**
-- All transforms (pan, zoom, rotation) go through ctx. The matrix is built so that the rotation pivot is the pattern centre. — **your decision** (pattern-centre pivot); **Agent's choice** (ctx-only).
-- `visualRotation` (animated) is kept separate from `view.rotation` (target/persisted) so painting mid-animation hits the pixel that's actually on screen. — **Agent's choice**
-- Rotation animation runs in a single rAF loop. — **Agent's choice**
-
-### Gestures
-Pointer-event state machine — one path for mouse, pen, touch:
-
-| Mode | Trigger | Behaviour |
-|---|---|---|
-| `idle` | no pointers | hover updates status |
-| `paint` | first pointer (non-middle) | paint stroke; right-click → secondary colour |
-| `gesture` | second pointer arrives | pinch-zoom + pan, anchored at midpoint |
-| `gesture-end` | one pointer released | latch until last is released |
-| `middle-pan` | mouse middle button | pan only |
-| `navigate-pan` | Navigate + primary pointer, or Space + primary pointer | pan only |
-
-When `paint` transitions to `gesture`, the in-flight stroke is **cancelled** (reverted to pre-stroke pixels), so an accidental two-finger pan never leaves stray pixels. A `pointercancel` in `paint` routes through the same rollback callback instead of the release/commit callback. — **Agent's choice**
-
-Latched and momentary Navigate state lives in `main.ts`; `gesture.ts` receives only a predicate and keeps an in-progress pan independent of later key release. `zoomAt` is shared render-layer view math, used by gestures with a pointer anchor and by zoom buttons with the canvas centre. — **Agent's choice**
-
-The canvas has no cell-navigation state. Keyboard arrows dispatch only selection movement when Move has an active float; Space participates only in momentary canvas navigation. — **your decision**
-
-### UI layer
-- `ui.ts` exposes `mountUI(callbacks): UIHandle`. Callbacks fire from DOM events; setters on the handle push state back into the DOM. No reactive framework. — **Agent's choice**
-- Styled radios and checkboxes use a visually-hidden focusable input rather than `display: none`; their label or track renders the focus indicator. Tool and yarn setters update `aria-pressed` with the visual active class. — **Agent's choice**
-- About uses a native modal `<dialog>` with a full-viewport light-dismiss surface, and Menu uses a light-dismiss popover. Pattern, Selection, Global Mirror, and Settings are sections in one non-modal inspector host. — **Agent's choice** (dialog implementation); **your decision** (About behavior)
-- Pattern editing uses field-scoped previews inside a longer history-coalescing session. `main.ts` captures pattern, pixels, and float when a field starts changing; input previews derive from that baseline without persistence, and invalid previews revert to it when focus leaves. The first effective Pattern adjustment appends a history snapshot, and later Pattern adjustments replace that snapshot's current head until another history-producing document edit or Undo/Redo. Replacement removes the current head when it again equals its predecessor. Inspector visibility does not delimit the session. A capture listener finalizes only the pending field before an outside pointer action proceeds. — **your decision** (history semantics); **Agent's choice** (preview boundary and current-head replacement)
-- Inspector-open guide hit testing resolves only at the first pointer sample, before the active authoring tool mutates pixels; exact axis fields commit one snapped position edit through the existing axis history path. — **Agent's choice**
-- Pattern-change counts use an occupied-cell marker pass through the existing preservation transfer, so a surviving cell is counted only when the resize mapping actually retains it. — **Agent's choice**
-- Canvas view controls mutate `Viewport` directly and render without project history. Rotation continues through the browser-local session preference so the renderer's existing pattern-centre animation remains the only rotation path. — **Agent's choice**
-- Pattern colocates yarn and canvas-contrast controls without merging their state boundaries: yarn and optional danger/accent overrides belong to the project, while `mosaic-preferences` supplies app-global danger/accent defaults. Overrides persist through recovery and `.mcw` but remain outside history. A finite palette with recognizable light and dark danger/accent variants maximizes each result's worst WCAG contrast against both yarns, then colour distance breaks ties. Dock swatches select the active yarn and route double-click/long-press shortcuts to the same Pattern yarn inputs. — **your decision**
-- Canvas context is interaction-owned rather than a persistent projection of `Store`: active-gesture details, coalesced rejected-action feedback, coordinates, and passive selection state update it only while relevant and render in that priority order. — **your decision**
-
-### Adaptive shell
-- CSS Grid composes a document bar, authoring dock, canvas/status, and one inspector host. At 64rem the dock changes from a wrapping bottom row to a vertical rail and the inspector changes from a fixed bottom sheet to a grid column; the content nodes never move or duplicate. — **Agent's choice**
-- The compact document-bar breakpoint derives at runtime from its two full-size groups. Below it, the existing secondary-command elements move into Menu without changing identity or event bindings. — **Agent's choice**
-
-### Styling
-- CSS custom-property tokens (`--space-*`, `--radius-*`, `--font-*`, `--bg-*`, `--fg-*`, `--accent`, `--hit`).
-- **rem** for typography/spacing; **em** for self-scaling components; **px** only for borders and shadows; **%, fr, vw, vh, dvh** for responsive. No 62.5% root-font hack. — **your decision**
-- Control hit targets use a 36 CSS-pixel token on wide fine-pointer layouts and a 44 CSS-pixel token when any coarse pointer is available or the viewport is at most 48rem wide; typography and spacing use rem tokens and reflow independently. — **Agent's choice**
-
-### Pixel encoding
-- In memory: 3 values — 0 = inner hole (transparent sentinel), 1 = COLOR_A, 2 = COLOR_B. The sentinel doubles as the universal "skip this cell" guard (`!= 0`) across every tool. — **your decision**
-- On disk: 1 bit per cell (A=0, B=1). Save converts at the boundary; load rebuilds the 3-value array using geometry to fill the transparent sentinel. Hole bits in storage are arbitrary. — **your decision**
-- `.mcw` file format is v3: packed pixel bits, optional project danger/accent overrides, Global Mirror axes, and bit-packed saved-repeat source masks and settings. Project contrast and newer recipe fields remain optional on read; earlier v3 files use app contrast defaults, Grid mode, primary gaps, and the source centre. Pure encode/decode lives in `@mosaic/logic/mcw`; the web layer only reads and writes text. Byte-to-base64 conversion is chunked so maximum-size masks do not exceed the JavaScript argument limit. Fixture tests preserve v1/v2 loading, and decoding validates version, shape, dimensions, colours, transforms, and payload length before session replacement. — **your decision** (v1/v2/v3 compatibility and project persistence); **Agent's choice** (codec boundary and validation)
-
-### Data flow & state
-- State ownership is defined by meaning rather than by its current storage container:
-
-  | Owner | State | Persistence and history boundary |
-  |---|---|---|
-  | Authored document | Pattern geometry, pixels, yarn definitions, optional danger/accent overrides, Global Mirror axes, and saved-repeat definitions; future output/traversal settings that change generated instructions | `.mcw`; project Undo/Redo for authored crochet state, while display overrides stay outside history |
-  | Editor workspace | Active tool/yarn, selection float, active saved-repeat source link, Global Mirror live mode, current inspector/context | Browser recovery as appropriate; never `.mcw` merely to recreate the editing setup |
-  | Local recovery | The last recoverable authored document plus workspace state needed to resume editing | Versioned browser storage; independent of whether a project file is current |
-  | Editor Undo/Redo | Reversible authored edits plus reversible workspace-tool edits such as selection and transform configuration | Separate versioned browser stack; excludes view-only state and future crochet progress |
-  | Display preferences | Guidance opacity, default danger/accent colours, number visibility, and invalid-placement protection | Independent app-global browser record; excluded from recovery snapshots, `.mcw`, and project history |
-  | Crochet progress | Current crochet progress boundary | Browser-local recovery; instruction selection and Back/Forward change this boundary, which remains excluded from `.mcw` and project Undo/Redo |
-
-  Recovery v6 contains document and workspace state, including optional project contrast overrides; `mosaic-preferences` owns app-global display defaults. History v5 stores document, active selection, Global Mirror axes, saved-repeat definitions, and the active source link as separate bounded fields. Restore accepts an active source link only when the float exactly matches that recipe's position and sparse mask. — **your decision** (ownership); **Agent's choice** (physical envelopes and invariant normalization)
-- Browser recovery, preferences, and editor history use stable `mosaic-recovery`, `mosaic-preferences`, and `mosaic-history` keys with independently versioned payloads. Existing recovery v4/v5 imports legacy preferences only when no dedicated preference record exists, then rewrites recovery as v6; unversioned history v4 migrates to v5. The legacy recovery remains when writing its migrated replacement fails. — **Agent's choice**
-- Crochet runtime progress uses a separate browser record. It is keyed to authored shape for ordinary stitch edits, cleared when geometry changes or Open or New receives different authored geometry or pixels, and remains outside recovery history and `.mcw` files. — **your decision** (progress boundary); **Agent's choice** (record separation)
-- `RELEASE_NOTES.md` is About's build-time source: each `##` release contains flat product-facing notes, and a Vite HTML transform renders every release and embeds a SHA-256 hash of the normalized newest heading and notes. About records the last dismissed hash under `mosaic-about-release-notes`; a missing or different value opens the dialog without depending on document recovery, dates, or release versions. Historical-release edits leave the current hash unchanged. — **Agent's choice** (Vite transform and normalization); **your decision** (structured release notes, content hash, and newest-release boundary)
-- Browser recovery writes return success to `main.ts`, which owns the persistent recovery-status presentation independently from `.mcw` file I/O. — **Agent's choice**
-- About is transient UI over a concrete `SessionState`, not a nullable document state. New resets history around the initialized default session and creates recovery immediately; a canceled file selection leaves About open. — **Agent's choice**
-- Single mutable owner: `Store` (class, in `store.ts`) owns `SessionState`. Direct mutation of `store.state` is blocked at the type level (`Readonly<SessionState>`); all writes go through `store.commit(mutate, opts?)`. — **your decision**
-- `commit` runs the chain: recompute highlight plan → push history (if `history`) → render (via registered renderer) → persist (via registered persister) → run observers. Defaults: recompute on, render on, history off, persist on. — **joint**
-- In-flight paint commits set `persist: false`; release writes both the single undo snapshot and the final recovery state. Hover never evaluates or mutates a speculative paint result. — **your decision** (no preview); **Agent's choice** (stroke persistence)
-- Observers fire after every commit and replace the boilerplate of e.g. `ui.setHistory(canUndo(), canRedo())` repeated at every mutation site. — **Agent's choice**
-- Pass things in — never reach for them: every module receives its dependencies as arguments. No module-level mutable singletons; no factory closures that hide state. — **your decision**
-- Renderer state is data (`RendererState` struct) operated on by free functions. The renderer has no invariant to enforce, so no class. — **joint**
-- Global Mirror axes: `SessionState.axes: Axis[]` are independent mirror / rotation axes, while `GridRecipe` owns sparse source masks and one mutually exclusive Grid or Rotation mode. The authoring dock exposes Global Mirror separately from Selection’s saved repeats, preventing a global paint symmetry from becoming a selection recipe. — **your decision**
-- The transform evaluator operates on safe-integer cell coordinates and rejects unsafe derived steps, translations, and destinations. Grid mode packs occupied cells along two cross-offset vectors with independent directional counts; mirrored axes use parity-dependent primary/alternate edge gaps while retaining a constant cross-axis increment. Rotation mode expands independently selected exact quarter turns around an editable centre without composing the retained grid. Recipe validation checks both retained modes so switching cannot expose invalid hidden settings. Results retain unique source indices and every multi-source collision coordinate. — **your decision** (exact quarter turns, mask packing, directional counts, alternating spacing, offsets, mirrored addressing, and collision rules); **Agent's choice** (pure evaluator and validation contracts)
-- The output-composition prototype distinguishes ready, content-conflict, and structurally unavailable results. `As authored` is identity-mapped; `Rotate quarter to full` accepts only a square bottom-left centre-out quarter, preserves exact round depth, retains an output-to-source cell map, accepts matching shared midpoint claims, and reports differing claims as spatial seam conflicts. The composed chart is compatible with the existing round walker without adding output state or UI. — **your decision** (authored/composed outputs and distortion-free rotation); **Agent's choice** (initial preset boundary and evaluator contract)
-- The traversal prototype lives beside the existing streaming walks and does not change their compatibility order. Rows resolve origin plus same/alternating schedule directly. Centre-out resolves a semantic corner group or side midpoint on every round, then rotates and optionally reverses the complete perimeter; corner paths begin on the approach cell so the three-cell parent group remains contiguous. Origin visibility is evaluated against the authored window before future persistence or UI integration. — **your decision** (explicit traversal choices and semantic origins); **Agent's choice** (prototype API and compatibility boundary)
-- Pattern dimensions are validated in `@mosaic/logic/pattern` before Rust allocation: at most 16,777,216 canvas cells total and 1,048,576 cells on either axis. Edit, local-session restore, and `.mcw` load all use the same rule. Saved-repeat evaluation allows at most 4,096 grid positions and counts source cells × positions × selected rotation copies against the 1,048,576-claim ceiling before expansion. Rust separately aborts whole operations when a symmetry closure or transformed target set exceeds 1,048,576 cells; tools return the original pixel buffer instead of partial output. — **your decision** (repeat ceilings); **joint** (pattern and symmetry ceilings); **Agent's choice** (validation boundaries and abort sentinel)
-- Dirty detection: pixel-array diff against a baseline snapshot (`preStroke`). — **your decision**
-- Stroke optimisation: pre-stroke snapshot compared on stroke end; unchanged → no history entry. — **Agent's choice**
-- Diagonal symmetries: integer arithmetic for `f(f(p)) = p`. — **Agent's choice**
-
-### TS / Rust boundary
-- "No duplicated functionality between Rust and TS." Geometry, tool logic, and natural-colour rules all live exactly once, in Rust core. TS owns DOM, canvas drawing, stroke state (`invertVisited`), and presentation choices (glyph shape, colour, opacity). — **your decision**
-- Each tool is a self-contained Rust function: `paint_pixel`, `flood_fill(..., selection: &[u8])`, `wand_select(..., mode, existing)`, `paint_natural_*(invert: bool)`, `paint_overlay_*` / `clear_overlay_*` (split where the gutter handling makes the two semantic actions structurally different), `lock_invalid_*`, `cut_to_natural_*` (selection → natural baseline, used by the move-pixels lift step), `transfer_preserved_*` (bottom-left anchored resize preservation; row mode shifts by `(0, ΔH)`, round mode uses the corner-block / strip partition with strips bottom-anchored). TS dispatches explicit Place/Clear and implements transformed Overlay Invert as per-target clear-or-place with one-stroke deduplication. UI concepts like pointer buttons never leak into Rust signatures; parameters describe the action's output. — **your decision**
-- **Selection = float (lifted layer)**: `SessionState.float = { x, y, w, h, pixels } | null` *is* the selection. `pixels` is the compact bounding box; zero cells are outside the marquee and non-zero cells carry lifted colours. Selecting resets those canvas cells to their natural baseline. Moving updates `x` / `y`; deselect stamps the visible cells back. Tool changes, save, and export keep the live float; save/export operate on a baked throwaway snapshot. Floats live in undo snapshots and session storage, but not `.mcw` files. — **your decision**
-- One-shot Global Mirror application sends a canvas-sized selection source and active axes to Rust independently of the live-mirror switch. Rust resolves every destination claim before writing, rejecting conflicting colours or safety-limit overflow atomically; TS commits only copied canvas pixels and leaves the source float active. Saved-repeat application is separate: TS evaluates the active Grid or Rotation recipe, reads each source cell once, and copies it to validated in-bounds instances while retaining the active float. — **your decision** (separate mirror and saved-repeat semantics, atomic mirror claims); **Agent's choice** (Rust mirror boundary and TS recipe application)
-- **Selection modify keeps the float's lift state.** Shift / Ctrl on rect or wand route through a single `applySelectionMod(region, mode)`, but the three modes are different:
-  - `replace` anchors any active float and lifts the region fresh.
-  - `add` lifts JUST the new cells into the existing float at `(canvas − offset)` source positions; existing float content / offset are preserved. Cells whose source position would fall off the W×H mask grid (only possible when the float has been dragged far enough that the new cell is unreachable in source coords) are skipped — not worth re-anchoring for a rare case.
-  - `remove` stamps each overlapping cell back onto the canvas at its *current visible position* and clears the float's mask there. No anchor; the rest of the float keeps moving. — **your decision**
-- The visible Select/Wand mode is transient `main.ts` state; rectangle preview combines its region with the current shifted-float mask without mutating the document, then release uses the existing selection commit path. — **Agent's choice**
-- **Non-destructive paste & duplicate**: `Ctrl+V` creates an *uncut* float at the clipboard's original canvas coords — `pixels` underneath is NOT modified at lift time. A regular Move-drag of that float stamps it at the destination and the source stays pristine — "paste then move" gives duplicate semantics for free. The Move tool's `Ctrl+drag` is the explicit duplicate path for *any* float: pre-stamp the float into the canvas at its current position on paintdown, then drag normally. Single history snapshot at release; the duplicate is visible the entire drag. — **your decision**
-- **Copy / cut against the base image**: `Ctrl+C` copies the float without changing either layer. `Ctrl+X` copies and drops the float; it clears matching canvas cells to their natural baseline only when every float cell matches the canvas, otherwise the base canvas is unchanged. — **your decision**
-- **Mask-only via Alt-drag (Move tool)**: paintdown stamps the float into `pixels` via `visiblePixels` so the original lifted content stays in place. During the drag, the float retains its mask while its pixels mirror the canvas under the translated mask, keeping the marquee visible without carrying the original content. Release re-lifts the canvas content at the new mask position via `liftCells`. Alt dominates Ctrl. — **your decision**
-- **Modifier-free selection movement modes** are transient workspace state owned by the Selection inspector rather than separate tools. Move content, Duplicate, and Move area activate Move and remain selected across tool changes; modifier keys override the chosen mode for one gesture. — **your decision**
-- **Move tool click-outside-float is a no-op.** The float lives across stray clicks and tool changes; deselect, modifying selection, canvas resize, file load, and select-all are the explicit operations that replace or end it. — **your decision**
-- **Single `gesture: Gesture | null` per-stroke state**: a discriminated union over the four `paint` / `select` / `wand` / `move` kinds replaces the half-dozen separate `preStroke` / `preFloat` / `selectDrag` / `wandDrag` / `moveDrag` / `pendingMoveMode` / `strokeColor` / `invertVisited` module vars. `onPaintStart` sets it, `onPaintAt` mutates it via `gesture.kind`-narrowed access, `onPaintEnd` / `onPaintCancel` consume + clear. Invalid combinations (two drags in flight, paint mid-wand, etc.) are unrepresentable. The pre-stroke pixels/float lives on the gesture variant that needs them — paint always, wand always, move only when paintdown mutated state (duplicate's pre-stamp, mask-only's stamp + clear), select never (drag preview is renderer state). Wand region changes suppress history and persistence during movement; release records the resulting selection once. — **Agent's choice**
-- **Render path is "what you see"**: `visiblePixels(s)` = `pixels` with the float stamped at offset (off-canvas / hole destinations drop). The store recomputes the highlight plan from `visiblePixels` on every commit, so ✕ / ! markers reflect the float live without a per-frame WASM rebuild. The renderer also uses `visiblePixels` for the cell draw pass, plus the shifted-mask outline for the marquee. — **your decision**
-- **Move tool gating**: the Move tool (`M`) is the only tool whose drag interacts with the float (drag-anchor + offset update). Switching tools keeps the float alive — paint tools clip to its shifted mask, so the selection survives across tool changes. — **your decision**
-- Selection clipping for painting tools uses a canvas-sized mask: `paint_pixel`, `paint_natural_row/round`, and `flood_fill` receive it through the WASM boundary, while Invert clips inline in TS and Overlay uses its click-cell gate. With an enabled saved repeat, the mask is the source plus every valid in-bounds instance, so Fill traversal and transformed targets remain inside the extended selection; TS clips Fill output again after global transforms. After painting, occupied source cells are written back to `float.pixels`, while repeat-instance results remain on the canvas; sparse holes are never restored over valid packed destinations. — **your decision**
-- **Pattern preview bakes the field-opening float**: each preview passes its field baseline through `visiblePixels` before `applyEditSettings`; the preview drops the float because its mask coordinates no longer match resized geometry. Undo restores the float from before the coalesced Pattern session. — **your decision**
-- **Save / Crochet keep the float alive**: `onSave` / `onInstructions` build a throwaway snapshot via `visiblePixels` for the file or instruction session; the live `store.state.float` is untouched. — **your decision**
-- `core::export` derives public flat `WorkStep` records before rendering text. Each record carries its row/round identity, Yarn A/B slot, worked and parent coordinates, and stitch kind. `WorkSequence` pairs those ordered records with a renderer-independent `SequenceItem` compression tree. Reversing work reverses outer sequence and repeat nodes while retaining the stitch order inside shared-parent groups, so direction changes do not rerun classification or compression. Valid and invalid overlay highlights both emit `oc`; the web entry point deduplicates invalid plan coordinates for the Crochet error count. — **your decision** (non-blocking export and immediate direction changes); **Agent's choice** (tree reversal and count boundary)
-- Crochet WIP pixels are reconstructed in `core::export` from natural colours plus an inclusive `WorkStep` prefix ending at the current row or round. An `oc` changes its supporting cell only when its work unit enters that prefix; transparent future cells are ignored by highlight-plan generation. WASM returns the derived byte buffer to the non-persisted preview store. — **your decision** (temporally correct inclusive surface); **Agent's choice** (core replay and WASM buffer boundary)
-- Crochet owns a separate, non-persisted preview `Store`, but Design and Crochet use one fixed `Viewport`, `RendererState`, rendering context, chart-viewport element, and DOM canvas. Only overlay panels and the preview store change, so toggling modes cannot reflow the canvas or alter pan/zoom/rotation. The preview store removes the live float and transform guides. — **your decision** (stable canvas with overlay panels); **Agent's choice** (persistent DOM canvas and preview-store boundary)
-- `main.ts` retains immutable plain instruction records keyed by a 64-bit pattern fingerprint. A WASM session first exposes cheap per-unit WorkStep signatures; unchanged signatures reuse their compressed text and paths while indexed generation creates records only for changed units. Invalid-work metadata travels separately so error presentation can update without recompression. — **your decision** (pattern-only invalidation and immediate direction changes); **Agent's choice** (plain-record ownership and signature boundary)
-- Crochet derives one start segment per generated unit from its worked-coordinate path or adjacent virtual traversal coordinate and passes those segments through `RendererState`; the canvas renderer draws them in screen space so they remain legible at any chart rotation or zoom. — **your decision** (canvas direction guidance); **Agent's choice** (screen-space rendering boundary)
-- `live-progress.ts` stores a versioned unit boundary under `mosaic-live-progress`, keyed by a 64-bit fingerprint of pattern geometry only. Stitch changes retain progress, while a committed shape or dimension change removes the mismatched stored boundary; invalid records start at the first unit and rejected writes are reported in Crochet without changing document-recovery status. — **your decision** (progress invalidation boundary); **Agent's choice** (fingerprint and persistence format)
-- `ui.ts` measures visible mode panels and inspectors and publishes canvas-chrome inset properties. Navigation and the compact status cluster consume those insets, while the canvas remains full-workspace and unchanged. Crochet retains the responsive mode-panel inset and repeats only the current instruction in a floating bottom card. — **your decision** (panel and floating-current placement); **Agent's choice** (ResizeObserver-backed CSS insets)
-- Mode-owned chrome is marked declaratively in the DOM and filtered by the body workspace class. The persistent document bar is excluded from that filtering. Pattern and Settings share the inspector with Crochet still active; an effective Pattern preview closes Crochet after applying the canvas change, while document-mutating commands close it before acting. — **your decision** (inspector routing); **Agent's choice** (callback boundary)
-- Highlight render plan: Rust emits a flat `Int16Array` with stride-4 records `[type, dir, wrong_x, wrong_y]` once per paint stroke. TS renderer iterates the plan and picks glyph / colour / opacity from presentation rules — those can change without touching Rust. Per-cell highlight `Uint8Array` lives only inside Rust (used by the export pipeline). — **joint**
-- Hover maps screen coordinates to the passive status only. Paint evaluation runs after contact, and WASM exposes the core inward-cell rule so rejected Overlay feedback cannot disagree with placement geometry. — **your decision**
-- The authoring icon family is an inline SVG symbol sprite in `web/index.html`; buttons reference symbols with `currentColor` strokes, keeping shapes, forced-colour adaptation, and hit-area styling independent of yarn palette data. — **Agent's choice**
-- Guidance visibility is an optional recovery preference so v4/v5 sessions remain readable; old zero-opacity recovery maps to guidance-off with a usable opacity value, while placement prevention retains its saved value. The renderer alone consumes guidance visibility; paint evaluation consumes prevention. — **Agent's choice**
-- Plan enum values: `PlanType` / `PlanDir` are `#[wasm_bindgen]` enums in `wasm/src/lib.rs` (autogenerates TS bindings). Core uses matching `u8` constants for the Vec<i16> writes; a compile-time `const _` assert verifies the discriminants stay in lockstep. — **joint**
-- **Invariant guards via `devAssert` / `assertNever`** (`src/dev.ts`): bounds checks that are *callable invariants* (callers must satisfy) — `commitWandAt` coords, exhaustive enum dispatch in `applySelectionMod` / `applyEditSettings` — throw in dev/test and dead-code-eliminate in production. Documented runtime drops (off-canvas float cells, hole-cell skips, rect fully outside, paste cells past dest edge) remain plain `if` guards because they fire on legitimate user actions. The split surfaces real coordinate-computation bugs early instead of letting them silently no-op via TypedArray-OOB-write semantics. — **joint**
-
----
-
-## Build & CI
-
-- `build:wasm` (wasm-pack) writes `wasm/pkg/`; `build:web` type-checks and writes the Vite bundle to `web/dist/`. `dev:rust` watches via `cargo-watch`. — **Agent's choice**
-- `@mosaic/logic` exports pure TypeScript (`store`, `selection`, `paint`, `pattern`, `symmetry`, grid-recipe evaluation, `clipboard`, packed storage, and the `.mcw` codec). `web/src/` keeps the I/O shell: `history.ts` (localStorage-backed undo), `storage-io.ts` (localStorage + file picker), DOM adapters. Stryker mutates only `logic/src/` — I/O paths are covered by E2E. — **joint**
-- `.mcw` v3 stores global axes and saved recipe definitions only; active selection identity remains workspace/history state so opening a project does not import a transient selection. — **your decision**
-- `flake.nix` provides rustup, wasm-pack, bun, cargo-watch, plus `playwright-driver.browsers` and the env vars to point Playwright at the nixpkgs-built chromium-headless-shell (downloaded binaries don't link against system libs on NixOS). — **joint**
-- `rust-toolchain.toml`: nightly + `wasm32-unknown-unknown`. — **Agent's choice**
-- GitHub Actions: single `ci.yml` — `test-rust` enforces rustfmt and reports Clippy warnings before running Rust tests; warnings do not fail CI because floating nightly toolchains can introduce new lints. `build-wasm` runs in parallel; `test-logic`, `test-io`, and `build-app` fan out from `build-wasm`; `test-e2e` runs against the `build-app` artifact; `deploy` is gated on all test jobs and reuses the `build-app` artifact. `test-logic` runs typecheck (`tsc -p logic/tsconfig.json`) before tests, enforcing the no-DOM boundary in CI. — **Agent's choice** (workflow shape); **your decision** (warning policy and no custom packaging)
-
-## Testing
-
-- **Rust:** `cargo test`. Per-tool BFS/flood/wand/cut/transfer specs cover the geometry boundary that TS cannot easily exercise. — **Agent's choice**
-- **Logic unit + properties:** `logic/tests/` — Vitest with `vite-plugin-wasm`, no jsdom. Covers `store`, `selection`, `paint`, `clipboard`, `symmetry`, `repeat`, `storage`, `pattern`, `types` + cross-feature interaction tests. `properties.test.ts` uses `fast-check` for invariants over random inputs (pack/unpack round-trips, lift-anchor identity, `applySelectionMod` add idempotence, wand BFS, history undo/redo balance). — **Agent's choice**
-- **Web IO unit:** `web/tests/` — Vitest with jsdom. Covers `history.ts` (localStorage-backed undo) and `storage-io.ts` (localStorage persistence). jsdom required for `localStorage`. — **Agent's choice**
-- **Logic mutation:** Stryker with the Vitest runner (`bun run test:mutation`) mutates `logic/src/`. The September 2026 baseline is 1,167 mutants, 87.75% total mutation score, and 87.90% among covered mutants; every mutated module scores above 80%. Node executes Stryker because its instrumenter relies on CommonJS default-import unwrapping that Bun does not provide; `flake.nix` supplies Node for this script. — **joint** (runner); **Agent's choice** (recorded baseline)
-- **E2E:** Playwright (pinned to 1.59.1) drives `vite preview`. Desktop Chromium covers the adaptive shell, tools, paint, selection/move/copy/cut/paste, symmetry/repeat, Pattern interactions, and persistence; a Pixel 7 Chromium project covers single-finger paint, two-finger pan/zoom cancellation, and modifier-free Selection movement modes. `render.ts` exposes the canvas matrix on `window.__test_matrix__` so cell-relative input does not need to inspect view state. — **Agent's choice**
-- Root `test` builds WASM and the production web bundle before running cargo, logic Vitest, web Vitest, and Playwright. Root subset scripts build the generated artifacts they consume. — **Agent's choice**
+Operations whose expansion depends on user-authored geometry are bounded and atomic: they either produce a complete valid result or leave the document unchanged. Persistent input is validated before allocation or session replacement. — **joint**

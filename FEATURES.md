@@ -1,224 +1,59 @@
-# Product Decisions
+# Product Model
 
-This file records what the app does and (briefly) why. User-facing how-tos live in [README.md](README.md). Technical decisions live in [ARCHITECTURE.md](ARCHITECTURE.md).
+This document records the durable user-facing decisions that define Mosaic Crochet Editor. It is a compact product map, not a usage guide or an inventory of every control. See [README.md](README.md) for current operation and [RELEASE_NOTES.md](RELEASE_NOTES.md) for changes over time.
+
+An entry here is a product constraint, not a historical note. Changing or removing one requires explicit user approval before implementation.
 
 **your decision** = decided by the user. **Agent's choice** = proposed and implemented without explicit instruction. **joint** = discussed and decided together.
 
-- The product name is **Mosaic Crochet Editor**. — **your decision**
+## Purpose and scope
 
-## Glossary
+- The app turns an alternating-yarn mosaic crochet chart into both an editable visual design and a chart-derived work sequence. Design and Crochet are two views of the same project, not separate documents. — **your decision**
+- Patterns support row construction and centre-out construction, including partial centre-out extents. Both modes use the same two-yarn chart language and overlay guidance. — **your decision**
+- Crochet instructions describe what can be derived from the chart. Technique choices that the chart does not encode, such as foundation and round-joining methods, remain with the crocheter. — **Agent's choice**
 
-- **Float** — a "lifted" layer sitting above the canvas. Selecting always lifts: the canvas at the selected cells is reset to natural baseline and the original pixel values move into the float. Stored as a compact bounding box (`x`, `y`, `w`, `h`) with absolute canvas-cell coordinates; `pixels[i] !== 0` determines membership (no separate mask array).
-- **Lift** — the verb. The cells leave the canvas and enter the float; canvas cuts to baseline.
-- **Anchor / commit** — stamping the float back into the canvas at its current position and clearing the float. Triggered by deselect and operations that replace the live selection; canvas resize bakes the visible result before dropping the float.
-- **Marquee** — the marching-ants outline traced around the float's non-zero pixel boundary. Same thing as the visible "selection box."
-- **Stamp** — copying float pixels into canvas. Anchoring clears the float afterward; duplicate and mask-only operations can stamp while keeping it active.
+## Core workflow
 
----
+The intended end-to-end story is:
 
-## Pattern modes
+1. Create or open a pattern and choose its construction, dimensions, and yarns.
+2. Draw directly on the chart, using overlay guidance to keep the design crochetable.
+3. Rework motifs with selection, movement, global symmetry, and reusable selection-based repeats.
+4. Enter Crochet to follow the derived rows or rounds and see completed work accumulate on the same chart.
+5. Save the authored project as an editable `.mcw` file; let browser recovery preserve in-progress workspace context between visits.
 
-- The two pattern geometries are named **Rows** and **Centre-out**; their worked units remain rows and rounds. — **your decision**
-- Full, half, and quarter are authored extents: the complete centre-out chart, its bottom half, or its bottom-left quarter. They imply no transform. — **your decision**
+— **your decision**
 
-## Drawing
+## Editing model
 
-- Tools: Pencil, Fill, Eraser, Overlay, Invert, Select, Magic Wand, Move. — **your decision**
-- **Eraser** (left = restore natural; right = paint *opposite* of natural, the exact inverse). — **your decision**
-- **Overlay** has explicit Place, Clear, and Invert actions. Right-click performs the opposite Place/Clear action, while Invert is button-independent and deduplicates repeated targets within one stroke. **O** selects Place and **Shift+O** selects Clear. A diagonal centre-out corner pixel remains a non-overlayable `(sc, ch, sc)` group. — **your decision**
-- Painting is blocked on inner-hole (transparent) pixels. — **Agent's choice**
-- Strokes that change nothing leave no history entry and don't dirty the pattern. — **Agent's choice**
-- Eraser restores each pixel to its own natural alternating colour, not the click point's. Works under active transforms. — **your decision** (behaviour); **Agent's choice** (per-target fix)
-- Invert toggles 1 ↔ 2 through active transforms; within one stroke a target cell can't be inverted twice. — **your decision**
-- Colour tools paint the primary yarn with left click and the secondary yarn with right click on desktop; Overlay uses the separate opposite Place/Clear rule. — **Agent's choice** (colour tools); **your decision** (Overlay shortcut)
+- Pattern changes preview in place. Compatible geometry changes preserve authored cells where their meaning remains stable; changing between row and centre-out construction starts the new geometry. — **your decision**
+- Editing is direct and tool-led. The chart remains the visual focus, while document commands, authoring tools, contextual inspectors, and navigation have distinct roles. — **your decision**
+- Selection is a persistent movable layer rather than a temporary outline. It can be edited, duplicated, transformed, copied, cut, pasted, or committed without forcing the user into a separate document mode. — **your decision**
+- Global Mirror and saved repeats solve different use cases: mirror axes transform drawing across the whole chart, while saved repeats reproduce a selected motif according to its own grid or rotation recipe. Both can affect live drawing or be applied deliberately to existing content. — **your decision**
+- Undo and redo cover authored changes as coherent user actions. Continuous gestures and related previews do not create a history entry for every intermediate frame. — **your decision**
 
-## Selection
+## Guidance and validation
 
-- **Selection is a "float"** — a lifted layer above the canvas. Picking a region (rect, wand, select-all) immediately cuts those cells from the canvas to their natural baseline and moves their original values into `float.pixels`; the render path stamps the float back on top at the current offset. There is no "selection mask without lifted pixels" concept — selection and lifted-content are the same thing. — **your decision**
-- **Select** tool (`S`): drag a rectangle. **Shift** adds, **Ctrl** removes, no-modifier replaces (GIMP semantics). Single click = 1×1 rect. — **your decision**
-- **Magic wand** tool (`W`): click to select the connected same-colour region (4-neighbour, no tolerance; hole click is a no-op). Same Shift / Ctrl / no-modifier semantics. Wand drag sweeps the cursor across multiple regions, applying the captured mode at each new cell and committing the sweep as one undoable edit. — **your decision** (selection semantics); **Agent's choice** (one transaction per sweep)
-- Select and Wand share visible Replace/Add/Subtract modes; leaving them resets to Replace, modifiers remain temporary overrides, and rectangle drags preview the resulting membership. — **Agent's choice**
-- **Add lifts new cells; remove stamps back the unselected cells.** Shift adds: just the new region cells get lifted into the existing float at `(canvas − offset)` source positions, canvas at those positions cuts to baseline; the rest of the float (lifted content, offset) is untouched. Ctrl removes: each overlapping cell is stamped back at its current visible position, mask shrinks; the rest of the float keeps moving. Replace anchors any active float and lifts the region fresh. — **your decision**
-- **Move tool** (`M`): a drag inside the float repositions it; release records the new position in history — no anchor. Click outside is a no-op. **Ctrl+drag** pre-stamps the float into canvas at paintdown so the duplicate is visible during the drag. **Alt+drag** is mask-only: stamps at paintdown, then the drag carries the same marquee shape (float pixels mirror canvas content at the new position so the marquee stays visible), release re-lifts the canvas at the new position. The float is clipped to canvas-visible cells when entering Alt mode; if entirely off-canvas, Alt destroys it instead of jumping. Alt dominates Ctrl. — **your decision**
-- The Selection inspector owns Move content, Duplicate, and Move area as modifier-free outcomes. The chosen outcome activates Move and remains selected across tool changes; Ctrl and Alt remain temporary gesture overrides. — **your decision**
-- **Copy** (`Ctrl+C`): yanks the float to the in-memory clipboard. Non-destructive — canvas and float are unchanged. — **your decision**
-- **Cut** (`Ctrl+X`): yanks the float to clipboard and drops it. Canvas cells are cleared to natural baseline only when **every** float cell's value matches the underlying canvas — any mismatch leaves the canvas untouched. This lets `Ctrl+X` act as a pattern-eraser (all-match = clear canvas) or a pure float-dropper (any mismatch = leave canvas alone). — **your decision**
-- **Paste** (`Ctrl+V`): anchors any active float, then creates a non-destructive uncut float at the clipboard's original canvas coordinates — `pixels` underneath is *not* modified, the float sits on top. Auto-switches to the Move tool. A regular Move-drag of the paste-float gives copy semantics out of the box (origin stays pristine because the lift never cut anything). — **your decision**
-- **Painting through a float**: when a float exists, paint tools (pencil, fill, eraser, invert) operate on the *visible* canvas (`pixels + float stamped at offset`), and the resulting changes are split — cells inside the float's shifted mask write to `float.pixels`; cells outside the mask are clipped (no-op). The Overlay tool is gated by click-cell-inside-mask but its painted inward-neighbour can land in either canvas or float depending on position. Selection clipping keeps the user's marquee meaningful: paint stays inside the lifted region. — **your decision**
-- **Tool switching keeps the float alive.** Picking another tool doesn't anchor — paint, fill, etc. just clip to the existing float. The float persists until explicit deselect (`Ctrl+Shift+A`), `Ctrl+A` (lift all + replace), canvas resize, file load, or another modifying operation that needs to anchor first. — **your decision**
-- Inner-hole cells behave as outside-the-canvas — never lifted into a float, never affected by paint through one, never outlined. A float can partially or fully extend off-canvas (e.g. after moving it to the edge); off-canvas cells are invisible and skipped on anchor. — **your decision**
-- **Marquee rendering**: marching-ants outline along the float's shifted mask boundary, one continuous closed loop per connected component (dashes flow around the perimeter rather than restarting per cell-edge). Drawn in the configured canvas accent, animated as discrete jumps (~8 ticks/sec, dash-offset snapped to 3-screen-px steps), speed zoom-independent. During a Select drag a static unclamped rect outline overlays the same style; in replace mode the existing float's outline is hidden during the drag. — **your decision**
-- **Live highlights**: `store.plan` is recomputed from `visiblePixels(state)` on every commit, so the ✕ / ! markers reflect the float's current position automatically — no per-frame WASM rebuild. — **your decision**
-- **Persistence**: the float is *session* state — it lives in `SessionState`, history snapshots, and browser recovery so it survives refresh. It is never written to `.mcw` files (still v2 schema) or to instruction output: `onSave` / `onInstructions` bake the float into a throwaway snapshot for the file/session and leave the live float alone. — **your decision**
-- **Canvas resize with an active float**: `onEditChange` bakes the float into the source pixels via `visiblePixels` before passing to the resize, then drops the float (its mask coords would be invalid in the new geometry). Content carries across; selection state doesn't. — **your decision**
-- **Keyboard shortcuts summary**:
-  - `Ctrl+A` — lift all paintable cells into float. `Ctrl+Shift+A` / `Esc` — anchor and clear.
-  - `Delete` — same all-or-nothing matching as `Ctrl+X` (see above), but re-lifts the result so the selection stays active. Pressing Delete twice always clears both float and canvas: first press makes float match canvas; second press (all match) clears canvas to baseline and re-lifts.
-  - On the focused canvas, plain **Arrow** and **Space** do not edit cells. Space-drag remains momentary Navigate.
-  - With Move active, **Arrow** nudges the float (content + position) ±1 cell. **Shift+Arrow** — ±5 cells.
-  - With Move active, **Ctrl+Arrow** bakes the float's current position into canvas once (first press per Ctrl-down), then moves the float **with its content intact** ±1 cell. **Ctrl+Shift+Arrow** — same but ±5 cells. Stamp resets when Ctrl is released.
-  - With Move active, **Alt+Arrow** is mask-only: stamp content into canvas once (first press per Alt-down), then move the marquee ±1 cell (float pixels mirror canvas at the new position so the marquee shape stays visible). On Alt release the canvas at the final position is re-lifted into the float. Clamped to canvas bounds; if the float is entirely off-canvas when Alt is pressed, it is destroyed instead of jumping. **Alt+Shift+Arrow** — same but ±5 cells.
-  - Holding any arrow key produces one undo entry for the entire held sequence.
-  — **your decision** (selection shortcut outcomes); **Agent's choice** (canvas cursor and Move scoping)
+- The chart distinguishes the two yarns from overlay guidance. Valid overlay work, impossible placements, selections, and transform guides remain understandable without relying on yarn colour alone. — **your decision**
+- Invalid overlay placements are explained and can be prevented during editing, but existing invalid work remains visible and correctable. They warn rather than block the Crochet workflow. — **your decision**
+- Large or combinatorial operations have explicit safety limits and fail without partially modifying the project. — **joint**
 
-## Global Mirror and saved repeats
+## Crochet workflow
 
-- Fresh sessions have no axes. **Global Mirror** and V/H/C/D/A shortcuts add vertical, horizontal, central, diagonal, or anti-diagonal axes; multiple axes of the same kind coexist. — **your decision**
-- Each Global Mirror axis is independently enabled or deleted. Active transforms compose without synthetic closure entries in the UI. — **your decision** (per-axis controls); **Agent's choice** (closure-free model)
-- Pattern changes retain only Global Mirror axes that can still mirror two cells on the resulting grid. — **your decision**
-- Diagonal axes work on every canvas size because they are placed at an integer line constant instead of requiring a canonical centred diagonal. — **your decision**
-- Global Mirror's **Mirror while drawing** controls axes for future pencil, fill, eraser, overlay, and invert operations. It defaults on, persists as session state, and is not part of undo history. — **your decision**
-- The Global Mirror button distinguishes no configured axes, axes applying during drawing, and axes paused during drawing. — **Agent's choice**
-- **Apply Global Mirror** (`T`) applies active axes to a floating selection regardless of the live-drawing toggle, without anchoring the source. The action is atomic and creates one undo snapshot; off-canvas sources and inner-hole destinations are skipped, while different source colours claiming one destination reject the whole action. — **your decision**
-- Global Mirror conflicts and safety-limit failures appear inline in its inspector; changing editor state or completing an application clears the transient message. — **Agent's choice**
-- Saved repeats belong to Selection. Saving captures the float's exact sparse mask, and only one recipe is active at a time. — **your decision**
-- Grid recipes repeat independently left, right, up, and down. Column and row vectors have separate packed gaps and cross-axis offsets; either direction can alternate mirrored instances. Mirrored edges alternate primary and alternate gaps symmetrically outward. — **your decision**
-- Rotation recipes are mutually exclusive with Grid and select 90°, 180°, and 270° copies independently around an editable centre. They remain distinct from Global Mirror’s central point axis. — **your decision**
-- An active saved repeat follows Move content, Duplicate, and Move area, including its absolute rotation centre. Selection shape edits retain that centre. The recipe deactivates when the float disappears or no longer exactly represents its source. — **your decision**
-- Each saved repeat independently controls **Repeat while drawing**. Source and instance edits use one extended selection mask, so Fill and Global Mirror targets cannot escape it. — **your decision**
-- **Apply current selection** copies the active source to every configured instance as one undoable edit and reports overlap or chart-boundary errors inline. — **your decision**
-- Saved repeats survive refresh, Undo/Redo, and `.mcw` save/load; the active source link remains workspace state and requires its matching float. — **your decision**
-- Saved-repeat grids are limited to 4,096 positions; every recipe is limited to 1,048,576 source-to-destination claims including selected rotations. — **your decision**
-- Active axes are drawn as dashed lines extending one pattern pixel past the pattern bounds; central symmetry as a dot. — **your decision** (lines + dot); **Agent's choice** (overhang for visibility)
-- **Drag a guide to move the mirror.** With the Move tool, clicking near an active guide repositions it, snapped to half-cells (V/H/C) or whole cells (D1/D2). Dragging it beyond the range that can mirror two distinct canvas cells deletes it. — **Agent's choice**
-- Global Mirror exposes editable guides and exact axis-position fields without requiring Move; outside that inspector, Move-based dragging remains available. — **Agent's choice**
-- **Intersection drag picks one axis per kind.** Clicking where multiple axes cross grabs one of each kind, so they move together. Overlapping parallel axes of the same kind are resolved to one entry so they can be separated. — **your decision**
+- Crochet mode is navigation-only: authored chart edits happen in Design, while Crochet presents generated rows or rounds, progress controls, direction guidance, and the chart state completed through the current instruction. — **your decision**
+- Progress advances by whole rows or rounds, can jump directly to an instruction, and survives compatible stitch edits. It is personal local progress rather than portable project content. — **your decision**
+- The complete compressed instruction sequence remains available for copying, while the primary workflow emphasizes the current instruction and its location on the chart. — **your decision**
 
-## Highlights
+## Projects, recovery, and ownership
 
-- Live overlay during drawing: **✕** marks valid overlay positions, **!** marks invalid placements. Both render on the overlay layer (one cell outward from the wrong pixel) — so the wrong cell stays visually clean and the marker explains "what's wrong about the overlay above." — **your decision**
-- ! markers for boundary cells (top row / outermost ring) render *outside* the canvas in the gutter, visually consistent with the rest. Right-clicking the gutter ! with the Overlay tool clears it. — **your decision**
-- Round-mode corners (diagonal cells) show **two** ! markers — one on each perpendicular outward side — because the corner has no single outward axis. — **your decision**
-- Foundation row (bottom) is overlay-able: there's no inner row to clash with, so any colour there is a valid overlay onto the row above. — **your decision**
-- **✕** is drawn in the *other* pixel colour (auto-contrast — on an A-cell it uses colour B, and vice versa). The ✕ literally shows the colour that would land there if you overlaid. — **your decision**
-- **!** uses the project danger override or app default; selections, mirror axes, and repeat guides use the project accent override or app default. Pattern can remove either override, save the effective pair as the defaults for new patterns, or deterministically find a distinct pair that maximizes its worst contrast against both yarns and reaches 3:1 whenever the semantic palette permits it. Override changes persist without entering Undo history. — **your decision**
-- **Guidance opacity** is always available from 0–100%; 0% is the single way to hide ✕ / ! guidance. — **your decision**
-- **Prevent impossible overlay placements** reverts paint/fill/invert writes to an always-invalid cell (outermost row, outermost ring, or round-mode diagonal) when it was correctly coloured; a contextual explanation appears and corrective edits still work. Fresh sessions start with prevention on, while saved sessions retain their setting. — **your decision** (protected-cell rule); **Agent's choice** (name, feedback, fresh default)
-- Settings keeps explanations in control hover text rather than persistent paragraphs. — **your decision**
+- `.mcw` is the editable project format. It carries authored crochet content and reusable project transforms, but not transient tool state, a live selection, app-wide preferences, undo history, or Crochet progress. — **your decision**
+- Browser recovery is automatic and separate from Save. It restores the local editing session but never implies that an external project file was updated. — **your decision**
+- App-wide display preferences belong to the browser; project-specific visual choices travel with the project. Opening a project must not silently replace the user's global defaults. — **your decision**
+- Invalid or unsupported files leave the active session unchanged and explain the failure without blocking the workspace. — **Agent's choice**
 
-## Labels
+## Workspace principles
 
-- Row labels number the bottom row as Row 1 and continue upward. — **your decision**
-- Round labels: innermost ring numbered 1, outermost = R. — **your decision**
-- Round placement: full mode → top-left corner cell of each ring; half/quarter → above the canvas, centred on column r. — **your decision**
-- Glyphs stay upright regardless of canvas rotation; positions follow the pattern's pan/zoom/rotation. — **your decision**
-- Toggleable via a switch in the Settings inspector. — **your decision**
-
-## View
-
-- Auto-fit zoom on every new pattern, file load, or refresh uses the same visual bounds as Fit. — **Agent's choice**
-- Wheel zoom anchored at the cursor; pinch zoom anchored at the gesture midpoint. — **Agent's choice**
-- A persistent canvas cluster exposes Fit, Zoom out/in, Navigate, Rotate view left/right, and an orientation arrow that resets upright. Fit uses the unobscured workspace around open panels and canvas chrome, plus the pattern's visual bounds including visible row or round numbers and the current rotation; turning numbers on reframes them into view. Button zoom preserves the canvas-centre focal cell. — **Agent's choice**
-- Rotation is ±45° increments around the **pattern centre** (panned patterns rotate in place), with a 250 ms ease-out animation. Rotation accumulates unbounded; persists across refreshes. — **your decision**
-- Pan is middle-mouse drag (desktop) or two-finger drag (touch); resets to centre on new pattern / load; not persisted across refresh. — **your decision** (reset on new); **Agent's choice** (input bindings)
-- Navigate is a view-only mode distinct from Move: its button latches single-pointer panning without changing the selected authoring tool, choosing an authoring tool exits it, and Space-drag enables it only while Space is held. — **Agent's choice**
-- Two-finger gesture from a single-finger paint discards the in-flight stroke — no stray pixels from accidental gestures. — **Agent's choice**
-- Browser or operating-system pointer cancellation restores the complete pre-edit state without adding an undo snapshot. — **Agent's choice**
-
-## History
-
-- Up to 64 history states per session. — **Agent's choice**
-- History survives page refresh — independently versioned snapshots persist to `localStorage` under the stable `mosaic-history` key. — **your decision** (persistence); **Agent's choice** (versioned envelope and key)
-- Each snapshot carries its own `state` and the colour pair (A/B), so undo / redo cross dimension, submode, and colour changes. — **your decision**
-- Colour-picker changes push a snapshot on *commit* (picker close), not on every drag — undo walks back through colour changes alongside paint strokes. — **your decision**
-- Global Mirror axes and saved selection recipes are part of undo. — **your decision**
-- Redundant snapshots (same packed pixels + same state + same colours as the head) are skipped. — **Agent's choice**
-
-## Persistence
-
-- Editor session state, including Global Mirror axes and live mode, saved repeats and their active source link, and an active float, auto-saves to `localStorage` and restores on refresh. The source link restores only with an exactly matching float. — **Agent's choice** (session persistence and validation); **your decision** (transform lifetime)
-- Guidance opacity, the default danger/accent pair, number visibility, and invalid-placement protection are app-global preferences. Optional project danger/accent overrides persist in recovery and `.mcw` without replacing those defaults or entering Undo history; legacy recovery imports global preferences once when no preference record exists. — **your decision** (lifetime); **Agent's choice** (migration boundary)
-- About opens on the first visit and once when the newest release-note heading or notes differ from the last acknowledged content, independently of browser recovery, dates, and release versioning. It presents concise product-facing release notes with project information and New/Open/Example actions; New resets to a blank row pattern and opens the modeless Pattern inspector. The dialog light-dismisses, has an explicit close action, and reopens from Settings. — **your decision**
-- A continuous paint stroke renders every update but writes session recovery once on release. — **Agent's choice**
-- Legacy v4/v5 recovery migrates once into the v6 recovery envelope; legacy display settings move to the independent preference record. Undo data remains independently versioned, and a failed recovery migration write keeps the usable legacy copy. — **Agent's choice**
-- The document bar reports only browser recovery restore or failure; routine successful recovery writes stay quiet and remain independent from the explicitly named **Save** file action. — **your decision**
-
-## Save / Load / Crochet
-
-- File format is `.mcw` (JSON). Browsers with the File System Access API show a save dialog; others download immediately. — **Agent's choice**
-- `.mcw` v3 stores pattern geometry, pixels, yarn colours, optional project danger/accent overrides, Global Mirror axes, and saved-repeat definitions. Tool state, the active recipe link, selection float, app defaults and other preferences, Crochet progress, and history remain outside the editable project; v1/v2 files restore no overrides, axes, or saved repeats. — **your decision** (project and non-project boundaries); **Agent's choice** (v3 migration boundary)
-- Unreadable, invalid, or unsupported `.mcw` files report a dismissible inline document error and leave the active session unchanged. Starting another open clears the previous error; dismissal returns focus to Open or compact Menu. — **Agent's choice**
-- Cancelling a native save picker is quiet; picker or write failures use the dismissible document error and return focus to Save or compact Menu. — **Agent's choice**
-- One centred Crochet transition states whether to begin, continue, or return to Design; document and secondary commands stay at the left. One canvas remains fixed beneath mode-specific overlay panels, preserving its screen geometry, pan, zoom, and rotation; authoring is disabled in Crochet. — **your decision** (transition, command placement, and overlay-panel canvas model); **Agent's choice** (one persistent DOM canvas)
-- Pattern and Settings open without leaving Crochet; an effective Pattern canvas change returns to Design, as do Open, Undo, and Redo. Save remains available without leaving Crochet. — **your decision**
-- Crochet keeps its responsive edge panel and adds a translucent bottom float containing only the current instruction text, centred on the same canvas axis as Fit. Each vertically scrollable list row uses its actual yarn colour as the number badge background and exposes Row/Round and Yarn in its accessible label; choosing a line moves progress directly to it. Back and Forward move whole-line boundaries and disable on the first and last lines. The current line is highlighted, and the canvas shows the finished appearance through it while future work and overlay contributions remain absent. A canvas arrow identifies the true start and direction of every generated unit, including Alternate direction. — **your decision**
-- Crochet emits structured work units line-by-line with a generation counter and reuses unchanged units after a cheap semantic signature pass; stitches preserve the numeric progress boundary. Open and New clear progress only when their incoming authored geometry or cells differ from the current chart. Returning to Design during generation cancels the unfinished plan. — **your decision** (cache and progress boundaries); **Agent's choice** (semantic-signature boundary and counter)
-- The complete compressed instruction dump remains available through an icon-only copy action; copy success or failure is reported inline, and there is no separate Text mode or download action. Alternate direction reverses the cached compression tree without regenerating the instruction plan. — **your decision**
-- Crochet instructions assign `oc` to the worked row or round containing the visible ✕, independently of the inward supporting pixel used to derive it. — **your decision**
-- Crochet reports invalid overlay placements on the closed Crochet control with `!`, retains a global singular or plural count while open, and marks generated units containing invalid work. They do not block progress; generation emits affected work as `oc`, while unmapped errors remain in the global count. — **your decision**
-- A failed Crochet progress write is visibly warned. — **Agent's choice**
-
-### Crochet instruction limitations
-
-- Round joins are not emitted. — **Agent's choice**
-- Foundation method is not indicated. — **Agent's choice**
-- A zero inner hole emits `(ch × 4)` for the innermost round. — **Agent's choice**
-
-## Input model
-
-- Colour editing, Overlay placement, and Arrange operations are explicit tool groups rather than persistent global authoring strategies. Wide rails show the group headings; compact layouts preserve the same tool order and identify the active intent in the canvas context. — **your decision** (retain both colour and overlay workflows); **Agent's choice** (tool-led grouping instead of strategy state)
-- Single pointer-event path for mouse, pen, and touch. — **Agent's choice**
-- Active tool and yarn controls expose pressed state; Pattern geometry and authored extent are named radio groups; visually styled radios and switches retain native focus and keyboard behavior. — **Agent's choice**
-- Yarn A/B swatches are visibly labelled and expose a check marker plus pressed state for the active logical yarn. Tap, click, Enter, or Space selects; double-click or long-press opens Pattern and invokes that yarn's picker. Pattern owns both direct yarn pickers, an icon-only Swap action, and project/default canvas-contrast actions. Swap exchanges yarn colours as one undoable edit without changing pixel values or the active logical yarn. Right-click on colour drawing temporarily uses the other yarn. — **your decision**
-- Every button has a hover label. Keyboard shortcuts cover all tools, add each symmetry-axis kind, apply active transforms to a selection, rotate, select colours, edit the selection, and undo/redo. — **your decision** (hover labels + shortcuts); **Agent's choice** (specific bindings)
-- Dynamic symmetry-axis actions identify the affected axis kind and position in hover and accessibility labels. Focus follows a toggled axis or the nearest remaining row after deletion. — **Agent's choice**
-- Explicitly opening an inspector focuses its first available control, while automatic error-driven opening does not steal focus. Escape closes the active inspector before canvas shortcuts run; dismissal restores focus to its visible opener, compact overflow trigger, or active authoring tool. — **Agent's choice**
-- Compact Menu exposes standard menu semantics: opening focuses the first command, arrow and boundary keys navigate commands, Escape restores the trigger, and Tab dismisses the menu before continuing sequential focus. Commands return to ordinary button semantics in the wide document bar. — **Agent's choice**
-- Composite keyboard widgets consume their navigation keys so compact Menu cannot also move selected canvas content. — **Agent's choice**
-- A toolbar Selection action opens the labelled Selection inspector on every input type. It owns selection composition, Move outcomes, Copy, Cut, Paste, and Deselect with shortcut hints; its label reports selected or copied cell count when present. — **your decision**
-- Saved-repeat entries identify their packed source dimensions with non-breaking spacing around `×`. — **your decision**
-- The passive context strip shows one priority at a time: active-gesture details, a coalesced constraint, cursor coordinates, then selection or clipboard summary. It contains no panel-opening controls. — **your decision**
-- Mouse and pen hover show coordinates only; drawing has no speculative colour, rectangle, dot, or transformed-result preview. — **your decision**
-- Authoring tools, Global Mirror, and Navigate use a consistent yarn-neutral visual language; accessible names and shortcuts remain stable, and the active action uses the shared filled-and-outlined state rather than an underline. — **your decision**
-- The Design canvas has no logical-cell keyboard cursor or Space-to-paint path. Arrow keys act only on an active Move selection; Space remains momentary navigation and form controls retain native keys. — **your decision**
-- Design and Crochet expose the shared canvas under a mode-appropriate accessible name; labelled controls and context remain the operable interface. — **Agent's choice**
-
-## Workspace shell
-
-- Document and history commands occupy a top document bar; paint, transform, and yarn controls occupy a separate authoring dock without changing their established order. — **Agent's choice**
-- The wide-screen Design tool rail is only one control wide to preserve as much canvas space as possible. — **your decision**
-- Mode panels and inspectors overlay the canvas so their changing size never shifts its geometry. At 64rem and wider they occupy the left or right edge; constrained layouts use bottom sheets. — **your decision**
-- Pattern, Selection, Global Mirror, and Settings use one explicitly opened and closed inspector host. Responsive recomposition preserves the active section and its uncommitted fields. — **Agent's choice**
-- Global Mirror axes remain separate from saved selection repeats. A saved repeat follows its active source selection, can use a directional angled/mirrored Grid or quarter-turn Rotation, and can be paused without deleting its definition. — **your decision**
-- Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact, growing with increased root text size. The interim phone dock keeps all eight authoring tools and both yarns visible while lower-frequency document commands and Settings move into Menu; when enlarged controls cannot fit a short viewport, the dock scrolls instead of collapsing the canvas. — **Agent's choice**
-- The compact document-bar breakpoint derives from its groups' measured intrinsic widths rather than device labels. — **Agent's choice**
-- A compact floating canvas context appears only for active-gesture details, rejected actions, hovered coordinates, or passive selection/clipboard summaries. Tool, yarn, transform, overlay, and panel-opening actions stay in their owning controls. Navigation and context follow the unobscured right/bottom edges around overlay panels without resizing the canvas. — **your decision** (content and visual anchoring); **Agent's choice** (measured insets)
-- Crochet omits the Design-only Navigate toggle and authoring context cluster; Fit, zoom, rotation, and direct canvas navigation remain available beside Crochet progress. — **joint**
-
-## Adaptive workspace conventions
-
-These decisions constrain continued development beyond the first adaptive shell.
-
-- Desktop, tablet, and phone use one recognisable interaction model. Placement and density may adapt, but tool names, grouping, ordering, state, and meaning remain consistent. Tablets, especially 10–11 inch landscape tablets with touch or pen, are a reference authoring posture rather than an enlarged phone afterthought. — **your decision**
-- Layout responds to available space while interaction enhancements respond to actual pointer, keyboard, and pen capabilities. Hybrid devices are not classified exclusively as desktop or touch, and no fixed orientation is required. — **Agent's choice**
-- Wide layouts use a document bar, authoring tool rail, central canvas, contextual inspector, and status area. Constrained layouts recompose the same controls into a compact app bar, bottom or side authoring dock, context strip, and non-modal inspector sheet. — **Agent's choice**
-- Fine-pointer controls may use 36 × 36 CSS-pixel targets; direct touch controls use at least 44 × 44 CSS pixels. Typography and spacing scale with user text settings, and controls reflow instead of shrinking below their applicable target. — **Agent's choice**
-- Command surfaces preserve logical grouping and never require horizontal scrolling. When a group no longer fits, the workspace recomposes or moves lower-frequency commands into labelled overflow instead of unpredictably shrinking controls. — **Agent's choice**
-- Frequent and contextual actions remain directly visible. Lower-frequency commands may move into Menu or an inspector, where icon-only actions gain text labels; essential actions never depend solely on hover, right-click, long-press, modifier keys, or pen hover. Those inputs remain accelerators. — **Agent's choice**
-- Dragging and direct manipulation provide an explicit click/tap or mode-based alternative where the operation permits one. Mouse, touch, pen, and keyboard routes produce the same document outcomes. — **Agent's choice**
-- Active, selected, unavailable, warning, and error states use visible non-colour cues. Disabled actions that need explanation remain discoverable and explain their prerequisite locally; contextually meaningless actions may be omitted. — **Agent's choice**
-- Multi-step and previewed edits expose clear pending state and explicit completion or cancellation. Undo and Redo remain predictable recovery paths, while modal confirmation is reserved for consequential actions that cannot be safely reversed. — **Agent's choice**
-- Recomposition preserves the canvas focal cell, selection, active tool, inspector context, and uncommitted transaction. Inspector content remains the same whether pinned, presented as a drawer, or shown as a bottom sheet. — **Agent's choice**
-- The workspace supports increased text size, visible keyboard focus, reduced motion, forced colours/high contrast, safe-area insets, and browser zoom outside custom canvas gestures. Short motion is used only to clarify spatial or state relationships. — **Agent's choice**
-- The canvas remains the visual priority. Persistent state appears near its owning affordance, immediate coordinates and interaction feedback use the context strip, and completion or failure feedback appears without unexpectedly dismissing or committing work. — **Agent's choice**
-
-## Pattern inspector
-
-- Single **Pattern** document-bar button handles both "create from scratch" and "edit in place" via the same inspector section (no separate New button). Mode, dimensions, and submode remain editable with a live canvas preview. — **your decision**
-- Pattern groups every colour editor: yarn colours and danger/accent overrides retain project semantics, while the effective danger/accent pair can be promoted to app-global defaults for new patterns. — **your decision**
-- Live preview as inputs change. Painted cells are preserved across resizing / submode toggles where they map:
-  - **Row mode** — bottom-left anchored: the foundation stays put vertically; column 0 stays put horizontally. Adding rows grows upward, adding columns grows to the right; shrinking truncates from the same far edges. — **your decision**
-  - **Round mode** — bottom-left anchored, partitioned into 4 corner blocks (`rounds × rounds` each, one per canvas corner) and 4 straight strips between them. Each region transfers independently: corner blocks anchor to their canvas corner; horizontal strips (top/bottom) anchor to top/bottom vertically and are left-anchored within the strip; vertical strips (left/right) anchor to left/right horizontally and are bottom-anchored within the strip (so detail near the foundation stays put when inner height changes). No collisions; shrinking inner dims drops cells from the side opposite the strip's anchor. — **your decision**
-  - **Rounds count change** — composes with the inner-dim rule above by giving every cell an inward shift of Δrounds (so old ring 1 stays ring 1; the new outermost ring wraps around with natural colour). — **your decision**
-  - **Mode switch** (row↔round) is inherently a wipe. — **your decision**
-- A field preview derives from the state captured when that field starts changing, so destructive scrubbing is reversible until change or blur. The first effective Pattern adjustment creates one history state and later Pattern adjustments replace its final state; closing and reopening the panel does not split the group. A non-Pattern document edit or Undo/Redo ends the group, so Undo restores its original state and Redo restores its exact final state. Returning exactly to the original state removes the no-op entry. — **your decision**
-- Pattern is modeless: authoring, canvas navigation, document commands, and other inspector sections remain available. The Pattern trigger, close button, and Escape close the panel without reverting committed changes; an invalid field retains its last valid preview while active and reverts that uncommitted preview when focus leaves. — **your decision** (modeless panel); **Agent's choice** (invalid-preview boundary)
-- **Clear drawing** is a direct, undoable action that restores natural alternating yarn values. Compatible geometry edits preserve painted pixels; a mode switch clears them because Rows and Centre-out have no stable cell mapping. — **your decision**
-- While a field is active, Pattern reports the resulting dimensions and exact added or removed cell counts; settled properties show no transaction-style summary. — **Agent's choice**
-- Numeric inputs typed below the field's minimum are normalised on blur. — **your decision**
-- Canvas dimensions are limited to 16,777,216 cells total and 1,048,576 cells per axis. Invalid Pattern edits leave the current preview intact and show an inline error; invalid saved dimensions are rejected before pixel allocation. — **joint**
-
-## Load
-
-- File picker → loads the picked `.mcw` → pushes a snapshot. Reverting is via undo (Ctrl+Z), which now restores the prior state, pixels *and* colours together. No separate revert bar. — **your decision**
-- Invalid, truncated, and unsupported future `.mcw` files are rejected before session replacement; a future version is identified explicitly. — **Agent's choice**
+- Desktop, tablet, and phone present one recognizable workflow. Layout and density adapt to available space and input capabilities without changing the meaning or order of core tools. — **your decision**
+- Mouse, touch, pen, and keyboard routes produce the same document outcomes. Gestures and shortcuts accelerate visible actions rather than becoming the only way to perform essential work. — **Agent's choice**
+- The canvas remains visually stable across responsive recomposition, open inspectors, and the Design/Crochet transition. Navigation and contextual chrome adapt around it rather than changing the document view unexpectedly. — **your decision**
+- Controls expose clear focus, selection, unavailable, warning, and error states with non-colour cues. Increased text size, browser zoom, reduced motion, high contrast, and touch-sized targets are supported as part of the main interface. — **Agent's choice**
