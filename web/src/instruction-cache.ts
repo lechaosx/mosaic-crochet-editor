@@ -2,16 +2,16 @@ export interface InstructionUnitSignature {
     label: string;
     yarn: "A" | "B";
     contentKey: string;
-    invalidWorkedCoords: readonly number[];
-    startDirection: readonly number[];
-    reversedStartDirection: readonly number[];
+    invalidWorkedCoords: readonly number[] | Int32Array;
+    startDirection: readonly number[] | Int32Array;
+    reversedStartDirection: readonly number[] | Int32Array;
 }
 
 export interface CachedInstructionUnit extends InstructionUnitSignature {
     text: string;
     reversedText: string;
-    workedCoords: readonly number[];
-    reversedWorkedCoords: readonly number[];
+    workedCoords: readonly number[] | Int32Array;
+    reversedWorkedCoords: readonly number[] | Int32Array;
     invalid: boolean;
 }
 

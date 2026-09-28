@@ -4,6 +4,7 @@ import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
 import { PlanType, PlanDir, transformed_target_indices } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
 import { AppPreferences } from "./preferences";
+import type { PackedInstructionCoordinates } from "./instruction-coordinates";
 
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;
@@ -109,6 +110,8 @@ export interface RendererState {
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
     instructionStarts: readonly { x: number; y: number; nextX: number; nextY: number; invalid: boolean }[];
+    instructionGuidanceCoords: PackedInstructionCoordinates | null;
+    instructionInvalidCoords: PackedInstructionCoordinates | null;
 }
 
 export function makeRendererState(preferences: AppPreferences): RendererState {
@@ -133,6 +136,8 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
         instructionStarts: [],
+        instructionGuidanceCoords: null,
+        instructionInvalidCoords: null,
     };
 }
 
@@ -228,7 +233,7 @@ export function fitToView(
         const labelWidth = 0.34 * String(H).length;
         // The right-aligned labels stay upright while their anchors rotate with the chart.
         const includeRowLabel = (y: number) => {
-            const x = -W / 2 - 0.25;
+            const x = -W / 2 - 1.05;
             const ry = y - H / 2;
             const anchorX = x * c - ry * s;
             const anchorY = x * s + ry * c;
@@ -242,18 +247,17 @@ export function fitToView(
     } else if (labelsVisible && pattern.mode === "round" && pattern.offsetY !== 0) {
         const halfWidth = 0.34 * String(pattern.rounds).length;
         const includeRoundLabel = (x: number) => {
-            include(x - W / 2, -H / 2 - 0.3, halfWidth, 0.28);
+            include(x - W / 2, -H / 2 - 1.1, halfWidth, 0.28);
         };
         includeRoundLabel(0.5);
         includeRoundLabel(pattern.rounds - 0.5);
     }
 
     view.zoom = clampZoom(margin * Math.min(
-        width / (maxX - minX),
+        width / (2 * Math.max(Math.abs(minX), Math.abs(maxX))),
         height / (maxY - minY),
     ));
-    view.panX = (workspace.left + workspace.right - rect.width) / 2
-        - view.zoom * (minX + maxX) / 2;
+    view.panX = (workspace.left + workspace.right - rect.width) / 2;
     view.panY = (workspace.top + workspace.bottom - rect.height) / 2
         - view.zoom * (minY + maxY) / 2;
 }
@@ -399,8 +403,9 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
+    renderInstructionErrors(ctx, view, dpr, pattern, committedPixels, rs.instructionInvalidCoords, dangerColor);
     renderHighlightSymbols(ctx, view, dpr, rs.colors, dangerColor, pattern, committedPixels, store.plan, m,
-        guidanceOpacity / 100);
+        guidanceOpacity / 100, rs.instructionGuidanceCoords);
     renderInstructionStarts(ctx, view, dpr, rs.instructionStarts, accentColor, dangerColor, m);
     (window as unknown as { __test_instruction_starts__?: typeof rs.instructionStarts }).__test_instruction_starts__ = rs.instructionStarts;
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
@@ -537,7 +542,18 @@ function renderInstructionStarts(
     starts: readonly { x: number; y: number; nextX: number; nextY: number; invalid: boolean }[],
     accentColor: string, dangerColor: string, m: DOMMatrix,
 ) {
-    if (starts.length === 0) return;
+    const geometry: {
+        startCentre: { x: number; y: number };
+        shaft: { x: number; y: number };
+        tip: { x: number; y: number };
+        direction: { x: number; y: number };
+        bounds: { left: number; top: number; right: number; bottom: number };
+    }[] = [];
+    if (starts.length === 0) {
+        (window as unknown as { __test_instruction_arrow_geometry__?: typeof geometry })
+            .__test_instruction_arrow_geometry__ = geometry;
+        return;
+    }
     const cell = view.zoom * dpr;
     const length = Math.min(cell * 0.38, 18);
     ctx.save();
@@ -552,16 +568,79 @@ function renderInstructionStarts(
         if (magnitude === 0) continue;
         const dx = (next.x - from.x) / magnitude;
         const dy = (next.y - from.y) / magnitude;
-        const tipX = from.x + dx * length, tipY = from.y + dy * length;
+        const tipGap = cell * 0.58;
+        let tipX = from.x - dx * tipGap, tipY = from.y - dy * tipGap;
+        let shaftX = tipX - dx * length, shaftY = tipY - dy * length;
         const side = length * 0.38;
+        const headA = { x: tipX - dx * side - dy * side, y: tipY - dy * side + dx * side };
+        const headB = { x: tipX - dx * side + dy * side, y: tipY - dy * side - dx * side };
+        const xs = [shaftX, tipX, headA.x, headB.x];
+        const ys = [shaftY, tipY, headA.y, headB.y];
+        const margin = Math.max(2, ctx.lineWidth);
+        const shiftX = Math.min(...xs) < margin
+            ? margin - Math.min(...xs)
+            : Math.max(...xs) > ctx.canvas.width - margin
+                ? ctx.canvas.width - margin - Math.max(...xs)
+                : 0;
+        const shiftY = Math.min(...ys) < margin
+            ? margin - Math.min(...ys)
+            : Math.max(...ys) > ctx.canvas.height - margin
+                ? ctx.canvas.height - margin - Math.max(...ys)
+                : 0;
+        tipX += shiftX; tipY += shiftY;
+        shaftX += shiftX; shaftY += shiftY;
+        geometry.push({
+            startCentre: { x: from.x, y: from.y },
+            shaft: { x: shaftX, y: shaftY },
+            tip: { x: tipX, y: tipY },
+            direction: { x: dx, y: dy },
+            bounds: {
+                left: Math.min(shaftX, tipX, headA.x + shiftX, headB.x + shiftX) - ctx.lineWidth / 2,
+                top: Math.min(shaftY, tipY, headA.y + shiftY, headB.y + shiftY) - ctx.lineWidth / 2,
+                right: Math.max(shaftX, tipX, headA.x + shiftX, headB.x + shiftX) + ctx.lineWidth / 2,
+                bottom: Math.max(shaftY, tipY, headA.y + shiftY, headB.y + shiftY) + ctx.lineWidth / 2,
+            },
+        });
         ctx.strokeStyle = start.invalid ? dangerColor : accentColor;
         ctx.beginPath();
-        ctx.moveTo(from.x, from.y);
+        ctx.moveTo(shaftX, shaftY);
         ctx.lineTo(tipX, tipY);
-        ctx.lineTo(tipX - dx * side - dy * side, tipY - dy * side + dx * side);
+        ctx.lineTo(headA.x + shiftX, headA.y + shiftY);
         ctx.moveTo(tipX, tipY);
-        ctx.lineTo(tipX - dx * side + dy * side, tipY - dy * side - dx * side);
+        ctx.lineTo(headB.x + shiftX, headB.y + shiftY);
         ctx.stroke();
+    }
+    ctx.restore();
+    (window as unknown as { __test_instruction_arrow_geometry__?: typeof geometry })
+        .__test_instruction_arrow_geometry__ = geometry;
+}
+
+function renderInstructionErrors(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: PatternState, pixels: Uint8Array,
+    coords: PackedInstructionCoordinates | null, dangerColor: string,
+) {
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    const visibleCoords: { x: number; y: number }[] = [];
+    coords?.forEach((x, y) => {
+        if (x >= 0 && x < W && y >= 0 && y < H && pixels[y * W + x] !== 0) {
+            visibleCoords.push({ x, y });
+        }
+    });
+    (window as unknown as { __test_instruction_error_coords__?: typeof visibleCoords })
+        .__test_instruction_error_coords__ = visibleCoords;
+    if (visibleCoords.length === 0) return;
+    ctx.save();
+    ctx.fillStyle = dangerColor;
+    ctx.globalAlpha = 0.24;
+    for (const { x, y } of visibleCoords) {
+        ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = dangerColor;
+    ctx.lineWidth = Math.max(2 / (view.zoom * dpr), 0.08);
+    for (const { x, y } of visibleCoords) {
+        ctx.strokeRect(x + 0.08, y + 0.08, 0.84, 0.84);
     }
     ctx.restore();
 }
@@ -677,7 +756,7 @@ function renderHighlightSymbols(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     colors: (string | null)[], dangerColor: string,
     pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
-    m: DOMMatrix, opacity: number,
+    m: DOMMatrix, opacity: number, guidanceCoords: PackedInstructionCoordinates | null,
 ) {
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
     const A = colors[1] ?? "#000";
@@ -702,6 +781,7 @@ function renderHighlightSymbols(
     ctx.lineCap  = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.16;
+    const validGlyphCoords: { x: number; y: number }[] = [];
     for (const { display, glyph } of groups) {
         ctx.strokeStyle = glyph;
         ctx.beginPath();
@@ -710,7 +790,9 @@ function renderHighlightSymbols(
             const wx = plan[i+2], wy = plan[i+3];
             const [dx, dy] = DIR_VECTORS[plan[i+1]];
             const ox = wx + dx, oy = wy + dy;
+            if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
             if (outwardPixel(ox, oy, wx, wy) !== display) continue;
+            validGlyphCoords.push({ x: ox, y: oy });
             ctx.moveTo(ox + 0.24, oy + 0.24); ctx.lineTo(ox + 0.76, oy + 0.76);
             ctx.moveTo(ox + 0.76, oy + 0.24); ctx.lineTo(ox + 0.24, oy + 0.76);
         }
@@ -727,33 +809,47 @@ function renderHighlightSymbols(
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    ctx.strokeStyle = dangerColor;
-    ctx.lineWidth   = cellPx * 0.16;
-    ctx.beginPath();
+    const invalidGlyphs: { x: number; y: number; point: DOMPoint }[] = [];
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] !== PlanType.Invalid) continue;
         const wx = plan[i+2], wy = plan[i+3];
         const [dx, dy] = DIR_VECTORS[plan[i+1]];
         const ox = wx + dx, oy = wy + dy;
-        const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
-        ctx.moveTo(p.x, p.y - stemTop);
-        ctx.lineTo(p.x, p.y + stemBot);
+        if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
+        const outwardUsable = ox >= 0 && ox < W && oy >= 0 && oy < H
+            && pixels[oy * W + ox] !== 0;
+        const x = outwardUsable ? ox : wx;
+        const y = outwardUsable ? oy : wy;
+        invalidGlyphs.push({ x, y, point: m.transformPoint({ x: x + 0.5, y: y + 0.5 }) });
+    }
+
+    ctx.strokeStyle = dangerColor;
+    ctx.lineWidth   = cellPx * 0.16;
+    ctx.beginPath();
+    for (const { point } of invalidGlyphs) {
+        ctx.moveTo(point.x, point.y - stemTop);
+        ctx.lineTo(point.x, point.y + stemBot);
     }
     ctx.stroke();
 
     ctx.fillStyle = dangerColor;
     ctx.beginPath();
-    for (let i = 0; i < plan.length; i += 4) {
-        if (plan[i] !== PlanType.Invalid) continue;
-        const wx = plan[i+2], wy = plan[i+3];
-        const [dx, dy] = DIR_VECTORS[plan[i+1]];
-        const ox = wx + dx, oy = wy + dy;
-        const p = m.transformPoint({ x: ox + 0.5, y: oy + 0.5 });
-        ctx.moveTo(p.x + dotR, p.y + dotY);
-        ctx.arc(p.x, p.y + dotY, dotR, 0, Math.PI * 2);
+    for (const { point } of invalidGlyphs) {
+        ctx.moveTo(point.x + dotR, point.y + dotY);
+        ctx.arc(point.x, point.y + dotY, dotR, 0, Math.PI * 2);
     }
     ctx.fill();
     ctx.restore();
+
+    (window as unknown as { __test_instruction_guidance__?: {
+        filtered: boolean;
+        validGlyphCoords: { x: number; y: number }[];
+        invalidGlyphCoords: { x: number; y: number }[];
+    } }).__test_instruction_guidance__ = {
+        filtered: guidanceCoords !== null,
+        validGlyphCoords,
+        invalidGlyphCoords: invalidGlyphs.map(({ x, y }) => ({ x, y })),
+    };
 
     ctx.restore();
 }
@@ -772,7 +868,7 @@ function renderRowLabels(
     ctx.textAlign  = "right";
     ctx.textBaseline = "middle";
     for (let y = 0; y < H; y++) {
-        const p = m.transformPoint({ x: -0.25, y: y + 0.5 });
+        const p = m.transformPoint({ x: -1.05, y: y + 0.5 });
         ctx.fillText(String(H - y), p.x, p.y);
     }
     ctx.restore();
@@ -788,6 +884,10 @@ function renderRoundLabels(
     const cell = view.zoom * dpr;
     const { canvasWidth: W, canvasHeight: H, rounds, offsetY } = pattern;
     const isFull = offsetY === 0;
+    const geometry: {
+        anchor: { x: number; y: number };
+        bounds: { left: number; top: number; right: number; bottom: number };
+    }[] = [];
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.font = `${cell * (isFull ? 0.55 : 0.5)}px ${LABEL_FONT}`;
@@ -810,14 +910,27 @@ function renderRoundLabels(
             cx = px + 0.5; cy = py + 0.5;
         } else {
             if (i >= W) continue;
-            cx = i + 0.5; cy = -0.3;
+            cx = i + 0.5; cy = -1.1;
         }
         const label = String(rounds - i);
         const p = m.transformPoint({ x: cx, y: cy });
+        const width = ctx.measureText(label).width;
+        const halfHeight = cell * (isFull ? 0.33 : 0.3);
+        geometry.push({
+            anchor: { x: p.x, y: p.y },
+            bounds: {
+                left: p.x - width / 2,
+                top: p.y - halfHeight,
+                right: p.x + width / 2,
+                bottom: p.y + halfHeight,
+            },
+        });
         if (isFull) ctx.strokeText(label, p.x, p.y);
         ctx.fillText(label, p.x, p.y);
     }
     ctx.restore();
+    (window as unknown as { __test_instruction_label_geometry__?: typeof geometry })
+        .__test_instruction_label_geometry__ = geometry;
 }
 
 function renderSymmetryGuides(

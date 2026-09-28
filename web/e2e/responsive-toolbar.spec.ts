@@ -51,7 +51,7 @@ test("Fit keeps row numbers inside constrained canvases", async ({ page }) => {
     }
 });
 
-test("turning row numbers on reframes the phone canvas and updates cell size", async ({ page }) => {
+test("turning row numbers on leaves the phone canvas view unchanged", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
     const openSettings = async () => {
@@ -77,14 +77,13 @@ test("turning row numbers on reframes the phone canvas and updates cell size", a
         scale: window.__test_matrix__!.a,
         offset: window.__test_matrix__!.e,
     }));
-    expect(withNumbers.scale).toBeLessThan(withoutNumbers.scale);
-    expect(withNumbers.offset).not.toBe(withoutNumbers.offset);
+    expect(withNumbers).toEqual(withoutNumbers);
     await expect(page.locator("#view-zoom-value")).toHaveCount(0);
     const bounds = await renderedBounds(page);
     expect(bounds.minX).toBeGreaterThanOrEqual(4);
 });
 
-test("Fit uses the unobscured workspace beside wide overlay panels", async ({ page }) => {
+test("Fit centres the chart on the whole canvas behind wide overlay panels", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 600 });
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
@@ -92,8 +91,6 @@ test("Fit uses the unobscured workspace beside wide overlay panels", async ({ pa
 
     const visible = await page.evaluate(() => {
         const canvas = document.getElementById("canvas")!.getBoundingClientRect();
-        const dock = document.getElementById("authoring-dock")!.getBoundingClientRect();
-        const inspector = document.getElementById("inspector-host")!.getBoundingClientRect();
         const m = window.__test_matrix__!;
         const corners = [
             m.transformPoint({ x: 0, y: 0 }),
@@ -101,14 +98,18 @@ test("Fit uses the unobscured workspace beside wide overlay panels", async ({ pa
             m.transformPoint({ x: 0, y: 9 }),
             m.transformPoint({ x: 9, y: 9 }),
         ];
+        const centre = m.transformPoint({ x: 4.5, y: 4.5 });
         return {
-            left: dock.right - canvas.left,
-            right: inspector.left - canvas.left,
+            left: 0,
+            right: canvas.width,
             top: 0,
             bottom: canvas.height,
+            centre: { x: centre.x / window.devicePixelRatio, canvasX: canvas.width / window.devicePixelRatio / 2 },
             corners: corners.map(({ x, y }) => ({ x: x / window.devicePixelRatio, y: y / window.devicePixelRatio })),
         };
     });
+
+    expect(visible.centre.x).toBeCloseTo(visible.centre.canvasX, 1);
 
     for (const corner of visible.corners) {
         expect(corner.x).toBeGreaterThanOrEqual(visible.left);
@@ -142,26 +143,23 @@ test("Fit keeps the chart below persistent view controls", async ({ page }) => {
     expect(bounds.minY).toBeGreaterThanOrEqual(top);
 });
 
-test("Fit immediately uses Crochet panel bounds", async ({ page }) => {
+test("Fit centres Crochet on the full canvas behind its panel", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 600 });
     await bootApp(page);
     await page.locator("#btn-export").click();
     await page.getByRole("button", { name: "Fit view" }).click();
 
-    const { left, corners } = await page.evaluate(() => {
+    const { canvasCentre, patternCentre } = await page.evaluate(() => {
         const canvas = document.getElementById("canvas")!.getBoundingClientRect();
-        const panel = document.getElementById("instructions-workspace")!.getBoundingClientRect();
         const m = window.__test_matrix__!;
+        const centre = m.transformPoint({ x: 4.5, y: 4.5 });
         return {
-            left: panel.right - canvas.left,
-            corners: [
-                m.transformPoint({ x: 0, y: 0 }), m.transformPoint({ x: 9, y: 0 }),
-                m.transformPoint({ x: 0, y: 9 }), m.transformPoint({ x: 9, y: 9 }),
-            ].map(({ x }) => x / window.devicePixelRatio),
+            canvasCentre: canvas.width / 2,
+            patternCentre: centre.x / window.devicePixelRatio,
         };
     });
 
-    expect(Math.min(...corners)).toBeGreaterThanOrEqual(left);
+    expect(patternCentre).toBeCloseTo(canvasCentre, 1);
 });
 
 test("Fit keeps rotated half-round numbers inside a phone canvas", async ({ page }) => {

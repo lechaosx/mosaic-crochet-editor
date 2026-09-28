@@ -3,19 +3,10 @@ import type { SelectMode } from "@mosaic/logic/selection";
 import type { OverlayAction } from "@mosaic/logic/paint";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
 import type { CanvasWorkspace } from "./render";
+import type { PackedInstructionCoordinates } from "./instruction-coordinates";
 
 export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
 export type SelectionMode = SelectMode;
-
-export function instructionBadgeTextColor(color: string): "#000000" | "#ffffff" {
-    if (!/^#[0-9a-f]{6}$/i.test(color)) return "#ffffff";
-    const channel = (offset: number) => {
-        const value = parseInt(color.slice(offset, offset + 2), 16) / 255;
-        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
-    };
-    const luminance = 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
-    return (luminance + 0.05) / 0.05 >= 1.05 / (luminance + 0.05) ? "#000000" : "#ffffff";
-}
 
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -133,6 +124,8 @@ export interface InstructionOverviewUnit {
     color: string;
     text: string;
     invalid: boolean;
+    guidanceCoords: PackedInstructionCoordinates;
+    invalidCoords: PackedInstructionCoordinates;
     start: { x: number; y: number; nextX: number; nextY: number } | null;
 }
 
@@ -208,9 +201,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         canvasShell.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);
         canvasShell.style.setProperty("--canvas-chrome-bottom", `${Math.max(0, bottom)}px`);
         const workspace: CanvasWorkspace = {
-            left: Math.max(0, left),
+            left: 0,
             top: 0,
-            right: Math.max(0, canvasRect.width - right),
+            right: canvasRect.width,
             bottom: Math.max(0, canvasRect.height - bottom),
         };
         for (const chrome of [canvasControls, canvasStatus, canvasInstruction]) {
@@ -277,7 +270,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         Array.from(controls).find(control => control.getClientRects().length > 0)?.focus();
     }
 
-    function closeInspector() {
+    function closeInspector(restoreFocus = true) {
         const panel = activeInspector;
         if (activeInspector === "pattern") finishPatternEdit();
         if (activeInspector === "transforms") cb.onTransformPopoverToggle(false);
@@ -292,6 +285,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         syncCanvasChromeInsets();
         queueCanvasChromeSync();
 
+        if (!restoreFocus) return;
         const more = el<HTMLButtonElement>("btn-more");
         const activeTool = document.querySelector<HTMLButtonElement>(
             ".authoring-dock .btn[aria-pressed='true']",
@@ -1056,7 +1050,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             ? "Back to Design"
             : hasCrochetProgress ? "Continue Crocheting" : "Begin Crocheting";
         const errors = crochetErrors === 1 ? "1 invalid stitch" : `${crochetErrors} invalid stitches`;
-        crochetMode.textContent = !open && crochetErrors ? `${label} !` : label;
+        crochetMode.textContent = label;
         crochetMode.title = (open
             ? "Return to pattern design"
             : hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions")
@@ -1088,13 +1082,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
         let liveCompleted = 0;
         let liveProgressChanged = (_completedUnits: number) => true;
         let isBusy = true;
-        const inspectorWasHidden = inspectorHost.hidden;
+        const retainedInspector = activeInspector === "pattern" || activeInspector === "settings";
+        if (activeInspector !== null && !retainedInspector) closeInspector(false);
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
         canvas.removeAttribute("aria-describedby");
         canvas.setAttribute("aria-label", "Crochet progress chart");
         instructions.hidden = false;
-        inspectorHost.hidden = true;
         document.body.classList.add("crochet-mode");
         setCrochetMode(true);
         syncCanvasChromeInsets();
@@ -1115,6 +1109,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
             unitElements.forEach((item, index) => {
                 item.disabled = isBusy;
                 item.classList.toggle("instructions-unit--complete", index < liveCompleted);
+                item.classList.toggle(
+                    "instructions-unit--current-invalid",
+                    index === liveCompleted && Boolean(liveUnits[index]?.invalid),
+                );
                 if (index === liveCompleted) {
                     item.setAttribute("aria-current", "step");
                 } else {
@@ -1162,7 +1160,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
             liveForward.onclick = null;
             canvas.setAttribute("aria-label", "Editable pattern chart");
             instructions.hidden = true;
-            if (inspectorHost.hidden) inspectorHost.hidden = inspectorWasHidden;
             document.body.classList.remove("crochet-mode");
             setCrochetMode(false);
             syncCanvasChromeInsets();
@@ -1200,11 +1197,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 const meta = document.createElement("span");
                 meta.className = "instructions-unit-number";
                 meta.textContent = unit.label.replace(/^\D+/, "");
-                meta.style.backgroundColor = unit.color;
-                meta.style.color = instructionBadgeTextColor(unit.color);
+                const yarn = document.createElement("span");
+                yarn.className = "instructions-unit-yarn";
+                yarn.style.backgroundColor = unit.color;
+                yarn.textContent = unit.yarn;
                 const text = document.createElement("code");
                 text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
-                item.append(meta, text);
+                item.append(yarn, meta, text);
                 row.append(item);
                 unitsList.append(row);
                 unitElements.push(item);

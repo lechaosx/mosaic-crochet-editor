@@ -1066,7 +1066,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   width: 100%;
   min-height: var(--hit);
   display: grid;
-  grid-template-columns: minmax(2ch, auto) minmax(0, 1fr);
+  grid-template-columns: 0.35rem minmax(2ch, auto) minmax(0, 1fr);
   align-items: center;
   column-gap: var(--space-3);
   row-gap: var(--space-1);
@@ -1086,13 +1086,32 @@ input[type="checkbox"] { accent-color: var(--accent); }
   box-shadow: inset 3px 0 var(--accent);
 }
 .instructions-unit--complete { opacity: 0.72; }
-.instructions-unit.instructions-unit--invalid { box-shadow: inset 3px 0 var(--danger); }
+.instructions-unit.instructions-unit--invalid {
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-1));
+  box-shadow: inset 3px 0 var(--danger);
+}
+.instructions-unit.instructions-unit--current-invalid {
+  background: color-mix(in srgb, var(--danger) 18%, var(--bg-1));
+  box-shadow: inset 4px 0 var(--danger), inset 0 0 0 1px var(--danger);
+}
+
+.instructions-unit-yarn {
+  width: 1rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--fg-2);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: -1px -1px #000, 1px -1px #000, -1px 1px #000, 1px 1px #000;
+}
 
 .instructions-unit-number {
   min-width: 2ch;
-  padding: 0.15rem 0.35rem;
-  border: var(--border);
-  border-radius: var(--radius-1);
+  padding: 0;
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;

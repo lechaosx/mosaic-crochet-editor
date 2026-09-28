@@ -146,6 +146,57 @@ test("only document-changing commands leave Crochet", async ({ page }) => {
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 });
 
+test("Crochet retains Pattern and Settings inspectors across the mode switch", async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await bootApp(page);
+
+    for (const name of ["Settings", "Pattern"] as const) {
+        await page.getByRole("button", { name }).click();
+        const inspector = page.getByRole("complementary", { name });
+        await expect(inspector).toBeVisible();
+        await page.locator("#btn-export").click();
+        await expect(inspector).toBeVisible();
+        await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
+        await page.locator("#btn-export").click();
+        await expect(inspector).toBeVisible();
+        await page.keyboard.press("Escape");
+    }
+});
+
+test("Fit uses the whole canvas width while an inspector is open", async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Fit view" }).click();
+
+    const centres = await page.evaluate(() => {
+        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        const rect = canvas.getBoundingClientRect();
+        const matrix = window.__test_matrix__!;
+        const pattern = matrix.transformPoint({ x: 4.5, y: 4.5 });
+        const dpr = window.devicePixelRatio || 1;
+        return { canvas: rect.width / 2, pattern: pattern.x / dpr };
+    });
+    expect(centres.pattern).toBeCloseTo(centres.canvas, 1);
+});
+
+test("showing numbers rerenders without changing the view", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.getByRole("button", { name: "Settings" }).click();
+    const before = await page.evaluate(() => {
+        const m = window.__test_matrix__!;
+        return [m.a, m.b, m.c, m.d, m.e, m.f];
+    });
+    await page.getByText("Show numbers", { exact: true }).click();
+    await page.getByText("Show numbers", { exact: true }).click();
+    const after = await page.evaluate(() => {
+        const m = window.__test_matrix__!;
+        return [m.a, m.b, m.c, m.d, m.e, m.f];
+    });
+    expect(after).toEqual(before);
+});
+
 test("switching workspaces does not move selected Design content", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 0, 1);
@@ -194,7 +245,7 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await clickCell(page, 0, 1);
 
     const crochet = page.getByRole("button", { name: "Begin Crocheting — 1 invalid stitch" });
-    await expect(crochet).toContainText("!");
+    await expect(crochet).toHaveText("Begin Crocheting");
     await expect(crochet).toHaveClass(/btn--danger/);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("1 error");
@@ -203,12 +254,48 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await expect(invalidUnit).toContainText("oc");
     await expect(invalidUnit).toHaveClass(/instructions-unit--invalid/);
     await expect(invalidUnit).toHaveAccessibleName(/contains invalid stitches/);
-    await expect(invalidUnit.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(invalidUnit.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(invalidUnit.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(0, 0, 0)");
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
     await invalidUnit.click();
+    await expect(invalidUnit).toHaveClass(/instructions-unit--current-invalid/);
     await expect(invalidUnit).toHaveCSS("box-shadow", /rgb\(255, 0, 0\)/);
+    const invalidGlyphs = await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: {
+            invalidGlyphCoords: Array<{ x: number; y: number }>;
+        } }).__test_instruction_guidance__?.invalidGlyphCoords ?? []);
+    expect(invalidGlyphs.length).toBeGreaterThan(0);
+    expect(invalidGlyphs.every(({ x, y }) => x >= 0 && x < 9 && y >= 0 && y < 9)).toBe(true);
+    expect(await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_error_coords__?: Array<{ x: number; y: number }> })
+            .__test_instruction_error_coords__ ?? [])).toEqual([{ x: 0, y: 0 }]);
+});
+
+test("a top-edge row error keeps its invalid glyph inside the chart", async ({ page }) => {
+    await bootApp(page);
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Open" }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles({
+        name: "top-edge-invalid.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({
+            version: 1,
+            state: { mode: "row", canvasWidth: 3, canvasHeight: 3 },
+            pixels: [1, 2, 1, 2, 2, 2, 1, 1, 1],
+            colorA: "#000000", colorB: "#ffffff",
+        })),
+    });
+    await expect(page.getByRole("button", { name: "Begin Crocheting — 1 invalid stitch" })).toBeVisible();
+
+    const invalidGlyphs = await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: {
+            invalidGlyphCoords: Array<{ x: number; y: number }>;
+        } }).__test_instruction_guidance__?.invalidGlyphCoords ?? []);
+    expect(invalidGlyphs).toContainEqual({ x: 1, y: 0 });
+    expect(invalidGlyphs.every(({ x, y }) => x >= 0 && x < 3 && y >= 0 && y < 3)).toBe(true);
 });
 
 test("Crochet advances by whole rows and resumes the exact instruction plan", async ({ page }) => {
@@ -268,8 +355,12 @@ test("Crochet lines are compact progress controls", async ({ page }) => {
     await expect(first).not.toContainText("Row");
     await expect(first).not.toContainText("Yarn");
     await expect(first.locator(".instructions-unit-number")).toHaveText("1");
-    await expect(first.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(18, 52, 86)");
-    await expect(second.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(171, 205, 239)");
+    await expect(first.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(first.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(18, 52, 86)");
+    await expect(second.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(171, 205, 239)");
+    await expect(first.locator(".instructions-unit-yarn")).toHaveText("A");
+    await expect(second.locator(".instructions-unit-yarn")).toHaveText("B");
+    await expect(first.locator(".instructions-unit-yarn")).not.toHaveAttribute("aria-hidden");
     await expect(first.locator("code")).toHaveCSS("white-space", "normal");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-y", "auto");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-x", "hidden");
@@ -415,6 +506,24 @@ test("Crochet canvas arrows start every unit in its actual alternate direction",
     expect(alternate![1].y).toBe(forward![1].y);
 });
 
+test("Crochet canvas arrows sit before and point into their first stitch", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const geometry = await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
+            startCentre: { x: number; y: number };
+            shaft: { x: number; y: number };
+            tip: { x: number; y: number };
+            direction: { x: number; y: number };
+        }> }).__test_instruction_arrow_geometry__?.[0]);
+    expect(geometry).toBeTruthy();
+    const project = (point: { x: number; y: number }) =>
+        point.x * geometry!.direction.x + point.y * geometry!.direction.y;
+    expect(project(geometry!.shaft)).toBeLessThan(project(geometry!.tip));
+    expect(project(geometry!.tip)).toBeLessThan(project(geometry!.startCentre));
+});
+
 test("Crochet canvas arrows stay visible and rotate with the chart", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
@@ -422,40 +531,28 @@ test("Crochet canvas arrows stay visible and rotate with the chart", async ({ pa
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
 
-    const accentBounds = async () => {
-        const start = await page.evaluate(() => window.__test_instruction_starts__?.[0]);
-        if (!start) throw new Error("instruction arrow hook missing");
-        const centre = await cellCoord(page, start.x, start.y);
-        return page.evaluate(({ cx, cy }) => {
+    const arrowGeometry = async () => page.evaluate(() => {
+            const geometry = (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
+                shaft: { x: number; y: number }; tip: { x: number; y: number };
+                direction: { x: number; y: number };
+            }> }).__test_instruction_arrow_geometry__?.[0];
+            if (!geometry) throw new Error("instruction arrow hook missing");
             const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-            const rect = canvas.getBoundingClientRect();
-            const dpr = window.devicePixelRatio || 1;
-            const left = Math.max(0, Math.round((cx - rect.left) * dpr) - 24);
-            const top = Math.max(0, Math.round((cy - rect.top) * dpr) - 24);
-            const width = Math.min(49, canvas.width - left), height = Math.min(49, canvas.height - top);
-            const pixels = canvas.getContext("2d", { willReadFrequently: true })!
-                .getImageData(left, top, width, height).data;
-            let minX = width, minY = height, maxX = -1, maxY = -1;
-            for (let i = 0; i < pixels.length; i += 4) {
-                if (pixels[i] > 160 && pixels[i + 2] > 120 && pixels[i] - pixels[i + 1] > 50) {
-                    const pixel = i / 4;
-                    const x = pixel % width, y = Math.floor(pixel / width);
-                    minX = Math.min(minX, x); minY = Math.min(minY, y);
-                    maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
-                }
-            }
-            return { width: maxX - minX + 1, height: maxY - minY + 1 };
-        }, centre);
-    };
+            return { ...geometry, width: canvas.width, height: canvas.height };
+        });
 
-    const before = await accentBounds();
-    expect(before.width).toBeGreaterThan(before.height);
+    const before = await arrowGeometry();
+    expect(Math.abs(before.direction.x)).toBeGreaterThan(Math.abs(before.direction.y));
+    expect([before.shaft, before.tip].some(point =>
+        point.x >= 0 && point.x <= before.width && point.y >= 0 && point.y <= before.height)).toBe(true);
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(300);
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(300);
-    const after = await accentBounds();
-    expect(after.height).toBeGreaterThan(after.width);
+    const after = await arrowGeometry();
+    expect(Math.abs(after.direction.y)).toBeGreaterThan(Math.abs(after.direction.x));
+    expect([after.shaft, after.tip].some(point =>
+        point.x >= 0 && point.x <= after.width && point.y >= 0 && point.y <= after.height)).toBe(true);
 });
 
 test("a one-cell quarter round has a canvas start arrow", async ({ page }) => {
@@ -472,6 +569,51 @@ test("a one-cell quarter round has a canvas start arrow", async ({ page }) => {
     const forward = await page.evaluate(() => window.__test_instruction_starts__);
     expect(forward).toHaveLength(1);
     expect(forward![0].nextX === forward![0].x && forward![0].nextY === forward![0].y).toBe(false);
+});
+
+test("partial-round start arrows do not overlap their number lane", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.getByText("Quarter", { exact: true }).click();
+    await page.locator("#edit-rounds").fill("3");
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+
+    const expectClearance = async () => {
+        const geometry = await page.evaluate(() => {
+            const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+            return {
+                width: canvas.width,
+                height: canvas.height,
+                arrows: (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
+                    bounds: { left: number; top: number; right: number; bottom: number };
+                }> }).__test_instruction_arrow_geometry__ ?? [],
+                labels: (window as typeof window & { __test_instruction_label_geometry__?: Array<{
+                    bounds: { left: number; top: number; right: number; bottom: number };
+                }> }).__test_instruction_label_geometry__ ?? [],
+            };
+        });
+        expect(geometry.arrows).toHaveLength(3);
+        expect(geometry.labels).toHaveLength(3);
+        for (const arrow of geometry.arrows) {
+            expect(arrow.bounds.left).toBeGreaterThanOrEqual(0);
+            expect(arrow.bounds.top).toBeGreaterThanOrEqual(0);
+            expect(arrow.bounds.right).toBeLessThanOrEqual(geometry.width);
+            expect(arrow.bounds.bottom).toBeLessThanOrEqual(geometry.height);
+            for (const label of geometry.labels) {
+                const horizontalGap = Math.max(label.bounds.left - arrow.bounds.right, arrow.bounds.left - label.bounds.right, 0);
+                const verticalGap = Math.max(label.bounds.top - arrow.bounds.bottom, arrow.bounds.top - label.bounds.bottom, 0);
+                expect(Math.hypot(horizontalGap, verticalGap)).toBeGreaterThanOrEqual(2);
+            }
+        }
+    };
+    await expectClearance();
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+    await expectClearance();
 });
 
 test("round arrows follow Alternate direction", async ({ page }) => {
@@ -496,8 +638,13 @@ test("round arrows follow Alternate direction", async ({ page }) => {
 
 test("Crochet renders through the current row and no future rows", async ({ page }) => {
     await bootApp(page);
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 4, 8);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    expect(await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
+            .__test_instruction_guidance__?.filtered)).toBe(true);
     const rowCount = await page.locator("#instructions-units .instructions-unit").count();
     await page.getByRole("button", { name: "Fit view" }).click();
     const currentRow1 = await cellCoord(page, 4, rowCount - 1);
@@ -506,6 +653,14 @@ test("Crochet renders through the current row and no future rows", async ({ page
     expect(await pixelRGB(page, currentRow1.cx, currentRow1.cy)).not.toEqual([22, 22, 24]);
 
     await page.getByRole("button", { name: "Forward one row" }).click();
+    const currentGuidance = await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: {
+            validGlyphCoords: Array<{ x: number; y: number }>;
+            invalidGlyphCoords: Array<{ x: number; y: number }>;
+        } }).__test_instruction_guidance__);
+    expect(currentGuidance!.validGlyphCoords).toContainEqual({ x: 4, y: 7 });
+    expect([...currentGuidance!.validGlyphCoords, ...currentGuidance!.invalidGlyphCoords]
+        .every(({ y }) => y === 7)).toBe(true);
     const completedRow1 = await cellCoord(page, 4, rowCount - 1);
     expect(await pixelRGB(page, completedRow1.cx, completedRow1.cy)).not.toEqual([22, 22, 24]);
     const currentRow2 = await cellCoord(page, 4, rowCount - 2);
@@ -514,6 +669,33 @@ test("Crochet renders through the current row and no future rows", async ({ page
     await page.getByRole("button", { name: "Back one row" }).click();
     const futureAgain = await cellCoord(page, 4, rowCount - 2);
     expect(await pixelRGB(page, futureAgain.cx, futureAgain.cy)).toEqual([22, 22, 24]);
+
+    await page.locator("#instructions-units .instructions-unit").last().click();
+    expect(await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
+            .__test_instruction_guidance__?.filtered)).toBe(false);
+});
+
+test("Crochet shows current-round guidance before the final round", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.locator("#edit-rounds").fill("3");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 2, 4);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await page.getByRole("button", { name: "Forward one round" }).click();
+
+    const guidance = await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: {
+            validGlyphCoords: Array<{ x: number; y: number }>;
+            invalidGlyphCoords: Array<{ x: number; y: number }>;
+        } }).__test_instruction_guidance__);
+    expect(guidance!.validGlyphCoords).toContainEqual({ x: 1, y: 4 });
+    expect([...guidance!.validGlyphCoords, ...guidance!.invalidGlyphCoords]
+        .every(({ x, y }) => Math.min(x, y, 8 - x, 8 - y) === 1)).toBe(true);
 });
 
 test("Crochet progress remains available when the chart has errors", async ({ page }) => {
@@ -567,10 +749,13 @@ test("Crochet keeps a single Centre-out round at both progress limits", async ({
 });
 
 test("Crochet reports copy completion", async ({ page }) => {
+    let copied = "";
     await page.addInitScript(() => {
         Object.defineProperty(navigator, "clipboard", {
             configurable: true,
-            value: { writeText: async () => undefined },
+            value: { writeText: async (text: string) => {
+                (window as typeof window & { __copied?: string }).__copied = text;
+            } },
         });
     });
     await bootApp(page);
@@ -580,6 +765,8 @@ test("Crochet reports copy completion", async ({ page }) => {
 
     await page.getByRole("button", { name: "Copy instructions" }).click();
     await expect(status).toHaveText("Copied");
+    copied = await page.evaluate(() => (window as typeof window & { __copied?: string }).__copied ?? "");
+    expect(copied.split("\n")[0]).toMatch(/^Row 1 · Yarn A: /);
 });
 
 test("Crochet reports clipboard failure", async ({ page }) => {

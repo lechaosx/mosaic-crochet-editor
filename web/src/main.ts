@@ -20,6 +20,7 @@ import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual 
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
+import { packInstructionCoordinates } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          previewSelectRectMask,
@@ -713,12 +714,6 @@ function findContrastColors() {
 }
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
-    if (v) {
-        fitToView(
-            viewport.canvas, viewport.view, store.state.pattern, store.state.rotation, true,
-            ui.getCanvasWorkspace(),
-        );
-    }
     preferences.labelsVisible = v;
     saveAppPreferences(preferences);
     renderCanvas();
@@ -1045,6 +1040,8 @@ async function onInstructions() {
         cancelled = true;
         instructionsPreviewStore = null;
         rs.instructionStarts = [];
+        rs.instructionGuidanceCoords = null;
+        rs.instructionInvalidCoords = null;
         ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
         renderCanvas();
     });
@@ -1083,6 +1080,14 @@ async function onInstructions() {
             preview => { preview.pixels = pixels; },
             { render: false, persist: false },
         );
+        const selectedUnit = completedUnits === null
+            ? null
+            : previewUnits[completedUnits - 1] ?? null;
+        const currentGuidance = completedUnits === null || completedUnits >= previewUnits.length
+            ? null
+            : selectedUnit;
+        rs.instructionGuidanceCoords = currentGuidance?.guidanceCoords ?? null;
+        rs.instructionInvalidCoords = selectedUnit?.invalidCoords ?? null;
         renderCanvas();
     });
 
@@ -1105,24 +1110,36 @@ async function onInstructions() {
     const directionalUnit = (unit: CachedInstructionUnit, index: number): InstructionOverviewUnit => {
         const reversed = dlg.alternate() && index % 2 === 1;
         const direction = reversed ? unit.reversedStartDirection : unit.startDirection;
+        const width = store.state.pattern.canvasWidth;
         return {
             label: unit.label,
             yarn: unit.yarn,
             color: unit.yarn === "A" ? store.state.colorA : store.state.colorB,
             text: reversed ? unit.reversedText : unit.text,
             invalid: unit.invalid,
+            guidanceCoords: packInstructionCoordinates(
+                reversed ? unit.reversedWorkedCoords : unit.workedCoords,
+                width,
+            ),
+            invalidCoords: packInstructionCoordinates(unit.invalidWorkedCoords, width),
             start: direction.length >= 4 ? { x: direction[0], y: direction[1], nextX: direction[2], nextY: direction[3] } : null,
         };
+    };
+    let previewUnits: readonly InstructionOverviewUnit[] = [];
+    const copiedInstruction = (unit: InstructionOverviewUnit) => {
+        const content = unit.text.slice(unit.text.indexOf(":") + 1).trim();
+        return `${unit.label} · Yarn ${unit.yarn}: ${content}`;
     };
     const renderUnits = (units: readonly CachedInstructionUnit[], live: boolean) => {
         dlg.clearText();
         dlg.clearUnits();
         const directionalUnits = units.map(directionalUnit);
+        previewUnits = directionalUnits;
         rs.instructionStarts = directionalUnits.flatMap(unit => unit.start ? [{ ...unit.start, invalid: unit.invalid }] : []);
         renderCanvas();
         directionalUnits.forEach(directional => {
             dlg.appendUnit(directional);
-            dlg.appendLine(directional.text);
+            dlg.appendLine(copiedInstruction(directional));
         });
         if (live) {
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
@@ -1157,9 +1174,9 @@ async function onInstructions() {
                 label: `${signature.kind() === InstructionUnitKind.Row ? "Row" : "Round"} ${signature.number()}`,
                 yarn: signature.yarn() === InstructionYarn.A ? "A" : "B",
                 contentKey: signature.content_key(),
-                invalidWorkedCoords: [...signature.invalid_worked_coords()],
-                startDirection: [...signature.start_direction()],
-                reversedStartDirection: [...signature.reversed_start_direction()],
+                invalidWorkedCoords: signature.invalid_worked_coords(),
+                startDirection: signature.start_direction(),
+                reversedStartDirection: signature.reversed_start_direction(),
             };
             signature.free();
             let cachedUnit = cachedInstructionUnit(instructionCache, progressFingerprint, index, rawSignature);
@@ -1169,7 +1186,7 @@ async function onInstructions() {
                 cachedUnit = {
                     ...rawSignature,
                     text: unit.text(), reversedText: unit.reversed_text(),
-                    workedCoords: [...unit.worked_coords()], reversedWorkedCoords: [...unit.reversed_worked_coords()],
+                    workedCoords: unit.worked_coords(), reversedWorkedCoords: unit.reversed_worked_coords(),
                     invalid: rawSignature.invalidWorkedCoords.length > 0,
                 };
                 unit.free();
@@ -1177,7 +1194,7 @@ async function onInstructions() {
             units.push(cachedUnit);
             const directional = directionalUnit(cachedUnit, units.length - 1);
             dlg.appendUnit(directional);
-            dlg.appendLine(directional.text);
+            dlg.appendLine(copiedInstruction(directional));
             dlg.setProgress(index + 1, total);
             if (shouldYieldInstructionGeneration(index, recomputed)) {
                 const hooks = window as unknown as {

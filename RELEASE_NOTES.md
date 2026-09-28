@@ -4,6 +4,8 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 28 September 2026
 
+- Crochet keeps Pattern or Settings open across mode changes, centres Fit on the full canvas width, and leaves the view unchanged when numbers are shown or hidden.
+- Crochet instructions use plain numbers with yarn-colour markers, include the yarn when copied, place start arrows before the first stitch, focus guidance on the current layer until the final layer, and keep stronger error indicators inside the chart.
 - Select and Magic wand now open their selection modes automatically, Move has its own outcome inspector, overlay actions use accessible icons, and active mirrors and saved repeats always apply while drawing.
 - Selection now always has an editable saved entry: create and switch entries without a separate save step, repeat them with single-gap grid mirrors or whole-selection rotations and mirrors, and apply only the destinations that fit the chart. Repeated instances keep separate animated outlines.
 - Returning to the source construction or centre-out extent during a Pattern edit restores cells and selection state that an intermediate Rows, Centre-out, Full, Half, or Quarter preview could not represent; drawing while Pattern remains open advances that source.
