@@ -10,6 +10,7 @@ An entry here is a product constraint, not a historical note. Changing or removi
 
 - The app turns an alternating-yarn mosaic crochet chart into both an editable visual design and a chart-derived work sequence. Design and Crochet are two views of the same project, not separate documents. — **your decision**
 - Patterns support row construction and centre-out construction, including partial centre-out extents. Both modes use the same two-yarn chart language and overlay guidance. — **your decision**
+- Full, Half, and Quarter are authored centre-out extents. They do not imply a transform or automatically generate the unauthored part of a design. — **your decision**
 - Crochet instructions describe what can be derived from the chart. Technique choices that the chart does not encode, such as foundation and round-joining methods, remain with the crocheter. — **Agent's choice**
 
 ## Core workflow

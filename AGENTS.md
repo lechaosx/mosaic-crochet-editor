@@ -26,6 +26,8 @@ The four top-level docs each have a distinct job. Keep them in their lane — do
 
 In short: README answers "how do I", FEATURES answers "what product are we building", ARCHITECTURE answers "what technical shape must we preserve", and RELEASE_NOTES answers "what changed for users".
 
+Before planning work that may affect the product model or a technical boundary, read the relevant FEATURES or ARCHITECTURE entries. Read both when a change crosses that boundary.
+
 ## Keeping the docs up to date
 
 The four docs are living and must stay in sync with the codebase, but FEATURES and ARCHITECTURE are deliberately low-traffic. They describe the stable shape of the product and system, not the history of every decision.

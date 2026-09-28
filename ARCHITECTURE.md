@@ -22,6 +22,11 @@ web (DOM, canvas, browser I/O)
 - `logic` is independent of the DOM, while `web` owns all browser effects and UI. The dependency direction is enforced by package boundaries and TypeScript configuration. — **joint**
 - Domain layers return structured data; user-facing text and graphics are produced at the presentation boundary. This keeps crochet semantics usable independently of the current interface. — **your decision**
 
+## Code design constraints
+
+- Stateful objects are justified by an invariant they enforce or a resource lifetime they own. Otherwise, prefer free functions with explicit state and dependencies; do not hide mutable state in module singletons or factory closures. — **your decision**
+- Violations of caller-owned preconditions are assertions in development and tests. Ordinary guards are reserved for documented runtime drops caused by legitimate user actions, such as off-canvas or structurally absent cells. — **your decision**
+
 ## State boundaries
 
 State is classified by meaning, not by whichever storage mechanism currently holds it.
