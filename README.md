@@ -35,7 +35,7 @@ Round 15: [(sc, ch, sc), sc × 27] × 4
 
 ---
 
-For updates, see [RELEASE_NOTES.md](RELEASE_NOTES.md). For decisions and rationale, see [FEATURES.md](FEATURES.md) (product) and [ARCHITECTURE.md](ARCHITECTURE.md) (technical).
+For updates, see [RELEASE_NOTES.md](RELEASE_NOTES.md). For durable decisions, see [FEATURES.md](FEATURES.md) (product) and [ARCHITECTURE.md](ARCHITECTURE.md) (technical). The [chart dialect contract](doc/chart-dialect.md) defines how chart cells become Crochet work.
 
 ---
 
