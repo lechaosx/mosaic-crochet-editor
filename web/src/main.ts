@@ -35,9 +35,13 @@ import { copyrightNotice, markAboutSeen, shouldShowAbout } from "./about";
 import { contrastingProjectColors } from "./contrast-colors";
 import {
     AppPreferences,
+    DEFAULT_APP_PREFERENCES,
     loadAppPreferences,
     saveAppPreferences,
 } from "./preferences";
+
+const DEFAULT_YARN_A = "#000000";
+const DEFAULT_YARN_B = "#ffffff";
 
 function arraysEqual(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
@@ -322,6 +326,7 @@ store.setRenderer(s => {
 });
 let patternHistorySession = false;
 let savingPatternHistory = false;
+let applyingPatternPreview = false;
 store.setHistoryFn(s => {
     if (!savingPatternHistory) patternHistorySession = false;
     historySave(s);
@@ -338,6 +343,15 @@ store.addObserver(s => ui.setViewState(
 store.addObserver(() => updateCoordinates(null, null));
 store.addObserver(() => ui.setCrochetErrors(crochetErrorCount()));
 store.addObserver(s => syncProjectColorInputs(s.state));
+store.addObserver(s => {
+    if (editSessionSource && !applyingPatternPreview) {
+        const current = patternEditSnapshot(s.state);
+        if (!editSessionPreview || !samePatternEditSnapshot(current, editSessionPreview)) {
+            editSessionSource = current;
+            editSessionPreview = current;
+        }
+    }
+});
 store.addObserver(s => {
     if (!s.state.float && selectionMode === "remove") selectionMode = "replace";
     ui.setRecipes(s.state.recipes, s.state.activeRecipeId);
@@ -691,6 +705,13 @@ function onSwapYarns() {
     }, { history: true });
     ui.setColors(store.state.colorA, store.state.colorB);
 }
+function resetYarnColor(slot: 1 | 2) {
+    store.commit(s => {
+        if (slot === 1) s.colorA = DEFAULT_YARN_A;
+        else s.colorB = DEFAULT_YARN_B;
+    }, { history: true });
+    ui.setColors(store.state.colorA, store.state.colorB);
+}
 function onHlOpacityInput() {
     const v = parseInt((document.getElementById("hl-opacity") as HTMLInputElement).value);
     preferences.guidanceOpacity = v;
@@ -716,15 +737,6 @@ function findContrastColors() {
     store.commit(s => {
         s.dangerColorOverride = colors.danger;
         s.accentColorOverride = colors.accent;
-    }, { recompute: false });
-}
-function useContrastColorsForNewPatterns() {
-    preferences.dangerColor = store.state.dangerColorOverride ?? preferences.dangerColor;
-    preferences.accentColor = store.state.accentColorOverride ?? preferences.accentColor;
-    saveAppPreferences(preferences);
-    store.commit(s => {
-        if (s.dangerColorOverride === preferences.dangerColor) s.dangerColorOverride = null;
-        if (s.accentColorOverride === preferences.accentColor) s.accentColorOverride = null;
     }, { recompute: false });
 }
 function onLabelsToggle() {
@@ -790,38 +802,71 @@ function onDeselect() {
 }
 
 // ── Pattern inspector ───────────────────────────────────────────────────────
-let editBaseline: {
+interface PatternEditSnapshot {
     pattern: PatternState;
     pixels: Uint8Array;
     float: Float | null;
     axes: Axis[];
     activeRecipeId: string | null;
-} | null = null;
+}
+
+let editBaseline: PatternEditSnapshot | null = null;
+let editSessionSource: PatternEditSnapshot | null = null;
+let editSessionPreview: PatternEditSnapshot | null = null;
+
+function patternEditSnapshot(state: Readonly<SessionState>): PatternEditSnapshot {
+    return {
+        pattern: state.pattern,
+        pixels: state.pixels.slice(),
+        float: state.float ? { ...state.float, pixels: state.float.pixels.slice() } : null,
+        axes: [...state.axes],
+        activeRecipeId: state.activeRecipeId,
+    };
+}
+
+function patternEditVisibleSource(snapshot: PatternEditSnapshot) {
+    return snapshot.float
+        ? { pattern: snapshot.pattern,
+            pixels: visiblePixels({ ...store.state, pattern: snapshot.pattern,
+                pixels: snapshot.pixels, float: snapshot.float }) }
+        : { pattern: snapshot.pattern, pixels: snapshot.pixels };
+}
+
+function samePatternGeometry(a: PatternState, b: PatternState): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function samePatternEditSnapshot(a: PatternEditSnapshot, b: PatternEditSnapshot): boolean {
+    return samePatternGeometry(a.pattern, b.pattern)
+        && arraysEqual(a.pixels, b.pixels)
+        && a.float?.x === b.float?.x
+        && a.float?.y === b.float?.y
+        && a.float?.w === b.float?.w
+        && a.float?.h === b.float?.h
+        && (a.float === null) === (b.float === null)
+        && (a.float === null || b.float === null || arraysEqual(a.float.pixels, b.float.pixels))
+        && axesEqual(a.axes, b.axes)
+        && a.activeRecipeId === b.activeRecipeId;
+}
 
 function onEditOpen() {
     editBaseline = null;
+    editSessionSource = null;
+    editSessionPreview = null;
     ui.syncEditInputs(store.state.pattern);
     const source = { pattern: store.state.pattern, pixels: visiblePixels(store.state) };
     const summary = patternChangeSummary(readEditSettings(), source, source);
     ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
 }
 function captureEditBaseline() {
-    editBaseline = {
-        pattern: store.state.pattern,
-        pixels: store.state.pixels.slice(),
-        float: store.state.float ? { ...store.state.float, pixels: store.state.float.pixels.slice() } : null,
-        axes: [...store.state.axes],
-        activeRecipeId: store.state.activeRecipeId,
-    };
+    editBaseline = patternEditSnapshot(store.state);
 }
 function onEditChange(): boolean {
     if (!editBaseline) captureEditBaseline();
     const baseline = editBaseline!;
-    const source: { pattern: PatternState; pixels: Uint8Array } = baseline.float
-        ? { pattern: baseline.pattern,
-            pixels: visiblePixels({ ...store.state, pattern: baseline.pattern,
-                pixels: baseline.pixels, float: baseline.float }) }
-        : { pattern: baseline.pattern, pixels: baseline.pixels };
+    if (!editSessionSource) editSessionSource = patternEditSnapshot(store.state);
+    const sessionSource = editSessionSource;
+    const source = patternEditVisibleSource(sessionSource);
     let edited: { pattern: PatternState; pixels: Uint8Array };
     try {
         edited = applyEditSettings(source);
@@ -831,20 +876,38 @@ function onEditChange(): boolean {
     }
     ui.setEditError(null);
     const { pattern, pixels } = edited;
-    const summary = patternChangeSummary(readEditSettings(), source, edited);
+    const settings = readEditSettings();
+    const summary = patternChangeSummary(settings, source, edited);
     ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
     fitToView(
         viewport.canvas, viewport.view, pattern, store.state.rotation, preferences.labelsVisible,
         ui.getCanvasWorkspace(),
     );
-    store.commit(s => {
-        s.pattern  = pattern;
-        s.pixels   = pixels;
-        s.axes     = baseline.axes.filter(axis => axisIsProjectValid(axis, pattern));
-        // Float coords no longer match the new geometry; the content (if any)
-        // was baked into the source pixels above before the resize.
-        s.float    = null;
-    }, { persist: false });
+    const restoreSessionSource = !settings.wipe
+        && samePatternGeometry(pattern, sessionSource.pattern);
+    applyingPatternPreview = true;
+    try {
+        store.commit(s => {
+            if (restoreSessionSource) {
+                s.pattern = sessionSource.pattern;
+                s.pixels = sessionSource.pixels.slice();
+                s.axes = [...sessionSource.axes];
+                s.float = sessionSource.float
+                    ? { ...sessionSource.float, pixels: sessionSource.float.pixels.slice() }
+                    : null;
+                s.activeRecipeId = sessionSource.activeRecipeId;
+                return;
+            }
+            s.pattern = pattern;
+            s.pixels = pixels;
+            s.axes = sessionSource.axes.filter(axis => axisIsProjectValid(axis, pattern));
+            s.float = null;
+        }, { persist: false });
+    } finally {
+        applyingPatternPreview = false;
+    }
+    editSessionPreview = patternEditSnapshot(store.state);
+    if (settings.wipe) editSessionSource = editSessionPreview;
     refreshSymmetryUi();
     return true;
 }
@@ -863,14 +926,21 @@ function onEditCommit() {
             && !arraysEqual(baseline.float.pixels, store.state.float.pixels))
         || !axesEqual(baseline.axes, store.state.axes);
     if (changed && patternHistorySession) {
-        store.commit(() => {}, { recompute: false, render: false });
+        applyingPatternPreview = true;
+        try {
+            store.commit(() => {}, { recompute: false, render: false });
+        } finally {
+            applyingPatternPreview = false;
+        }
         patternHistorySession = historyReplaceCurrent(store.state);
         ui.setHistory(canUndo(), canRedo());
     } else if (changed) {
         savingPatternHistory = true;
         try {
+            applyingPatternPreview = true;
             store.commit(() => {}, { recompute: false, render: false, history: true });
         } finally {
+            applyingPatternPreview = false;
             savingPatternHistory = false;
         }
         patternHistorySession = true;
@@ -885,14 +955,20 @@ function onEditRevert() {
         viewport.canvas, viewport.view, baseline.pattern, store.state.rotation,
         preferences.labelsVisible, ui.getCanvasWorkspace(),
     );
-    store.replace({
-        ...store.state,
-        pattern: baseline.pattern,
-        pixels: baseline.pixels,
-        float: baseline.float,
-        axes: baseline.axes,
-        activeRecipeId: baseline.activeRecipeId,
-    }, { persist: false });
+    applyingPatternPreview = true;
+    try {
+        store.replace({
+            ...store.state,
+            pattern: baseline.pattern,
+            pixels: baseline.pixels,
+            float: baseline.float,
+            axes: baseline.axes,
+            activeRecipeId: baseline.activeRecipeId,
+        }, { persist: false });
+    } finally {
+        applyingPatternPreview = false;
+    }
+    editSessionPreview = patternEditSnapshot(store.state);
     ui.syncEditInputs(baseline.pattern);
     refreshSymmetryUi();
 }
@@ -1181,6 +1257,7 @@ const ui: UIHandle = mountUI({
     onSelectionDeselect: onDeselect,
     onPrimaryColor: setPrimary,
     onSwapYarns,
+    onResetYarnColor: resetYarnColor,
     onColorChange:  onColorInput,
     onColorCommit,
     onAddAxis:    addAxisOfKind,
@@ -1201,7 +1278,6 @@ const ui: UIHandle = mountUI({
     onDangerColorReset:        () => resetProjectColor("danger"),
     onAccentColorReset:        () => resetProjectColor("accent"),
     onFindContrastColors:      findContrastColors,
-    onUseContrastDefaults:     useContrastColorsForNewPatterns,
     onLabelsVisibleChange:     onLabelsToggle,
     onLockInvalidChange:   onLockInvalidToggle,
     onUndo: undo,
@@ -1846,10 +1922,11 @@ function syncPreferenceInputs() {
 }
 
 function syncProjectColorInputs(s: Readonly<SessionState>) {
-    (document.getElementById("danger-color") as HTMLInputElement).value =
-        s.dangerColorOverride ?? preferences.dangerColor;
-    (document.getElementById("accent-color") as HTMLInputElement).value =
-        s.accentColorOverride ?? preferences.accentColor;
+    const danger = s.dangerColorOverride ?? DEFAULT_APP_PREFERENCES.dangerColor;
+    const accent = s.accentColorOverride ?? DEFAULT_APP_PREFERENCES.accentColor;
+    (document.getElementById("danger-color") as HTMLInputElement).value = danger;
+    (document.getElementById("accent-color") as HTMLInputElement).value = accent;
+    ui.setProjectColors(danger, accent);
 }
 
 syncDomInputs(store.state);

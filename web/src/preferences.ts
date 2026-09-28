@@ -8,7 +8,7 @@ export interface AppPreferences {
 
 export const DEFAULT_APP_PREFERENCES: Readonly<AppPreferences> = {
     guidanceOpacity: 100,
-    dangerColor:     "#ff7474",
+    dangerColor:     "#ff0000",
     accentColor:     "#d653a3",
     labelsVisible:   true,
     lockInvalid:     true,
@@ -45,7 +45,13 @@ export function loadAppPreferences(): AppPreferences {
         const parsed: unknown = JSON.parse(source);
         if (!valid(parsed)) throw new TypeError("Invalid preferences");
         const { version: _, ...preferences } = parsed;
-        return preferences;
+        const normalized = {
+            ...preferences,
+            dangerColor: DEFAULT_APP_PREFERENCES.dangerColor,
+            accentColor: DEFAULT_APP_PREFERENCES.accentColor,
+        };
+        saveAppPreferences(normalized);
+        return normalized;
     } catch {
         localStorage.removeItem(PREFERENCES_KEY);
         return { ...DEFAULT_APP_PREFERENCES };
@@ -53,7 +59,12 @@ export function loadAppPreferences(): AppPreferences {
 }
 
 export function saveAppPreferences(preferences: Readonly<AppPreferences>): boolean {
-    const stored: StoredPreferences = { version: PREFERENCES_VERSION, ...preferences };
+    const stored: StoredPreferences = {
+        version: PREFERENCES_VERSION,
+        ...preferences,
+        dangerColor: DEFAULT_APP_PREFERENCES.dangerColor,
+        accentColor: DEFAULT_APP_PREFERENCES.accentColor,
+    };
     if (!valid(stored)) return false;
     try {
         localStorage.setItem(PREFERENCES_KEY, JSON.stringify(stored));

@@ -30,6 +30,22 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     await expect(page.getByLabel("Yarn A colour")).toHaveValue("#000000");
     await expect(page.getByLabel("Yarn B colour")).toHaveValue("#ffffff");
     await expect(page.getByRole("button", { name: "Swap yarn colours" })).toBeVisible();
+    for (const name of [
+        "Reset Yarn A to default", "Reset Yarn B to default",
+        "Reset danger colour", "Reset accent colour",
+    ]) {
+        const reset = page.getByRole("button", { name });
+        await expect(reset).toBeVisible();
+        await expect(reset).toHaveText("");
+    }
+    await expect(page.getByRole("button", { name: /new patterns/i })).toHaveCount(0);
+    const preview = page.getByRole("img", { name: /Rows colour preview/ });
+    await expect(preview).toBeVisible();
+    await expect(preview.locator("[data-preview-cue='selection']")).toHaveCount(1);
+    await expect(preview.locator("[data-preview-cue='grid']")).toHaveCount(1);
+    await expect(preview.locator("[data-preview-cue='mirror']")).toHaveCount(1);
+    await expect(preview.locator("[data-preview-cue='valid-overlay']")).toHaveCount(1);
+    await expect(preview.locator("[data-preview-cue='invalid-overlay']")).toHaveCount(1);
     await expect(page.locator("#edit-yarn")).toHaveCount(0);
     const danger = page.getByLabel("Project danger colour");
     const accent = page.getByLabel("Project accent colour");
@@ -41,6 +57,20 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     }
     await danger.fill("#123456");
     await accent.fill("#abcdef");
+    expect(await preview.evaluate(element => {
+        const cell = (selector: string) => element.querySelector<HTMLElement>(selector)!;
+        return {
+            yarnA: getComputedStyle(cell(".preview-cell--a")).backgroundColor,
+            yarnB: getComputedStyle(cell(".preview-cell--b")).backgroundColor,
+            accent: getComputedStyle(cell("[data-preview-cue='selection']")).borderTopColor,
+            danger: getComputedStyle(cell("[data-preview-cue='invalid-overlay']"), "::after").color,
+        };
+    })).toEqual({
+        yarnA: "rgb(0, 0, 0)",
+        yarnB: "rgb(255, 255, 255)",
+        accent: "rgb(171, 205, 239)",
+        danger: "rgb(18, 52, 86)",
+    });
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document))
         .toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: "#abcdef" });
 
@@ -56,7 +86,7 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
         .toHaveAttribute("title", "Block new marks on cells that cannot host an overlay");
 });
 
-test("Pattern colour overrides use app defaults and contrast suggestions stay outside undo", async ({ page }) => {
+test("Pattern colour resets use fixed app defaults and contrast suggestions stay outside undo", async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("mosaic-preferences", JSON.stringify({
         version: 1,
         guidanceOpacity: 100,
@@ -70,15 +100,15 @@ test("Pattern colour overrides use app defaults and contrast suggestions stay ou
 
     const danger = page.getByLabel("Project danger colour");
     const accent = page.getByLabel("Project accent colour");
-    await expect(danger).toHaveValue("#aa0000");
-    await expect(accent).toHaveValue("#006699");
+    await expect(danger).toHaveValue("#ff0000");
+    await expect(accent).toHaveValue("#d653a3");
 
     await danger.fill("#123456");
     await expect.poll(() => page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
     )).toBe("#123456");
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-preferences")!).dangerColor))
-        .toBe("#aa0000");
+        .toBe("#ff0000");
 
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Undo" }).click();
@@ -87,8 +117,8 @@ test("Pattern colour overrides use app defaults and contrast suggestions stay ou
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
     )).toBe("#123456");
 
-    await page.getByRole("button", { name: "Use default danger colour" }).click();
-    await expect(danger).toHaveValue("#aa0000");
+    await page.getByRole("button", { name: "Reset danger colour" }).click();
+    await expect(danger).toHaveValue("#ff0000");
     await expect.poll(() => page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
     )).toBeNull();
@@ -103,29 +133,18 @@ test("Pattern colour overrides use app defaults and contrast suggestions stay ou
         JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
     )).toBe(historyBefore);
 
-    await page.getByRole("button", { name: "Use current contrast colors for new patterns" }).click();
-    expect(await page.evaluate(() => {
-        const preferences = JSON.parse(localStorage.getItem("mosaic-preferences")!);
-        const document = JSON.parse(localStorage.getItem("mosaic-recovery")!).document;
-        return {
-            danger: preferences.dangerColor,
-            accent: preferences.accentColor,
-            dangerOverride: document.dangerColorOverride,
-            accentOverride: document.accentColorOverride,
-        };
-    })).toEqual({
-        danger: "#d32f2f",
-        accent: "#00838f",
-        dangerOverride: null,
-        accentOverride: null,
-    });
+    await page.getByRole("button", { name: "Reset accent colour" }).click();
+    await expect(accent).toHaveValue("#d653a3");
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.accentColorOverride,
+    )).toBeNull();
 
-    await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Settings" }).click();
-    await page.getByRole("button", { name: "About Mosaic Crochet Editor" }).click();
-    await page.getByRole("button", { name: "New", exact: true }).click();
-    await expect(page.getByLabel("Project danger colour")).toHaveValue("#d32f2f");
-    await expect(page.getByLabel("Project accent colour")).toHaveValue("#00838f");
+    await page.getByLabel("Yarn A colour").fill("#112233");
+    await page.getByLabel("Yarn B colour").fill("#445566");
+    await page.getByRole("button", { name: "Reset Yarn A to default" }).click();
+    await page.getByRole("button", { name: "Reset Yarn B to default" }).click();
+    await expect(page.getByLabel("Yarn A colour")).toHaveValue("#000000");
+    await expect(page.getByLabel("Yarn B colour")).toHaveValue("#ffffff");
 });
 
 test("opening project contrast overrides keeps app defaults and Crochet progress", async ({ page }) => {
@@ -177,7 +196,7 @@ test("app preferences survive reload and are not part of undo or recovery snapsh
         stored: JSON.stringify({
             version: 1,
             guidanceOpacity: 37,
-            dangerColor: "#ff7474",
+            dangerColor: "#ff0000",
             accentColor: "#d653a3",
             labelsVisible: true,
             lockInvalid: true,

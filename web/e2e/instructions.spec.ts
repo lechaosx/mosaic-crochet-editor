@@ -208,7 +208,7 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
     await invalidUnit.click();
-    await expect(invalidUnit).toHaveCSS("box-shadow", /rgb\(255, 116, 116\)/);
+    await expect(invalidUnit).toHaveCSS("box-shadow", /rgb\(255, 0, 0\)/);
 });
 
 test("Crochet advances by whole rows and resumes the exact instruction plan", async ({ page }) => {

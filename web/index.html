@@ -354,11 +354,21 @@
     <div class="field-group pattern-colours" role="group" aria-label="Pattern colours">
       <div class="popover-row">
         <label class="popover-label" for="color-a">Yarn A colour</label>
-        <input type="color" id="color-a" value="#000000" aria-label="Yarn A colour">
+        <div class="setting-color">
+          <input type="color" id="color-a" value="#000000" aria-label="Yarn A colour">
+          <button class="btn btn--icon pattern-colour-reset" id="color-a-reset" type="button" aria-label="Reset Yarn A to default" title="Reset Yarn A to the app default">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+          </button>
+        </div>
       </div>
       <div class="popover-row">
         <label class="popover-label" for="color-b">Yarn B colour</label>
-        <input type="color" id="color-b" value="#ffffff" aria-label="Yarn B colour">
+        <div class="setting-color">
+          <input type="color" id="color-b" value="#ffffff" aria-label="Yarn B colour">
+          <button class="btn btn--icon pattern-colour-reset" id="color-b-reset" type="button" aria-label="Reset Yarn B to default" title="Reset Yarn B to the app default">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+          </button>
+        </div>
       </div>
       <div class="pattern-colour-actions">
         <button class="btn btn--icon" id="swap-yarns" type="button" aria-label="Swap yarn colours" title="Swap Yarn A and Yarn B colours">⇄</button>
@@ -366,20 +376,33 @@
       <div class="popover-row" title="Colour used for invalid ! markers.">
         <label class="popover-label" for="danger-color">Project danger colour</label>
         <div class="setting-color">
-          <input type="color" id="danger-color" value="#ff7474" aria-label="Project danger colour">
-          <button class="btn" id="danger-color-reset" type="button" aria-label="Use default danger colour" title="Use the app default danger colour">Use default</button>
+          <input type="color" id="danger-color" value="#ff0000" aria-label="Project danger colour">
+          <button class="btn btn--icon pattern-colour-reset" id="danger-color-reset" type="button" aria-label="Reset danger colour" title="Reset danger to the app default">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+          </button>
         </div>
       </div>
       <div class="popover-row" title="Colour used for selections and transform guides.">
         <label class="popover-label" for="accent-color">Project accent colour</label>
         <div class="setting-color">
           <input type="color" id="accent-color" value="#d653a3" aria-label="Project accent colour">
-          <button class="btn" id="accent-color-reset" type="button" aria-label="Use default accent colour" title="Use the app default accent colour">Use default</button>
+          <button class="btn btn--icon pattern-colour-reset" id="accent-color-reset" type="button" aria-label="Reset accent colour" title="Reset accent to the app default">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+          </button>
         </div>
       </div>
       <div class="pattern-contrast-actions">
         <button class="btn" id="find-contrast-colors" type="button" title="Choose distinct danger and accent colours that contrast with both yarns">Find contrasting colors</button>
-        <button class="btn" id="contrast-colors-default" type="button" aria-label="Use current contrast colors for new patterns" title="Save these danger and accent colours as the app defaults">Use for new patterns</button>
+      </div>
+      <div id="pattern-colour-preview" class="pattern-colour-preview" data-mode="row" role="img" aria-label="Rows colour preview with selection, grid, mirror, valid overlay, and invalid overlay">
+        <div class="pattern-preview-grid" data-preview-cue="grid" aria-hidden="true">
+          <span class="preview-cell preview-cell--a"></span><span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a preview-cell--valid" data-preview-cue="valid-overlay"></span><span class="preview-cell preview-cell--b"></span>
+          <span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a preview-cell--round-hole"></span><span class="preview-cell preview-cell--b preview-cell--round-hole"></span><span class="preview-cell preview-cell--a"></span>
+          <span class="preview-cell preview-cell--a"></span><span class="preview-cell preview-cell--b preview-cell--round-hole"></span><span class="preview-cell preview-cell--a preview-cell--round-hole"></span><span class="preview-cell preview-cell--b preview-cell--invalid" data-preview-cue="invalid-overlay"></span>
+          <span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a"></span><span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a"></span>
+        </div>
+        <span class="pattern-preview-selection" data-preview-cue="selection" aria-hidden="true"></span>
+        <span class="pattern-preview-mirror" data-preview-cue="mirror" aria-hidden="true"></span>
       </div>
     </div>
   </section>

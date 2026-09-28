@@ -2,9 +2,14 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 28 September 2026
+
+- Returning to the source construction or centre-out extent during a Pattern edit restores cells and selection state that an intermediate Rows, Centre-out, Full, Half, or Quarter preview could not represent; drawing while Pattern remains open advances that source.
+- Pattern now has fixed icon-reset defaults for all four colours, uses pure red as the default danger colour, and previews yarn, grid, selection, mirror, and overlay colours together in a miniature chart.
+
 ## 22 September 2026
 
-- Projects can carry their own danger and accent colours without changing the app defaults, and Pattern can find a distinct pair with at least 3:1 contrast against both yarns when possible or make the current pair the defaults for new patterns.
+- Projects can carry their own danger and accent colours, and Pattern can find a distinct pair with at least 3:1 contrast against both yarns when possible.
 - The compact document control is named Menu, and saved repeats show their source dimensions without splitting the multiplication label across lines.
 - Canvas arrow keys remain reserved for moving a selection; there is no keyboard cell cursor.
 - Saved selection repeats now extend independently in every direction, support angled row and column vectors, and can alternate mirrored instances with two alternating gaps.

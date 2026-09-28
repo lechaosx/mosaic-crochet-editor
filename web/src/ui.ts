@@ -61,6 +61,7 @@ export interface UICallbacks {
     onSelectionDeselect: () => void;
     onPrimaryColor:    (slot: 1 | 2) => void;
     onSwapYarns:       () => void;
+    onResetYarnColor:  (slot: 1 | 2) => void;
     onColorChange:     () => void;
     onColorCommit:     () => void;
     onAddAxis:         (k: SymKey) => void;
@@ -81,7 +82,6 @@ export interface UICallbacks {
     onDangerColorReset:       () => void;
     onAccentColorReset:       () => void;
     onFindContrastColors:     () => void;
-    onUseContrastDefaults:    () => void;
     onLabelsVisibleChange:    () => void;
     onLockInvalidChange: () => void;
     onUndo:            () => void;
@@ -109,6 +109,7 @@ export interface UIHandle {
     setCanvasFeedback:  (message: string | null) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
+    setProjectColors:   (danger: string, accent: string) => void;
     setAxes:            (axes: ReadonlyArray<Axis>) => void;
     setRecipes:         (recipes: ReadonlyArray<GridRecipe>, activeId: string | null) => void;
     setRecipeError:     (message: string | null) => void;
@@ -451,6 +452,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const swatchB = el("swatch-b");
     const colorA  = el<HTMLInputElement>("color-a");
     const colorB  = el<HTMLInputElement>("color-b");
+    const patternColourPreview = el("pattern-colour-preview");
 
     const openYarnPicker = (slot: 1 | 2) => {
         if (!isInspectorOpen("pattern")) {
@@ -473,6 +475,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     swatchA.addEventListener("dblclick", () => openYarnPicker(1));
     swatchB.addEventListener("dblclick", () => openYarnPicker(2));
     el("swap-yarns").addEventListener("click", cb.onSwapYarns);
+    el("color-a-reset").addEventListener("click", () => cb.onResetYarnColor(1));
+    el("color-b-reset").addEventListener("click", () => cb.onResetYarnColor(2));
     colorA.addEventListener("input",  cb.onColorChange);
     colorB.addEventListener("input",  cb.onColorChange);
     // `change` fires when the picker closes — that's the user's "I'm done"
@@ -490,6 +494,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
         colorA.value = a; colorB.value = b;
         swatchA.style.background = a;
         swatchB.style.background = b;
+        patternColourPreview.style.setProperty("--preview-a", a);
+        patternColourPreview.style.setProperty("--preview-b", b);
+    }
+    function setProjectColors(danger: string, accent: string) {
+        patternColourPreview.style.setProperty("--preview-danger", danger);
+        patternColourPreview.style.setProperty("--preview-accent", accent);
     }
 
     /* ── Global Mirror inspector ──────────────────────────────────────── */
@@ -793,7 +803,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el("danger-color-reset").addEventListener("click", cb.onDangerColorReset);
     el("accent-color-reset").addEventListener("click", cb.onAccentColorReset);
     el("find-contrast-colors").addEventListener("click", cb.onFindContrastColors);
-    el("contrast-colors-default").addEventListener("click", cb.onUseContrastDefaults);
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
     el("settings-about").addEventListener("click", () => {
@@ -922,17 +931,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         finishPatternEdit();
     }, true);
 
-    let editOpenState: PatternState | null = null;
-
-    // Row and centre-out cells have no stable coordinate mapping, so a mode
-    // change uses the same natural-colour reset as the explicit reset action.
     function refreshWipeAvailability() {
-        if (!editOpenState) return;
-        const newMode = radioValue("edit-mode");
-        const force = newMode !== editOpenState.mode;
         const wipeEl = el<HTMLInputElement>("edit-wipe");
-        if (force) wipeEl.checked = true;
-        wipeEl.disabled = force;
+        wipeEl.disabled = false;
     }
 
     function applyAndCommitPatternEdit() {
@@ -993,7 +994,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
     });
 
     function syncEditInputs(s: PatternState) {
-        editOpenState = s;
+        patternColourPreview.dataset.mode = s.mode;
+        patternColourPreview.setAttribute(
+            "aria-label",
+            `${s.mode === "row" ? "Rows" : "Centre-out"} colour preview with selection, grid, mirror, valid overlay, and invalid overlay`,
+        );
         setEditError(null);
         setRadio("edit-mode", s.mode);
         el("edit-row-controls")  .hidden = s.mode !== "row";
@@ -1237,7 +1242,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     mountToolbarLayout();
 
     return {
-        setTool, setOverlayAction, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setAxes, setRecipes, setRecipeError,
+        setTool, setOverlayAction, setSelectionState, setSelectionMode, setCanvasFeedback, setPrimary, setColors, setProjectColors, setAxes, setRecipes, setRecipeError,
         setTransformState, setTransformError,
         setHistory, setCrochetProgress: (hasProgress) => {
             hasCrochetProgress = hasProgress;

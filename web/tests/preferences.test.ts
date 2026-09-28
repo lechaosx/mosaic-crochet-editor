@@ -14,7 +14,7 @@ describe("app preferences", () => {
         expect(loadAppPreferences()).toEqual(DEFAULT_APP_PREFERENCES);
     });
 
-    test("round-trips independently from project recovery", () => {
+    test("stores display preferences with the fixed application palette", () => {
         const preferences = {
             guidanceOpacity: 0,
             dangerColor: "#ff0000",
@@ -24,8 +24,30 @@ describe("app preferences", () => {
         };
 
         expect(saveAppPreferences(preferences)).toBe(true);
-        expect(loadAppPreferences()).toEqual(preferences);
+        expect(loadAppPreferences()).toEqual({
+            ...preferences,
+            accentColor: "#d653a3",
+        });
         expect(localStorage.getItem("mosaic-recovery")).toBeNull();
+    });
+
+    test("stored legacy palette defaults cannot redefine the application palette", () => {
+        localStorage.setItem("mosaic-preferences", JSON.stringify({
+            version: 1,
+            guidanceOpacity: 37,
+            dangerColor: "#aa0000",
+            accentColor: "#006699",
+            labelsVisible: false,
+            lockInvalid: false,
+        }));
+
+        expect(loadAppPreferences()).toEqual({
+            guidanceOpacity: 37,
+            dangerColor: "#ff0000",
+            accentColor: "#d653a3",
+            labelsVisible: false,
+            lockInvalid: false,
+        });
     });
 
     test("rejects malformed stored values as a whole", () => {

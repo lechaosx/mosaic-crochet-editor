@@ -167,6 +167,152 @@ test("Pattern presents direct properties with contextual resize feedback", async
     await expect(page.locator("#edit-summary")).toBeHidden();
 });
 
+test("Pattern construction previews restore the captured baseline when switched back", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 0, 8);
+    const baseline = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
+    );
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await expect(page.getByRole("img", { name: /Centre-out colour preview/ })).toBeVisible();
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.state.mode,
+    )).toBe("round");
+    await page.getByRole("radiogroup", { name: "Pattern geometry" })
+        .getByText("Rows", { exact: true }).click();
+
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
+    )).toEqual(baseline);
+});
+
+test("tool and yarn choices do not replace the Pattern construction source", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 0, 8);
+    const baseline = await page.evaluate(() => {
+        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        return {
+            document: recovery.document,
+            axes: recovery.workspace.axes,
+            recipes: recovery.workspace.recipes,
+            activeRecipeId: recovery.workspace.activeRecipeId,
+            liveTransforms: recovery.workspace.liveTransforms,
+            float: recovery.workspace.float,
+        };
+    });
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.getByRole("button", { name: "Fill", exact: true }).click();
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await page.getByRole("radiogroup", { name: "Pattern geometry" })
+        .getByText("Rows", { exact: true }).click();
+
+    await expect.poll(() => page.evaluate(() => {
+        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        return {
+            authored: {
+                document: recovery.document,
+                axes: recovery.workspace.axes,
+                recipes: recovery.workspace.recipes,
+                activeRecipeId: recovery.workspace.activeRecipeId,
+                liveTransforms: recovery.workspace.liveTransforms,
+                float: recovery.workspace.float,
+            },
+            activeTool: recovery.workspace.activeTool,
+            primaryColor: recovery.workspace.primaryColor,
+        };
+    })).toEqual({ authored: baseline, activeTool: "fill", primaryColor: 1 });
+});
+
+test("Pattern session source advances after modeless canvas edits", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const width = page.locator("#edit-width");
+    await width.fill("10");
+    await width.press("Tab");
+
+    const editedCell = await cellCoord(page, 0, 1);
+    const before = await pixelRGB(page, editedCell.cx, editedCell.cy);
+    await dragCells(page, 0, 1, 3, 1);
+    expect(await pixelRGB(page, editedCell.cx, editedCell.cy)).not.toEqual(before);
+    const edited = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
+    );
+
+    await width.fill("11");
+    await width.fill("10");
+    await width.press("Tab");
+
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
+    )).toEqual(edited);
+});
+
+test("Pattern construction round-trip restores associated selection and mirror state", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("v");
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.locator("#recipe-create").click();
+    const baseline = await page.evaluate(() => {
+        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        return {
+            document: recovery.document,
+            axes: recovery.workspace.axes,
+            float: recovery.workspace.float,
+            activeRecipeId: recovery.workspace.activeRecipeId,
+        };
+    });
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.getByRole("radiogroup", { name: "Pattern geometry" })
+        .getByText("Rows", { exact: true }).click();
+
+    await expect.poll(() => page.evaluate(() => {
+        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        return {
+            document: recovery.document,
+            axes: recovery.workspace.axes,
+            float: recovery.workspace.float,
+            activeRecipeId: recovery.workspace.activeRecipeId,
+        };
+    })).toEqual(baseline);
+});
+
+test("Pattern extent switches restore cells clipped by a smaller preview", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.keyboard.press("Escape");
+
+    const paintedCell = await cellCoord(page, 10, 6);
+    const before = await pixelRGB(page, paintedCell.cx, paintedCell.cy);
+    await page.getByRole("button", {
+        name: before[0] < 128 ? "Yarn B" : "Yarn A",
+        exact: true,
+    }).click();
+    await clickCell(page, 10, 6);
+    expect(await pixelRGB(page, paintedCell.cx, paintedCell.cy)).not.toEqual(before);
+    const baseline = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
+    );
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Quarter", { exact: true }).click();
+    await page.getByText("Full", { exact: true }).click();
+
+    await expect.poll(() => page.evaluate(() =>
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
+    )).toEqual(baseline);
+});
+
 test("Clear drawing restores natural colours immediately and is undoable", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 0, 1);
