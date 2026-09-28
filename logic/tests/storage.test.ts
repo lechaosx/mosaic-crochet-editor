@@ -12,6 +12,10 @@ function mcwFixture(name: string): string {
     return readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 }
 
+function validationFixture(name: string): string {
+    return readFileSync(new URL(`../../doc/validation-fixtures/${name}`, import.meta.url), "utf8");
+}
+
 describe(".mcw codec", () => {
     test("migrates v1 files to the empty global mirror project boundary", () => {
         const legacy = decodeMcw(mcwFixture("pattern-v1.mcw"));
@@ -35,6 +39,18 @@ describe(".mcw codec", () => {
         expect(current.accentColorOverride).toBeNull();
 
         expect(decodeMcw(encodeMcw(current))).toEqual(current);
+    });
+
+    test.each([
+        ["rows-live.mcw", { mode: "row", canvasWidth: 11, canvasHeight: 6 }],
+        ["centre-out-live.mcw", {
+            mode: "round", canvasWidth: 10, canvasHeight: 10,
+            virtualWidth: 10, virtualHeight: 10, offsetX: 0, offsetY: 0, rounds: 4,
+        }],
+    ])("opens documented validation fixture %s", (name, pattern) => {
+        const document = decodeMcw(validationFixture(name));
+        expect(document.pattern).toEqual(pattern);
+        expect(document.pixels).toHaveLength(pattern.canvasWidth * pattern.canvasHeight);
     });
 
     test("round-trips global mirrors without serializing workspace state", () => {
