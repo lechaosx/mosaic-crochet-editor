@@ -29,7 +29,7 @@ Record a participant's existing practice rather than treating it as the expected
 
 Use the two editable fixtures below and prepare the yarn needed to work them:
 
-- [Rows fixture](validation-fixtures/rows-live.mcw): five worked rows after the foundation, 11 positions wide, with ordinary `sc`, isolated `oc`, repeated sequences, and an asymmetric motif so a reversed row is visible.
+- [Rows fixture](validation-fixtures/rows-live.mcw): six chart rows, 11 positions wide, with ordinary `sc`, isolated `oc`, repeated sequences, and an asymmetric motif so a reversed row is visible.
 - [Centre-out fixture](validation-fixtures/centre-out-live.mcw): four complete rounds on an even 10 × 10 chart, with ordinary corners, overlays adjacent to corners, and two distinguishable middle positions on every side.
 
 Use strong yarn contrast and label the physical yarns A and B. Do not teach a foundation, overlay stitch recipe, yarn-change method, join, or finishing method; participants use their own.
@@ -156,6 +156,6 @@ Confirm that participants understand the canvas as finished work through the hig
 
 ## Research constraints behind the prompts
 
-- The [Craft Yarn Council abbreviation list](https://www.craftyarncouncil.com/standards/crochet-abbreviations) standardizes `sc`, `ch`, `rnd`, `BLO`, and `FLO`, but not the editor's `oc`; every tested view must keep defining `oc`.
+- The [Craft Yarn Council abbreviation list](https://www.craftyarncouncil.com/standards/crochet-abbreviations) standardizes `sc`, `ch`, `rnd`, `BLO`, and `FLO`, but not the editor's `oc`; the protocol therefore defines `oc` before the tasks.
 - Row-overlay tutorials commonly describe all-right-side work in one direction, often right-to-left for right-handed crocheters and left-to-right for left-handed crocheters. The editor therefore tests origin and direction directly instead of deriving them from handedness. See [Interweave's overview](https://www.interweave.com/article/crochet/learn-mosaic-crochet-colorwork/) and [HanJan Crochet's chart guide](https://www.hanjancrochet.com/mosaic-crochet-chart/).
 - Centre-out tutorials commonly use corners for increases, markers, joins, and yarn changes, and they document both ordinary and overlay corner constructions. Those practices make a corner familiar but do not establish universal names for arbitrary side-midpoint starts. See [Ashlee Brotzell's centre-out tutorial](https://ashleeslint.com/wp-content/uploads/2022/04/AshleeBrotzellCenterOutOverlayMosaicCrochetTutorial.pdf) and [Concrete Gems' centre-out guide](https://concretegems.co.uk/mosaic-crochet-center-out/).

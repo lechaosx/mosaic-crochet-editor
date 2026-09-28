@@ -31,7 +31,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Tool selection, transform guides, warnings, and selections now use a cleaner, consistent visual language.
 - About brings New, Open, Example, and concise release notes together after each update.
 - Design tools leave more room for the chart.
-- Row numbering starts with the bottom foundation row.
+- Row numbering starts with the bottom chart row.
 - Crochet instructions show yarn colours, separate row or round details, and wrap long steps.
 - Choose any crochet row or round directly and keep your progress while editing stitches.
 - Crochet stays open while viewing settings and returns to Design when the chart changes.
