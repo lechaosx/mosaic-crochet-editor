@@ -411,7 +411,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
     selectionCopy.addEventListener("click", cb.onSelectionCopy);
     selectionCut.addEventListener("click", cb.onSelectionCut);
     selectionPaste.addEventListener("click", cb.onSelectionPaste);
-    selectionDeselect.addEventListener("click", cb.onSelectionDeselect);
+    selectionDeselect.addEventListener("click", () => {
+        cb.onSelectionDeselect();
+        if (isInspectorOpen("selection")) {
+            closeInspector(false);
+            toolButtons[currentTool].focus();
+        }
+    });
 
     function setSelectionState(selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) {
         const hasSelection = selectedCount > 0;
