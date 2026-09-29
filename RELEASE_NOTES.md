@@ -4,46 +4,29 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 28 September 2026
 
-- Crochet keeps Pattern or Settings open across mode changes, refreshes its chart and yarn markers after palette edits, centres Fit on the full canvas width, and leaves the view unchanged when numbers are shown or hidden.
-- Crochet instructions use plain numbers with yarn-colour markers, include the yarn when copied, place start arrows before the first stitch, focus guidance on the current layer until the final layer, and keep stronger error indicators inside the chart.
-- Select and Magic wand now open their selection modes automatically, Move has its own outcome inspector, overlay actions use accessible icons, and active mirrors and saved repeats always apply while drawing.
-- Selection actions remain available for an empty saved entry: create and switch entries without a separate save step, repeat them with normalized single-gap grid mirrors or whole-selection rotations and mirrors, and apply only non-conflicting destinations that fit the chart. Repeated instances keep separate animated outlines.
-- Returning to the source construction or centre-out extent during a Pattern edit restores cells and selection state that an intermediate Rows, Centre-out, Full, Half, or Quarter preview could not represent; drawing while Pattern remains open advances that source.
-- Pattern now has fixed icon-reset defaults for all four colours, uses pure red as the default danger colour, and previews yarn, grid, selection, mirror, and overlay colours together in a miniature chart.
+- Crochet preserves the open Pattern or Settings panel and canvas view, refreshes after palette edits, and shows clearer yarn, direction, progress, and error guidance.
+- Selection and Move open their relevant controls automatically, while active mirrors and saved repeats apply consistently as you draw.
+- Saved selections support reusable grids, rotations, and mirrors, with conflicts rejected before the chart changes.
+- Pattern previews preserve source work while switching construction or centre-out extent and include resettable, contrast-aware canvas colours.
 
 ## 22 September 2026
 
-- Projects can carry their own danger and accent colours, and Pattern can find a distinct pair with at least 3:1 contrast against both yarns when possible.
-- The compact document control is named Menu, and saved repeats show their source dimensions without splitting the multiplication label across lines.
-- Canvas arrow keys remain reserved for moving a selection; there is no keyboard cell cursor.
-- Saved selection repeats now extend independently in every direction, support angled row and column vectors, and can alternate mirrored instances with two alternating gaps.
-- A saved repeat can instead rotate the selection around an editable centre with any combination of 90°, 180°, and 270° copies; rotation remains separate from Global Mirror.
-- Repeat controls reject unsafe or invalid retained settings without leaving stale values selected, and rotation centres stay fixed through selection shape edits while following explicit moves.
+- Projects can store custom danger and accent colours, and Pattern can find a contrasting pair for the selected yarns.
+- Saved-repeat grids extend in every direction with offsets and alternating mirrors; transformation repeats rotate or mirror around an editable centre.
+- Repeat controls reject unsafe settings without leaving stale values active.
 
 ## 21 September 2026
 
-- Saved repeats now live with the source selection: save, activate, pause, adjust packed right/down copies and gaps, or apply the selection across its instances. Global Mirror has its own controls.
-- Global Mirror axes and saved repeats now save with editable `.mcw` projects and restore on open; older project files open without either, and resizing removes axes that no longer fit.
-- Crochet now keeps unchanged instruction rows or rounds cached while regenerating only changed work, and keeps the generation space stable.
-- Crochet flags invalid work before opening, marks affected instructions, and shows each row or round’s start direction on the chart.
-- Crochet instruction number badges now use the corresponding yarn colour.
+- Saved motif repeats are managed with their source selection and remain separate from Global Mirror.
+- Mirror axes and saved repeats are stored in editable `.mcw` projects, while older project files remain supported.
+- Crochet updates changed instructions efficiently and marks yarn, start direction, and invalid work more clearly.
 
 ## 20 September 2026
 
-- Fit now frames the chart within the visible workspace around open panels, while the canvas stays in place.
-- View controls now use a persistent orientation arrow to show and reset rotation, with a cleaner zoom control group.
-- The centred Crochet control now begins, continues, or returns to Design, while Open and New clear progress only for a different chart.
-- Overlay drawing now has explicit Place, Clear, and Invert actions for mouse, pen, and touch, with opposite-action right-click shortcuts.
-- Selection modes and actions now live together in the Selection inspector with their shortcuts.
-- The canvas shows committed work without hover previews, while its passive status prioritizes useful context.
-- Pattern brings visible yarn and canvas-colour editing together, while yarn swatches retain direct editing shortcuts.
-- Tool selection, transform guides, warnings, and selections now use a cleaner, consistent visual language.
-- About brings New, Open, Example, and concise release notes together after each update.
-- Design tools leave more room for the chart.
-- Row numbering starts with the bottom chart row.
-- Crochet instructions show yarn colours, separate row or round details, and wrap long steps.
-- Choose any crochet row or round directly and keep your progress while editing stitches.
-- Crochet stays open while viewing settings and returns to Design when the chart changes.
+- Design and Crochet share a stable canvas, with clearer view controls and more room for the chart.
+- Overlay, selection, yarn, and pattern controls are grouped by task and work across mouse, pen, and touch input.
+- Crochet shows clearer row or round instructions, preserves compatible progress, and supports direct navigation to any step.
+- About provides New, Open, Example, and release notes in one place.
 
 ## 19 September 2026
 

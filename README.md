@@ -1,251 +1,58 @@
 # Mosaic Crochet Editor
 
-A browser-based editor for alternating-yarn mosaic crochet charts. Draw pixel patterns, review derived overlay positions, and export a chart-derived work sequence.
+A browser-based editor for designing alternating-yarn mosaic crochet charts and turning them into chart-derived row-by-row or round-by-round instructions.
 
-**▶ [Try it now](https://lechaosx.github.io/mosaic-crochet-editor/)** — no install, runs in your browser.
-
-Companion to the [Aseprite plugin](https://github.com/lechaosx/aseprite-mosaic-crochet) for the same workflow inside Aseprite.
-
----
+**[Open the editor](https://lechaosx.github.io/mosaic-crochet-editor/)** — no installation or account required.
 
 <table>
 <tr>
-<td><img src="doc/screenshot.png" alt="Web editor with a row pattern and the symmetry-axis popover open"></td>
-<td><img src="doc/photo.jpg" alt="Finished crocheted square"></td>
+<td><img src="doc/screenshot.png" alt="Mosaic Crochet Editor showing a chart and its symmetry controls"></td>
+<td><img src="doc/photo.jpg" alt="A crocheted square made from a chart"></td>
 </tr>
 </table>
 
-```
-Round 1: ([sc, ch] × 4)
-Round 2: [(sc, ch, sc), oc] × 4
-Round 3: [(sc, ch, sc), oc, sc, oc] × 4
-Round 4: [(sc, ch, sc), oc, [sc, oc] × 2] × 4
-Round 5: [(sc, ch, sc), oc, [sc, oc] × 3] × 4
-Round 6: [(sc, ch, sc), oc, [sc × 3, oc] × 2] × 4
-Round 7: [(sc, ch, sc), [oc, sc] × 2, sc × 3, [sc, oc] × 2] × 4
-Round 8: [(sc, ch, sc), oc, [sc × 3, oc] × 3] × 4
-Round 9: [(sc, ch, sc), oc, sc × 4, [sc, oc] × 2, sc × 5, oc] × 4
-Round 10: [(sc, ch, sc), oc, [sc × 7, oc] × 2] × 4
-Round 11: [(sc, ch, sc), oc, sc × 17, oc] × 4
-Round 12: [(sc, ch, sc), sc, [sc, oc, sc × 2] × 5] × 4
-Round 13: [(sc, ch, sc), oc, sc × 2, [sc, oc] × 8, sc × 3, oc] × 4
-Round 14: [(sc, ch, sc), oc, sc × 2, [sc × 3, oc] × 4, sc × 5, oc] × 4
-Round 15: [(sc, ch, sc), sc × 27] × 4
-```
+## Capabilities
 
----
+- Rectangular row patterns and full, half, or quarter centre-out patterns
+- Two-yarn drawing with customizable colours, overlay-stitch guidance, and impossible-placement warnings
+- Selection, movement, copying, repetition, rotation, and mirroring of motifs
+- Multiple global symmetry axes that apply while drawing
+- Generated crochet instructions that can be copied, with progress shown on the chart
+- Editable `.mcw` project files, with separate browser-local recovery for in-progress work
+- Accessible desktop and mobile layouts with mouse, touch, pen, and keyboard support
 
-For updates, see [RELEASE_NOTES.md](RELEASE_NOTES.md). For durable decisions, see [FEATURES.md](FEATURES.md) (product) and [ARCHITECTURE.md](ARCHITECTURE.md) (technical). The [chart dialect contract](doc/chart-dialect.md) defines how chart cells become Crochet work.
+The controls are designed to be discovered in the app, with labels and tooltips available where they are needed.
 
----
+The generated sequence covers the work encoded by the chart; foundation, joining, and finishing methods remain the crocheter's choice.
 
-## Using the app
+Mosaic Crochet Editor is also available as an [Aseprite plugin](https://github.com/lechaosx/aseprite-mosaic-crochet).
 
-The workspace separates global document commands from mode-specific panels. One stable canvas fills the workspace while Design tools and Crochet instructions overlay its left edge on wide screens or its bottom edge on narrower screens. The current Crochet instruction also appears alone in a translucent bottom float centred on the canvas. The document bar keeps document commands at the left and one centred Crochet transition: **Begin Crocheting**, **Continue Crocheting**, or **Back to Design**. An open Pattern or Settings inspector stays open when entering and leaving Crochet; Selection, Move, and Global Mirror close because they apply only while drawing. An effective Pattern canvas change returns to Design, as do Open, Undo, and Redo. Save remains available without leaving Crochet. Pattern, Selection, Global Mirror, and Settings share a right-edge or bottom-sheet inspector; its close button dismisses the current section. None of these panels resize or shift the canvas. At phone widths, lower-frequency document commands and Settings move into **Menu**. Controls retain their pointer or touch minimum size and grow when the browser's text size is increased; on short screens, panels scroll instead of collapsing the canvas.
+## Project documentation
 
-The app opens **About** on the first visit and once whenever the newest entry in `RELEASE_NOTES.md` changes. The dialog keeps its Release notes heading, current-year copyright, project link, and three bottom actions visible while the complete notes scroll: **New** creates a blank row pattern and opens the normal Pattern inspector, **Open** loads an editable `.mcw` file, and **Example** loads a small chart that demonstrates Colour, Overlay, Global Mirror, and Crochet. Canceling the file picker leaves About open. Close About with **×**, **Escape**, or a click outside it; reopen it from **Settings → About Mosaic Crochet Editor**.
+- [Release notes](RELEASE_NOTES.md) summarize changes visible to users.
+- [Product model](FEATURES.md) records the durable user-facing decisions behind the editor.
+- [Architecture](ARCHITECTURE.md) records the technical boundaries contributors must preserve.
+- [Chart dialect](doc/chart-dialect.md) defines how chart cells become crochet instructions.
+- [Crochet validation protocol](doc/instructions-validation.md) describes how generated instructions are evaluated with crocheters.
 
-### Patterns
+## Developing locally
 
-Click **Pattern** to edit the pattern's dimensions and colours. Shape and size come first; below them, Yarn A/B use direct colour pickers and **⇄** exchanges the two colours as one undoable edit. Each of the four colour pickers has an icon-only reset to its fixed app default; the default danger colour is pure red. Project danger and accent choices sit beside the yarns because their contrast is judged against the current pattern. **Find contrasting colors** chooses a deterministic, visually distinct pair with at least 3:1 contrast against both yarns whenever the semantic palette permits it without adding an Undo step. A miniature chart previews both yarns together with grid, selection, mirror, valid-overlay, and invalid-overlay cues, and follows the selected Rows or Centre-out geometry.
-
-Two geometry modes are available:
-
-- **Rows** — a rectangular grid worked row by row, numbered from the bottom row as Row 1.
-- **Centre-out** — concentric rounds numbered from the innermost band outward. Set centre opening width / height / rounds, plus an authored extent:
-  - **Full** — all four sides.
-  - **Half** — bottom half only.
-  - **Quarter** — bottom-left quarter only.
-
-Settings update the canvas live. While a dimension is changing, the inspector briefly reports the resulting size and the cells added or removed; the message disappears when the edit finishes. Destructive scrubbing within one field remains reversible until change or blur. Pattern adjustments collapse into one before-and-after Undo state until another document edit occurs: closing and reopening the inspector does not split that state, Undo restores the pattern from before the first adjustment, and Redo restores the final result. **Clear drawing** immediately restores every cell to its natural alternating yarn. Switching between Rows and Centre-out previews fresh geometry, but returning to the session's source construction restores the latest committed pattern instead of the intermediate preview. Full, Half, and Quarter likewise derive from that source, so returning to a larger source extent restores cells that the smaller extent temporarily clipped. Drawing while Pattern remains open advances the source, preserving that new work through later geometry previews. Pattern remains open while you draw or navigate the canvas. Close it with the Pattern button, its close button, or **Escape**; panel visibility does not change history. Invalid input keeps the last valid preview while the field remains active and restores the field's starting state when focus leaves it.
-
-Canvas dimensions may contain up to 16,777,216 cells total, with either axis up to 1,048,576 cells for unusually long, narrow patterns. The Pattern inspector reports an inline error without replacing the current canvas when those safety bounds are exceeded; invalid `.mcw` dimensions are rejected during load.
-
-### Drawing
-
-Eight tools, grouped in the authoring dock:
-
-The authoring tools, Global Mirror, and Navigate use the same monochrome visual language. Tool names remain available as button labels or hover descriptions, and the selected action uses the same filled-and-outlined state throughout the app.
-
-- **Pencil** — paint the active colour.
-- **Fill** — flood-fill a connected region (stops at the selection boundary when a selection is active).
-- **Eraser** — left click restores pixels to the underlying alternating colour; right click paints the *opposite* (the exact inverse).
-- **Overlay Place / Clear / Invert** — choose the icon for ✕ in a square, an empty square, or an inverted square, then draw where the ✕ belongs. Place adds a mark, Clear removes one, and Invert toggles its presence independently at every transformed target. Right-click is the opposite Place/Clear shortcut; Invert behaves identically with either button. **O** selects Place and **Shift+O** selects Clear. A diagonal round-corner pixel is not overlayable because it emits the complete `(sc, ch, sc)` group; neighbouring pixels retain normal Overlay behavior.
-- **Invert** — flip pixels between primary and secondary on draw. Within one stroke, no pixel is inverted twice.
-- **Select** — opens the Selection inspector and lets you drag a rectangle to **lift** those cells into a floating selection: their values move into the float, and the canvas below them resets to the natural alternating colour. Choose **Replace**, **Add**, or **Subtract** in the inspector; the drag shows the resulting selection outline and its width, height, and cell count before release. **Shift** temporarily adds and **Ctrl** temporarily subtracts without changing the chosen mode. A single click lifts one cell. Click Select again to reopen its dismissed inspector.
-- **Magic wand** — opens the Selection inspector and lets you click a cell to lift its connected same-colour region as a float. It shares the visible Replace/Add/Subtract choice and temporary Shift/Ctrl overrides with Select. Dragging can sweep across regions; the entire sweep is one Undo step. Leaving Select or Wand resets the choice to Replace. Click the active Wand again to reopen its dismissed inspector.
-- **Move** — opens the Move inspector for persistent **Move content**, **Duplicate**, and **Move area** outcomes, then lets you drag inside the float to reposition it. Release just stops dragging; the float stays alive across tool changes and saving until you deselect (`Ctrl+Shift+A`), replace the selection, resize the pattern, or load another file. **Ctrl+drag** stamps the float into the canvas at its current position the moment you press, so you visibly drag a duplicate. **Alt+drag** is mask-only: the float's content is baked into the canvas at the start, the drag carries the same marquee shape, and on release the canvas content at the new position is re-lifted as the new float (the original content stays where it was). Click the active Move tool to reopen its dismissed inspector. **Shift+drag** has no special meaning on the Move tool — it behaves as a regular move.
-
-Active Global Mirror axes and the active saved repeat always apply while drawing. The five drawing tools respect both transformations, and the eraser restores each affected pixel to *its own* natural colour rather than the click point's.
-
-Hovering the chart reports only the current cell coordinates. Drawing begins on contact; there is no speculative colour, rectangle, or dot preview to obscure the committed pattern. Rejected gestures explain the immediate constraint in the context strip.
-
-When a selection is active, painting tools clip to its visible marquee: changes inside the float go to the float's pixels; clicks outside the marquee do nothing. The boundary appears as marching ants in a palette-aware accent colour. Holes (transparent cells) behave as outside the selection — never lifted, never affected by paint through the float.
-
-Open **Selection** in the authoring dock for Replace/Add/Subtract, Copy, Cut, Paste, and Deselect actions alongside their keyboard hints. Open **Move** for Move content/Duplicate/Move area. The current saved selection updates as its cells change. **New selection** creates and selects an empty entry; earlier entries remain available, and Delete is enabled whenever more than one entry exists. Entries show their packed source size, such as `Selection 1 · 2 × 3`. The context strip is passive: active-gesture information takes priority, followed by constraints, cursor coordinates, and the selection summary. Deselect places the floating content into the pattern before removing the live selection. After Cut or Deselect, the Selection trigger shows the number of copied cells while the in-memory clipboard remains available.
-
-`Ctrl+C` copies the float to the clipboard (non-destructive — canvas and marquee stay unchanged). `Ctrl+X` cuts: clipboard gets the content and the selection drops; canvas cells are cleared to baseline only when every cell's value matches the float (all-or-nothing — if anything differs, the canvas is left alone). `Ctrl+V` pastes from the clipboard back at the original copy location as a non-destructive float — moving it leaves the canvas underneath alone, so paste-then-move is duplicate by default.
-
-**Mouse:** colour tools use the active yarn on left click and the other yarn on right click. Overlay uses right-click as the opposite Place/Clear shortcut.
-**Touch / pen:** single-finger drag paints with the active yarn. Select Yarn A or B by tapping its labelled swatch or pressing **1** or **2**. Tap the selected-cell count for selection and clipboard actions, or tap Move for a modifier-free move outcome.
-
-A ✕ marks valid overlay-stitch positions in the other yarn colour; a ! marks invalid placements in the configured danger colour. Selections and transform guides share the configured canvas accent.
-
-Opening an inspector explicitly moves keyboard focus to its first available control. Close it with its close button or **Escape**. Dismissal happens before canvas shortcuts and returns focus to the opener. If that opener is no longer available, focus returns to **Menu** on compact layouts or to the active authoring tool.
-
-### Global Mirror and saved repeats
-
-New patterns start without mirror axes and with one empty saved selection. **Global Mirror** adds any of five axis kinds: **↔ Vertical**, **↕ Horizontal**, **⊕ Central**, **╲ Diagonal**, or **╱ Anti-diagonal**. Each axis has its own enable/disable and delete controls, whose hover and accessibility labels identify the axis kind and position. Keyboard focus follows an axis when it is toggled or deleted. You can add multiple axes of the same kind.
-
-Active Global Mirror axes are drawn as dashed guides; central rotation is shown as a dot. While **Global Mirror** is open, guides can be dragged without switching away from the current drawing tool. Each axis row also has an exact position field. With the inspector closed, the **Move** tool can still drag guides. Vertical, horizontal, and central axes snap to half-cells; diagonals snap to whole cells. Dragging an axis beyond its useful canvas range deletes it, and resizing drops only axes that no longer have a useful mirror. Diagonal axes work on rectangular canvases of any parity.
-
-Active axes compose automatically: for example, vertical and horizontal mirrors together produce the corresponding four-cell orbit without adding a separate central-axis entry.
-
-Saved selections live in **Selection**, separately from Global Mirror. The current entry follows Replace/Add/Subtract, Move content, Duplicate, and Move area. Selecting an earlier entry lifts its source for editing. The current entry remains selected after its live cells are placed or cut, while repeat drawing and application require a live selection.
-
-In **Grid** mode, set additional copies independently to the left, right, up, and down. Columns advance by the packed source width plus the horizontal gap and can use a vertical offset between columns; rows advance by the packed source height plus the vertical gap and can use a horizontal offset between rows. These two offsets make diagonal and 45° grids possible. Column copies can alternate a horizontal mirror, and row copies can alternate a vertical mirror. Each axis uses one consistent gap. Packing uses occupied source cells, so sparse selections keep their holes instead of reserving the whole bounding box.
-
-In **Transformations** mode, enter a centre and select any combination of 90°, 180°, and 270° copies plus horizontal and vertical mirror copies of the whole selection. Transformations and Grid are mutually exclusive within an entry. The centre accepts whole- or half-cell coordinates when the selected transformations map cells exactly. It stays at that absolute chart position when cells are added to or removed from the selection, and follows explicit Move, Duplicate, and Move area translations. These selection transformations are distinct from Global Mirror and its live global axes.
-
-Edits made at the source or any repeat instance always apply across the active saved repeat. Fill and mirror targets remain clipped to the complete extended selection. **Apply current selection** copies the source selection to every valid chart destination as one undoable edit, clipping copies at chart edges and round holes. Conflicts between paintable chart destinations reject the whole operation; conflicts beyond chart edges or inside round holes are ignored. Every visible grid instance has its own marching-ant outline, including boundaries shared by adjacent instances.
-
-Each saved-repeat grid accepts at most 4,096 positions. Every recipe is limited to 1,048,576 source-to-destination claims, including selected rotation copies, before it can render or paint.
-
-Active Global Mirror axes always affect future pencil, fill, eraser, overlay, and invert operations. **Apply Global Mirror** applies the active axes to content already in the floating selection. Choose it or press **T**; the source selection stays active and the entire stamp is one undo step. Off-canvas sources and inner-hole destinations are skipped. If differently coloured source cells claim the same destination, the action reports the conflict in Global Mirror and leaves the canvas unchanged.
-
-The Global Mirror button reports whether axes are absent or applying while drawing. Saved-selection repeat state appears in Selection instead of on the mirror button.
-
-### Yarns
-
-The labelled **Yarn A** and **Yarn B** swatches remain directly available at every dock size. A visible check and outline identify the active yarn independently of colour. Click, tap, Enter, or Space selects a yarn. Colour editing and Swap live in Pattern; double-clicking or long-pressing a dock swatch opens Pattern and invokes that yarn's picker directly. Swapping does not change the pattern's A/B cells or the active logical yarn, and Undo restores the previous colours.
-
-### Highlights
-
-The **⚙** button in the document bar opens Settings in the inspector:
-
-- **Guidance opacity** — fades visible ✕ / ! glyphs from 0–100%. Guidance is always available; 0% hides it.
-- **Show numbers** — row numbers in the left gutter, starting with Row 1 at the bottom; round numbers start with Round 1 at the innermost band and appear above half/quarter charts or in the corner cells of full charts.
-- **Prevent impossible overlay placements** — on for fresh sessions. It blocks new impossible marks (top row in Rows; outermost ring and diagonal corners in Centre-out), but still permits correcting an already-wrong cell. Turn it off for free sketching; saved sessions keep their prior choice.
-- **About Mosaic Crochet Editor** — opens the release notes, copyright, project information, and New/Open/Example actions.
-
-### Zoom, pan, rotation
-
-- **Zoom**: use **−** / **+** in the canvas controls, scroll the wheel, or pinch with two fingers. Buttons preserve the canvas-centre focal cell; wheel and pinch use the pointer or gesture midpoint. New patterns, loaded files, and refreshes auto-fit to the viewport.
-- **Fit**: centres the pattern on the full canvas width and fits its current rotated bounds there, independent of side panels. Bottom panels and canvas chrome still reduce the available height. Showing or hiding row and round numbers rerenders labels without moving or zooming the view.
-- **Pan**: in Design, choose **Navigate** and drag with mouse, pen, or one finger; choose an authoring tool to leave Navigate. Crochet is already navigation-only, so it omits the redundant Navigate toggle. Hold **Space** while dragging in Design for momentary Navigate. Middle-mouse drag and two-finger drag remain direct shortcuts.
-- If the browser or operating system cancels an active drawing pointer, the unfinished edit is discarded. Starting a two-finger gesture also discards any unfinished one-finger edit before navigation begins.
-- **Rotate view**: ↺ / ↻ rotate ±45° around the pattern centre. The persistent arrow in the view controls follows the current orientation and resets the view upright.
-
-### Saving
-
-- **Save** saves the editable pattern as a `.mcw` file (JSON). Modern browsers (Chrome/Edge) open a save dialog; Firefox downloads immediately. Cancelling the save dialog does nothing; a file-system failure appears in the document-bar alert.
-- **Open** opens a file picker and restores pattern geometry, pixels, colours, Global Mirror axes, and saved-repeat definitions. A different project drops the active float and active recipe link, while an identical project leaves workspace state intact. Legacy v1/v2 files open without axes or saved repeats. Unreadable or invalid files and files from a newer unsupported `.mcw` version are reported in a dismissible document-bar alert without blocking the workspace or replacing the current pattern.
-- The Crochet transition keeps one canvas fixed in the workspace, including its pan, zoom, and rotation; switching changes only the mode panel and mode-specific canvas chrome above it. Design shows authoring tools, Navigate, and the authoring context cluster. Crochet makes the canvas navigation-only, omits those redundant Design controls, and shows the complete crochet-order instruction list in its mode panel; the current instruction is repeated in a floating bottom card for readability. Row instructions begin with the bottom chart row as Row 1; round instructions begin with the innermost band as Round 1. Each list row has a plain number beside a narrow yarn-colour marker labelled A or B and carries an accessible Row/Round and Yarn label. Pattern palette edits refresh the open chart and yarn markers without changing its frozen geometry or progress. Choose any instruction to move progress directly to it; **Back** and **Forward** move one whole row or round and disable on the first and last instruction. The canvas shows completed crochet pixels through the current line. Until the final line, overlay and invalid-placement guidance is limited to the current line; the final line shows the complete finished guidance. Start arrows sit before the first stitch and point into it, while invalid work is emphasized in both the instruction list and its in-chart cells. Stitch edits preserve the current row or round. Opening a different authored pattern clears Crochet progress, while reopening an identical chart keeps it. Progress is excluded from `.mcw` and project Undo and reports a browser-storage failure inline. The copy icon copies the complete compressed instruction dump with the yarn named on every line. **Alternate direction** reverses cached instruction direction immediately without regenerating unchanged work. Each `oc` belongs to the worked row or round containing its visible ✕, while the covered supporting pixel remains an internal chart detail.
-- Before opening Crochet, invalid overlay placements add danger styling and an accessible error count to the Crochet control without changing its visible label. They do not block progress; generated rows and rounds emit affected work as `oc`, mark the affected instruction when it maps to one, and retain any unmapped errors in the overall count.
-
-Tool, colour, Global Mirror axes and live mode, saved repeats and their active source link, rotation, the active float, and the committed canvas auto-save to browser-local recovery and restore on refresh. Guidance opacity, number visibility, and invalid-placement protection use an app-global browser record. Yarn, danger, and accent resets use fixed application defaults. Project danger/accent overrides follow the project through recovery and optional backward-compatible `.mcw` v3 fields; they remain unchanged across Undo/Redo, and opening them does not change Crochet progress. The document bar appears only when a session was **Recovered** or recovery **failed**; routine successful writes stay quiet. This automatic recovery is separate from **Save** and never means an editable pattern file was updated. Drawing remains live on the canvas while dragging and updates recovery storage when the stroke is released. Existing v4/v5 browser recovery and Undo history migrate automatically to the current version. `.mcw` v3 files contain pattern geometry, pixels, yarn colours, optional danger/accent overrides, Global Mirror axes, and saved-repeat definitions; the active float and active recipe link remain workspace state. Save and Crochet output bake the visible float into their snapshots without changing the live selection.
-
-In Design, the passive canvas context stays hidden until it has useful information. It shows one priority at a time: active-gesture details, a rejected-action explanation, hovered coordinates, or the selection/clipboard summary. Selection actions open from the authoring dock instead of from the status surface. Crochet omits this authoring context because its current-line and progress context are already visible in the instruction panel.
-
-When a canvas action cannot proceed, the context strip explains the immediate cause: the pointer is outside the selection, Move needs a selection or must start inside it, an Overlay target has no inward supporting cell, or Settings skipped a protected destination. Repeated blocked cells in one drag produce one message; beginning another canvas action clears it.
-
-### Responsive workspace
-
-Authoring is tool-led rather than controlled by a global strategy switch. **Colour** contains Pencil, Fill, Eraser, and Invert; **Overlay** places the chart-required overlay operation; **Arrange** contains Select, Magic wand, Move, and Global Mirror. Pressed controls identify the active tool. Wide layouts use a single-control-width Design tool rail; compact layouts retain the same ordered controls in a bottom dock.
-
-Controls use a minimum 36 × 36 CSS-pixel target on wide fine-pointer layouts and 44 × 44 CSS pixels when touch input is available or space is compact. Mode panels and inspectors overlay the canvas instead of resizing it: wide layouts place them at the left or right edge, while constrained layouts use bottom sheets. Canvas navigation remains in the top-right and the status cluster in the bottom-right of the unobscured area, moving around an open inspector or sheet without changing the canvas view. The current phone dock keeps all eight authoring tools and both yarns visible across up to three rows; lower-frequency document commands and Settings move into **Menu**, while Design and Crochet remain direct mode controls. Opening Menu focuses its first command; use Up/Down or Home/End to move through the menu without moving selected canvas content. Escape returns to Menu, while Tab or Shift+Tab closes the menu and continues through the page.
-
-### Keyboard shortcuts
-
-Toolbar tools and yarn swatches expose their selected state to assistive technology. Yarn swatches respond to Enter and Space. Pattern geometry and authored extent are named radio groups, and their choices and switches remain native controls that use the standard arrow and Space keys.
-
-The shared canvas is exposed as **Editable pattern chart** in Design and **Crochet progress chart** in Crochet. Hold Space and drag to pan without applying a tool. Arrow keys do not navigate individual chart cells; with Move active, Arrow and Shift+Arrow retain their one- and five-cell selection nudges. Form controls keep their native keys.
-
-| Action | Key |
-|---|---|
-| Pencil / Fill / Eraser / Overlay / Invert / Select / Wand / Move | **P** / **F** / **E** / **O** / **I** / **S** / **W** / **M** |
-| Add Vertical / Horizontal / Central axis | **V** / **H** / **C** |
-| Add Diagonal ╲ / Anti-diagonal ╱ axis | **D** / **A** |
-| Apply Global Mirror to the selection | **T** |
-| Rotate clockwise / counter-clockwise | **R** / **Shift+R** |
-| Select Yarn A / Yarn B | **1** / **2** |
-| Select all paintable cells / Deselect / Clear selection | **Ctrl+A** / **Ctrl+Shift+A** / **Esc** |
-| Delete selection content (keeps selection active) | **Delete** |
-| Nudge float / Nudge ×5 | **Arrow** / **Shift+Arrow** with Move active |
-| Bake position into canvas, nudge float | **Ctrl+Arrow** / **Ctrl+Shift+Arrow** with Move active |
-| Mask-only nudge (stamp + move marquee, re-lifts on release) | **Alt+Arrow** / **Alt+Shift+Arrow** with Move active |
-| Copy selection / Cut to clipboard / Paste as a free float | **Ctrl+C** / **Ctrl+X** / **Ctrl+V** |
-| Undo / Redo | **Ctrl+Z** / **Ctrl+Y** (or **Ctrl+Shift+Z**) |
-
-Every button has a hover label that shows the same info.
-
----
-
-## Running locally
-
-### Prerequisites
-
-- [Nix](https://nixos.org/) with flakes enabled
-
-### First-time setup
+The development environment requires [Nix](https://nixos.org/) with flakes enabled.
 
 ```sh
-# Enter the dev shell (installs rustup, wasm-pack, bun, cargo-watch)
 nix develop
-
-# Install the nightly Rust toolchain
-rustup toolchain install nightly
-
-# Install JS dependencies
 bun install
-```
-
-### Development
-
-```sh
 bun run dev
 ```
 
-Starts the Rust watcher and the Vite dev server in parallel. Open [http://localhost:5173](http://localhost:5173).
+The development server runs at [http://localhost:5173](http://localhost:5173). Vite reloads TypeScript changes immediately; Rust changes rebuild the WebAssembly package first.
 
-- TypeScript changes reload instantly via Vite HMR.
-- Rust changes trigger a WASM rebuild (a few seconds), after which Vite reloads the page.
-
-### Tests
+Run the complete test suite before submitting changes:
 
 ```sh
 bun run test
 ```
 
-Builds the generated WASM package and production web bundle, then runs all three test layers:
+Useful narrower commands are `bun run test:rust`, `bun run test:logic`, `bun run test:web`, and `bun run test:e2e`. Run `bun run build` for a production build in `web/dist/`.
 
-- **Rust** (`cargo test`) — geometry, walk generators, pattern compression.
-- **TS unit + properties** (`bun run test:logic` for pure logic, `bun run test:web` for IO layer, Vitest) — store / selection / paint / clipboard / symmetry / saved repeats / storage / pattern + `fast-check`-generated property assertions for pack/unpack round-trips, lift-anchor identity, wand BFS invariants, history undo/redo balance; plus history and localStorage persistence.
-- **E2E** (`bun run test:e2e`, Playwright, desktop Chromium) — full UX flows: adaptive workspace, tool switching, paint pixel verification via `getImageData`, selection / move / copy / cut / paste, symmetry and repeat transforms, Pattern inspector.
-
-CI rejects Rust formatting drift and reports Clippy warnings with `cargo fmt --all -- --check` and `cargo clippy --workspace`.
-
-Run a subset:
-
-```sh
-bun run test:logic                    # Vitest — pure logic (logic/tests/)
-bun run test:web                      # Vitest — IO layer (web/tests/)
-bun run --cwd web test:watch          # Vitest interactive
-bun run --cwd web test:coverage       # Istanbul HTML report at web/coverage/index.html
-bun run test:mutation                 # Stryker mutation sweep on logic (report at logic/reports/mutation/mutation.html)
-bun run test:e2e                      # Production build + Playwright
-```
-
-> On NixOS, the dev shell provides `playwright-driver.browsers` and sets `PLAYWRIGHT_BROWSERS_PATH` for you. The `@playwright/test` npm version is pinned to match nixpkgs's bundled chromium.
-
-### Production build
-
-```sh
-bun run build
-```
-
-Output is in `web/dist/`.
-
-### Deployment
-
-Pushes to `master` automatically deploy to GitHub Pages via GitHub Actions. Enable Pages in the repo settings with **GitHub Actions** as the source.
+Pushes to `master` deploy to GitHub Pages through GitHub Actions.

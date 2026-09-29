@@ -1,6 +1,6 @@
 # Product Model
 
-This document records the durable user-facing decisions that define Mosaic Crochet Editor. It is a compact product map, not a usage guide or an inventory of every control. See [README.md](README.md) for current operation and [RELEASE_NOTES.md](RELEASE_NOTES.md) for changes over time.
+This document records the durable user-facing decisions that define Mosaic Crochet Editor. It is a compact product map, not a usage guide or an inventory of every control. See [README.md](README.md) for the product overview and contributor setup, and [RELEASE_NOTES.md](RELEASE_NOTES.md) for changes over time.
 
 An entry here is a product constraint, not a historical note. Changing or removing one requires explicit user approval before implementation.
 
