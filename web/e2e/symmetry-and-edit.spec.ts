@@ -607,6 +607,10 @@ for (const action of ["Cut", "Deselect"] as const) {
 
         await page.getByRole("button", { name: action, exact: true }).click();
 
+        if (action === "Deselect") {
+            await expect(page.getByRole("dialog", { name: "Selection" })).toBeHidden();
+            await page.getByRole("button", { name: "Selection actions" }).click();
+        }
         await expect(recipe).toHaveAttribute("aria-pressed", "true");
     });
 }
