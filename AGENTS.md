@@ -19,18 +19,28 @@ When work requires both refactoring and a functional change, put them in separat
 
 The four top-level docs each have a distinct job. Keep them in their lane — don't mix purposes.
 
-- **`README.md`** — documentation **for users, devs, and visitors**. The "how do I use / build / run this" file. Prose, examples, screenshots if any. Lives in the present tense.
+- **`README.md`** — a **skimmable landing page for users, contributors, and visitors**. It explains what the app is, shows its main capabilities, links to the live app and deeper project documents, and gives only the essential build, run, and test commands. It is not a control reference or user manual.
 - **`FEATURES.md`** — the **durable product model**. It records the app's defining user stories, workflows, use cases, and user-facing constraints. It is neither a tutorial nor an exhaustive feature list.
 - **`ARCHITECTURE.md`** — the **durable technical model**. It records high-level boundaries and the few non-obvious code-design or implementation decisions that are expected to constrain future work.
-- **`RELEASE_NOTES.md`** — dated, user-visible changes deployed continuously from `master`. No release versions or semantic versioning. Its complete entries are also shown in the About dialog.
+- **`RELEASE_NOTES.md`** — terse, dated summaries of meaningful user-visible changes deployed continuously from `master`. No release versions or semantic versioning. Its complete entries are also shown in the About dialog.
 
-In short: README answers "how do I", FEATURES answers "what product are we building", ARCHITECTURE answers "what technical shape must we preserve", and RELEASE_NOTES answers "what changed for users".
+In short: README answers "what is this and how do I work on it", FEATURES answers "what product are we building", ARCHITECTURE answers "what technical shape must we preserve", and RELEASE_NOTES answers "what changed for users".
 
 Before planning work that may affect the product model or a technical boundary, read the relevant FEATURES or ARCHITECTURE entries. Read both when a change crosses that boundary.
 
 ## Keeping the docs up to date
 
 The four docs are living and must stay in sync with the codebase, but FEATURES and ARCHITECTURE are deliberately low-traffic. They describe the stable shape of the product and system, not the history of every decision.
+
+### Documentation hygiene
+
+- Keep one canonical home for each fact. Link to that source when another document needs context instead of copying the details.
+- Prefer removing obsolete or low-value prose over appending corrections. A document should read as a coherent current description, not as a history of additions.
+- Keep the README easy to scan. Its user-facing content is limited to the product purpose, a concise capability overview, representative media, and links. Its contributor content is limited to the commands needed to start, test, and build the project.
+- Do not put exhaustive control descriptions, shortcut tables, edge cases, safety limits, file-format field lists, or responsive-layout rules in the README. Behaviour that is clear from labels, tooltips, feedback, or ordinary use belongs in the app rather than in a parallel manual.
+- Put a non-obvious crochet-semantic contract in the chart dialect, and a validation procedure in its dedicated protocol. Keep implementation detail close to the code unless it qualifies as a durable architecture constraint.
+- Treat release notes as summaries, not specifications. Group related changes by user outcome, omit implementation details and minor polish, and default to one to four one-sentence bullets per date. Exceed that only when additional independently meaningful changes cannot be combined clearly.
+- A code change does not automatically require every document to change. Update only the canonical documents whose current claims or durable constraints are affected.
 
 ### Admission test for durable decisions
 
@@ -49,7 +59,7 @@ Treat every recorded entry as a constraint. Before implementing work that would 
 
 ### When to update which
 
-- User-visible behaviour changes → update **README.md** when usage documentation changes and add a terse entry under the current date in **RELEASE_NOTES.md**.
+- Meaningful user-visible behaviour changes → add a terse entry under the current date in **RELEASE_NOTES.md**. Update **README.md** only when its product summary, capability overview, media, links, or contributor instructions would otherwise become inaccurate.
 - Update **FEATURES.md** only when the durable product model changes, not for every feature or interaction change.
 - Update **ARCHITECTURE.md** only when a durable technical constraint changes or a newly established decision passes the admission test, not for routine dependency, module, algorithm, or implementation changes.
 - Bug fix that changes documented behaviour → update the relevant file(s).
@@ -66,7 +76,7 @@ When in doubt, be honest. If you suggested something and the user accepted it wi
 
 ### Format
 
-Follow the existing structure in each file. Add new entries under the appropriate section. Do not reorganise existing sections without being asked. Keep entries terse and independently understandable. Release-note headings use dates, not release numbers.
+Follow the existing structure in each file. Add new entries under the appropriate section. Do not reorganise existing sections without being asked. Keep entries terse and independently understandable. Release-note headings use dates, not release numbers, and related changes should share a single outcome-focused bullet.
 
 ### Priority
 
