@@ -15,6 +15,8 @@ This is not permission for unrelated cleanup, speculative abstraction, aesthetic
 
 When work requires both refactoring and a functional change, put them in separate commits and verify each commit independently. The same applies to restructuring documentation while changing its substantive policy or meaning. Put the refactoring commit first when it creates a stable shape in which the change becomes local and obvious; put it afterwards when the right structure only becomes clear once the change exists. Each commit must be coherent and leave the repository in a valid state. Do not hide behaviour or policy changes inside moves, renames, formatting, or structural rewrites. If the changes genuinely cannot be separated, explain why before proceeding.
 
+Implement separated commits as separate work phases: make only the first change, verify it, and commit it before beginning the second. Do not implement both changes in one working tree and split them only when staging; that does not provide an independently developed and verified boundary.
+
 ## Documentation roles
 
 The four top-level docs each have a distinct job. Keep them in their lane — don't mix purposes.
