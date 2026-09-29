@@ -174,6 +174,7 @@ test("dynamic symmetry actions retain keyboard focus after rebuilding the axis l
 
 test("closing an inspector restores focus to the available authoring context", async ({ page }) => {
     await bootApp(page);
+    const selectionInspector = page.getByRole("dialog", { name: "Selection" });
 
     const settings = page.getByRole("button", { name: "Settings" });
     await settings.click();
@@ -183,7 +184,18 @@ test("closing an inspector restores focus to the available authoring context", a
     await page.keyboard.press("Control+a");
     await page.getByRole("button", { name: /selected/ }).click();
     await page.getByRole("button", { name: "Deselect" }).click();
+    await expect(selectionInspector).toBeHidden();
     await expect(page.getByRole("button", { name: "Pencil" })).toBeFocused();
+
+    for (const name of ["Clear overlay", "Invert overlay"] as const) {
+        const action = page.getByRole("button", { name });
+        await action.click();
+        await page.keyboard.press("Control+a");
+        await page.getByRole("button", { name: /selected/ }).click();
+        await page.getByRole("button", { name: "Deselect" }).click();
+        await expect(selectionInspector).toBeHidden();
+        await expect(action).toBeFocused();
+    }
 
     await page.setViewportSize({ width: 360, height: 740 });
     const more = page.getByRole("button", { name: "Menu" });

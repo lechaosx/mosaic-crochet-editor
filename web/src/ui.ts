@@ -415,7 +415,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
         cb.onSelectionDeselect();
         if (isInspectorOpen("selection")) {
             closeInspector(false);
-            toolButtons[currentTool].focus();
+            document.querySelector<HTMLButtonElement>(
+                ".authoring-dock .btn[aria-pressed='true']",
+            )?.focus();
         }
     });
 
