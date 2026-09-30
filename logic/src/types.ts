@@ -39,8 +39,10 @@ export interface GridRecipe {
     rowSpacingAlternate: number;
     columnOffset:        number;
     rowOffset:           number;
-    columnOrientation:   "same" | "alternate-mirrored";
-    rowOrientation:      "same" | "alternate-mirrored";
+    columnMirrorHorizontal: boolean;
+    columnMirrorVertical: boolean;
+    rowMirrorHorizontal: boolean;
+    rowMirrorVertical: boolean;
     rotationCentreX:     number;
     rotationCentreY:     number;
     rotationTurns:       (90 | 180 | 270)[];

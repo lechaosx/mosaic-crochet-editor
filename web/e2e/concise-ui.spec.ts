@@ -312,13 +312,13 @@ test("app preferences survive reload and are not part of undo or recovery snapsh
     await expect(page.getByRole("slider", { name: "Guidance opacity" })).toHaveValue("37");
 });
 
-test("status is passive and Selection actions live in the authoring dock", async ({ page }) => {
+test("status is passive and Select opens selection actions", async ({ page }) => {
     await bootApp(page);
 
-    const emptySelection = page.getByRole("button", { name: "Selection actions" });
+    const emptySelection = page.getByRole("button", { name: "Select", exact: true });
     await expect(emptySelection).toBeEnabled();
     await emptySelection.click();
-    await expect(page.getByRole("button", { name: "Selection 1 · Empty" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Selection 1 Empty" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New selection" })).toBeVisible();
     await page.keyboard.press("Escape");
 
@@ -326,8 +326,8 @@ test("status is passive and Selection actions live in the authoring dock", async
 
     const status = page.getByLabel("Canvas context");
     await expect(status.getByRole("button")).toHaveCount(0);
-    const selection = page.getByRole("button", { name: /Selection actions/ });
-    await expect(selection).toContainText("81");
+    const selection = page.getByRole("button", { name: "Select", exact: true });
+    await expect(page.locator("#status-selection")).toContainText("81");
     await selection.click();
     await expect(page.getByRole("button", { name: "Copy" })).toBeVisible();
 });
@@ -335,7 +335,7 @@ test("status is passive and Selection actions live in the authoring dock", async
 test("contextual inspectors rely on controls and hover text", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("Control+a");
-    await page.getByRole("button", { name: /selected/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await expect(page.getByText("Deselect places", { exact: false })).toHaveCount(0);
     await expect(page.getByText("Nothing copied yet", { exact: false })).toHaveCount(0);
 

@@ -12,8 +12,8 @@ const noGrid: PackedGridRecipe = {
     rowSpacingAlternate: 0,
     columnOffset: 0,
     rowOffset: 0,
-    columnOrientation: "same",
-    rowOrientation: "same",
+    columnMirrorHorizontal: false, columnMirrorVertical: false,
+    rowMirrorHorizontal: false, rowMirrorVertical: false,
 };
 
 describe("packed transform grid prototype", () => {
@@ -48,7 +48,7 @@ describe("packed transform grid prototype", () => {
                 right: 2,
                 columnSpacing: halfUp - 1,
                 columnSpacingAlternate: halfUp - 1,
-                columnOrientation: "alternate-mirrored",
+                columnMirrorHorizontal: true,
             },
         )).toThrow(/safe integer/i);
         expect(() => evaluatePackedGrid(
@@ -240,7 +240,7 @@ describe("packed transform grid prototype", () => {
     test("uses signed lattice parity for alternate mirrored columns", () => {
         const result = evaluatePackedGrid(
             [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }],
-            { ...noGrid, left: 1, right: 2, columnOrientation: "alternate-mirrored" },
+            { ...noGrid, left: 1, right: 2, columnMirrorHorizontal: true },
         );
 
         expect(result.columnStep).toEqual({ x: 2, y: 0 });
@@ -259,7 +259,7 @@ describe("packed transform grid prototype", () => {
                 columnSpacing: 1,
                 columnSpacingAlternate: 3,
                 columnOffset: 1,
-                columnOrientation: "alternate-mirrored",
+                columnMirrorHorizontal: true,
             },
         );
 
@@ -277,8 +277,8 @@ describe("packed transform grid prototype", () => {
                 ...noGrid,
                 right: 1,
                 down: 1,
-                columnOrientation: "alternate-mirrored",
-                rowOrientation: "alternate-mirrored",
+                columnMirrorHorizontal: true,
+                rowMirrorVertical: true,
             },
         );
 
@@ -286,4 +286,67 @@ describe("packed transform grid prototype", () => {
         expect(result.cells).toContainEqual({ x: 2, y: 3, sourceIndex: 1 });
         expect(result.cells).toContainEqual({ x: 3, y: 2, sourceIndex: 2 });
     });
+});
+
+
+describe("independent grid mirrors", () => {
+    const mirrors = { columnMirrorHorizontal: false, columnMirrorVertical: false,
+        rowMirrorHorizontal: false, rowMirrorVertical: false };
+    const source = [{ x: 0, y: 0 }, { x: 2, y: 0 }, { x: 0, y: 1 }];
+    test.each([
+        ["column horizontal", { columnMirrorHorizontal: true }, 1, 0, [2, 0]],
+        ["column vertical", { columnMirrorVertical: true }, 1, 0, [0, 1]],
+        ["row horizontal", { rowMirrorHorizontal: true }, 0, 1, [2, 0]],
+        ["row vertical", { rowMirrorVertical: true }, 0, 1, [0, 1]],
+        ["both column mirrors", { columnMirrorHorizontal: true, columnMirrorVertical: true }, 1, 0, [2, 1]],
+        ["both row mirrors", { rowMirrorHorizontal: true, rowMirrorVertical: true }, 0, 1, [2, 1]],
+        ["same-axis cancellation", { columnMirrorHorizontal: true, rowMirrorHorizontal: true }, 1, 1, [0, 0]],
+        ["both-axis cancellation", { columnMirrorHorizontal: true, columnMirrorVertical: true,
+            rowMirrorHorizontal: true, rowMirrorVertical: true }, 1, 1, [0, 0]],
+    ])("%s composes at signed odd instances", (_name, flags, column, row, expected) => {
+        for (const sign of [-1, 1]) {
+            const result = evaluatePackedGrid(source, { ...noGrid, ...mirrors, ...flags,
+                left: column, right: column, up: row, down: row,
+                columnSpacing: 3, columnSpacingAlternate: 3, rowSpacing: 3, rowSpacingAlternate: 3 });
+            const dx = sign * column * result.columnStep.x;
+            const dy = sign * row * result.rowStep.y;
+            expect(result.cells).toContainEqual({ x: dx + expected[0], y: dy + expected[1], sourceIndex: 0 });
+        }
+    });
+    test("re-packs cross offsets for vertical column and horizontal row mirrors", () => {
+        const motif = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+        for (const sign of [-1, 1]) {
+            expect(evaluatePackedGrid(motif, { ...noGrid, ...mirrors,
+                columnMirrorVertical: true, left: 1, right: 1, columnOffset: sign }).columnStep.x).toBe(2);
+            expect(evaluatePackedGrid(motif, { ...noGrid, ...mirrors,
+                rowMirrorHorizontal: true, up: 1, down: 1, rowOffset: sign }).rowStep.y).toBe(2);
+        }
+    });
+    test("packs sparse reflected neighbours across positive and negative cross offsets", () => {
+        const source = [{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 3, y: 2 }];
+        for (const offset of [-1, 1]) {
+            for (const flags of [
+                { columnMirrorVertical: true },
+                { columnMirrorHorizontal: true, columnMirrorVertical: true },
+                { columnMirrorHorizontal: true, rowMirrorVertical: true },
+            ]) {
+                const result = evaluatePackedGrid(source, { ...noGrid, ...mirrors, ...flags,
+                    left: 1, right: 1, up: 1, down: 1, columnOffset: offset,
+                    rowSpacing: 10, rowSpacingAlternate: 10 });
+                expect(result.conflicts).toEqual([]);
+            }
+        }
+    });
+    test.each(Object.keys(mirrors))("rejects malformed %s", field => {
+        expect(() => evaluatePackedGrid(source, { ...noGrid, ...mirrors, [field]: "true" }))
+            .toThrow(/mirror/i);
+    });
+});
+
+
+test("unused row mirrors do not change column packing with cross offsets", () => {
+    const recipe = { ...noGrid, right: 1, columnOffset: 1 };
+    const source = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
+    expect(evaluatePackedGrid(source, { ...recipe, rowMirrorVertical: true }).columnStep)
+        .toEqual(evaluatePackedGrid(source, recipe).columnStep);
 });

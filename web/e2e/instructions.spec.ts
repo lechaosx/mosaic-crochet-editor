@@ -270,7 +270,7 @@ test("Design shortcuts are inert while Crochet is open", async ({ page }) => {
     await page.locator("#btn-export").click();
 
     await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("button", { name: /selected/ })).toBeVisible();
+    await expect(page.locator("#status-selection")).toBeVisible();
 });
 
 test("reselecting Crochet preserves its current line", async ({ page }) => {

@@ -114,13 +114,13 @@ test("Clear design removes drawing and transform context in one recoverable edit
     expect(await recovery(page)).toEqual(before);
     await page.getByRole("button", { name: "Redo" }).click();
     expect(await recovery(page)).toEqual(cleared);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await expect(page.getByRole("button", { name: "Paste", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Selection 1 · Empty" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Selection 1 Empty" })).toBeVisible();
 
     await page.reload();
     await page.waitForFunction(() => !!window.__test_matrix__);
-    expect(await recovery(page)).toEqual(cleared);
+    expect(await recovery(page)).toEqual({ ...cleared, workspace: { ...cleared.workspace, activeTool: "select" } });
 });
 
 test("Clear design preserves authored centre-out geometry and compatible Crochet progress", async ({ page }) => {
@@ -190,7 +190,7 @@ test("Pattern previews after Clear design preserve the cleared source and revert
     await page.locator("#edit-width").fill("2000000");
     await expect(page.locator("#edit-error")).toBeVisible();
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: /Selection actions/ }).click();
-    await expect(page.getByRole("button", { name: "Selection 1 · Empty" })).toBeVisible();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Selection 1 Empty" })).toBeVisible();
     expect(await recovery(page)).toEqual(cleared);
 });

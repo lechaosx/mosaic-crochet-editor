@@ -4,7 +4,7 @@ import { axisIsProjectValid } from "./symmetry";
 import { emptyGridRecipe, gridRecipeError } from "./grid-recipes";
 import type { Axis, GridRecipe, PatternState } from "./types";
 
-export const MCW_VERSION = 3;
+export const MCW_VERSION = 4;
 
 // This is the complete editable project boundary. Workspace controls,
 // selection state, app preferences, and history deliberately stay outside it.
@@ -27,8 +27,8 @@ interface McwV2 {
     colorB:  string;
 }
 
-interface McwV3 extends Omit<McwV2, "version"> {
-    version: 3;
+interface McwV4 extends Omit<McwV2, "version"> {
+    version: 4;
     axes: Axis[];
     recipes?: unknown[];
     dangerColorOverride?: string;
@@ -53,7 +53,7 @@ function unpackMask(source: string, length: number): Uint8Array {
     return mask;
 }
 
-function readRecipes(value: unknown): GridRecipe[] {
+function readRecipes(value: unknown, legacy = false): GridRecipe[] {
     if (value === undefined) return [emptyGridRecipe()];
     if (!Array.isArray(value)) throw invalidFile();
     const ids = new Set<string>();
@@ -74,10 +74,12 @@ function readRecipes(value: unknown): GridRecipe[] {
             if (item[key] === undefined) return fallback;
             return number(key);
         };
-        const string = (key: string) => {
-            if (typeof item[key] !== "string") throw invalidFile();
-            return item[key] as string;
+        const boolean = (key: string) => {
+            if (typeof item[key] !== "boolean") throw invalidFile();
+            return item[key] as boolean;
         };
+        if (legacy && [item.columnOrientation, item.rowOrientation]
+            .some(value => value !== "same" && value !== "alternate-mirrored")) throw invalidFile();
         let mask: Uint8Array;
         try { mask = unpackMask(item.source.mask, item.source.w * item.source.h); }
         catch { throw invalidFile(); }
@@ -99,8 +101,10 @@ function readRecipes(value: unknown): GridRecipe[] {
             columnSpacingAlternate: columnSpacing,
             rowSpacingAlternate: rowSpacing,
             columnOffset: number("columnOffset"), rowOffset: number("rowOffset"),
-            columnOrientation: string("columnOrientation") as GridRecipe["columnOrientation"],
-            rowOrientation: string("rowOrientation") as GridRecipe["rowOrientation"],
+            columnMirrorHorizontal: legacy ? item.columnOrientation === "alternate-mirrored" : boolean("columnMirrorHorizontal"),
+            columnMirrorVertical: legacy ? false : boolean("columnMirrorVertical"),
+            rowMirrorHorizontal: legacy ? false : boolean("rowMirrorHorizontal"),
+            rowMirrorVertical: legacy ? item.rowOrientation === "alternate-mirrored" : boolean("rowMirrorVertical"),
             rotationCentreX: optionalNumber("rotationCentreX", item.source.x + (item.source.w - 1) / 2),
             rotationCentreY: optionalNumber("rotationCentreY", item.source.y + (item.source.h - 1) / 2),
             rotationTurns: rotationTurns as GridRecipe["rotationTurns"],
@@ -113,7 +117,7 @@ function readRecipes(value: unknown): GridRecipe[] {
     return recipes.length > 0 ? recipes : [emptyGridRecipe()];
 }
 
-function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV3["recipes"] {
+function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV4["recipes"] {
     const checked = readRecipes(recipes.map(recipe => ({ ...recipe, source: {
         ...recipe.source,
         mask: packMask(recipe.source.mask),
@@ -181,7 +185,7 @@ export function encodeMcw(document: Readonly<ProjectDocument>): string {
     if (document.pixels.length !== document.pattern.canvasWidth * document.pattern.canvasHeight) {
         throw invalidFile();
     }
-    const file: McwV3 = {
+    const file: McwV4 = {
         version: MCW_VERSION,
         state: document.pattern,
         pixels: packPixels(document.pixels),
@@ -208,7 +212,7 @@ export function decodeMcw(source: string): ProjectDocument {
     if (typeof parsed.version === "number" && Number.isInteger(parsed.version) && parsed.version > MCW_VERSION) {
         throw new Error(`This pattern uses unsupported .mcw version ${parsed.version}.`);
     }
-    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== MCW_VERSION) throw invalidFile();
+    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== MCW_VERSION) throw invalidFile();
 
     const common = readCommon(parsed);
     const expectedLength = common.pattern.canvasWidth * common.pattern.canvasHeight;
@@ -224,14 +228,14 @@ export function decodeMcw(source: string): ProjectDocument {
     }
     if (typeof parsed.pixels !== "string") throw invalidFile();
     try {
-        const recipes = parsed.version === 3 ? readRecipes(parsed.recipes) : [emptyGridRecipe()];
+        const recipes = parsed.version >= 3 ? readRecipes(parsed.recipes, parsed.version === 3) : [emptyGridRecipe()];
         return {
             ...common,
             pixels: unpackPixels(parsed.pixels, common.pattern),
-            axes: parsed.version === 3 ? readAxes(parsed.axes, common.pattern) : [],
+            axes: parsed.version >= 3 ? readAxes(parsed.axes, common.pattern) : [],
             recipes,
-            dangerColorOverride: parsed.version === 3 ? readColorOverride(parsed.dangerColorOverride) : null,
-            accentColorOverride: parsed.version === 3 ? readColorOverride(parsed.accentColorOverride) : null,
+            dangerColorOverride: parsed.version >= 3 ? readColorOverride(parsed.dangerColorOverride) : null,
+            accentColorOverride: parsed.version >= 3 ? readColorOverride(parsed.accentColorOverride) : null,
         };
     } catch {
         throw invalidFile();

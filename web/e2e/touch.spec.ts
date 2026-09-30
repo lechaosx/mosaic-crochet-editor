@@ -87,7 +87,7 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await page.getByRole("button", { name: "Close inspector" }).tap();
     await page.touchscreen.tap(painted.cx, painted.cy);
 
-    const summary = page.getByRole("button", { name: /1 selected/ });
+    const summary = page.getByRole("button", { name: "Select", exact: true });
     await expect(summary).toBeVisible();
     await summary.tap();
 
@@ -123,15 +123,18 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await summary.click();
 
     await card.getByRole("button", { name: "Cut" }).click();
-    const clipboardSummary = page.getByRole("button", { name: /clipboard has 1 cell/i });
+    const clipboardSummary = page.locator("#status-selection");
     await expect(clipboardSummary).toBeVisible();
     const hovered = await cellCoord(page, 2, 1);
     await page.mouse.move(hovered.cx, hovered.cy);
     await expect(clipboardSummary).toBeVisible();
     await card.getByRole("button", { name: "Paste" }).click();
-    await expect(page.getByRole("button", { name: "1 selected" })).toBeVisible();
+    await expect(page.locator("#status-selection")).toHaveText("1 selected");
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await summary.click();
     await card.getByRole("button", { name: "Deselect" }).click();
-    await expect(summary).toBeHidden();
+    await expect(card).toBeHidden();
+    await expect(clipboardSummary).toHaveText("1 copied");
     expect(await pixelRGB(page, destination.cx, destination.cy)).toEqual([0, 0, 0]);
 });
 

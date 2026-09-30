@@ -286,7 +286,7 @@ describe("saveToFile", () => {
 
         await expect(saveToFile(session)).resolves.toBe(true);
         const file = JSON.parse(written);
-        expect(file).toMatchObject({ version: 3, axes: session.axes });
+        expect(file).toMatchObject({ version: 4, axes: session.axes });
         expect(file.recipes).toHaveLength(1);
         expect(file).toMatchObject({
             dangerColorOverride: "#123456",

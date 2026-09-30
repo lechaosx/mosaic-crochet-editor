@@ -6,7 +6,8 @@ const noGrid = {
     columnSpacing: 0, rowSpacing: 0,
     columnSpacingAlternate: 0, rowSpacingAlternate: 0,
     columnOffset: 0, rowOffset: 0,
-    columnOrientation: "same" as const, rowOrientation: "same" as const,
+    columnMirrorHorizontal: false, columnMirrorVertical: false,
+    rowMirrorHorizontal: false, rowMirrorVertical: false,
 };
 
 function recipeId(): string {
@@ -23,7 +24,8 @@ export function gridRecipeFromFloat(float: Float): GridRecipe {
         columnSpacing: 0, rowSpacing: 0,
         columnSpacingAlternate: 0, rowSpacingAlternate: 0,
         columnOffset: 0, rowOffset: 0,
-        columnOrientation: "same", rowOrientation: "same",
+        columnMirrorHorizontal: false, columnMirrorVertical: false,
+        rowMirrorHorizontal: false, rowMirrorVertical: false,
         rotationCentreX: float.x + (float.w - 1) / 2,
         rotationCentreY: float.y + (float.h - 1) / 2,
         rotationTurns: [],
@@ -165,13 +167,22 @@ export function restoreGridRecipes(value: unknown): GridRecipe[] {
     const recipes: GridRecipe[] = [];
     for (const raw of value) {
         if (!raw || typeof raw !== "object") continue;
-        const recipe = raw as Partial<Omit<GridRecipe, "source">> & { source?: Partial<Omit<GridRecipe["source"], "mask">> & { mask?: unknown } };
+        const recipe = raw as { columnOrientation?: unknown; rowOrientation?: unknown } & Partial<Omit<GridRecipe, "source">> & { source?: Partial<Omit<GridRecipe["source"], "mask">> & { mask?: unknown } };
         const source = recipe.source;
         if (!source || !Array.isArray(source.mask) || typeof recipe.id !== "string" || ids.has(recipe.id)) continue;
         const mask = Uint8Array.from(source.mask.map(Number));
         if (mask.length !== source.mask.length || mask.some(value => value !== 0 && value !== 1)) continue;
+        const { columnOrientation, rowOrientation, ...current } = recipe;
+        const legacy = [recipe.columnMirrorHorizontal, recipe.columnMirrorVertical,
+            recipe.rowMirrorHorizontal, recipe.rowMirrorVertical].every(value => value === undefined);
+        if (legacy && [columnOrientation, rowOrientation]
+            .some(value => value !== "same" && value !== "alternate-mirrored")) continue;
         const restored = {
-            ...recipe,
+            ...current,
+            columnMirrorHorizontal: legacy ? columnOrientation === "alternate-mirrored" : recipe.columnMirrorHorizontal,
+            columnMirrorVertical: legacy ? false : recipe.columnMirrorVertical,
+            rowMirrorHorizontal: legacy ? false : recipe.rowMirrorHorizontal,
+            rowMirrorVertical: legacy ? rowOrientation === "alternate-mirrored" : recipe.rowMirrorVertical,
             enabled: true,
             mode: recipe.mode ?? "grid",
             columnSpacingAlternate: recipe.columnSpacing,

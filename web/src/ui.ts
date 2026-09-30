@@ -162,7 +162,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         pattern: el("edit-pattern-widget"),
     };
     const inspectorTriggers: Record<InspectorPanel, HTMLElement> = {
-        selection: el("selection-actions"),
+        selection: el("tool-select"),
         move: el("tool-move"),
         settings: el("btn-hl-toggle"),
         transforms: el("btn-sym-toggle"),
@@ -237,7 +237,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     const panelTriggers: Record<InspectorPanel, HTMLElement[]> = {
-        selection: [el("selection-actions"), el("tool-select"), el("tool-wand")],
+        selection: [el("tool-select"), el("tool-wand")],
         move: [el("tool-move")],
         settings: [el("btn-hl-toggle")],
         transforms: [el("btn-sym-toggle")],
@@ -361,7 +361,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     /* ── Selection card ──────────────────────────────────────────────── */
-    const selectionTrigger = el<HTMLButtonElement>("selection-actions");
     const selectionStatus = el("status-selection");
     const selectionModeControls = el("selection-mode-controls");
     const selectionModeButtons: Record<SelectionMode, HTMLButtonElement> = {
@@ -382,14 +381,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
         "mask-only": el("selection-mode-area"),
     };
 
-    selectionTrigger.addEventListener("click", event => {
-        event.preventDefault();
-        if (isInspectorOpen("selection")) closeInspector();
-        else {
-            openInspector("selection", "Selection");
-            focusFirstInspectorControl("selection");
-        }
-    });
     (Object.keys(selectionModeButtons) as SelectionMode[]).forEach(mode =>
         selectionModeButtons[mode].addEventListener("click", () => cb.onSelectionMode(mode))
     );
@@ -426,22 +417,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const hasSelection = selectedCount > 0;
         const hasClip = clipboardCount > 0;
         const statusVisibilityChanged = selectionStatus.hidden === (hasSelection || hasClip);
-        selectionTrigger.disabled = false;
         if (hasSelection) {
-            selectionTrigger.textContent = `Selection · ${selectedCount}`;
-            selectionTrigger.setAttribute("aria-label", `Selection actions, ${selectedCount} selected`);
-            selectionTrigger.title = `Open actions for ${selectedCount} selected ${selectedCount === 1 ? "cell" : "cells"}`;
             selectionTitle.textContent = `Selection · ${selectedCount} ${selectedCount === 1 ? "cell" : "cells"}`;
             selectionStatus.textContent = `${selectedCount} selected`;
         } else if (hasClip) {
-            selectionTrigger.textContent = `Clipboard · ${clipboardCount}`;
-            selectionTrigger.setAttribute("aria-label", `Selection actions, clipboard has ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`);
-            selectionTrigger.title = `Open clipboard actions for ${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"}`;
             selectionTitle.textContent = "Clipboard";
             selectionStatus.textContent = `${clipboardCount} copied`;
         } else {
-            selectionTrigger.textContent = "Selection";
-            selectionTrigger.setAttribute("aria-label", "Selection actions");
+            selectionTitle.textContent = "Selection";
             selectionStatus.textContent = "";
         }
         selectionStatus.hidden = !hasSelection && !hasClip;
@@ -610,8 +593,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const recipeDown = el<HTMLInputElement>("recipe-down");
     const recipeGapX = el<HTMLInputElement>("recipe-gap-x");
     const recipeGapY = el<HTMLInputElement>("recipe-gap-y");
-    const recipeColumnMirrored = el<HTMLInputElement>("recipe-column-mirrored");
-    const recipeRowMirrored = el<HTMLInputElement>("recipe-row-mirrored");
+    const recipeColumnMirrorHorizontal = el<HTMLInputElement>("recipe-column-mirror-horizontal");
+    const recipeColumnMirrorVertical = el<HTMLInputElement>("recipe-column-mirror-vertical");
+    const recipeRowMirrorHorizontal = el<HTMLInputElement>("recipe-row-mirror-horizontal");
+    const recipeRowMirrorVertical = el<HTMLInputElement>("recipe-row-mirror-vertical");
     const recipeColumnOffset = el<HTMLInputElement>("recipe-column-offset");
     const recipeRowOffset = el<HTMLInputElement>("recipe-row-offset");
     const recipeCentreX = el<HTMLInputElement>("recipe-centre-x");
@@ -627,7 +612,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el("recipe-apply").addEventListener("click", cb.onApplyRecipe);
     const recipeInputs = [
         recipeLeft, recipeRight, recipeUp, recipeDown,
-        recipeGapX, recipeGapY, recipeColumnMirrored, recipeRowMirrored,
+        recipeGapX, recipeGapY, recipeColumnMirrorHorizontal, recipeColumnMirrorVertical,
+        recipeRowMirrorHorizontal, recipeRowMirrorVertical,
         recipeColumnOffset, recipeRowOffset, recipeCentreX, recipeCentreY,
         ...recipeTurns, recipeMirrorHorizontal, recipeMirrorVertical,
         ...document.querySelectorAll<HTMLInputElement>('[name="recipe-mode"]'),
@@ -651,8 +637,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
             rowSpacing: recipeGapY.valueAsNumber,
             columnOffset: recipeColumnOffset.valueAsNumber,
             rowOffset: recipeRowOffset.valueAsNumber,
-            columnOrientation: recipeColumnMirrored.checked ? "alternate-mirrored" : "same",
-            rowOrientation: recipeRowMirrored.checked ? "alternate-mirrored" : "same",
+            columnMirrorHorizontal: recipeColumnMirrorHorizontal.checked,
+            columnMirrorVertical: recipeColumnMirrorVertical.checked,
+            rowMirrorHorizontal: recipeRowMirrorHorizontal.checked,
+            rowMirrorVertical: recipeRowMirrorVertical.checked,
             rotationCentreX: recipeCentreX.valueAsNumber,
             rotationCentreY: recipeCentreY.valueAsNumber,
             rotationTurns: recipeTurns.filter(input => input.checked).map(input => Number(input.value)) as GridRecipe["rotationTurns"],
@@ -666,22 +654,35 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setRecipes(recipes: ReadonlyArray<GridRecipe>, activeId: string | null) {
         const currentId = activeId ?? recipes[0]?.id ?? null;
         if (recipes !== projectedRecipes || activeId !== projectedActiveRecipeId) {
+            const focused = document.activeElement instanceof HTMLButtonElement
+                && recipeList.contains(document.activeElement) ? document.activeElement : null;
+            const focusedId = focused?.dataset.recipeId;
+            const focusedIndex = projectedRecipes?.findIndex(recipe => recipe.id === focusedId) ?? -1;
             projectedRecipes = recipes;
             projectedActiveRecipeId = activeId;
             selectedRecipeId = currentId;
             recipeList.replaceChildren(...recipes.map((recipe, index) => {
-                const row = document.createElement("div");
+                const row = document.createElement("li");
+                row.className = "recipe-list-row";
+                row.dataset.recipeId = recipe.id;
                 const activate = document.createElement("button");
-                activate.className = "btn";
-                activate.textContent = recipe.source.mask.length === 0
-                    ? `Selection ${index + 1} · Empty`
-                    : `Selection ${index + 1} · ${recipe.source.w}\u00a0×\u00a0${recipe.source.h}`;
+                activate.className = "btn btn--ghost recipe-list-activate";
+                const name = document.createElement("span");
+                name.textContent = `Selection ${index + 1}`;
+                const detail = document.createElement("span");
+                detail.className = "recipe-list-detail";
+                detail.textContent = recipe.source.mask.length === 0
+                    ? "Empty" : `${recipe.source.w}\u00a0×\u00a0${recipe.source.h}`;
+                activate.append(name, detail);
                 activate.title = "Select this saved selection";
                 activate.dataset.recipeId = recipe.id;
+                activate.dataset.recipeAction = "activate";
                 activate.setAttribute("aria-pressed", String(recipe.id === currentId));
                 activate.addEventListener("click", () => cb.onActivateRecipe(recipe.id));
                 const remove = document.createElement("button");
                 remove.className = "btn btn--icon"; remove.textContent = "×";
+                remove.dataset.recipeId = recipe.id;
+                remove.dataset.recipeAction = "delete";
                 remove.setAttribute("aria-label", `Delete selection ${index + 1}`);
                 remove.title = recipes.length === 1 ? "At least one selection is required" : `Delete selection ${index + 1}`;
                 remove.disabled = recipes.length === 1;
@@ -689,6 +690,14 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 row.append(activate, remove);
                 return row;
             }));
+            if (focused) {
+                const fallback = recipes.find(recipe => recipe.id === focusedId)
+                    ?? recipes[Math.min(focusedIndex, recipes.length - 1)];
+                const row = Array.from(recipeList.children)
+                    .find(child => (child as HTMLElement).dataset.recipeId === fallback?.id);
+                const target = row?.querySelector<HTMLButtonElement>(`[data-recipe-action='${focused.dataset.recipeAction}']`);
+                (target?.disabled ? row?.querySelector<HTMLButtonElement>("[data-recipe-action='activate']") : target)?.focus();
+            }
         }
         const active = currentId === null ? null : recipes.find(recipe => recipe.id === currentId) ?? null;
         recipeControls.hidden = active === null;
@@ -702,8 +711,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         recipeGapY.value = String(active.rowSpacing);
         recipeColumnOffset.value = String(active.columnOffset);
         recipeRowOffset.value = String(active.rowOffset);
-        recipeColumnMirrored.checked = active.columnOrientation === "alternate-mirrored";
-        recipeRowMirrored.checked = active.rowOrientation === "alternate-mirrored";
+        recipeColumnMirrorHorizontal.checked = active.columnMirrorHorizontal;
+        recipeColumnMirrorVertical.checked = active.columnMirrorVertical;
+        recipeRowMirrorHorizontal.checked = active.rowMirrorHorizontal;
+        recipeRowMirrorVertical.checked = active.rowMirrorVertical;
         recipeCentreX.value = String(active.rotationCentreX);
         recipeCentreY.value = String(active.rotationCentreY);
         recipeTurns.forEach(input => { input.checked = active.rotationTurns.includes(Number(input.value) as 90 | 180 | 270); });

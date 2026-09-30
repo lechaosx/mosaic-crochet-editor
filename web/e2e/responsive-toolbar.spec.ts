@@ -222,7 +222,7 @@ test("phone contextual, Settings, and Pattern colour controls keep 44px targets"
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
     await page.keyboard.press("Control+a");
-    const selection = await page.locator("#selection-actions").boundingBox();
+    const selection = await page.locator("#tool-select").boundingBox();
     expect(selection!.height).toBeGreaterThanOrEqual(44);
 
     await page.getByRole("button", { name: "Menu" }).click();

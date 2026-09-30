@@ -209,7 +209,7 @@ export function screenToPatternFrac(
 
 export function fitToView(
     canvas: HTMLCanvasElement, view: ViewState, pattern: PatternState, rotationDeg: number,
-    labelsVisible: boolean, workspace: CanvasWorkspace,
+    workspace: CanvasWorkspace,
 ) {
     const rect = canvas.getBoundingClientRect();
     const width = Math.max(0, workspace.right - workspace.left);
@@ -234,7 +234,7 @@ export function fitToView(
     include(-W / 2,  H / 2);
     include( W / 2,  H / 2);
 
-    if (labelsVisible && pattern.mode === "row") {
+    if (pattern.mode === "row") {
         const labelWidth = 0.34 * String(H).length;
         // The right-aligned labels stay upright while their anchors rotate with the chart.
         const includeRowLabel = (y: number) => {
@@ -249,7 +249,7 @@ export function fitToView(
         };
         includeRowLabel(0.5);
         includeRowLabel(H - 0.5);
-    } else if (labelsVisible && pattern.mode === "round" && pattern.offsetY !== 0) {
+    } else if (pattern.mode === "round" && pattern.offsetY !== 0) {
         const halfWidth = 0.34 * String(pattern.rounds).length;
         const includeRoundLabel = (x: number) => {
             include(x - W / 2, -H / 2 - 1.1, halfWidth, 0.28);

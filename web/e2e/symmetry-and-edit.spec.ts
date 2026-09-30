@@ -162,7 +162,7 @@ test("saved repeat extends the active selection and applies its instances", asyn
     await page.keyboard.press("s");
     await clickCell(page, 2, 1);
     if (!await page.locator("#selection-popover").isVisible()) {
-        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.getByRole("button", { name: "Select", exact: true }).click();
     }
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").press("Enter");
@@ -179,21 +179,21 @@ test("saved repeat extends the active selection and applies its instances", asyn
     await clickCell(page, 2, 1);
     expect(await pixelRGB(page, source.cx, source.cy)).toEqual([0, 0, 0]);
     expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([0, 0, 0]);
-    await expect(page.locator("#recipe-list")).toContainText("Selection 1 · 1\u00a0×\u00a01");
+    await expect(page.locator("#recipe-list")).toContainText("Selection 11\u00a0×\u00a01");
 });
 
 test("Selection starts with one editable slot and New selection preserves earlier entries", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Selection 1 · Empty" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Selection 1 Empty" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Delete selection 1" })).toBeDisabled();
 
     await clickCell(page, 2, 1);
-    await expect(page.getByRole("button", { name: "Selection 1 · 1 × 1" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Selection 1 1 × 1" })).toBeVisible();
     await page.getByRole("button", { name: "New selection" }).click();
 
-    await expect(page.getByRole("button", { name: "Selection 1 · 1 × 1" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Selection 2 · Empty" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Selection 1 1 × 1" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Selection 2 Empty" })).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Delete selection 2" }).click();
     await expect(page.locator("#recipe-list").getByRole("button", { name: /^Selection/ })).toHaveCount(1);
 });
@@ -266,7 +266,7 @@ test("saved grid repeats apply independent directions, angled vectors, and one g
     await page.locator("#recipe-down").fill("1");
     await page.locator("#recipe-column-offset").fill("1");
     await page.locator("#recipe-row-offset").fill("2");
-    await page.locator("label:has(#recipe-column-mirrored)").click();
+    await page.locator("label:has(#recipe-column-mirror-horizontal)").click();
     await page.locator("#recipe-gap-x").fill("1");
     await page.locator("#recipe-gap-x").dispatchEvent("change");
     await page.locator("#recipe-apply").click();
@@ -461,7 +461,7 @@ test("saved repeat source follows moves and pointer cancel restores it", async (
     await page.keyboard.press("s");
     await clickCell(page, 2, 1);
     if (!await page.locator("#selection-popover").isVisible()) {
-        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.getByRole("button", { name: "Select", exact: true }).click();
     }
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").press("Enter");
@@ -471,7 +471,7 @@ test("saved repeat source follows moves and pointer cancel restores it", async (
         JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
     )).toBe(3);
     if (!await page.locator("#selection-popover").isVisible()) {
-        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.getByRole("button", { name: "Select", exact: true }).click();
     }
     await page.locator("#recipe-apply").click();
     const movedCopy = await cellCoord(page, 4, 1);
@@ -485,7 +485,7 @@ test("saved repeat source follows moves and pointer cancel restores it", async (
     });
     await page.mouse.up();
     if (!await page.locator("#selection-popover").isVisible()) {
-        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.getByRole("button", { name: "Select", exact: true }).click();
     }
     await page.locator("#recipe-apply").click();
     expect(await pixelRGB(page, movedCopy.cx, movedCopy.cy)).toEqual([0, 0, 0]);
@@ -510,7 +510,7 @@ test("wand pointer cancel restores the saved repeat source transaction", async (
     });
     await page.mouse.up();
     if (!await page.locator("#selection-popover").isVisible()) {
-        await page.getByRole("button", { name: /Selection actions/ }).click();
+        await page.getByRole("button", { name: "Select", exact: true }).click();
     }
 
     await page.locator("#recipe-apply").click();
@@ -538,7 +538,7 @@ test("saved repeat source follows an explicit duplicate move", async ({ page }) 
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
     )).toBe(3);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.locator("#recipe-apply").click();
 
     const original = await cellCoord(page, 1, 1);
@@ -569,7 +569,7 @@ test("saved repeat source follows an explicit move-area move", async ({ page }) 
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
     )).toBe(3);
-    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.locator("#recipe-apply").click();
 
     const original = await cellCoord(page, 1, 1);
@@ -586,14 +586,14 @@ test("Pattern resize deactivates a saved repeat when it removes the source selec
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await expect(page.getByRole("button", { name: /^Selection 1 ·/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: /^Selection 1 / })).toHaveAttribute("aria-pressed", "true");
 
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").press("Tab");
-    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
 
-    await expect(page.getByRole("button", { name: /^Selection 1 ·/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: /^Selection 1 / })).toHaveAttribute("aria-pressed", "true");
 });
 
 for (const action of ["Cut", "Deselect"] as const) {
@@ -601,7 +601,7 @@ for (const action of ["Cut", "Deselect"] as const) {
         await bootApp(page);
         await page.getByRole("button", { name: "Select", exact: true }).click();
         await clickCell(page, 2, 1);
-        const recipe = page.getByRole("button", { name: /^Selection 1 ·/ });
+        const recipe = page.getByRole("button", { name: /^Selection 1 / });
         await expect(recipe).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator("#recipe-controls")).toBeVisible();
 
@@ -609,7 +609,7 @@ for (const action of ["Cut", "Deselect"] as const) {
 
         if (action === "Deselect") {
             await expect(page.getByRole("dialog", { name: "Selection" })).toBeHidden();
-            await page.getByRole("button", { name: "Selection actions" }).click();
+            await page.getByRole("button", { name: "Select", exact: true }).click();
         }
         await expect(recipe).toHaveAttribute("aria-pressed", "true");
     });
@@ -710,9 +710,9 @@ test("invalid Pattern preview restores the active saved-repeat source", async ({
     await page.locator("#edit-width").fill("2000000");
     await expect(page.locator("#edit-error")).toBeVisible();
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: /Selection actions/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
 
-    await expect(page.getByRole("button", { name: /^Selection 1 ·/ }))
+    await expect(page.getByRole("button", { name: /^Selection 1 / }))
         .toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("#recipe-controls")).toBeVisible();
 });
@@ -766,11 +766,11 @@ test("Load rejects a future file without replacing the active session", async ({
     await chooser.setFiles({
         name: "future.mcw",
         mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify({ version: 4 })),
+        buffer: Buffer.from(JSON.stringify({ version: 5 })),
     });
 
     const alert = page.getByRole("alert");
-    await expect(alert).toContainText("This pattern uses unsupported .mcw version 4.");
+    await expect(alert).toContainText("This pattern uses unsupported .mcw version 5.");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
 
     await page.setViewportSize({ width: 360, height: 740 });

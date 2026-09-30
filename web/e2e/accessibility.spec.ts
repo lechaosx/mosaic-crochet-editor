@@ -182,19 +182,19 @@ test("closing an inspector restores focus to the available authoring context", a
     await expect(settings).toBeFocused();
 
     await page.keyboard.press("Control+a");
-    await page.getByRole("button", { name: /selected/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.getByRole("button", { name: "Deselect" }).click();
     await expect(selectionInspector).toBeHidden();
-    await expect(page.getByRole("button", { name: "Pencil" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
 
     for (const name of ["Clear overlay", "Invert overlay"] as const) {
         const action = page.getByRole("button", { name });
         await action.click();
         await page.keyboard.press("Control+a");
-        await page.getByRole("button", { name: /selected/ }).click();
+        await page.getByRole("button", { name: "Select", exact: true }).click();
         await page.getByRole("button", { name: "Deselect" }).click();
         await expect(selectionInspector).toBeHidden();
-        await expect(action).toBeFocused();
+        await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
     }
 
     await page.setViewportSize({ width: 360, height: 740 });
@@ -254,12 +254,12 @@ test("compact menu navigation does not move selected canvas content", async ({ p
     await page.getByRole("button", { name: "Close inspector" }).click();
     const selectedCell = await cellCoord(page, 0, 1);
     await page.mouse.click(selectedCell.cx, selectedCell.cy);
-    await expect(page.getByRole("button", { name: /selected/ })).toBeVisible();
+    await expect(page.locator("#status-selection")).toBeVisible();
 
     await page.getByRole("button", { name: "Menu" }).click();
     await page.keyboard.press("ArrowDown");
     await page.locator("#more-popover").evaluate((popover: HTMLElement) => popover.hidePopover());
-    await page.getByRole("button", { name: /selected/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.getByRole("button", { name: "Deselect" }).click();
 
     const original = await cellCoord(page, 0, 1);
@@ -269,7 +269,7 @@ test("compact menu navigation does not move selected canvas content", async ({ p
 test("Escape closes an inspector before applying a canvas shortcut", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("Control+a");
-    const selection = page.getByRole("button", { name: /selected/ });
+    const selection = page.getByRole("button", { name: "Select", exact: true });
     await selection.click();
 
     await page.keyboard.press("Escape");
@@ -278,7 +278,7 @@ test("Escape closes an inspector before applying a canvas shortcut", async ({ pa
     await expect(selection).toBeFocused();
 
     await page.keyboard.press("Escape");
-    await expect(selection).toBeHidden();
+    await expect(page.locator("#status-selection")).toBeHidden();
 
     const settings = page.getByRole("button", { name: "Settings" });
     await settings.click();
@@ -303,7 +303,7 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await page.getByRole("button", { name: "Close inspector" }).click();
 
     await page.keyboard.press("Control+a");
-    await page.getByRole("button", { name: /selected/ }).click();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
     await expectHoverLabels("Selection inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
@@ -328,8 +328,8 @@ test("explicit inspector opening moves focus to its first available control", as
     await page.keyboard.press("Escape");
 
     await page.keyboard.press("Control+a");
-    await page.getByRole("button", { name: /selected/ }).click();
-    await expect(page.getByRole("button", { name: "Copy" })).toBeFocused();
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", { name: /Global Mirror/ }).click();

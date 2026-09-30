@@ -7,6 +7,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Pattern colour samples use chart geometry, diagonal mirror guides, and marching selection outlines; colour resets are unavailable when the default is already selected.
 - Crochet highlights the current row or round boundary and direction, with compact instructions and row numbers on yarn-coloured squares.
 - Clear design removes drawing, selections, repeats, and mirror axes together, with Undo restoring them.
+- Saved selections use a row list and open through selection tools, with independent horizontal and vertical mirrors for both columns and rows of copies.
 
 ## 28 September 2026
 

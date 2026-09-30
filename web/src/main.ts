@@ -745,7 +745,7 @@ function resetRotation() {
 function fitPattern() {
     fitToView(
         viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
-        preferences.labelsVisible, ui.getCanvasWorkspace(),
+        ui.getCanvasWorkspace(),
     );
     renderCanvas();
     ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
@@ -863,7 +863,7 @@ function onEditChange(clearDesign = false): boolean {
     ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
     if (!clearDesign) {
         fitToView(
-            viewport.canvas, viewport.view, pattern, store.state.rotation, preferences.labelsVisible,
+            viewport.canvas, viewport.view, pattern, store.state.rotation,
             ui.getCanvasWorkspace(),
         );
     }
@@ -934,7 +934,7 @@ function onEditRevert() {
     editBaseline = null;
     fitToView(
         viewport.canvas, viewport.view, baseline.pattern, store.state.rotation,
-        preferences.labelsVisible, ui.getCanvasWorkspace(),
+        ui.getCanvasWorkspace(),
     );
     applyingPatternPreview = true;
     try {
@@ -962,7 +962,7 @@ function applyRestored(r: Restored) {
     if (dimsChanged) {
         fitToView(
             viewport.canvas, viewport.view, r.pattern, store.state.rotation,
-            preferences.labelsVisible, ui.getCanvasWorkspace(),
+            ui.getCanvasWorkspace(),
         );
     }
     store.replace(
@@ -1021,7 +1021,7 @@ async function onLoad() {
     if (!sameAuthoredPattern(loaded.pattern, loaded.pixels)) clearCrochetProgress();
     fitToView(
         viewport.canvas, viewport.view, loaded.pattern, store.state.rotation,
-        preferences.labelsVisible, ui.getCanvasWorkspace(),
+        ui.getCanvasWorkspace(),
     );
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
@@ -1324,7 +1324,7 @@ function beginFreshPattern() {
     ).slice();
     if (!sameAuthoredPattern(fresh.pattern, fresh.pixels)) clearCrochetProgress();
     fitToView(
-        viewport.canvas, viewport.view, fresh.pattern, fresh.rotation, preferences.labelsVisible,
+        viewport.canvas, viewport.view, fresh.pattern, fresh.rotation,
         ui.getCanvasWorkspace(),
     );
     historyReset(fresh);
@@ -1345,7 +1345,7 @@ function useExample() {
     const example = exampleSession();
     fitToView(
         viewport.canvas, viewport.view, example.pattern, example.rotation,
-        preferences.labelsVisible, ui.getCanvasWorkspace(),
+        ui.getCanvasWorkspace(),
     );
     historyReset(example);
     store.replace(example, { persist: true });
@@ -1951,7 +1951,7 @@ ui.setCrochetErrors(crochetErrorCount());
 if (saved) {
     fitToView(
         viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,
-        preferences.labelsVisible, ui.getCanvasWorkspace(),
+        ui.getCanvasWorkspace(),
     );
     refreshSymmetryUi();
     historyEnsureInitialized(store.state);
@@ -1960,7 +1960,7 @@ if (saved) {
     const { pattern, pixels } = applyEditSettings();
     fitToView(
         viewport.canvas, viewport.view, pattern, store.state.rotation,
-        preferences.labelsVisible, ui.getCanvasWorkspace(),
+        ui.getCanvasWorkspace(),
     );
     store.commit(s => { s.pattern = pattern; s.pixels = pixels; }, { persist: false });
     refreshSymmetryUi();

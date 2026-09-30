@@ -58,7 +58,7 @@ describe("saved grid recipes", () => {
             right: 2,
             columnSpacing: 0,
             columnSpacingAlternate: 1,
-            columnOrientation: "alternate-mirrored",
+            columnMirrorHorizontal: true,
             source: { ...recipe.source, mask: [1, 0, 1] },
         }])[0];
 
@@ -125,7 +125,7 @@ describe("saved grid recipes", () => {
         recipe.left = 1;
         recipe.up = 1;
         recipe.rowOffset = 2;
-        recipe.columnOrientation = "alternate-mirrored";
+        recipe.columnMirrorHorizontal = true;
         expect(gridRecipeError(recipe)).toBeNull();
     });
 
@@ -178,7 +178,7 @@ describe("saved grid recipes", () => {
             right: 2,
             columnSpacing: 1,
             columnSpacingAlternate: 1,
-            columnOrientation: "alternate-mirrored",
+            columnMirrorHorizontal: true,
         });
 
         expect(evaluateGridRecipe(recipe).instances.map(instance => instance.map(cell => cell.x))).toEqual([
@@ -236,4 +236,22 @@ describe("saved grid recipes", () => {
             rotationCentreY: 4,
         });
     });
+});
+
+
+test("recovery and history migrate legacy orientations and validate all mirror flags", () => {
+    const recipe = gridRecipeFromFloat({ x: 0, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 2]) });
+    const legacy: Record<string, unknown> = { ...recipe, columnOrientation: "alternate-mirrored",
+        rowOrientation: "alternate-mirrored", source: { ...recipe.source, mask: [1, 1] } };
+    for (const field of ["columnMirrorHorizontal", "columnMirrorVertical", "rowMirrorHorizontal", "rowMirrorVertical"]) delete legacy[field];
+    expect(restoreGridRecipes([legacy])[0]).toMatchObject({ columnMirrorHorizontal: true,
+        columnMirrorVertical: false, rowMirrorHorizontal: false, rowMirrorVertical: true });
+    expect(restoreGridRecipes([{ ...legacy, columnOrientation: "invalid" }])[0].source.w).toBe(0);
+    const modern = { ...recipe, columnMirrorHorizontal: true, columnMirrorVertical: true,
+        rowMirrorHorizontal: true, rowMirrorVertical: true, source: { ...recipe.source, mask: [1, 1] } };
+    expect(restoreGridRecipes([modern])[0]).toMatchObject({ columnMirrorHorizontal: true,
+        columnMirrorVertical: true, rowMirrorHorizontal: true, rowMirrorVertical: true });
+    for (const field of ["columnMirrorHorizontal", "columnMirrorVertical", "rowMirrorHorizontal", "rowMirrorVertical"]) {
+        expect(restoreGridRecipes([{ ...modern, [field]: "true" }])[0].source.w).toBe(0);
+    }
 });

@@ -17,11 +17,12 @@ export interface PackedGridRecipe {
     rowSpacingAlternate: number;
     columnOffset: number;
     rowOffset: number;
-    columnOrientation: GridOrientation;
-    rowOrientation: GridOrientation;
+    columnMirrorHorizontal: boolean;
+    columnMirrorVertical: boolean;
+    rowMirrorHorizontal: boolean;
+    rowMirrorVertical: boolean;
 }
 
-export type GridOrientation = "same" | "alternate-mirrored";
 export type QuarterTurn = 90 | 180 | 270;
 
 export interface AroundCentreRecipe {
@@ -95,21 +96,19 @@ export function evaluatePackedGrid(
     if (offsets.some(value => !Number.isSafeInteger(value))) {
         throw new RangeError("Grid offsets must be whole numbers.");
     }
-    const orientations = [recipe.columnOrientation, recipe.rowOrientation];
-    if (orientations.some(value => value !== "same" && value !== "alternate-mirrored")) {
-        throw new RangeError("Grid orientation is not supported.");
+    const mirrors = [recipe.columnMirrorHorizontal, recipe.columnMirrorVertical,
+        recipe.rowMirrorHorizontal, recipe.rowMirrorVertical];
+    if (mirrors.some(value => typeof value !== "boolean")) {
+        throw new RangeError("Grid mirror state must be boolean.");
     }
 
     const input = expandAroundCentre(source, aroundCentre);
-
-    const columnPacked = packedDistance(
-        input, "x", recipe.columnOffset,
-        recipe.columnOrientation === "alternate-mirrored",
-    );
-    const rowPacked = packedDistance(
-        input, "y", recipe.rowOffset,
-        recipe.rowOrientation === "alternate-mirrored",
-    );
+    const columnPacked = packedDistance(input, "x", recipe.columnOffset,
+        recipe.columnMirrorHorizontal, recipe.columnMirrorVertical,
+        recipe.rowMirrorHorizontal && rows > 1, recipe.rowMirrorVertical && rows > 1);
+    const rowPacked = packedDistance(input, "y", recipe.rowOffset,
+        recipe.rowMirrorHorizontal, recipe.rowMirrorVertical,
+        recipe.columnMirrorHorizontal && columns > 1, recipe.columnMirrorVertical && columns > 1);
     const columnStep = {
         x: safeAdd(columnPacked, recipe.columnSpacing),
         y: recipe.columnOffset,
@@ -140,8 +139,10 @@ export function evaluatePackedGrid(
                 safeMultiply(column, columnStep.y),
                 repeatDistance(row, rowStep.y, rowStepAlternate.y),
             );
-            const mirrorX = recipe.columnOrientation === "alternate-mirrored" && isOdd(column);
-            const mirrorY = recipe.rowOrientation === "alternate-mirrored" && isOdd(row);
+            const mirrorX = (recipe.columnMirrorHorizontal && isOdd(column))
+                !== (recipe.rowMirrorHorizontal && isOdd(row));
+            const mirrorY = (recipe.columnMirrorVertical && isOdd(column))
+                !== (recipe.rowMirrorVertical && isOdd(row));
             const instanceClaims = new Map<string, CellClaim>();
             for (const cell of input) {
                 const oriented = orientCell(cell, bounds, mirrorX, mirrorY);
@@ -315,27 +316,40 @@ function packedDistance(
     source: ReadonlyArray<TransformSourceCell>,
     primary: "x" | "y",
     crossOffset: number,
-    alternateMirrored: boolean,
+    mirrorX: boolean,
+    mirrorY: boolean,
+    otherMirrorX: boolean,
+    otherMirrorY: boolean,
 ): number {
-    const occupied = new Set<string>();
-    for (const cell of source) occupied.add(coordKey(cell.x, cell.y));
     const bounds = cellBounds(source);
     const span = primary === "x"
         ? safeAdd(safeSubtract(bounds.maxX, bounds.minX), 1)
         : safeAdd(safeSubtract(bounds.maxY, bounds.minY), 1);
+    const orientations = new Map<string, { occupied: Set<string>; neighbour: TransformSourceCell[] }>();
+    for (const primaryOdd of [false, true]) {
+        for (const otherOdd of [false, true]) {
+            const flipX = (mirrorX && primaryOdd) !== (otherMirrorX && otherOdd);
+            const flipY = (mirrorY && primaryOdd) !== (otherMirrorY && otherOdd);
+            const key = `${flipX},${flipY}`;
+            if (orientations.has(key)) continue;
+            orientations.set(key, {
+                occupied: new Set(source.map(cell => {
+                    const oriented = orientCell(cell, bounds, flipX, flipY);
+                    return coordKey(oriented.x, oriented.y);
+                })),
+                neighbour: source.map(cell => orientCell(cell, bounds, flipX !== mirrorX, flipY !== mirrorY)),
+            });
+        }
+    }
 
+    // A reflected row or column also reverses the cross offset's relation to a sparse motif.
     for (let distance = 1; distance <= span; distance++) {
-        const overlaps = [-1, 1].some(direction => source.some(cell => {
-            const oriented = orientCell(
-                cell,
-                bounds,
-                alternateMirrored && primary === "x",
-                alternateMirrored && primary === "y",
-            );
-            const x = safeAdd(oriented.x, safeMultiply(direction, primary === "x" ? distance : crossOffset));
-            const y = safeAdd(oriented.y, safeMultiply(direction, primary === "y" ? distance : crossOffset));
-            return occupied.has(coordKey(x, y));
-        }));
+        const overlaps = [...orientations.values()].some(({ occupied, neighbour }) =>
+            [-1, 1].some(direction => neighbour.some(cell => {
+                const x = safeAdd(cell.x, safeMultiply(direction, primary === "x" ? distance : crossOffset));
+                const y = safeAdd(cell.y, safeMultiply(direction, primary === "y" ? distance : crossOffset));
+                return occupied.has(coordKey(x, y));
+            })));
         if (!overlaps) return distance;
     }
     return span;

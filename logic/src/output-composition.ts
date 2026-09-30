@@ -37,8 +37,8 @@ const noGrid: PackedGridRecipe = {
     rowSpacingAlternate: 0,
     columnOffset: 0,
     rowOffset: 0,
-    columnOrientation: "same",
-    rowOrientation: "same",
+    columnMirrorHorizontal: false, columnMirrorVertical: false,
+    rowMirrorHorizontal: false, rowMirrorVertical: false,
 };
 
 export function composeOutput(
