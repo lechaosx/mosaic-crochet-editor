@@ -46,10 +46,7 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     await expect(page.getByRole("button", { name: /new patterns/i })).toHaveCount(0);
     const preview = page.getByRole("img", { name: /Rows colour preview/ });
     await expect(preview).toBeVisible();
-    await expect(preview.locator("[data-preview-cue='selection']")).toHaveCount(1);
-    await expect(preview.locator("[data-preview-cue='grid']")).toHaveCount(1);
-    await expect(preview.locator("[data-preview-cue='mirror']")).toHaveCount(1);
-    await expect(page.getByText("× overlay stitch · ! invalid overlay placement")).toBeVisible();
+    await expect(page.getByText("× overlay stitch · ! invalid overlay placement")).toHaveCount(0);
     await expect(page.locator("#edit-yarn")).toHaveCount(0);
     const danger = page.getByLabel("Project danger colour");
     const accent = page.getByLabel("Project accent colour");
@@ -64,22 +61,22 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     expect(await preview.evaluate(element => {
         const canvas = element.querySelector("canvas")!;
         const ctx = canvas.getContext("2d")!;
-        const rgb = (x: number, y: number) => Array.from(ctx.getImageData(x, y, 1, 1).data).slice(0, 3);
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
         let danger = false;
+        let accent = false;
+        let yarnA = false;
+        let yarnB = false;
         for (let i = 0; i < pixels.length; i += 4) {
             if (pixels[i] === 18 && pixels[i + 1] === 52 && pixels[i + 2] === 86) danger = true;
+            if (pixels[i] === 171 && pixels[i + 1] === 205 && pixels[i + 2] === 239) accent = true;
+            if (pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 0) yarnA = true;
+            if (pixels[i] === 255 && pixels[i + 1] === 255 && pixels[i + 2] === 255) yarnB = true;
         }
-        return {
-            yarnA: rgb(10, 10),
-            yarnB: rgb(10, 30),
-            accent: getComputedStyle(element.querySelector<HTMLElement>("[data-preview-cue='selection']")!).borderTopColor,
-            danger,
-        };
+        return { yarnA, yarnB, accent, danger };
     })).toEqual({
-        yarnA: [0, 0, 0],
-        yarnB: [255, 255, 255],
-        accent: "rgb(171, 205, 239)",
+        yarnA: true,
+        yarnB: true,
+        accent: true,
         danger: true,
     });
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document))
@@ -98,13 +95,16 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
 });
 
 test("the pattern swatch uses the chart's row and concentric-round yarn geometry", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     const sample = async () => page.locator("#pattern-colour-preview canvas").evaluate((canvas: HTMLCanvasElement) => {
         const ctx = canvas.getContext("2d")!;
         const n = 7;
         const at = (x: number, y: number) => {
-            const p = ctx.getImageData((x + 0.5) * canvas.width / n, (y + 0.5) * canvas.height / n, 1, 1).data;
+            const padding = 8 * window.devicePixelRatio;
+            const p = ctx.getImageData(padding + (x + 0.25) * (canvas.width - 2 * padding) / n,
+                padding + (y + 0.6) * (canvas.height - 2 * padding) / n, 1, 1).data;
             return Array.from(p).slice(0, 3);
         };
         return { rowTop: [at(0, 0), at(6, 0)], rowNext: [at(0, 1), at(6, 1)],
@@ -122,6 +122,71 @@ test("the pattern swatch uses the chart's row and concentric-round yarn geometry
     expect(rounds.outer[0]).not.toEqual(rounds.inner[0]);
     expect(rounds.center).not.toEqual(rounds.outer[0]);
     expect(rounds.center).not.toEqual(rounds.inner[0]);
+});
+
+test.describe("responsive pattern swatch", () => {
+    test.use({ deviceScaleFactor: 2 });
+
+    test("fills the panel with padding and sizes its bitmap for the display", async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Pattern" }).click();
+        const preview = page.locator("#pattern-preview-canvas");
+        const measure = () => preview.evaluate((canvas: HTMLCanvasElement) => ({
+            width: canvas.clientWidth,
+            available: canvas.closest(".pattern-colours")!.clientWidth,
+            bitmapWidth: canvas.width,
+            bitmapHeight: canvas.height,
+            expected: Math.round(canvas.clientWidth * window.devicePixelRatio),
+        }));
+        for (const viewport of [{ width: 1280, height: 900 }, { width: 800, height: 900 }]) {
+            await page.setViewportSize(viewport);
+            await expect.poll(async () => {
+                const size = await measure();
+                return size.bitmapWidth === size.expected && size.bitmapHeight === size.expected;
+            }).toBe(true);
+            const size = await measure();
+            expect(size.available - size.width).toBeGreaterThan(0);
+            expect(size.available - size.width).toBeLessThanOrEqual(24);
+        }
+    });
+});
+
+test("swatch shows its diagonal mirror in the project accent colour", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByLabel("Project accent colour").fill("#123456");
+    expect(await page.locator("#pattern-preview-canvas").evaluate((canvas: HTMLCanvasElement) => {
+        const ctx = canvas.getContext("2d")!;
+        let accentPixels = 0;
+        for (let x = canvas.width * 0.1; x < canvas.width * 0.4; x++) {
+            const p = ctx.getImageData(x, x, 1, 1).data;
+            if (p[0] === 18 && p[1] === 52 && p[2] === 86) accentPixels++;
+        }
+        return accentPixels;
+    })).toBeGreaterThan(10);
+});
+
+test("swatch selection marches while visible and pauses for reduced motion and closed Pattern", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const preview = page.locator("#pattern-preview-canvas");
+    const bitmap = () => preview.evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+    const initial = await bitmap();
+    await expect.poll(bitmap).not.toBe(initial);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.waitForTimeout(100);
+    const still = await bitmap();
+    await page.waitForTimeout(250);
+    expect(await bitmap()).toBe(still);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await expect.poll(bitmap).not.toBe(still);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(100);
+    const hidden = await bitmap();
+    await page.waitForTimeout(250);
+    expect(await bitmap()).toBe(hidden);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await expect.poll(bitmap).not.toBe(hidden);
 });
 
 test("Pattern colour resets use fixed app defaults and contrast suggestions stay outside undo", async ({ page }) => {

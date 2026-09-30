@@ -750,10 +750,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
   gap: var(--space-1);
 }
 .pattern-colour-preview {
-  --preview-accent: #d653a3;
-  position: relative;
   align-self: center;
-  width: min(9rem, 70%);
+  width: calc(100% - 2 * var(--space-2));
   aspect-ratio: 1;
   margin-block-start: var(--space-2);
 }
@@ -761,29 +759,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   display: block;
   width: 100%;
   height: 100%;
-}
-.pattern-preview-selection {
-  position: absolute;
-  inset: 57.143% 57.143% 0 0;
-  border: 2px dashed var(--preview-accent);
-  animation: pattern-preview-march 0.8s linear infinite;
-}
-.pattern-preview-mirror {
-  position: absolute;
-  inset-block: -0.2rem;
-  left: 50%;
-  border-left: 2px solid var(--preview-accent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--preview-accent) 25%, transparent);
-}
-.pattern-preview-key {
-  align-self: center;
-  margin: var(--space-1) 0 0;
-  color: var(--fg-2);
-  font-size: var(--font-sm);
-}
-@keyframes pattern-preview-march { to { border-style: dotted; } }
-@media (prefers-reduced-motion: reduce) {
-  .pattern-preview-selection { animation: none; }
 }
 
 /* "Add axis" row pushes the 5 +V/+H/+C/+D1/+D2 buttons to the right edge

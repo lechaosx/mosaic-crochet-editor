@@ -14,7 +14,6 @@ const ROT_DURATION = 250;
 const FAVICON_SIZE = 32;
 const LABEL_FONT   = `ui-monospace, "SF Mono", Menlo, monospace`;
 const PREVIEW_CELLS = 7;
-const PREVIEW_CELL_PX = 20;
 // Marching-ants scroll speed in **screen pixels** per second. Converted to
 // pattern units per frame using current zoom/dpr so the perceived speed is
 // constant regardless of zoom level.
@@ -349,7 +348,8 @@ function updateFavicon(
 
 export function renderPatternColourPreview(
     canvas: HTMLCanvasElement, mode: PatternState["mode"],
-    colorA: string, colorB: string, dangerColor: string, opacity: number,
+    colorA: string, colorB: string, dangerColor: string, accentColor: string,
+    opacity: number, antsElapsedMs: number,
 ) {
     const W = PREVIEW_CELLS, H = PREVIEW_CELLS;
     const pattern: PatternState = mode === "row"
@@ -370,12 +370,19 @@ export function renderPatternColourPreview(
         ? build_highlight_plan_row(pixels, W, H)
         : build_highlight_plan_round(pixels, W, H, W, H, 0, 0, 3);
     const ctx = canvas.getContext("2d")!;
-    const cell = PREVIEW_CELL_PX;
-    canvas.width = W * cell;
-    canvas.height = H * cell;
+    const dpr = window.devicePixelRatio || 1;
+    const size = Math.round(canvas.clientWidth * dpr);
+    if (canvas.width !== size || canvas.height !== size) {
+        canvas.width = size;
+        canvas.height = size;
+    }
+    const padding = 8 * dpr;
+    const cell = (size - 2 * padding) / W;
+    const view = { panX: 8, panY: 8, zoom: cell / dpr };
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#161618";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const matrix = new DOMMatrix().scale(cell);
+    const matrix = new DOMMatrix().translate(padding, padding).scale(cell);
     ctx.setTransform(matrix);
     for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
@@ -391,8 +398,17 @@ export function renderPatternColourPreview(
     for (let x = 0; x <= W; x++) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
-    renderHighlightSymbols(ctx, { panX: 0, panY: 0, zoom: cell }, 1,
+    renderHighlightSymbols(ctx, view, dpr,
         [null, colorA, colorB], dangerColor, pattern, pixels, plan, matrix, opacity, null, false);
+    renderSymmetryGuides(ctx, view, dpr, pattern,
+        [{ kind: "D1", id: "preview", active: true, c: 0 }], accentColor, new Set(), true);
+    const selection = new Uint8Array(W * H);
+    for (let y = 4; y < H; y++) {
+        for (let x = 0; x < 3; x++) selection[y * W + x] = 1;
+    }
+    const dashOffset = Math.floor(antsElapsedMs / 1000 * ANTS_SCREEN_PX_PER_SEC / ANTS_STEP_PX)
+        * ANTS_STEP_PX / cell;
+    renderSelection(ctx, view, dpr, pattern, selection, accentColor, dashOffset);
 }
 
 // ── Top-level entry ────────────────────────────────────────────────────────

@@ -479,11 +479,35 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const colorB  = el<HTMLInputElement>("color-b");
     const patternColourPreview = el("pattern-colour-preview");
     const patternPreviewCanvas = el<HTMLCanvasElement>("pattern-preview-canvas");
-    const drawPatternPreview = () => renderPatternColourPreview(
-        patternPreviewCanvas, patternColourPreview.dataset.mode === "round" ? "round" : "row",
-        colorA.value, colorB.value, el<HTMLInputElement>("danger-color").value,
-        Number(el<HTMLInputElement>("hl-opacity").value) / 100,
-    );
+    const previewReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let previewFrame: number | null = null;
+    let previewLastTime = 0;
+    let previewAntsElapsedMs = 0;
+    function drawPatternPreview() {
+        const visible = patternPreviewCanvas.clientWidth > 0 && !document.hidden;
+        if ((!visible || previewReducedMotion.matches) && previewFrame !== null) {
+            cancelAnimationFrame(previewFrame);
+            previewFrame = null;
+        }
+        if (!visible) return;
+        renderPatternColourPreview(
+            patternPreviewCanvas, patternColourPreview.dataset.mode === "round" ? "round" : "row",
+            colorA.value, colorB.value, el<HTMLInputElement>("danger-color").value,
+            el<HTMLInputElement>("accent-color").value,
+            Number(el<HTMLInputElement>("hl-opacity").value) / 100, previewAntsElapsedMs,
+        );
+        if (!previewReducedMotion.matches && previewFrame === null) {
+            previewLastTime = performance.now();
+            previewFrame = requestAnimationFrame(now => {
+                previewFrame = null;
+                previewAntsElapsedMs = (previewAntsElapsedMs + Math.min(50, now - previewLastTime)) % 100000;
+                drawPatternPreview();
+            });
+        }
+    }
+    new ResizeObserver(drawPatternPreview).observe(patternPreviewCanvas);
+    previewReducedMotion.addEventListener("change", drawPatternPreview);
+    document.addEventListener("visibilitychange", drawPatternPreview);
 
     const openYarnPicker = (slot: 1 | 2) => {
         if (!isInspectorOpen("pattern")) {
@@ -532,7 +556,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
     function setProjectColors(danger: string, accent: string) {
         el<HTMLButtonElement>("danger-color-reset").disabled = danger.toLowerCase() === DEFAULT_APP_PREFERENCES.dangerColor;
         el<HTMLButtonElement>("accent-color-reset").disabled = accent.toLowerCase() === DEFAULT_APP_PREFERENCES.accentColor;
-        patternColourPreview.style.setProperty("--preview-accent", accent);
         drawPatternPreview();
     }
 
