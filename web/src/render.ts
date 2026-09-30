@@ -1,8 +1,8 @@
 import { PatternState, RowState, RoundState, Axis, SymKey } from "@mosaic/logic/types";
 import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
+import { applyEditSettings } from "@mosaic/logic/pattern";
 import { PlanType, PlanDir, transformed_target_indices,
-    initialize_row_pattern, initialize_round_pattern,
     build_highlight_plan_row, build_highlight_plan_round } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
 import { AppPreferences } from "./preferences";
@@ -234,6 +234,21 @@ export function fitToView(
     include(-W / 2,  H / 2);
     include( W / 2,  H / 2);
 
+    const includeWarning = (x: number, y: number) => include(x - W / 2, y - H / 2, 0.09, 0.37);
+    if (pattern.mode === "row") {
+        includeWarning(0.5, -0.5);
+        includeWarning(W - 0.5, -0.5);
+    } else {
+        for (const y of [0.5, H - 0.5]) {
+            includeWarning(-0.5, y);
+            includeWarning(W + 0.5, y);
+        }
+        for (const x of [0.5, W - 0.5]) {
+            includeWarning(x, -0.5);
+            includeWarning(x, H + 0.5);
+        }
+    }
+
     if (pattern.mode === "row") {
         const labelWidth = 0.34 * String(H).length;
         // The right-aligned labels stay upright while their anchors rotate with the chart.
@@ -348,41 +363,44 @@ function updateFavicon(
 
 export function renderPatternColourPreview(
     canvas: HTMLCanvasElement, mode: PatternState["mode"],
+    subMode: "full" | "half" | "quarter",
     colorA: string, colorB: string, dangerColor: string, accentColor: string,
     opacity: number, antsElapsedMs: number,
 ) {
-    const W = PREVIEW_CELLS, H = PREVIEW_CELLS;
-    const pattern: PatternState = mode === "row"
-        ? { mode, canvasWidth: W, canvasHeight: H }
-        : { mode, canvasWidth: W, canvasHeight: H, virtualWidth: W, virtualHeight: H,
-            offsetX: 0, offsetY: 0, rounds: 3 };
-    const pixels = (mode === "row"
-        ? initialize_row_pattern(W, H)
-        : initialize_round_pattern(W, H, W, H, 0, 0, 3)).slice();
-    if (mode === "row") {
+    const { pattern, pixels } = applyEditSettings(mode === "row"
+        ? { mode, width: PREVIEW_CELLS, height: PREVIEW_CELLS, wipe: true }
+        : { mode, innerWidth: 1, innerHeight: 1, rounds: 3, subMode, wipe: true });
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
+    if (pattern.mode === "row") {
         pixels[6 * W + 2] = pixels[6 * W + 2] === 1 ? 2 : 1;
-        pixels[5] = pixels[5] === 1 ? 2 : 1;
+        for (const y of [2, 3]) pixels[y * W + 5] = pixels[y * W + 5] === 1 ? 2 : 1;
     } else {
-        pixels[3 * W + 1] = pixels[3 * W + 1] === 1 ? 2 : 1;
-        pixels[W + 1] = pixels[W + 1] === 1 ? 2 : 1;
+        for (const y of [4, 5]) {
+            const index = (y - pattern.offsetY) * W + 1;
+            pixels[index] = pixels[index] === 1 ? 2 : 1;
+        }
     }
-    const plan = mode === "row"
+    const plan = pattern.mode === "row"
         ? build_highlight_plan_row(pixels, W, H)
-        : build_highlight_plan_round(pixels, W, H, W, H, 0, 0, 3);
+        : build_highlight_plan_round(pixels, W, H, pattern.virtualWidth, pattern.virtualHeight,
+            pattern.offsetX, pattern.offsetY, pattern.rounds);
     const ctx = canvas.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
-    const size = Math.round(canvas.clientWidth * dpr);
-    if (canvas.width !== size || canvas.height !== size) {
-        canvas.width = size;
-        canvas.height = size;
+    const width = Math.round(canvas.clientWidth * dpr);
+    const height = Math.round(canvas.clientHeight * dpr);
+    if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
     }
     const padding = 8 * dpr;
-    const cell = (size - 2 * padding) / W;
-    const view = { panX: 8, panY: 8, zoom: cell / dpr };
+    const cell = Math.min((width - 2 * padding) / W, (height - 2 * padding) / H);
+    const panX = (width - W * cell) / 2;
+    const panY = (height - H * cell) / 2;
+    const view = { panX: panX / dpr, panY: panY / dpr, zoom: cell / dpr };
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = "#161618";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    const matrix = new DOMMatrix().translate(padding, padding).scale(cell);
+    const matrix = new DOMMatrix().translate(panX, panY).scale(cell);
     ctx.setTransform(matrix);
     for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
@@ -403,8 +421,10 @@ export function renderPatternColourPreview(
     renderSymmetryGuides(ctx, view, dpr, pattern,
         [{ kind: "D1", id: "preview", active: true, c: 0 }], accentColor, new Set(), true);
     const selection = new Uint8Array(W * H);
-    for (let y = 4; y < H; y++) {
-        for (let x = 0; x < 3; x++) selection[y * W + x] = 1;
+    for (let y = Math.max(0, H - 3); y < H; y++) {
+        for (let x = 0; x < Math.min(3, W); x++) {
+            if (pixels[y * W + x] !== 0) selection[y * W + x] = 1;
+        }
     }
     const dashOffset = Math.floor(antsElapsedMs / 1000 * ANTS_SCREEN_PX_PER_SEC / ANTS_STEP_PX)
         * ANTS_STEP_PX / cell;
@@ -919,11 +939,7 @@ function renderHighlightSymbols(
         const [dx, dy] = DIR_VECTORS[plan[i+1]];
         const ox = wx + dx, oy = wy + dy;
         if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
-        const outwardUsable = ox >= 0 && ox < W && oy >= 0 && oy < H
-            && pixels[oy * W + ox] !== 0;
-        const x = outwardUsable ? ox : wx;
-        const y = outwardUsable ? oy : wy;
-        invalidGlyphs.push({ x, y, point: m.transformPoint({ x: x + 0.5, y: y + 0.5 }) });
+        invalidGlyphs.push({ x: ox, y: oy, point: m.transformPoint({ x: ox + 0.5, y: oy + 0.5 }) });
     }
 
     ctx.strokeStyle = dangerColor;

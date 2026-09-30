@@ -1,6 +1,74 @@
 import { test, expect } from "@playwright/test";
 import { bootApp, cellCoord, clickCell } from "./_helpers";
 
+for (const mode of ["row", "round"] as const) {
+    test(`${mode} colour preview shows its warning within the yarn chart`, async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Pattern" }).click();
+        if (mode === "round") await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
+        const preview = page.getByRole("img", { name: /colour preview/ });
+        const warnings = await preview.evaluate(element => {
+            const canvas = element.querySelector("canvas")!;
+            const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+            let left = canvas.width, top = canvas.height, right = 0, bottom = 0;
+            const danger: { x: number; y: number }[] = [];
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const i = (y * canvas.width + x) * 4;
+                    const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
+                    if ((r === 0 && g === 0 && b === 0) || (r === 255 && g === 255 && b === 255)) {
+                        left = Math.min(left, x); top = Math.min(top, y);
+                        right = Math.max(right, x); bottom = Math.max(bottom, y);
+                    }
+                    if (r === 255 && g === 0 && b === 0) danger.push({ x, y });
+                }
+            }
+            return {
+                count: danger.length,
+                outside: danger.filter(({ x, y }) => x < left || x > right || y < top || y > bottom).length,
+            };
+        });
+        expect(warnings.count).toBeGreaterThan(0);
+        expect(warnings.outside).toBe(0);
+    });
+}
+
+test("Centre-out colour preview follows Full, Half, and Quarter extents", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
+    const preview = page.getByRole("img", { name: /Centre-out colour preview/ });
+    const images: string[] = [];
+    for (const [extent, ratio] of [["full", 1], ["half", 7 / 4], ["quarter", 1]] as const) {
+        await page.locator(`label:has(input[name="edit-submode"][value="${extent}"])`).click();
+        await expect.poll(async () => {
+            const box = await preview.boundingBox();
+            return box!.width / box!.height;
+        }).toBeCloseTo(ratio, 1);
+        const image = await preview.evaluate(element => {
+            const canvas = element.querySelector("canvas")!;
+            const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+            let warning = false;
+            let left = canvas.width, right = 0;
+            for (let i = 0; i < pixels.length; i += 4) {
+                if (pixels[i] === 255 && pixels[i + 1] === 0 && pixels[i + 2] === 0) warning = true;
+                if ((pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 0)
+                    || (pixels[i] === 255 && pixels[i + 1] === 255 && pixels[i + 2] === 255)) {
+                    const x = (i / 4) % canvas.width;
+                    left = Math.min(left, x); right = Math.max(right, x);
+                }
+            }
+            return { warning, bitmap: canvas.toDataURL(),
+                horizontalImbalance: Math.abs(left - (canvas.width - right - 1)) / window.devicePixelRatio };
+        });
+        expect(image.warning).toBe(true);
+        expect(image.horizontalImbalance).toBeLessThanOrEqual(1);
+        images.push(image.bitmap);
+    }
+    expect(images[0]).not.toBe(images[2]);
+});
+
 test("About and the idle canvas omit redundant guidance and status", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);

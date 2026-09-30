@@ -320,30 +320,60 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
             .__test_instruction_error_coords__ ?? [])).toEqual([{ x: 0, y: 0 }]);
 });
 
-test("a top-edge row error keeps its invalid glyph inside the chart", async ({ page }) => {
-    await bootApp(page);
-    const chooserPromise = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Open" }).click();
-    const chooser = await chooserPromise;
-    await chooser.setFiles({
-        name: "top-edge-invalid.mcw",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify({
-            version: 1,
-            state: { mode: "row", canvasWidth: 3, canvasHeight: 3 },
-            pixels: [1, 2, 1, 2, 2, 2, 1, 1, 1],
-            colorA: "#000000", colorB: "#ffffff",
-        })),
-    });
-    await expect(page.getByRole("button", { name: "Begin Crocheting — 1 invalid stitch" })).toBeVisible();
+for (const mode of ["row", "round"] as const) {
+    test(`a top-edge ${mode} warning renders in the outward gutter and clears its support`, async ({ page }) => {
+        if (mode === "row") await page.setViewportSize({ width: 852, height: 393 });
+        await bootApp(page);
+        const width = mode === "row" ? 3 : 9;
+        const x = Math.floor(width / 2);
+        const pixels = mode === "row"
+            ? [1, 2, 1, 2, 2, 2, 1, 1, 1]
+            : Array.from({ length: width * width }, (_, index) => {
+                const px = index % width, py = Math.floor(index / width);
+                const ring = Math.min(px, py, width - 1 - px, width - 1 - py);
+                return ring >= 3 ? 0 : ring % 2 + 1;
+            });
+        pixels[x] = 2;
+        const chooserPromise = page.waitForEvent("filechooser");
+        await page.getByRole("button", { name: "Open" }).click();
+        await (await chooserPromise).setFiles({
+            name: `top-edge-invalid-${mode}.mcw`,
+            mimeType: "application/json",
+            buffer: Buffer.from(JSON.stringify({
+                version: 1,
+                state: mode === "row"
+                    ? { mode, canvasWidth: width, canvasHeight: width }
+                    : { mode, canvasWidth: width, canvasHeight: width,
+                        virtualWidth: width, virtualHeight: width, offsetX: 0, offsetY: 0, rounds: 3 },
+                pixels, colorA: "#000000", colorB: "#ffffff",
+            })),
+        });
+        await expect(page.getByRole("button", { name: "Begin Crocheting — 1 invalid stitch" })).toBeVisible();
+        if (mode === "round") {
+            await page.keyboard.press("r");
+            await page.keyboard.press("r");
+            await expect.poll(() => page.evaluate(() => Math.abs(window.__test_matrix__!.a))).toBeLessThan(0.001);
+        }
+        const outward = await cellCoord(page, x, -1);
+        expect(await pixelRGB(page, outward.cx, outward.cy)).toEqual([255, 0, 0]);
+        const cellSize = await page.evaluate(() => {
+            const matrix = window.__test_matrix__!;
+            return Math.hypot(matrix.a, matrix.b) / window.devicePixelRatio;
+        });
+        const canvas = await page.locator("#canvas").boundingBox();
+        expect(outward.cy - cellSize * 0.37).toBeGreaterThanOrEqual(canvas!.y);
+        expect(outward.cy + cellSize * 0.37).toBeLessThanOrEqual(canvas!.y + canvas!.height);
+        expect(await pixelRGB(page, outward.cx, outward.cy + cellSize * 0.28)).toEqual([255, 0, 0]);
+        const support = await cellCoord(page, x, 0);
+        expect(await pixelRGB(page, support.cx, support.cy)).toEqual([255, 255, 255]);
 
-    const invalidGlyphs = await page.evaluate(() =>
-        (window as typeof window & { __test_instruction_guidance__?: {
-            invalidGlyphCoords: Array<{ x: number; y: number }>;
-        } }).__test_instruction_guidance__?.invalidGlyphCoords ?? []);
-    expect(invalidGlyphs).toContainEqual({ x: 1, y: 0 });
-    expect(invalidGlyphs.every(({ x, y }) => x >= 0 && x < 3 && y >= 0 && y < 3)).toBe(true);
-});
+        await page.getByRole("button", { name: "Clear overlay" }).click();
+        await clickCell(page, x, -1);
+        await expect(page.getByRole("button", { name: "Begin Crocheting", exact: true })).toBeVisible();
+        expect(await pixelRGB(page, support.cx, support.cy)).toEqual([0, 0, 0]);
+        expect(await pixelRGB(page, outward.cx, outward.cy)).not.toEqual([255, 0, 0]);
+    });
+}
 
 test("Crochet advances by whole rows and resumes the exact instruction plan", async ({ page }) => {
     await bootApp(page);

@@ -475,6 +475,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         if (!visible) return;
         renderPatternColourPreview(
             patternPreviewCanvas, patternColourPreview.dataset.mode === "round" ? "round" : "row",
+            patternColourPreview.dataset.extent as "full" | "half" | "quarter",
             colorA.value, colorB.value, el<HTMLInputElement>("danger-color").value,
             el<HTMLInputElement>("accent-color").value,
             Number(el<HTMLInputElement>("hl-opacity").value) / 100, previewAntsElapsedMs,
@@ -1050,7 +1051,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     function syncEditInputs(s: PatternState) {
         patternColourPreview.dataset.mode = s.mode;
-        drawPatternPreview();
         patternColourPreview.setAttribute(
             "aria-label",
             `${s.mode === "row" ? "Rows" : "Centre-out"} colour preview with selection, grid, mirror, valid overlay, and invalid overlay`,
@@ -1060,6 +1060,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
         el("edit-row-controls")  .hidden = s.mode !== "row";
         el("edit-round-controls").hidden = s.mode !== "round";
         if (s.mode === "row") {
+            patternColourPreview.dataset.extent = "full";
+            patternColourPreview.style.aspectRatio = "1";
             el<HTMLInputElement>("edit-width") .value = String(s.canvasWidth);
             el<HTMLInputElement>("edit-height").value = String(s.canvasHeight);
         } else {
@@ -1069,10 +1071,13 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 ? "full"
                 : s.canvasWidth === s.virtualWidth ? "half" : "quarter";
             setRadio("edit-submode", sub);
+            patternColourPreview.dataset.extent = sub;
+            patternColourPreview.style.aspectRatio = sub === "half" ? "7 / 4" : "1";
             el<HTMLInputElement>("edit-inner-width") .value = String(innerW);
             el<HTMLInputElement>("edit-inner-height").value = String(innerH);
             el<HTMLInputElement>("edit-rounds")      .value = String(s.rounds);
         }
+        drawPatternPreview();
         // Every committed change starts the next field from preservation.
         const wipeEl = el<HTMLInputElement>("edit-wipe");
         wipeEl.checked = false;
