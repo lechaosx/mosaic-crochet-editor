@@ -82,7 +82,6 @@ export function observeCanvasResize(
 
 export interface InstructionSeam {
     start: { x: number; y: number; dx: number; dy: number };
-    end: { x: number; y: number; dx: number; dy: number };
     invalid: boolean;
 }
 
@@ -120,7 +119,6 @@ export interface RendererState {
     faviconCtx:    CanvasRenderingContext2D;
     instructionSeam: InstructionSeam | null;
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
-    instructionInvalidCoords: PackedInstructionCoordinates | null;
 }
 
 export function makeRendererState(preferences: AppPreferences): RendererState {
@@ -146,7 +144,6 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         faviconCtx:     faviconCanvas.getContext("2d")!,
         instructionSeam: null,
         instructionGuidanceCoords: null,
-        instructionInvalidCoords: null,
     };
 }
 
@@ -497,10 +494,9 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
 
-    renderInstructionErrors(ctx, view, dpr, pattern, committedPixels, rs.instructionInvalidCoords, dangerColor);
     renderHighlightSymbols(ctx, view, dpr, rs.colors, dangerColor, pattern, committedPixels, store.plan, m,
         guidanceOpacity / 100, rs.instructionGuidanceCoords);
-    renderInstructionSeam(ctx, view, dpr, rs.instructionSeam, accentColor, dangerColor, m);
+    renderInstructionSeam(ctx, view, rs.instructionSeam, accentColor, dangerColor, m);
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
     const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
     const activeRecipe = activeRecipeId === null ? null : recipes.find(recipe => recipe.id === activeRecipeId) ?? null;
@@ -631,7 +627,7 @@ function tracedSparseBoundary(selection: ReadonlySet<string>): number[][] {
 }
 
 function renderInstructionSeam(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    ctx: CanvasRenderingContext2D, view: ViewState,
     seam: InstructionSeam | null, accentColor: string, dangerColor: string, m: DOMMatrix,
 ) {
     if (!seam) {
@@ -639,83 +635,42 @@ function renderInstructionSeam(
             .__test_instruction_seam_geometry__ = null;
         return;
     }
-    const { start, end } = seam;
+    const { start } = seam;
     const sx = start.x + 0.5 - start.dx * 0.5;
     const sy = start.y + 0.5 - start.dy * 0.5;
-    const ex = end.x + 0.5 + end.dx * 0.5;
-    const ey = end.y + 0.5 + end.dy * 0.5;
-    const edge = (x: number, y: number, dx: number) => dx !== 0
-        ? [x, y - 0.5, x, y + 0.5]
-        : [x - 0.5, y, x + 0.5, y];
-    const edges = [edge(sx, sy, start.dx)];
-    if (sx !== ex || sy !== ey) edges.push(edge(ex, ey, end.dx));
-    const cell = view.zoom * dpr;
-    const depth = Math.min(0.32, 12 * dpr / cell);
-    const halfBase = Math.min(0.22, 8 * dpr / cell);
-    const triangle = [
-        [sx - start.dy * halfBase, sy + start.dx * halfBase],
-        [sx + start.dy * halfBase, sy - start.dx * halfBase],
-        [sx + start.dx * depth, sy + start.dy * depth],
+    const edges = [start.dx !== 0
+        ? [sx, sy - 0.5, sx, sy + 0.5]
+        : [sx - 0.5, sy, sx + 0.5, sy]];
+    const depth = 0.32;
+    const halfBase = 0.22;
+    const halfBar = 0.025;
+    const point = (normal: number, tangent: number) => [
+        sx + start.dx * normal - start.dy * tangent,
+        sy + start.dy * normal + start.dx * tangent,
+    ];
+    const triangle = [point(0, halfBase), point(0, -halfBase), point(depth, 0)];
+    const join = halfBase * (1 - halfBar / depth);
+    const outline = [
+        point(-halfBar, -0.5), point(halfBar, -0.5), point(halfBar, -join),
+        point(depth, 0), point(halfBar, join), point(halfBar, 0.5), point(-halfBar, 0.5),
     ];
     const screenTriangle = triangle.map(([x, y]) => {
         const point = m.transformPoint({ x, y });
         return [point.x, point.y];
     });
     (window as unknown as { __test_instruction_seam_geometry__?: unknown })
-        .__test_instruction_seam_geometry__ = { edges, triangle, screenTriangle };
+        .__test_instruction_seam_geometry__ = { edges, triangle, screenTriangle, outline };
     ctx.save();
     ctx.lineJoin = "round";
-    const color = seam.invalid ? dangerColor : accentColor;
-    for (const [width, stroke] of [[4, "#161618"], [2, color]] as const) {
-        ctx.lineWidth = width / view.zoom;
-        ctx.strokeStyle = stroke;
-        ctx.beginPath();
-        for (const [x1, y1, x2, y2] of edges) {
-            ctx.moveTo(x1, y1);
-            ctx.lineTo(x2, y2);
-        }
-        ctx.stroke();
-    }
     ctx.beginPath();
-    ctx.moveTo(triangle[0][0], triangle[0][1]);
-    ctx.lineTo(triangle[1][0], triangle[1][1]);
-    ctx.lineTo(triangle[2][0], triangle[2][1]);
+    ctx.moveTo(outline[0][0], outline[0][1]);
+    for (const [x, y] of outline.slice(1)) ctx.lineTo(x, y);
     ctx.closePath();
+    ctx.fillStyle = seam.invalid ? dangerColor : accentColor;
+    ctx.fill();
     ctx.lineWidth = 1 / view.zoom;
     ctx.strokeStyle = "#161618";
     ctx.stroke();
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.restore();
-}
-
-function renderInstructionErrors(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    pattern: PatternState, pixels: Uint8Array,
-    coords: PackedInstructionCoordinates | null, dangerColor: string,
-) {
-    const { canvasWidth: W, canvasHeight: H } = pattern;
-    const visibleCoords: { x: number; y: number }[] = [];
-    coords?.forEach((x, y) => {
-        if (x >= 0 && x < W && y >= 0 && y < H && pixels[y * W + x] !== 0) {
-            visibleCoords.push({ x, y });
-        }
-    });
-    (window as unknown as { __test_instruction_error_coords__?: typeof visibleCoords })
-        .__test_instruction_error_coords__ = visibleCoords;
-    if (visibleCoords.length === 0) return;
-    ctx.save();
-    ctx.fillStyle = dangerColor;
-    ctx.globalAlpha = 0.24;
-    for (const { x, y } of visibleCoords) {
-        ctx.fillRect(x, y, 1, 1);
-    }
-    ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = dangerColor;
-    ctx.lineWidth = Math.max(2 / (view.zoom * dpr), 0.08);
-    for (const { x, y } of visibleCoords) {
-        ctx.strokeRect(x + 0.08, y + 0.08, 0.84, 0.84);
-    }
     ctx.restore();
 }
 

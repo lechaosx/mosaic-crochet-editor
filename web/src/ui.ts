@@ -126,7 +126,6 @@ export interface InstructionOverviewUnit {
     text: string;
     invalid: boolean;
     guidanceCoords: PackedInstructionCoordinates;
-    invalidCoords: PackedInstructionCoordinates;
     seam: Omit<InstructionSeam, "invalid"> | null;
 }
 

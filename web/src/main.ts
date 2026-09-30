@@ -1045,7 +1045,6 @@ async function onInstructions() {
         instructionsPreviewStore = null;
         rs.instructionSeam = null;
         rs.instructionGuidanceCoords = null;
-        rs.instructionInvalidCoords = null;
         ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
         renderCanvas();
     });
@@ -1090,7 +1089,6 @@ async function onInstructions() {
         rs.instructionSeam = selectedUnit?.seam ? { ...selectedUnit.seam, invalid: selectedUnit.invalid } : null;
         rs.instructionGuidanceCoords = completedUnits !== null && completedUnits < previewUnits.length
             ? selectedUnit?.guidanceCoords ?? null : null;
-        rs.instructionInvalidCoords = selectedUnit?.invalidCoords ?? null;
         renderCanvas();
     });
 
@@ -1126,8 +1124,6 @@ async function onInstructions() {
         const startDirection = sharedEdge
             ? edgeDirection(coords[0] - coords[last], coords[1] - coords[last + 1])
             : edgeDirection(direction[2] - direction[0], direction[3] - direction[1]);
-        const endDirection = sharedEdge || last === 0 ? startDirection
-            : edgeDirection(coords[last] - coords[last - 2], coords[last + 1] - coords[last - 1]);
         return {
             label: unit.label,
             yarn: unit.yarn,
@@ -1135,10 +1131,8 @@ async function onInstructions() {
             text: reversed ? unit.reversedText : unit.text,
             invalid: unit.invalid,
             guidanceCoords: packInstructionCoordinates(coords, width),
-            invalidCoords: packInstructionCoordinates(unit.invalidWorkedCoords, width),
             seam: direction.length >= 4 ? {
                 start: { x: direction[0], y: direction[1], ...startDirection },
-                end: { x: coords[last], y: coords[last + 1], ...endDirection },
             } : null,
         };
     };
