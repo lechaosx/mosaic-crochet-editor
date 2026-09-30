@@ -1,7 +1,9 @@
 import { PatternState, RowState, RoundState, Axis, SymKey } from "@mosaic/logic/types";
 import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
-import { PlanType, PlanDir, transformed_target_indices } from "@mosaic/wasm";
+import { PlanType, PlanDir, transformed_target_indices,
+    initialize_row_pattern, initialize_round_pattern,
+    build_highlight_plan_row, build_highlight_plan_round } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
 import { AppPreferences } from "./preferences";
 import type { PackedInstructionCoordinates } from "./instruction-coordinates";
@@ -11,6 +13,8 @@ const ZOOM_MAX     = 96;
 const ROT_DURATION = 250;
 const FAVICON_SIZE = 32;
 const LABEL_FONT   = `ui-monospace, "SF Mono", Menlo, monospace`;
+const PREVIEW_CELLS = 7;
+const PREVIEW_CELL_PX = 20;
 // Marching-ants scroll speed in **screen pixels** per second. Converted to
 // pattern units per frame using current zoom/dpr so the perceived speed is
 // constant regardless of zoom level.
@@ -111,6 +115,7 @@ export interface RendererState {
     faviconCtx:    CanvasRenderingContext2D;
     instructionStarts: readonly { x: number; y: number; nextX: number; nextY: number; invalid: boolean }[];
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
+    instructionBoundaryCoords: PackedInstructionCoordinates | null;
     instructionInvalidCoords: PackedInstructionCoordinates | null;
 }
 
@@ -137,6 +142,7 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         faviconCtx:     faviconCanvas.getContext("2d")!,
         instructionStarts: [],
         instructionGuidanceCoords: null,
+        instructionBoundaryCoords: null,
         instructionInvalidCoords: null,
     };
 }
@@ -233,7 +239,7 @@ export function fitToView(
         const labelWidth = 0.34 * String(H).length;
         // The right-aligned labels stay upright while their anchors rotate with the chart.
         const includeRowLabel = (y: number) => {
-            const x = -W / 2 - 1.05;
+            const x = -W / 2 - 0.25;
             const ry = y - H / 2;
             const anchorX = x * c - ry * s;
             const anchorY = x * s + ry * c;
@@ -341,6 +347,54 @@ function updateFavicon(
     if (link) link.href = faviconCanvas.toDataURL("image/png");
 }
 
+export function renderPatternColourPreview(
+    canvas: HTMLCanvasElement, mode: PatternState["mode"],
+    colorA: string, colorB: string, dangerColor: string, opacity: number,
+) {
+    const W = PREVIEW_CELLS, H = PREVIEW_CELLS;
+    const pattern: PatternState = mode === "row"
+        ? { mode, canvasWidth: W, canvasHeight: H }
+        : { mode, canvasWidth: W, canvasHeight: H, virtualWidth: W, virtualHeight: H,
+            offsetX: 0, offsetY: 0, rounds: 3 };
+    const pixels = (mode === "row"
+        ? initialize_row_pattern(W, H)
+        : initialize_round_pattern(W, H, W, H, 0, 0, 3)).slice();
+    if (mode === "row") {
+        pixels[6 * W + 2] = pixels[6 * W + 2] === 1 ? 2 : 1;
+        pixels[5] = pixels[5] === 1 ? 2 : 1;
+    } else {
+        pixels[3 * W + 1] = pixels[3 * W + 1] === 1 ? 2 : 1;
+        pixels[W + 1] = pixels[W + 1] === 1 ? 2 : 1;
+    }
+    const plan = mode === "row"
+        ? build_highlight_plan_row(pixels, W, H)
+        : build_highlight_plan_round(pixels, W, H, W, H, 0, 0, 3);
+    const ctx = canvas.getContext("2d")!;
+    const cell = PREVIEW_CELL_PX;
+    canvas.width = W * cell;
+    canvas.height = H * cell;
+    ctx.fillStyle = "#161618";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const matrix = new DOMMatrix().scale(cell);
+    ctx.setTransform(matrix);
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            const p = pixels[y * W + x];
+            if (p === 0) continue;
+            ctx.fillStyle = p === 1 ? colorA : colorB;
+            ctx.fillRect(x, y, 1, 1);
+        }
+    }
+    ctx.lineWidth = 1 / cell;
+    ctx.strokeStyle = "rgba(128, 128, 128, 0.18)";
+    ctx.beginPath();
+    for (let x = 0; x <= W; x++) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+    renderHighlightSymbols(ctx, { panX: 0, panY: 0, zoom: cell }, 1,
+        [null, colorA, colorB], dangerColor, pattern, pixels, plan, matrix, opacity, null, false);
+}
+
 // ── Top-level entry ────────────────────────────────────────────────────────
 export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
     rs.lastStore    = store;
@@ -406,6 +460,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     renderInstructionErrors(ctx, view, dpr, pattern, committedPixels, rs.instructionInvalidCoords, dangerColor);
     renderHighlightSymbols(ctx, view, dpr, rs.colors, dangerColor, pattern, committedPixels, store.plan, m,
         guidanceOpacity / 100, rs.instructionGuidanceCoords);
+    renderInstructionBoundary(ctx, view, dpr, pattern, rs.instructionBoundaryCoords, accentColor);
     renderInstructionStarts(ctx, view, dpr, rs.instructionStarts, accentColor, dangerColor, m);
     (window as unknown as { __test_instruction_starts__?: typeof rs.instructionStarts }).__test_instruction_starts__ = rs.instructionStarts;
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
@@ -555,12 +610,12 @@ function renderInstructionStarts(
         return;
     }
     const cell = view.zoom * dpr;
-    const length = Math.min(cell * 0.38, 18);
+    const length = Math.min(cell * 0.2, 12);
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.lineWidth = Math.max(1.5, cell * 0.08);
+    ctx.lineWidth = Math.min(2.5, Math.max(1.5, length * 0.18));
     for (const start of starts) {
         const from = m.transformPoint({ x: start.x + 0.5, y: start.y + 0.5 });
         const next = m.transformPoint({ x: start.nextX + 0.5, y: start.nextY + 0.5 });
@@ -568,7 +623,7 @@ function renderInstructionStarts(
         if (magnitude === 0) continue;
         const dx = (next.x - from.x) / magnitude;
         const dy = (next.y - from.y) / magnitude;
-        const tipGap = cell * 0.58;
+        const tipGap = Math.min(cell * 0.28, 12);
         let tipX = from.x - dx * tipGap, tipY = from.y - dy * tipGap;
         let shaftX = tipX - dx * length, shaftY = tipY - dy * length;
         const side = length * 0.38;
@@ -641,6 +696,37 @@ function renderInstructionErrors(
     ctx.lineWidth = Math.max(2 / (view.zoom * dpr), 0.08);
     for (const { x, y } of visibleCoords) {
         ctx.strokeRect(x + 0.08, y + 0.08, 0.84, 0.84);
+    }
+    ctx.restore();
+}
+
+function renderInstructionBoundary(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    pattern: PatternState, coords: PackedInstructionCoordinates | null, color: string,
+) {
+    if (!coords) {
+        (window as unknown as { __test_instruction_boundary_paths__?: number[][] }).__test_instruction_boundary_paths__ = [];
+        return;
+    }
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    const mask = new Uint8Array(W * H);
+    coords.forEach((x, y) => {
+        if (x >= 0 && x < W && y >= 0 && y < H) mask[y * W + x] = 1;
+    });
+    const paths = tracedBoundary(mask, W, H);
+    (window as unknown as { __test_instruction_boundary_paths__?: number[][] }).__test_instruction_boundary_paths__ = paths;
+    if (paths.length === 0) return;
+    ctx.save();
+    ctx.lineJoin = "round";
+    for (const [width, stroke] of [[6, "#161618"], [3, color]] as const) {
+        ctx.lineWidth = width / (view.zoom * dpr);
+        ctx.strokeStyle = stroke;
+        ctx.beginPath();
+        for (const path of paths) {
+            ctx.moveTo(path[0], path[1]);
+            for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
+        }
+        ctx.stroke();
     }
     ctx.restore();
 }
@@ -757,6 +843,7 @@ function renderHighlightSymbols(
     colors: (string | null)[], dangerColor: string,
     pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
     m: DOMMatrix, opacity: number, guidanceCoords: PackedInstructionCoordinates | null,
+    recordTestHook = true,
 ) {
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
     const A = colors[1] ?? "#000";
@@ -841,7 +928,7 @@ function renderHighlightSymbols(
     ctx.fill();
     ctx.restore();
 
-    (window as unknown as { __test_instruction_guidance__?: {
+    if (recordTestHook) (window as unknown as { __test_instruction_guidance__?: {
         filtered: boolean;
         validGlyphCoords: { x: number; y: number }[];
         invalidGlyphCoords: { x: number; y: number }[];
@@ -868,7 +955,7 @@ function renderRowLabels(
     ctx.textAlign  = "right";
     ctx.textBaseline = "middle";
     for (let y = 0; y < H; y++) {
-        const p = m.transformPoint({ x: -1.05, y: y + 0.5 });
+        const p = m.transformPoint({ x: -0.25, y: y + 0.5 });
         ctx.fillText(String(H - y), p.x, p.y);
     }
     ctx.restore();

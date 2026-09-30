@@ -1055,6 +1055,7 @@ async function onInstructions() {
         instructionsPreviewStore = null;
         rs.instructionStarts = [];
         rs.instructionGuidanceCoords = null;
+        rs.instructionBoundaryCoords = null;
         rs.instructionInvalidCoords = null;
         ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
         renderCanvas();
@@ -1097,10 +1098,10 @@ async function onInstructions() {
         const selectedUnit = completedUnits === null
             ? null
             : previewUnits[completedUnits - 1] ?? null;
-        const currentGuidance = completedUnits === null || completedUnits >= previewUnits.length
-            ? null
-            : selectedUnit;
-        rs.instructionGuidanceCoords = currentGuidance?.guidanceCoords ?? null;
+        rs.instructionStarts = selectedUnit?.start ? [{ ...selectedUnit.start, invalid: selectedUnit.invalid }] : [];
+        rs.instructionGuidanceCoords = completedUnits !== null && completedUnits < previewUnits.length
+            ? selectedUnit?.guidanceCoords ?? null : null;
+        rs.instructionBoundaryCoords = selectedUnit?.guidanceCoords ?? null;
         rs.instructionInvalidCoords = selectedUnit?.invalidCoords ?? null;
         renderCanvas();
     });
@@ -1149,8 +1150,6 @@ async function onInstructions() {
         dlg.clearUnits();
         const directionalUnits = units.map(directionalUnit);
         previewUnits = directionalUnits;
-        rs.instructionStarts = directionalUnits.flatMap(unit => unit.start ? [{ ...unit.start, invalid: unit.invalid }] : []);
-        renderCanvas();
         directionalUnits.forEach(directional => {
             dlg.appendUnit(directional);
             dlg.appendLine(copiedInstruction(directional));

@@ -44,7 +44,7 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     expect(await page.locator("#chart-viewport").boundingBox()).toEqual(designViewport);
     expect(await page.evaluate(() => document.getElementById("canvas") ===
         (window as typeof window & { __designCanvas?: HTMLCanvasElement }).__designCanvas)).toBe(true);
-    await expect(page.locator("canvas")).toHaveCount(1);
+    await expect(page.locator("#chart-viewport canvas")).toHaveCount(1);
     await expect(page.locator("#instructions-units .instructions-unit").first()).toHaveAttribute("aria-current", "step");
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("tab")).toHaveCount(0);
@@ -193,7 +193,7 @@ test("Pattern palette edits refresh the open Crochet chart and yarn markers", as
         input.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
-    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"] .instructions-unit-yarn'))
+    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"] .instructions-unit-number'))
         .toHaveCSS("background-color", "rgb(18, 52, 86)");
     expect(await pixelRGB(page, chartCell.cx, chartCell.cy)).toEqual([18, 52, 86]);
     await page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]').click();
@@ -302,8 +302,7 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await expect(invalidUnit).toContainText("oc");
     await expect(invalidUnit).toHaveClass(/instructions-unit--invalid/);
     await expect(invalidUnit).toHaveAccessibleName(/contains invalid stitches/);
-    await expect(invalidUnit.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(invalidUnit.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(invalidUnit.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(0, 0, 0)");
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
@@ -403,13 +402,16 @@ test("Crochet lines are compact progress controls", async ({ page }) => {
     await expect(first).not.toContainText("Row");
     await expect(first).not.toContainText("Yarn");
     await expect(first.locator(".instructions-unit-number")).toHaveText("1");
-    await expect(first.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(first.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(18, 52, 86)");
-    await expect(second.locator(".instructions-unit-yarn")).toHaveCSS("background-color", "rgb(171, 205, 239)");
-    await expect(first.locator(".instructions-unit-yarn")).toHaveText("A");
-    await expect(second.locator(".instructions-unit-yarn")).toHaveText("B");
-    await expect(first.locator(".instructions-unit-yarn")).not.toHaveAttribute("aria-hidden");
-    await expect(first.locator("code")).toHaveCSS("white-space", "normal");
+    await expect(first.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(18, 52, 86)");
+    await expect(second.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(171, 205, 239)");
+    await expect(first.locator(".instructions-unit-number")).toHaveText("1");
+    await expect(second.locator(".instructions-unit-number")).toHaveText("2");
+    await expect(first.locator(".instructions-unit-number")).not.toHaveAttribute("aria-hidden");
+    const marker = await first.locator(".instructions-unit-number").boundingBox();
+    const button = await first.boundingBox();
+    expect(marker!.height).toBe(button!.height);
+    expect(marker!.width).toBe(marker!.height);
+    await expect(first.locator("code")).toHaveCSS("white-space", "nowrap");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-y", "auto");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-x", "hidden");
     const workspace = await page.locator(".workspace").boundingBox();
@@ -539,19 +541,149 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
 });
 
-test("Crochet canvas arrows start every unit in its actual alternate direction", async ({ page }) => {
+test("Crochet canvas arrow follows the current unit's alternate direction", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
     const forward = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(forward).toHaveLength(9);
-    expect(forward![1].invalid).toBe(false);
+    expect(forward).toHaveLength(1);
+    expect(forward![0].invalid).toBe(false);
 
     await page.getByText("Alternate direction", { exact: true }).click();
     const alternate = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(forward![1].nextX).toBeGreaterThan(forward![1].x);
-    expect(alternate![1].nextX).toBeLessThan(alternate![1].x);
-    expect(alternate![1].y).toBe(forward![1].y);
+    expect(forward![0].nextX).toBeGreaterThan(forward![0].x);
+    expect(alternate![0].nextX).toBeLessThan(alternate![0].x);
+    expect(alternate![0].y).toBe(forward![0].y);
+});
+
+test("Crochet shows only the current unit's start arrow", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    expect(await page.evaluate(() => window.__test_instruction_starts__)).toHaveLength(1);
+    const first = (await page.evaluate(() => window.__test_instruction_starts__))![0];
+    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
+    const second = await page.evaluate(() => window.__test_instruction_starts__);
+    expect(second).toHaveLength(1);
+    expect(second![0].y).not.toBe(first.y);
+});
+
+test("long Crochet instructions keep a full-height square yarn number and readable current text", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-width").fill("50");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    for (const x of [0, 2, 3, 6, 9, 10, 13, 15, 18, 19, 22, 25, 27, 28, 31, 34, 35, 38, 41, 43, 46, 49]) {
+        await clickCell(page, x, 8);
+    }
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const row = page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]');
+    await row.click();
+    expect((await row.locator("code").textContent())!.length).toBeGreaterThan(60);
+    const marker = await row.locator(".instructions-unit-number").boundingBox();
+    const button = await row.boundingBox();
+    expect(marker!.height).toBeCloseTo(button!.height, 0);
+    expect(marker!.width).toBeCloseTo(marker!.height, 0);
+    await expect(row.locator("code")).toHaveCSS("white-space", "nowrap");
+    await expect(page.locator("#instructions-current-text")).toHaveText(await row.locator("code").textContent() ?? "");
+    await page.addStyleTag({ content: "html { font-size: 200%; }" });
+    const enlargedMarker = await row.locator(".instructions-unit-number").boundingBox();
+    const enlargedButton = await row.boundingBox();
+    const enlargedText = await row.locator("code").boundingBox();
+    expect(enlargedMarker!.width).toBeCloseTo(enlargedMarker!.height, 0);
+    expect(enlargedMarker!.height).toBeCloseTo(enlargedButton!.height, 0);
+    expect(enlargedText!.height).toBeLessThanOrEqual(enlargedButton!.height);
+});
+
+test("the current row arrow stays inside the chart beside nearby row numbers", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const lane = async () => page.evaluate(() => {
+        const edge = window.__test_matrix__!.transformPoint({ x: 0, y: 0 }).x;
+        const arrow = (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
+            bounds: { left: number; right: number };
+        }> }).__test_instruction_arrow_geometry__![0];
+        return { edge, arrow };
+    });
+    const first = await lane();
+    expect(first.arrow.bounds.left).toBeGreaterThanOrEqual(first.edge);
+    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
+    await page.getByText("Alternate direction", { exact: true }).click();
+    const second = await lane();
+    expect(second.arrow.bounds.left).toBeGreaterThanOrEqual(second.edge);
+});
+
+test("Crochet outlines the current row on the chart", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const edge = async () => page.evaluate(() =>
+        (window as typeof window & { __test_instruction_boundary_paths__?: number[][] })
+            .__test_instruction_boundary_paths__ ?? []);
+    const first = await edge();
+    expect(first.length).toBeGreaterThan(0);
+    expect([...new Set(first.flat().filter((_, index) => index % 2 === 1))].sort())
+        .toEqual([8, 9]);
+    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
+    const second = await edge();
+    expect(second.length).toBeGreaterThan(0);
+    expect([...new Set(second.flat().filter((_, index) => index % 2 === 1))].sort())
+        .toEqual([7, 8]);
+    expect(second).not.toEqual(first);
+});
+
+test("the current round edge and arrow follow the same chart ring", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.locator("#edit-rounds").fill("2");
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const geometry = async () => page.evaluate(() => ({
+        arrows: window.__test_instruction_starts__ ?? [],
+        paths: (window as typeof window & { __test_instruction_boundary_paths__?: number[][] })
+            .__test_instruction_boundary_paths__ ?? [],
+    }));
+    const first = await geometry();
+    expect(first.arrows).toHaveLength(1);
+    expect(first.paths.length).toBeGreaterThan(0);
+    await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
+    const second = await geometry();
+    expect(second.arrows).toHaveLength(1);
+    expect(second.paths).not.toEqual(first.paths);
+    const xs = second.paths.flat().filter((_, index) => index % 2 === 0);
+    const ys = second.paths.flat().filter((_, index) => index % 2 === 1);
+    expect(second.arrows[0].x + 0.5).toBeGreaterThan(Math.min(...xs));
+    expect(second.arrows[0].x + 0.5).toBeLessThan(Math.max(...xs));
+    expect(second.arrows[0].y + 0.5).toBeGreaterThan(Math.min(...ys));
+    expect(second.arrows[0].y + 0.5).toBeLessThan(Math.max(...ys));
+});
+
+test("the final round keeps its edge and arrow while showing full-chart guidance", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.locator("#edit-rounds").fill("3");
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await page.locator("#instructions-units .instructions-unit").last().click();
+    const state = await page.evaluate(() => ({
+        filtered: (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
+            .__test_instruction_guidance__?.filtered,
+        arrows: window.__test_instruction_starts__?.length,
+        paths: (window as typeof window & { __test_instruction_boundary_paths__?: number[][] })
+            .__test_instruction_boundary_paths__?.length,
+    }));
+    expect(state.filtered).toBe(false);
+    expect(state.arrows).toBe(1);
+    expect(state.paths).toBeGreaterThan(0);
 });
 
 test("Crochet canvas arrows sit before and point into their first stitch", async ({ page }) => {
@@ -642,7 +774,7 @@ test("partial-round start arrows do not overlap their number lane", async ({ pag
                 }> }).__test_instruction_label_geometry__ ?? [],
             };
         });
-        expect(geometry.arrows).toHaveLength(3);
+        expect(geometry.arrows).toHaveLength(1);
         expect(geometry.labels).toHaveLength(3);
         for (const arrow of geometry.arrows) {
             expect(arrow.bounds.left).toBeGreaterThanOrEqual(0);
@@ -673,14 +805,18 @@ test("round arrows follow Alternate direction", async ({ page }) => {
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const forward = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(forward).toHaveLength(2);
+    expect(forward).toHaveLength(1);
+
+    await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
+    const round2Forward = await page.evaluate(() => window.__test_instruction_starts__);
+    expect(round2Forward).toHaveLength(1);
 
     await page.getByText("Alternate direction", { exact: true }).click();
     const alternate = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(alternate).toHaveLength(2);
-    expect(alternate![1]).not.toMatchObject({
-        x: forward![1].x, y: forward![1].y,
-        nextX: forward![1].nextX, nextY: forward![1].nextY,
+    expect(alternate).toHaveLength(1);
+    expect(alternate![0]).not.toMatchObject({
+        x: round2Forward![0].x, y: round2Forward![0].y,
+        nextX: round2Forward![0].nextX, nextY: round2Forward![0].nextY,
     });
 });
 

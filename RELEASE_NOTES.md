@@ -2,6 +2,11 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 30 September 2026
+
+- Pattern colour samples follow row and round geometry and chart guidance, and colour resets are unavailable when the default is already selected.
+- Crochet highlights the current row or round boundary and direction, with compact instructions and row numbers on yarn-coloured squares.
+
 ## 28 September 2026
 
 - Crochet preserves the open Pattern or Settings panel and canvas view, refreshes after palette edits, and shows clearer yarn, direction, progress, and error guidance.

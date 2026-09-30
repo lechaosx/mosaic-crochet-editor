@@ -2,8 +2,9 @@ import { Tool, SymKey, PatternState, Axis, GridRecipe } from "@mosaic/logic/type
 import type { SelectMode } from "@mosaic/logic/selection";
 import type { OverlayAction } from "@mosaic/logic/paint";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
-import type { CanvasWorkspace } from "./render";
+import { renderPatternColourPreview, type CanvasWorkspace } from "./render";
 import type { PackedInstructionCoordinates } from "./instruction-coordinates";
+import { DEFAULT_APP_PREFERENCES } from "./preferences";
 
 export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
 export type SelectionMode = SelectMode;
@@ -477,6 +478,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const colorA  = el<HTMLInputElement>("color-a");
     const colorB  = el<HTMLInputElement>("color-b");
     const patternColourPreview = el("pattern-colour-preview");
+    const patternPreviewCanvas = el<HTMLCanvasElement>("pattern-preview-canvas");
+    const drawPatternPreview = () => renderPatternColourPreview(
+        patternPreviewCanvas, patternColourPreview.dataset.mode === "round" ? "round" : "row",
+        colorA.value, colorB.value, el<HTMLInputElement>("danger-color").value,
+        Number(el<HTMLInputElement>("hl-opacity").value) / 100,
+    );
 
     const openYarnPicker = (slot: 1 | 2) => {
         if (!isInspectorOpen("pattern")) {
@@ -516,14 +523,17 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
     function setColors(a: string, b: string) {
         colorA.value = a; colorB.value = b;
+        el<HTMLButtonElement>("color-a-reset").disabled = a.toLowerCase() === "#000000";
+        el<HTMLButtonElement>("color-b-reset").disabled = b.toLowerCase() === "#ffffff";
         swatchA.style.background = a;
         swatchB.style.background = b;
-        patternColourPreview.style.setProperty("--preview-a", a);
-        patternColourPreview.style.setProperty("--preview-b", b);
+        drawPatternPreview();
     }
     function setProjectColors(danger: string, accent: string) {
-        patternColourPreview.style.setProperty("--preview-danger", danger);
+        el<HTMLButtonElement>("danger-color-reset").disabled = danger.toLowerCase() === DEFAULT_APP_PREFERENCES.dangerColor;
+        el<HTMLButtonElement>("accent-color-reset").disabled = accent.toLowerCase() === DEFAULT_APP_PREFERENCES.accentColor;
         patternColourPreview.style.setProperty("--preview-accent", accent);
+        drawPatternPreview();
     }
 
     /* ── Global Mirror inspector ──────────────────────────────────────── */
@@ -808,7 +818,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             focusFirstInspectorControl("settings");
         }
     });
-    el<HTMLInputElement>("hl-opacity")        .addEventListener("input",  cb.onHighlightChange);
+    el<HTMLInputElement>("hl-opacity")        .addEventListener("input",  () => { cb.onHighlightChange(); drawPatternPreview(); });
     el<HTMLInputElement>("danger-color")      .addEventListener("input",  cb.onDangerColorChange);
     el<HTMLInputElement>("accent-color")      .addEventListener("input",  cb.onAccentColorChange);
     el("danger-color-reset").addEventListener("click", cb.onDangerColorReset);
@@ -1006,6 +1016,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     function syncEditInputs(s: PatternState) {
         patternColourPreview.dataset.mode = s.mode;
+        drawPatternPreview();
         patternColourPreview.setAttribute(
             "aria-label",
             `${s.mode === "row" ? "Rows" : "Centre-out"} colour preview with selection, grid, mirror, valid overlay, and invalid overlay`,
@@ -1203,14 +1214,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 };
                 const meta = document.createElement("span");
                 meta.className = "instructions-unit-number";
+                meta.style.backgroundColor = unit.color;
                 meta.textContent = unit.label.replace(/^\D+/, "");
-                const yarn = document.createElement("span");
-                yarn.className = "instructions-unit-yarn";
-                yarn.style.backgroundColor = unit.color;
-                yarn.textContent = unit.yarn;
+                meta.dataset.yarn = unit.yarn;
                 const text = document.createElement("code");
                 text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
-                item.append(yarn, meta, text);
+                item.append(meta, text);
                 row.append(item);
                 unitsList.append(row);
                 unitElements.push(item);
@@ -1243,8 +1252,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
             },
             setYarnColors: (a, b) => {
                 unitElements.forEach(item => {
-                    const marker = item.querySelector<HTMLElement>(".instructions-unit-yarn");
-                    if (marker) marker.style.backgroundColor = marker.textContent === "A" ? a : b;
+                    const marker = item.querySelector<HTMLElement>(".instructions-unit-number");
+                    if (marker) marker.style.backgroundColor = marker.dataset.yarn === "A" ? a : b;
                 });
             },
             alternate: () => alternateChk.checked,

@@ -29,7 +29,7 @@
       <rect x="4.5" y="4.5" width="15" height="15" rx="1"/>
     </symbol>
     <symbol id="icon-overlay-invert" viewBox="0 0 24 24">
-      <rect x="4.5" y="4.5" width="15" height="15" rx="1"/><path d="M5 19 19 5M5 15l4 4m-4-8 8 8M5 7l12 12M9 5l10 10m-6-10 6 6m-2-6 2 2"/>
+      <rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M7 9h10m-3-3 3 3-3 3M17 15H7m3-3-3 3 3 3"/>
     </symbol>
     <symbol id="icon-select" viewBox="0 0 24 24">
       <rect x="4.5" y="5" width="15" height="14" rx="1" stroke-dasharray="3 2"/>
@@ -392,15 +392,11 @@
         <button class="btn" id="find-contrast-colors" type="button" title="Choose distinct danger and accent colours that contrast with both yarns">Find contrasting colors</button>
       </div>
       <div id="pattern-colour-preview" class="pattern-colour-preview" data-mode="row" role="img" aria-label="Rows colour preview with selection, grid, mirror, valid overlay, and invalid overlay">
-        <div class="pattern-preview-grid" data-preview-cue="grid" aria-hidden="true">
-          <span class="preview-cell preview-cell--a"></span><span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a preview-cell--valid" data-preview-cue="valid-overlay"></span><span class="preview-cell preview-cell--b"></span>
-          <span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a preview-cell--round-hole"></span><span class="preview-cell preview-cell--b preview-cell--round-hole"></span><span class="preview-cell preview-cell--a"></span>
-          <span class="preview-cell preview-cell--a"></span><span class="preview-cell preview-cell--b preview-cell--round-hole"></span><span class="preview-cell preview-cell--a preview-cell--round-hole"></span><span class="preview-cell preview-cell--b preview-cell--invalid" data-preview-cue="invalid-overlay"></span>
-          <span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a"></span><span class="preview-cell preview-cell--b"></span><span class="preview-cell preview-cell--a"></span>
-        </div>
+        <canvas id="pattern-preview-canvas" width="140" height="140" data-preview-cue="grid" aria-hidden="true"></canvas>
         <span class="pattern-preview-selection" data-preview-cue="selection" aria-hidden="true"></span>
         <span class="pattern-preview-mirror" data-preview-cue="mirror" aria-hidden="true"></span>
       </div>
+      <p class="pattern-preview-key">× overlay stitch · ! invalid overlay placement</p>
     </div>
   </section>
       </div>

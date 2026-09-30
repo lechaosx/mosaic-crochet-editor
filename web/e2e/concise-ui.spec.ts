@@ -37,15 +37,19 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
         const reset = page.getByRole("button", { name });
         await expect(reset).toBeVisible();
         await expect(reset).toHaveText("");
+        await expect(reset).toBeDisabled();
     }
+    await page.getByLabel("Yarn A colour").fill("#123456");
+    await expect(page.getByRole("button", { name: "Reset Yarn A to default" })).toBeEnabled();
+    await page.getByRole("button", { name: "Reset Yarn A to default" }).click();
+    await expect(page.getByRole("button", { name: "Reset Yarn A to default" })).toBeDisabled();
     await expect(page.getByRole("button", { name: /new patterns/i })).toHaveCount(0);
     const preview = page.getByRole("img", { name: /Rows colour preview/ });
     await expect(preview).toBeVisible();
     await expect(preview.locator("[data-preview-cue='selection']")).toHaveCount(1);
     await expect(preview.locator("[data-preview-cue='grid']")).toHaveCount(1);
     await expect(preview.locator("[data-preview-cue='mirror']")).toHaveCount(1);
-    await expect(preview.locator("[data-preview-cue='valid-overlay']")).toHaveCount(1);
-    await expect(preview.locator("[data-preview-cue='invalid-overlay']")).toHaveCount(1);
+    await expect(page.getByText("× overlay stitch · ! invalid overlay placement")).toBeVisible();
     await expect(page.locator("#edit-yarn")).toHaveCount(0);
     const danger = page.getByLabel("Project danger colour");
     const accent = page.getByLabel("Project accent colour");
@@ -58,18 +62,25 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     await danger.fill("#123456");
     await accent.fill("#abcdef");
     expect(await preview.evaluate(element => {
-        const cell = (selector: string) => element.querySelector<HTMLElement>(selector)!;
+        const canvas = element.querySelector("canvas")!;
+        const ctx = canvas.getContext("2d")!;
+        const rgb = (x: number, y: number) => Array.from(ctx.getImageData(x, y, 1, 1).data).slice(0, 3);
+        const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+        let danger = false;
+        for (let i = 0; i < pixels.length; i += 4) {
+            if (pixels[i] === 18 && pixels[i + 1] === 52 && pixels[i + 2] === 86) danger = true;
+        }
         return {
-            yarnA: getComputedStyle(cell(".preview-cell--a")).backgroundColor,
-            yarnB: getComputedStyle(cell(".preview-cell--b")).backgroundColor,
-            accent: getComputedStyle(cell("[data-preview-cue='selection']")).borderTopColor,
-            danger: getComputedStyle(cell("[data-preview-cue='invalid-overlay']"), "::after").color,
+            yarnA: rgb(10, 10),
+            yarnB: rgb(10, 30),
+            accent: getComputedStyle(element.querySelector<HTMLElement>("[data-preview-cue='selection']")!).borderTopColor,
+            danger,
         };
     })).toEqual({
-        yarnA: "rgb(0, 0, 0)",
-        yarnB: "rgb(255, 255, 255)",
+        yarnA: [0, 0, 0],
+        yarnB: [255, 255, 255],
         accent: "rgb(171, 205, 239)",
-        danger: "rgb(18, 52, 86)",
+        danger: true,
     });
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document))
         .toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: "#abcdef" });
@@ -84,6 +95,33 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     await expect(settings.getByLabel("Project accent colour")).toHaveCount(0);
     await expect(page.locator("label:has(#lock-invalid)"))
         .toHaveAttribute("title", "Block new marks on cells that cannot host an overlay");
+});
+
+test("the pattern swatch uses the chart's row and concentric-round yarn geometry", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const sample = async () => page.locator("#pattern-colour-preview canvas").evaluate((canvas: HTMLCanvasElement) => {
+        const ctx = canvas.getContext("2d")!;
+        const n = 7;
+        const at = (x: number, y: number) => {
+            const p = ctx.getImageData((x + 0.5) * canvas.width / n, (y + 0.5) * canvas.height / n, 1, 1).data;
+            return Array.from(p).slice(0, 3);
+        };
+        return { rowTop: [at(0, 0), at(6, 0)], rowNext: [at(0, 1), at(6, 1)],
+            outer: [at(0, 0), at(6, 0), at(0, 6), at(6, 6)],
+            inner: [at(1, 2), at(5, 2), at(2, 1), at(2, 5)], center: at(3, 3) };
+    });
+    const rows = await sample();
+    expect(rows.rowTop[0]).toEqual(rows.rowTop[1]);
+    expect(rows.rowNext[0]).toEqual(rows.rowNext[1]);
+    expect(rows.rowTop[0]).not.toEqual(rows.rowNext[0]);
+    await page.getByText("Centre-out", { exact: true }).click();
+    const rounds = await sample();
+    expect(rounds.outer.every(color => JSON.stringify(color) === JSON.stringify(rounds.outer[0]))).toBe(true);
+    expect(rounds.inner.every(color => JSON.stringify(color) === JSON.stringify(rounds.inner[0]))).toBe(true);
+    expect(rounds.outer[0]).not.toEqual(rounds.inner[0]);
+    expect(rounds.center).not.toEqual(rounds.outer[0]);
+    expect(rounds.center).not.toEqual(rounds.inner[0]);
 });
 
 test("Pattern colour resets use fixed app defaults and contrast suggestions stay outside undo", async ({ page }) => {
