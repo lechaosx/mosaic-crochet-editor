@@ -368,9 +368,6 @@ function selectionCellCount(): number {
 }
 
 // ── Paint ────────────────────────────────────────────────────────────────────
-// Paint operates on the *visible* canvas (pixels + float stamped). When a
-// float is active, paint changes are clipped to its shifted mask and
-// written back to `float.pixels`. When no float, paint writes to canvas.
 // `g.prePixels` / `g.preFloat` (captured at paintdown) drive cancel revert
 // and the change-detection that decides whether release pushes a snapshot.
 interface PaintOutcome {
@@ -435,28 +432,18 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
 
     const transforms = axesToFlat(s.axes);
     const targets = transformed_target_indices(W, H, x, y, transforms);
-    let next = paintOps[tool as PaintTool]({
-        visible, pattern, x, y,
-        color, primary: s.primaryColor,
-        overlayAction: effectiveOverlayAction,
-        invertVisited,
-        transforms, shifted: paintMask,
-    });
-    if (evaluatedRecipe) {
-        const clicked = recipeCell;
-        if (clicked) {
-            for (const cell of evaluatedRecipe.cells) {
-                if (cell.sourceIndex !== clicked.sourceIndex || (cell.x === x && cell.y === y)) continue;
-                next = paintOps[tool as PaintTool]({
-                    visible: next, pattern, x: cell.x, y: cell.y,
-                    color, primary: s.primaryColor,
-                    overlayAction: effectiveOverlayAction,
-                    invertVisited,
-                    transforms,
-                    shifted: paintMask,
-                });
-            }
-        }
+    let next: Uint8Array;
+    try {
+        next = paintOps[tool]({
+            visible, pattern, x, y,
+            color, primary: s.primaryColor,
+            overlayAction: effectiveOverlayAction,
+            invertVisited,
+            transforms, shifted: paintMask, repeat: evaluatedRecipe,
+        });
+    } catch (error) {
+        if (error instanceof RangeError) return blocked(error.message);
+        throw error;
     }
     let protectedSkipped = false;
     if (preferences.lockInvalid) {
@@ -485,7 +472,7 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
             const cx = f.x + lx, cy = f.y + ly;
             if (cx >= 0 && cx < W && cy >= 0 && cy < H) canvasPixels[cy * W + cx] = s.pixels[cy * W + cx];
         }
-        after = visiblePixels({ ...s, float: { ...f, pixels: newFP } });
+        after = visiblePixels({ ...s, pixels: canvasPixels, float: { ...f, pixels: newFP } });
     }
     return { before: visible, after, targets, floatPixels, canvasPixels, reason: null, protectedSkipped };
 }

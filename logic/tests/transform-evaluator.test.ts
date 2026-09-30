@@ -17,6 +17,15 @@ const noGrid: PackedGridRecipe = {
 };
 
 describe("packed transform grid prototype", () => {
+    test("instance maps preserve an edited offset outside a one-cell source", () => {
+        const evaluated = evaluatePackedGrid([{ x: 2, y: 1 }], { ...noGrid, right: 1 },
+            { x: 2, y: 2, turns: [90] });
+        expect(evaluated.placements.map(instance => instance.map({ x: 2, y: 2 })))
+            .toEqual([{ x: 2, y: 2 }, { x: 2, y: 2 }, { x: 3, y: 2 }, { x: 3, y: 2 }]);
+        for (const instance of evaluated.placements) {
+            expect(instance.unmap(instance.map({ x: 8, y: -3 }))).toEqual({ x: 8, y: -3 });
+        }
+    });
     test("requires a source and whole-cell grid values", () => {
         expect(() => evaluatePackedGrid([], noGrid)).toThrow(/source/i);
         expect(() => evaluatePackedGrid([{ x: 0.5, y: 0 }], noGrid)).toThrow(/source cells/i);

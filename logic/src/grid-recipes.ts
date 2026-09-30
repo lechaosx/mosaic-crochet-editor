@@ -100,6 +100,7 @@ export function gridRecipeError(
 export function evaluateGridRecipe(recipe: GridRecipe): PackedGridEvaluation {
     const source = recipeSourceCells(recipe);
     if (source.length === 0) return {
+        source: [], placements: [],
         columnStep: { x: 0, y: 0 }, columnStepAlternate: { x: 0, y: 0 },
         rowStep: { x: 0, y: 0 }, rowStepAlternate: { x: 0, y: 0 },
         cells: [], conflicts: [], instances: [],

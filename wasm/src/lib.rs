@@ -739,6 +739,52 @@ pub fn paint_pixel(
 }
 
 #[wasm_bindgen]
+pub fn fill_region(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    x: i32,
+    y: i32,
+    selection: Option<Vec<u8>>,
+) -> Vec<i32> {
+    tools::fill_region(
+        pixels,
+        width,
+        height,
+        x,
+        y,
+        selection.as_deref().unwrap_or(&[]),
+    )
+    .into_iter()
+    .flat_map(|(x, y)| [x, y])
+    .collect()
+}
+
+#[wasm_bindgen]
+pub fn transformed_patch_targets(
+    width: i32,
+    height: i32,
+    x: i32,
+    y: i32,
+    patch_x: i32,
+    patch_y: i32,
+    axes: Option<Vec<f64>>,
+) -> Vec<i32> {
+    tools::transformed_patch_targets(
+        x,
+        y,
+        width,
+        height,
+        patch_x,
+        patch_y,
+        axes.as_deref().unwrap_or(&[]),
+    )
+    .into_iter()
+    .flat_map(|(x, y, px, py)| [x, y, px, py])
+    .collect()
+}
+
+#[wasm_bindgen]
 pub fn flood_fill(
     pixels: &[u8],
     width: i32,

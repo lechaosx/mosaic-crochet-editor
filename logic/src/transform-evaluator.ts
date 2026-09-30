@@ -46,6 +46,8 @@ export interface TransformConflict {
 }
 
 export interface PackedGridEvaluation {
+    source: ReadonlyArray<TransformSourceCell>;
+    placements: TransformPlacement[];
     columnStep: { x: number; y: number };
     columnStepAlternate: { x: number; y: number };
     rowStep: { x: number; y: number };
@@ -53,6 +55,11 @@ export interface PackedGridEvaluation {
     cells: EvaluatedTransformCell[];
     conflicts: TransformConflict[];
     instances: EvaluatedTransformCell[][];
+}
+
+export interface TransformPlacement {
+    map: (cell: TransformSourceCell) => TransformSourceCell;
+    unmap: (cell: TransformSourceCell) => TransformSourceCell;
 }
 
 export function evaluatePackedGrid(
@@ -128,6 +135,8 @@ export function evaluatePackedGrid(
     const bounds = cellBounds(input);
     const claims = new Map<string, CellClaim>();
     const instances: EvaluatedTransformCell[][] = [];
+    const placements: TransformPlacement[] = [];
+    const aroundPlacements = centrePlacements(aroundCentre);
 
     for (let row = -recipe.up; row <= recipe.down; row++) {
         for (let column = -recipe.left; column <= recipe.right; column++) {
@@ -143,6 +152,17 @@ export function evaluatePackedGrid(
                 !== (recipe.rowMirrorHorizontal && isOdd(row));
             const mirrorY = (recipe.columnMirrorVertical && isOdd(column))
                 !== (recipe.rowMirrorVertical && isOdd(row));
+            for (const around of aroundPlacements) {
+                placements.push({
+                    map: cell => {
+                        const oriented = orientCell(around.map(cell), bounds, mirrorX, mirrorY);
+                        return { x: safeAdd(oriented.x, dx), y: safeAdd(oriented.y, dy) };
+                    },
+                    unmap: cell => around.unmap(orientCell({
+                        x: safeSubtract(cell.x, dx), y: safeSubtract(cell.y, dy),
+                    }, bounds, mirrorX, mirrorY)),
+                });
+            }
             const instanceClaims = new Map<string, CellClaim>();
             for (const cell of input) {
                 const oriented = orientCell(cell, bounds, mirrorX, mirrorY);
@@ -164,6 +184,8 @@ export function evaluatePackedGrid(
 
     const ordered = [...claims.values()].sort((a, b) => a.y - b.y || a.x - b.x);
     return {
+        source,
+        placements,
         columnStep,
         columnStepAlternate,
         rowStep,
@@ -184,6 +206,27 @@ export function evaluatePackedGrid(
             })),
         instances,
     };
+}
+
+function centrePlacements(centre: AroundCentreRecipe | undefined): TransformPlacement[] {
+    const identity = (cell: TransformSourceCell) => ({ ...cell });
+    const placements: TransformPlacement[] = [{ map: identity, unmap: identity }];
+    if (!centre) return placements;
+    for (const turn of [...new Set(centre.turns)]) {
+        placements.push({
+            map: cell => rotateCell(cell, centre, turn),
+            unmap: cell => rotateCell(cell, centre, turn === 90 ? 270 : turn === 270 ? 90 : 180),
+        });
+    }
+    for (const horizontal of [true, false]) {
+        if (!(horizontal ? centre.mirrorHorizontal : centre.mirrorVertical)) continue;
+        const mirror = (cell: TransformSourceCell) => ({
+            x: horizontal ? safeGridSubtract(centre.x * 2, cell.x) : cell.x,
+            y: horizontal ? cell.y : safeGridSubtract(centre.y * 2, cell.y),
+        });
+        placements.push({ map: mirror, unmap: mirror });
+    }
+    return placements;
 }
 
 interface CellClaim {
@@ -233,21 +276,15 @@ function expandAroundCentre(
         throw new RangeError("Rotation centre is not grid-compatible with quarter turns.");
     }
 
-    source.forEach((cell, sourceIndex) => {
-        for (const turn of turns) {
-            const rotated = rotateCell(cell, aroundCentre, turn);
-            if (!Number.isSafeInteger(rotated.x) || !Number.isSafeInteger(rotated.y)) {
+    for (const placement of centrePlacements(aroundCentre).slice(1)) {
+        source.forEach((cell, sourceIndex) => {
+            const mapped = placement.map(cell);
+            if (!Number.isSafeInteger(mapped.x) || !Number.isSafeInteger(mapped.y)) {
                 throw new RangeError("Rotation centre is not grid-compatible with quarter turns.");
             }
-            addClaim(claims, rotated.x, rotated.y, sourceIndex);
-        }
-        if (aroundCentre.mirrorHorizontal) {
-            addClaim(claims, safeGridSubtract(aroundCentre.x * 2, cell.x), cell.y, sourceIndex);
-        }
-        if (aroundCentre.mirrorVertical) {
-            addClaim(claims, cell.x, safeGridSubtract(aroundCentre.y * 2, cell.y), sourceIndex);
-        }
-    });
+            addClaim(claims, mapped.x, mapped.y, sourceIndex);
+        });
+    }
     return [...claims.values()];
 }
 

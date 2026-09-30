@@ -8,6 +8,15 @@ import { paintOps, PaintCtx, PaintTool } from "../src/paint";
 import { initialize_row_pattern, initialize_round_pattern, overlay_target_available_row } from "@mosaic/wasm";
 import type { PatternState } from "../src/types";
 import { filledPixels, rowPattern } from "./_helpers";
+import { evaluatePackedGrid, type PackedGridRecipe } from "../src/transform-evaluator";
+
+const grid: PackedGridRecipe = {
+    left: 0, right: 1, up: 0, down: 0,
+    columnSpacing: 0, rowSpacing: 0, columnSpacingAlternate: 0, rowSpacingAlternate: 0,
+    columnOffset: 0, rowOffset: 0,
+    columnMirrorHorizontal: false, columnMirrorVertical: false,
+    rowMirrorHorizontal: false, rowMirrorVertical: false,
+};
 
 function ctx(tool: PaintTool, opts: Partial<PaintCtx> = {}): PaintCtx {
     const W = 3, H = 3;
@@ -25,6 +34,111 @@ function ctx(tool: PaintTool, opts: Partial<PaintCtx> = {}): PaintCtx {
 }
 
 describe("paintOps", () => {
+    test("global mirror can return a rotated support to canvas while its anchor stays authorized", () => {
+        const out = paintOps.overlay(ctx("overlay", {
+            visible: initialize_row_pattern(3, 3), pattern: rowPattern(3, 3), x: 1, y: 1,
+            repeat: evaluatePackedGrid([{ x: 1, y: 1 }], { ...grid, right: 0 }, { x: 1, y: 0, turns: [90] }),
+            transforms: new Float64Array([0, 0, 0]),
+        }));
+        expect(out[1]).toBe(2);
+    });
+    test("transform limit failure leaves pixels and stroke visits unchanged", () => {
+        const visible = new Uint8Array([1, 1, 1]);
+        const visited = new Set([2]);
+        expect(() => paintOps.invert(ctx("invert", {
+            visible, pattern: rowPattern(3, 1), x: 0, y: 0, invertVisited: visited,
+            transforms: new Float64Array([5, 1, 4_096]),
+        }))).toThrow(RangeError);
+        expect(Array.from(visible)).toEqual([1, 1, 1]);
+        expect(visited).toEqual(new Set([2]));
+    });
+    test("off-canvas repeat coordinates never wrap through the wasm boundary", () => {
+        const out = paintOps.pencil(ctx("pencil", {
+            visible: new Uint8Array([1, 1, 1]), pattern: rowPattern(3, 1), x: 0, y: 0, color: 2,
+            repeat: evaluatePackedGrid([{ x: 0, y: 0 }], { ...grid, columnSpacing: 4_294_967_296 }),
+        }));
+        expect(Array.from(out)).toEqual([2, 1, 1]);
+    });
+    test("gutter clear mirrors supporting boundary cells and respects selection", () => {
+        const visible = initialize_row_pattern(3, 5);
+        visible[1] = 2;
+        visible[4 * 3 + 1] = 2;
+        const options = {
+            visible, pattern: rowPattern(3, 5), x: 1, y: -1,
+            overlayAction: "clear" as const, transforms: new Float64Array([1, 2, 0]),
+        };
+        const out = paintOps.overlay(ctx("overlay", options));
+        expect(out[1]).toBe(1);
+        expect(out[4 * 3 + 1]).toBe(1);
+        const shifted = new Uint8Array(15);
+        shifted[1] = 1;
+        const clipped = paintOps.overlay(ctx("overlay", { ...options, shifted }));
+        expect(clipped[1]).toBe(1);
+        expect(clipped[4 * 3 + 1]).toBe(2);
+    });
+    test("no-op source Eraser synchronizes a repeat with a different value", () => {
+        const out = paintOps.eraser(ctx("eraser", {
+            visible: new Uint8Array([1, 2, 2]), pattern: rowPattern(3, 1), x: 0, y: 0,
+            repeat: evaluatePackedGrid([{ x: 0, y: 0 }], grid),
+        }));
+        expect(Array.from(out)).toEqual([1, 1, 2]);
+    });
+
+    test("fill uses only the clicked repeat instance region", () => {
+        const out = paintOps.fill(ctx("fill", {
+            visible: new Uint8Array([1, 1, 1, 1, 1]), pattern: rowPattern(5, 1),
+            x: 0, y: 0, color: 2,
+            repeat: evaluatePackedGrid([{ x: 0, y: 0 }, { x: 1, y: 0 }], grid),
+        }));
+        expect(Array.from(out)).toEqual([2, 2, 2, 2, 1]);
+    });
+
+    test("overlay copies support outside a one-cell motif", () => {
+        const out = paintOps.overlay(ctx("overlay", {
+            visible: initialize_row_pattern(5, 5), pattern: rowPattern(5, 5), x: 2, y: 1,
+            repeat: evaluatePackedGrid([{ x: 2, y: 1 }], grid),
+        }));
+        expect(out[2 * 5 + 2]).toBe(2);
+        expect(out[2 * 5 + 3]).toBe(2);
+    });
+
+    test("overlay support rotates with its repeat, including clicks on copies", () => {
+        const repeat = evaluatePackedGrid([{ x: 1, y: 1 }], { ...grid, right: 0 },
+            { x: 2, y: 2, turns: [90] });
+        const out = paintOps.overlay(ctx("overlay", {
+            visible: filledPixels(5, 5, 1), pattern: rowPattern(5, 5), x: 1, y: 1, repeat,
+        }));
+        expect(out[2 * 5 + 1]).toBe(2);
+        expect(out[1 * 5 + 2]).toBe(2);
+        expect(out[2 * 5 + 3]).toBe(1);
+        const fromCopy = paintOps.overlay(ctx("overlay", {
+            visible: filledPixels(5, 5, 1), pattern: rowPattern(5, 5), x: 3, y: 1, repeat,
+        }));
+        expect(fromCopy[2 * 5 + 3]).toBe(2);
+        expect(fromCopy[1 * 5 + 2]).toBe(2);
+    });
+    test("invert copies the clicked result onto a different mirror value", () => {
+        const visible = new Uint8Array([1, 1, 2]);
+        const visited = new Set<number>();
+        const out = paintOps.invert(ctx("invert", {
+            visible, pattern: rowPattern(3, 1), x: 0, y: 0,
+            transforms: new Float64Array([0, 1, 0]), invertVisited: visited,
+        }));
+        expect(Array.from(out)).toEqual([2, 1, 2]);
+        expect(paintOps.invert(ctx("invert", {
+            visible: out, pattern: rowPattern(3, 1), x: 2, y: 0,
+            transforms: new Float64Array([0, 1, 0]), invertVisited: visited,
+        }))).toEqual(out);
+    });
+
+    test("overlay mirrors its supporting pixel across a horizontal axis", () => {
+        const out = paintOps.overlay(ctx("overlay", {
+            visible: initialize_row_pattern(3, 5), pattern: rowPattern(3, 5),
+            x: 1, y: 1, transforms: new Float64Array([1, 2, 0]),
+        }));
+        expect(out[2 * 3 + 1]).toBe(2);
+        expect(out[4 * 3 + 1]).toBe(1);
+    });
     test("pencil paints the click cell to the given colour", () => {
         const out = paintOps.pencil(ctx("pencil", {
             visible: filledPixels(3, 3, 1),

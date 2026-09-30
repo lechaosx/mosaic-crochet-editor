@@ -1,10 +1,5 @@
 //! Drawing tools.
 //!
-//! Each tool expands the click through active symmetry axes, then offsets the
-//! complete motif across the bounded repeat grid. The target generator is also
-//! exported through wasm so the TS-side Invert tool can reuse it for per-stroke
-//! deduping.
-
 // Tool parameters mirror the flat wasm-bindgen boundary; Rust-only wrapper
 // types would add conversions without representing shared domain concepts.
 #![allow(clippy::too_many_arguments)]
@@ -64,6 +59,21 @@ pub fn transformed_targets(
     height: i32,
     records: &[f64],
 ) -> Vec<(i32, i32)> {
+    transformed_patch_targets(x, y, width, height, x, y, records)
+        .into_iter()
+        .map(|(x, y, _, _)| (x, y))
+        .collect()
+}
+
+pub fn transformed_patch_targets(
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+    patch_x: i32,
+    patch_y: i32,
+    records: &[f64],
+) -> Vec<(i32, i32, i32, i32)> {
     type Transform = Box<dyn Fn(i32, i32) -> (i32, i32)>;
     let mut transforms: Vec<Transform> = Vec::new();
     let mut repeat_x = (1_i64, 0_i64);
@@ -117,22 +127,23 @@ pub fn transformed_targets(
         return Vec::new();
     }
 
-    let mut visited: HashSet<(i32, i32)> = HashSet::new();
-    let mut queue: VecDeque<(i32, i32)> = VecDeque::new();
-    visited.insert((x, y));
-    queue.push_back((x, y));
+    let mut visited: HashSet<(i32, i32, i32, i32)> = HashSet::new();
+    let mut queue: VecDeque<(i32, i32, i32, i32)> = VecDeque::new();
+    visited.insert((x, y, patch_x, patch_y));
+    queue.push_back((x, y, patch_x, patch_y));
 
-    while let Some((cx, cy)) = queue.pop_front() {
+    while let Some((cx, cy, px, py)) = queue.pop_front() {
         for transform in &transforms {
             let (nx, ny) = transform(cx, cy);
+            let (qx, qy) = transform(px, py);
             if nx < 0 || nx >= width || ny < 0 || ny >= height {
                 continue;
             }
-            if !visited.contains(&(nx, ny)) && visited.len() >= EFFECTIVE_ORBIT_LIMIT {
+            if !visited.contains(&(nx, ny, qx, qy)) && visited.len() >= EFFECTIVE_ORBIT_LIMIT {
                 return Vec::new();
             }
-            if visited.insert((nx, ny)) {
-                queue.push_back((nx, ny));
+            if visited.insert((nx, ny, qx, qy)) {
+                queue.push_back((nx, ny, qx, qy));
             }
         }
     }
@@ -142,7 +153,7 @@ pub fn transformed_targets(
     }
 
     let mut repeated = HashSet::new();
-    for &(sx, sy) in &visited {
+    for &(sx, sy, px, py) in &visited {
         for iy in -repeat_y.1..=repeat_y.1 {
             for ix in -repeat_x.1..=repeat_x.1 {
                 let tx = sx as i64 + ix * repeat_x.0;
@@ -150,7 +161,12 @@ pub fn transformed_targets(
                 if tx < 0 || tx >= width as i64 || ty < 0 || ty >= height as i64 {
                     continue;
                 }
-                repeated.insert((tx as i32, ty as i32));
+                let qx = px as i64 + ix * repeat_x.0;
+                let qy = py as i64 + iy * repeat_y.0;
+                let (Ok(qx), Ok(qy)) = (i32::try_from(qx), i32::try_from(qy)) else {
+                    return Vec::new();
+                };
+                repeated.insert((tx as i32, ty as i32, qx, qy));
                 if repeated.len() > MAX_TRANSFORM_CLAIMS {
                     return Vec::new();
                 }
@@ -274,30 +290,6 @@ pub fn paint_pixel(
     result
 }
 
-// Overlay tools. Two semantic actions; TS picks which one to call.
-//
-// `paint_overlay_*` — make a ✕ visually appear at the clicked cell. The inward
-//   neighbour of each transformed target is painted with the *opposite* of its
-//   natural colour; the highlight pass then renders a valid-overlay marker at
-//   each target. Skips holes, corners
-//   (no single inward axis), and innermost-ring cells (no inward neighbour)
-//   — `inward_cell_*` returns None in those cases. No-op on gutter clicks
-//   (there's no cell there to paint at).
-//
-// `clear_overlay_*` — remove a marker that's already there.
-//   • In-canvas: restore inward neighbours of the targets back to natural.
-//   • Gutter: the boundary cell whose ! renders in the gutter is the inward
-//     neighbour of the gutter cell; restore its full transformed target set.
-//     This is how the user clears boundary-row/ring ! markers they can see
-//     hovering outside the pattern.
-
-// Paint each non-hole transformed target to its natural
-// baseline (the alternating row / round colour at that cell's position).
-// `invert = true` paints the *opposite* of natural instead — used by the
-// eraser tool's secondary action to deliberately wrong out cells. Each
-// target uses its own natural colour, not the click point's, so transformed
-// writes do not smear the click row across the full target set.
-
 pub fn paint_natural_row(
     pixels: &[u8],
     width: i32,
@@ -309,6 +301,14 @@ pub fn paint_natural_row(
     selection: &[u8],
 ) -> Vec<u8> {
     let mut result = pixels.to_vec();
+    if x < 0
+        || x >= width
+        || y < 0
+        || y >= height
+        || pixels[(y * width + x) as usize] == COLOR_TRANSPARENT
+    {
+        return result;
+    }
     let orbit = transformed_targets(x, y, width, height, axes);
     if orbit.is_empty() {
         return result;
@@ -321,7 +321,7 @@ pub fn paint_natural_row(
         if !selection.is_empty() && selection[idx] == 0 {
             continue;
         }
-        let nat = natural_color_row(height, sy);
+        let nat = natural_color_row(height, y);
         result[idx] = if invert { opposite_color(nat) } else { nat };
     }
     result
@@ -345,6 +345,14 @@ pub fn paint_natural_round(
     let virtual_size = IVec2::new(virtual_width, virtual_height);
     let offset = IVec2::new(offset_x, offset_y);
     let mut result = pixels.to_vec();
+    if x < 0
+        || x >= canvas_width
+        || y < 0
+        || y >= canvas_height
+        || pixels[(y * canvas_width + x) as usize] == COLOR_TRANSPARENT
+    {
+        return result;
+    }
     let orbit = transformed_targets(x, y, canvas_width, canvas_height, axes);
     if orbit.is_empty() {
         return result;
@@ -357,8 +365,32 @@ pub fn paint_natural_round(
         if !selection.is_empty() && selection[idx] == 0 {
             continue;
         }
-        let nat = natural_color_round(virtual_size, offset, rounds, IVec2::new(sx, sy));
+        let nat = natural_color_round(virtual_size, offset, rounds, IVec2::new(x, y));
         result[idx] = if invert { opposite_color(nat) } else { nat };
+    }
+    result
+}
+
+fn paint_overlay_patch(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    anchor: IVec2,
+    support: IVec2,
+    color: u8,
+    axes: &[f64],
+) -> Vec<u8> {
+    let mut result = pixels.to_vec();
+    for (_, _, x, y) in transformed_patch_targets(
+        anchor.x, anchor.y, width, height, support.x, support.y, axes,
+    ) {
+        if x < 0 || x >= width || y < 0 || y >= height {
+            continue;
+        }
+        let i = (y * width + x) as usize;
+        if result[i] != COLOR_TRANSPARENT {
+            result[i] = color;
+        }
     }
     result
 }
@@ -371,26 +403,22 @@ pub fn paint_overlay_row(
     y: i32,
     axes: &[f64],
 ) -> Vec<u8> {
-    let canvas_size = IVec2::new(width, height);
     if x < 0 || x >= width || y < 0 || y >= height {
         return pixels.to_vec();
     }
-    let mut result = pixels.to_vec();
-    let orbit = transformed_targets(x, y, width, height, axes);
-    if orbit.is_empty() {
-        return result;
-    }
-    for (sx, sy) in orbit {
-        let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else {
-            continue;
-        };
-        let ti = (inner.y * width + inner.x) as usize;
-        if result[ti] == COLOR_TRANSPARENT {
-            continue;
-        }
-        result[ti] = opposite_color(natural_color_row(height, inner.y));
-    }
-    result
+    let Some(inner) = inward_cell_row(IVec2::new(width, height), IVec2::new(x, y)) else {
+        return pixels.to_vec();
+    };
+    let anchor = IVec2::new(x, y);
+    paint_overlay_patch(
+        pixels,
+        width,
+        height,
+        anchor,
+        inner,
+        opposite_color(natural_color_row(height, inner.y)),
+        axes,
+    )
 }
 
 pub fn clear_overlay_row(
@@ -401,42 +429,23 @@ pub fn clear_overlay_row(
     y: i32,
     axes: &[f64],
 ) -> Vec<u8> {
-    let canvas_size = IVec2::new(width, height);
-    let in_canvas = x >= 0 && x < width && y >= 0 && y < height;
-    let mut result = pixels.to_vec();
-
-    if in_canvas {
-        let orbit = transformed_targets(x, y, width, height, axes);
-        if orbit.is_empty() {
-            return pixels.to_vec();
-        }
-        for (sx, sy) in orbit {
-            let Some(inner) = inward_cell_row(canvas_size, IVec2::new(sx, sy)) else {
-                continue;
-            };
-            let ti = (inner.y * width + inner.x) as usize;
-            if result[ti] == COLOR_TRANSPARENT {
-                continue;
-            }
-            result[ti] = natural_color_row(height, inner.y);
-        }
+    let Some(inner) = inward_cell_row(IVec2::new(width, height), IVec2::new(x, y)) else {
+        return pixels.to_vec();
+    };
+    let anchor = if x >= 0 && x < width && y >= 0 && y < height {
+        IVec2::new(x, y)
     } else {
-        let Some(inner) = inward_cell_row(canvas_size, IVec2::new(x, y)) else {
-            return result;
-        };
-        let orbit = transformed_targets(inner.x, inner.y, width, height, axes);
-        if orbit.is_empty() {
-            return pixels.to_vec();
-        }
-        for (sx, sy) in orbit {
-            let idx = (sy * width + sx) as usize;
-            if result[idx] == COLOR_TRANSPARENT {
-                continue;
-            }
-            result[idx] = natural_color_row(height, sy);
-        }
-    }
-    result
+        inner
+    };
+    paint_overlay_patch(
+        pixels,
+        width,
+        height,
+        anchor,
+        inner,
+        natural_color_row(height, inner.y),
+        axes,
+    )
 }
 
 pub fn paint_overlay_round(
@@ -452,29 +461,32 @@ pub fn paint_overlay_round(
     y: i32,
     axes: &[f64],
 ) -> Vec<u8> {
-    let canvas_size = IVec2::new(canvas_width, canvas_height);
-    let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset = IVec2::new(offset_x, offset_y);
     if x < 0 || x >= canvas_width || y < 0 || y >= canvas_height {
         return pixels.to_vec();
     }
-    let mut result = pixels.to_vec();
-    let orbit = transformed_targets(x, y, canvas_width, canvas_height, axes);
-    if orbit.is_empty() {
-        return result;
-    }
-    for (sx, sy) in orbit {
-        let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy))
-        else {
-            continue;
-        };
-        let ti = (inner.y * canvas_width + inner.x) as usize;
-        if result[ti] == COLOR_TRANSPARENT {
-            continue;
-        }
-        result[ti] = opposite_color(natural_color_round(virtual_size, offset, rounds, inner));
-    }
-    result
+    let Some(inner) = inward_cell_round(
+        IVec2::new(canvas_width, canvas_height),
+        IVec2::new(virtual_width, virtual_height),
+        IVec2::new(offset_x, offset_y),
+        IVec2::new(x, y),
+    ) else {
+        return pixels.to_vec();
+    };
+    let anchor = IVec2::new(x, y);
+    paint_overlay_patch(
+        pixels,
+        canvas_width,
+        canvas_height,
+        anchor,
+        inner,
+        opposite_color(natural_color_round(
+            IVec2::new(virtual_width, virtual_height),
+            IVec2::new(offset_x, offset_y),
+            rounds,
+            inner,
+        )),
+        axes,
+    )
 }
 
 pub fn clear_overlay_round(
@@ -490,47 +502,33 @@ pub fn clear_overlay_round(
     y: i32,
     axes: &[f64],
 ) -> Vec<u8> {
-    let canvas_size = IVec2::new(canvas_width, canvas_height);
-    let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset = IVec2::new(offset_x, offset_y);
-    let in_canvas = x >= 0 && x < canvas_width && y >= 0 && y < canvas_height;
-    let mut result = pixels.to_vec();
-
-    if in_canvas {
-        let orbit = transformed_targets(x, y, canvas_width, canvas_height, axes);
-        if orbit.is_empty() {
-            return pixels.to_vec();
-        }
-        for (sx, sy) in orbit {
-            let Some(inner) =
-                inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(sx, sy))
-            else {
-                continue;
-            };
-            let ti = (inner.y * canvas_width + inner.x) as usize;
-            if result[ti] == COLOR_TRANSPARENT {
-                continue;
-            }
-            result[ti] = natural_color_round(virtual_size, offset, rounds, inner);
-        }
+    let Some(inner) = inward_cell_round(
+        IVec2::new(canvas_width, canvas_height),
+        IVec2::new(virtual_width, virtual_height),
+        IVec2::new(offset_x, offset_y),
+        IVec2::new(x, y),
+    ) else {
+        return pixels.to_vec();
+    };
+    let anchor = if x >= 0 && x < canvas_width && y >= 0 && y < canvas_height {
+        IVec2::new(x, y)
     } else {
-        let Some(inner) = inward_cell_round(canvas_size, virtual_size, offset, IVec2::new(x, y))
-        else {
-            return result;
-        };
-        let orbit = transformed_targets(inner.x, inner.y, canvas_width, canvas_height, axes);
-        if orbit.is_empty() {
-            return pixels.to_vec();
-        }
-        for (sx, sy) in orbit {
-            let idx = (sy * canvas_width + sx) as usize;
-            if result[idx] == COLOR_TRANSPARENT {
-                continue;
-            }
-            result[idx] = natural_color_round(virtual_size, offset, rounds, IVec2::new(sx, sy));
-        }
-    }
-    result
+        inner
+    };
+    paint_overlay_patch(
+        pixels,
+        canvas_width,
+        canvas_height,
+        anchor,
+        inner,
+        natural_color_round(
+            IVec2::new(virtual_width, virtual_height),
+            IVec2::new(offset_x, offset_y),
+            rounds,
+            inner,
+        ),
+        axes,
+    )
 }
 
 // Lock-invalid post-filter. After a tool runs, revert any always-invalid
@@ -726,27 +724,20 @@ pub fn transfer_preserved_round(
     result
 }
 
-// `selection` is a per-cell bitmask (1 = in selection, 0 = not). Empty slice
-// = no selection — walker runs across the whole connected region. When
-// non-empty the walker treats unselected cells as boundaries: BFS never
-// crosses out of the selection, so a same-colour path running through
-// unselected cells doesn't leak the fill into another selection island.
-// The transformed fill at the end is unaffected; TS-side clip-after handles
-// target cells that land outside the selection.
-pub fn flood_fill(
+pub fn fill_region(
     pixels: &[u8],
     width: i32,
     height: i32,
     start_x: i32,
     start_y: i32,
-    fill_color: u8,
-    axes: &[f64],
     selection: &[u8],
-) -> Vec<u8> {
-    let mut result = pixels.to_vec();
-    let target_color = result[(start_y * width + start_x) as usize];
-    if target_color == fill_color || target_color == 0 {
-        return result;
+) -> Vec<(i32, i32)> {
+    if start_x < 0 || start_x >= width || start_y < 0 || start_y >= height {
+        return Vec::new();
+    }
+    let target_color = pixels[(start_y * width + start_x) as usize];
+    if target_color == 0 {
+        return Vec::new();
     }
     let use_sel = !selection.is_empty();
 
@@ -761,7 +752,7 @@ pub fn flood_fill(
             continue;
         }
         let idx = y * width + x;
-        if visited.contains(&idx) || result[idx as usize] != target_color {
+        if visited.contains(&idx) || pixels[idx as usize] != target_color {
             continue;
         }
         if use_sel && selection[idx as usize] == 0 {
@@ -774,6 +765,22 @@ pub fn flood_fill(
         queue.push_back((x, y + 1));
         queue.push_back((x, y - 1));
     }
+
+    filled
+}
+
+pub fn flood_fill(
+    pixels: &[u8],
+    width: i32,
+    height: i32,
+    start_x: i32,
+    start_y: i32,
+    fill_color: u8,
+    axes: &[f64],
+    selection: &[u8],
+) -> Vec<u8> {
+    let mut result = pixels.to_vec();
+    let filled = fill_region(pixels, width, height, start_x, start_y, selection);
 
     let mut claim_count = 0_usize;
     let claim_limit = if has_active_repeat(axes) {
@@ -1156,12 +1163,7 @@ mod tests {
     }
 
     #[test]
-    fn paint_natural_row_uses_per_orbit_natural() {
-        // Regression target: the old erase tool used the CLICK's natural
-        // colour for every orbit cell, smearing the click row's value
-        // across the whole orbit. With H-mirror (mask=2), click (2, 1)
-        // mirrors to (2, 2) — a different row, different natural. Both
-        // cells should restore to *their own* row's natural.
+    fn paint_natural_row_copies_source_natural() {
         let mut pixels = row_grid(4, 4);
         pixels[1 * 4 + 2] = opposite_color(natural_color_row(4, 1));
         pixels[2 * 4 + 2] = opposite_color(natural_color_row(4, 2));
@@ -1169,7 +1171,7 @@ mod tests {
         let h_axis = [1.0_f64, 1.5, 0.0];
         let out = paint_natural_row(&pixels, 4, 4, 2, 1, &h_axis, false, &[]);
         assert_eq!(out[1 * 4 + 2], natural_color_row(4, 1));
-        assert_eq!(out[2 * 4 + 2], natural_color_row(4, 2));
+        assert_eq!(out[2 * 4 + 2], natural_color_row(4, 1));
     }
 
     // ── paint_natural_round ──────────────────────────────────────────────────
@@ -1186,6 +1188,27 @@ mod tests {
         let out = paint_natural_round(&pixels, 9, 9, 9, 9, 0, 0, 3, 1, 4, &[], false, &[]);
         assert_eq!(out[4 * 9 + 1], COLOR_B);
         assert_eq!(out[4 * 9 + 4], COLOR_TRANSPARENT);
+    }
+
+    #[test]
+    fn paint_natural_round_hole_source_does_not_erase_mirrored_cells() {
+        let pixels = round_grid(9, 9, 9, 9, 0, 0, 3);
+        let out = paint_natural_round(
+            &pixels,
+            9,
+            9,
+            9,
+            9,
+            0,
+            0,
+            3,
+            4,
+            4,
+            &[0.0, 2.0, 0.0],
+            false,
+            &[],
+        );
+        assert_eq!(out, pixels);
     }
 
     #[test]
@@ -1610,6 +1633,52 @@ mod tests {
         let pixels = vec![COLOR_A; 5];
         let out = flood_fill(&pixels, 5, 1, 0, 0, COLOR_B, &[], &[]);
         assert_eq!(&out[..], &[COLOR_B, COLOR_B, COLOR_B, COLOR_B, COLOR_B]);
+    }
+
+    #[test]
+    fn flood_fill_same_color_still_copies_source_region() {
+        let out = flood_fill(&[1, 2, 2], 3, 1, 0, 0, 1, &[0.0, 1.0, 0.0], &[]);
+        assert_eq!(out, vec![1, 2, 1]);
+    }
+
+    #[test]
+    fn fill_region_preserves_same_color_touches_and_selection_boundaries() {
+        let mut region = fill_region(&[1, 1, 1, 2, 1], 5, 1, 0, 0, &[1, 1, 0, 1, 1]);
+        region.sort();
+        assert_eq!(region, vec![(0, 0), (1, 0)]);
+        assert!(fill_region(&[0, 1], 2, 1, 0, 0, &[]).is_empty());
+    }
+
+    #[test]
+    fn paired_transform_preserves_support_orbit_when_anchor_is_fixed() {
+        let mut orbit = transformed_patch_targets(2, 1, 5, 5, 2, 2, &[1.0, 1.0, 0.0]);
+        orbit.sort();
+        assert_eq!(orbit, vec![(2, 1, 2, 0), (2, 1, 2, 2)]);
+    }
+
+    #[test]
+    fn paired_transform_aborts_at_the_orbit_limit() {
+        assert!(
+            transformed_patch_targets(0, 0, 20, 2, 0, 1, &[0.0, 4.0, 0.0, 0.0, 5.0, 0.0])
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn overlay_horizontal_mirror_transforms_support_not_anchor() {
+        let pixels = row_grid(3, 5);
+        let out = paint_overlay_row(&pixels, 3, 5, 1, 1, &[1.0, 2.0, 0.0]);
+        assert_eq!(out[2 * 3 + 1], opposite_color(natural_color_row(5, 2)));
+        assert_eq!(out[4 * 3 + 1], pixels[4 * 3 + 1]);
+    }
+
+    #[test]
+    fn overlay_drops_support_when_mirrored_anchor_is_off_canvas() {
+        let mut pixels = row_grid(3, 5);
+        pixels[4 * 3 + 1] = 2;
+        let out = paint_overlay_row(&pixels, 3, 5, 1, 0, &[1.0, 2.5, 0.0]);
+        assert_eq!(out[4 * 3 + 1], pixels[4 * 3 + 1]);
+        assert_eq!(out[1 * 3 + 1], opposite_color(natural_color_row(5, 1)));
     }
 
     #[test]

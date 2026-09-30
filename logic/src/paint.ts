@@ -1,17 +1,11 @@
-// Per-tool paint dispatch. Each entry takes the visible canvas + click +
-// stroke/state context and returns the new canvas. The shared `PaintCtx`
-// shape lets `paintAt` look the right op up in `paintOps` instead of
-// branching on tool — same surface area as `paint_*` Rust functions.
-
 import {
-    paint_pixel, flood_fill,
-    paint_natural_row, paint_natural_round,
-    paint_overlay_row, paint_overlay_round,
-    clear_overlay_row, clear_overlay_round,
+    fill_region, paint_natural_row, paint_natural_round,
+    paint_overlay_row, paint_overlay_round, clear_overlay_row, clear_overlay_round,
     overlay_target_available_row, overlay_target_available_round,
-    transformed_target_indices,
+    overlay_inward_cell_row, overlay_inward_cell_round, transformed_patch_targets,
 } from "@mosaic/wasm";
 import { PatternState } from "./types";
+import { MAX_TRANSFORM_CLAIMS, type PackedGridEvaluation, type TransformPlacement, type TransformSourceCell } from "./transform-evaluator";
 
 export type PaintTool = "pencil" | "fill" | "eraser" | "overlay" | "invert";
 export type OverlayAction = "place" | "clear" | "invert";
@@ -27,91 +21,121 @@ export interface PaintCtx {
     invertVisited:  Set<number> | null;
     transforms:     Float64Array;
     shifted:        Uint8Array | null;
+    repeat?:        PackedGridEvaluation | null;
 }
 
-type PaintOp = (c: PaintCtx) => Uint8Array;
+const none = new Float64Array(0);
+const identity: TransformPlacement = { map: cell => cell, unmap: cell => cell };
 
-export const paintOps: Record<PaintTool, PaintOp> = {
-    pencil: ({ visible, pattern: p, x, y, color, transforms, shifted }) =>
-        paint_pixel(visible, p.canvasWidth, p.canvasHeight, x, y, color, transforms, shifted),
-
-    fill: ({ visible, pattern: p, x, y, color, transforms, shifted }) => {
-        const filled = flood_fill(visible, p.canvasWidth, p.canvasHeight, x, y, color, transforms, shifted);
-        if (shifted) {
-            for (let i = 0; i < filled.length; i++) {
-                if (shifted[i] === 0) filled[i] = visible[i];
+function paint(tool: PaintTool, c: PaintCtx): Uint8Array {
+    const { visible, pattern: p, x, y, color, primary, transforms, shifted, repeat } = c;
+    const W = p.canvasWidth, H = p.canvasHeight;
+    const inCanvas = (cell: TransformSourceCell) => cell.x >= 0 && cell.x < W && cell.y >= 0 && cell.y < H;
+    const index = (cell: TransformSourceCell) => cell.y * W + cell.x;
+    const click = { x, y };
+    if (inCanvas(click) && (visible[index(click)] === 0 || shifted?.[index(click)] === 0)) return visible.slice();
+    if (!inCanvas(click) && tool !== "overlay") return visible.slice();
+    if (repeat?.conflicts.some(cell => cell.x === x && cell.y === y)) throw new RangeError("Repeat has conflicting source cells.");
+    const clicked = repeat?.cells.find(cell => cell.x === x && cell.y === y);
+    const candidates = clicked && repeat ? repeat.placements.filter(placement => {
+        const mapped = placement.map(repeat.source[clicked.sourceIndex]);
+        return mapped.x === x && mapped.y === y;
+    }) : [identity];
+    const sourcePlacement = candidates[0];
+    const placements = clicked && repeat ? repeat.placements : [identity];
+    const toggling = tool === "invert" || (tool === "overlay" && c.overlayAction === "invert");
+    let sourceCells: TransformSourceCell[];
+    let result = visible;
+    if (tool === "fill") {
+        let sourceMask = shifted;
+        if (clicked && repeat) {
+            sourceMask = new Uint8Array(visible.length);
+            for (const cell of repeat.source) {
+                const mapped = sourcePlacement.map(cell);
+                if (inCanvas(mapped) && (!shifted || shifted[index(mapped)] !== 0)) sourceMask[index(mapped)] = 1;
             }
         }
-        return filled;
-    },
-
-    // Left click = primary = restore baseline; right click = secondary =
-    // paint the *opposite* baseline (deliberately wrong placement).
-    eraser: ({ visible, pattern: p, x, y, color, primary, transforms, shifted }) => {
-        const invert = color !== primary;
-        return p.mode === "row"
-            ? paint_natural_row(visible, p.canvasWidth, p.canvasHeight, x, y, transforms, invert, shifted)
-            : paint_natural_round(
-                visible, p.canvasWidth, p.canvasHeight,
-                p.virtualWidth, p.virtualHeight,
-                p.offsetX, p.offsetY, p.rounds,
-                x, y, transforms, invert, shifted,
-            );
-    },
-
-    overlay: ({ visible, pattern: p, x, y, overlayAction = "place", invertVisited, transforms, shifted }) => {
-        const apply = (source: Uint8Array, tx: number, ty: number, action: "place" | "clear", activeTransforms: Float64Array) => {
-            if (p.mode === "row") {
-                return action === "clear"
-                    ? clear_overlay_row(source, p.canvasWidth, p.canvasHeight, tx, ty, activeTransforms)
-                    : paint_overlay_row(source, p.canvasWidth, p.canvasHeight, tx, ty, activeTransforms);
-            }
-            return action === "clear"
-                ? clear_overlay_round(source, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, tx, ty, activeTransforms)
-                : paint_overlay_round(source, p.canvasWidth, p.canvasHeight, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, tx, ty, activeTransforms);
-        };
-        if (!shifted && overlayAction !== "invert") return apply(visible, x, y, overlayAction, transforms);
-
-        const available = (tx: number, ty: number) => p.mode === "row"
-            ? overlay_target_available_row(p.canvasWidth, p.canvasHeight, tx, ty)
-            : overlay_target_available_round(
-                p.canvasWidth, p.canvasHeight,
-                p.virtualWidth, p.virtualHeight,
-                p.offsetX, p.offsetY, p.rounds,
-                tx, ty,
-            );
-        let out: Uint8Array = visible.slice();
-        const none = new Float64Array(0);
-        for (const index of transformed_target_indices(p.canvasWidth, p.canvasHeight, x, y, transforms)) {
-            if (shifted && shifted[index] === 0) continue;
-            if (invertVisited?.has(index)) continue;
-            invertVisited?.add(index);
-            const tx = index % p.canvasWidth;
-            const ty = Math.floor(index / p.canvasWidth);
-            if (overlayAction !== "invert") {
-                out = apply(out, tx, ty, overlayAction, none);
-                continue;
-            }
-            const cleared = apply(out, tx, ty, "clear", none);
-            const markerWasPresent = cleared.some((pixel, i) => pixel !== out[i]);
-            out = markerWasPresent ? cleared : available(tx, ty) ? apply(out, tx, ty, "place", none) : out;
+        const region = fill_region(visible, W, H, x, y, sourceMask);
+        sourceCells = [];
+        for (let i = 0; i < region.length; i += 2) sourceCells.push({ x: region[i], y: region[i + 1] });
+    } else if (tool === "overlay") {
+        const support = p.mode === "row"
+            ? overlay_inward_cell_row(W, H, x, y)
+            : overlay_inward_cell_round(W, H, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, x, y);
+        if (support.length === 0) return visible.slice();
+        sourceCells = [{ x: support[0], y: support[1] }];
+        if (visible[index(sourceCells[0])] === 0) return visible.slice();
+        const apply = (clear: boolean) => p.mode === "row"
+            ? (clear ? clear_overlay_row : paint_overlay_row)(visible, W, H, x, y, none)
+            : (clear ? clear_overlay_round : paint_overlay_round)(visible, W, H, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, none);
+        let action = c.overlayAction ?? "place";
+        if (action === "invert") {
+            const cleared = apply(true);
+            const present = cleared[index(sourceCells[0])] !== visible[index(sourceCells[0])];
+            const available = p.mode === "row" ? overlay_target_available_row(W, H, x, y)
+                : overlay_target_available_round(W, H, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y);
+            if (!present && !available) return visible.slice();
+            action = present ? "clear" : "place";
         }
-        return out;
-    },
+        if (action === "place" && !inCanvas(click)) return visible.slice();
+        result = apply(action === "clear");
+    } else {
+        sourceCells = [click];
+        if (tool === "eraser") result = p.mode === "row"
+            ? paint_natural_row(visible, W, H, x, y, none, color !== primary, null)
+            : paint_natural_round(visible, W, H, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, none, color !== primary, null);
+    }
+    if (toggling && sourceCells.some(cell => c.invertVisited?.has(index(cell)))) return visible.slice();
 
-    // Flip pixels between primary and secondary on each *first* visit; a
-    // single stroke never inverts the same cell twice.
-    invert: ({ visible, pattern: p, x, y, invertVisited, transforms, shifted }) => {
-        const out = visible.slice();
-        const indices = transformed_target_indices(p.canvasWidth, p.canvasHeight, x, y, transforms);
-        for (const idx of indices) {
-            if (invertVisited!.has(idx)) continue;
-            if (shifted && shifted[idx] === 0) continue;
-            invertVisited!.add(idx);
-            const cur = out[idx];
-            if      (cur === 1) out[idx] = 2;
-            else if (cur === 2) out[idx] = 1;
+    const writes = new Map<number, number>();
+    const visited = new Set<number>();
+    let claimCount = 0;
+    for (const sourceCell of sourceCells) {
+        const value = tool === "pencil" || tool === "fill" ? color
+            : tool === "invert" ? (visible[index(sourceCell)] === 1 ? 2 : 1)
+                : result[index(sourceCell)];
+        const canonical = sourcePlacement.unmap(sourceCell);
+        // A shared anchor can belong to several orientations; its edited support must identify one.
+        if (clicked && repeat && (repeat.source[clicked.sourceIndex].x !== x || repeat.source[clicked.sourceIndex].y !== y)) {
+            for (const candidate of candidates) {
+                const other = candidate.unmap(sourceCell);
+                if (other.x !== canonical.x || other.y !== canonical.y) throw new RangeError("Repeat edit has ambiguous orientation.");
+            }
         }
-        return out;
-    },
+        for (const placement of placements) {
+            const target = placement.map(canonical);
+            const anchor = tool === "overlay" && inCanvas(click) ? placement.map(sourcePlacement.unmap(click)) : target;
+            if (!inCanvas(anchor)) continue;
+            if (target.x < -2_147_483_648 || target.x > 2_147_483_647
+                || target.y < -2_147_483_648 || target.y > 2_147_483_647) continue;
+            const orbit = transformed_patch_targets(W, H, anchor.x, anchor.y, target.x, target.y, transforms);
+            if (orbit.length === 0) throw new RangeError("Transform exceeds its safety limit.");
+            claimCount += orbit.length / 4;
+            if (claimCount > MAX_TRANSFORM_CLAIMS) throw new RangeError("Paint cannot exceed 1,048,576 transform claims.");
+            for (let i = 0; i < orbit.length; i += 4) {
+                const authorized = { x: orbit[i], y: orbit[i + 1] };
+                const dest = { x: orbit[i + 2], y: orbit[i + 3] };
+                if (!inCanvas(authorized)) continue;
+                if (inCanvas(authorized) && shifted?.[index(authorized)] === 0) continue;
+                if (!inCanvas(dest) || visible[index(dest)] === 0) continue;
+                const destIndex = index(dest);
+                if (writes.has(destIndex) && writes.get(destIndex) !== value) throw new RangeError("Paint transforms have conflicting results.");
+                writes.set(destIndex, value);
+                visited.add(destIndex);
+            }
+        }
+    }
+    if (toggling && [...visited].some(i => c.invertVisited?.has(i))) return visible.slice();
+    const out = visible.slice();
+    for (const [i, value] of writes) out[i] = value;
+    if (toggling) for (const i of visited) c.invertVisited?.add(i);
+    return out;
+}
+
+export const paintOps: Record<PaintTool, (c: PaintCtx) => Uint8Array> = {
+    pencil: c => paint("pencil", c),
+    fill: c => paint("fill", c),
+    eraser: c => paint("eraser", c),
+    overlay: c => paint("overlay", c),
+    invert: c => paint("invert", c),
 };
