@@ -6,6 +6,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Pattern colour samples follow row and round geometry and chart guidance, and colour resets are unavailable when the default is already selected.
 - Crochet highlights the current row or round boundary and direction, with compact instructions and row numbers on yarn-coloured squares.
+- Clear design removes drawing, selections, repeats, and mirror axes together, with Undo restoring them.
 
 ## 28 September 2026
 

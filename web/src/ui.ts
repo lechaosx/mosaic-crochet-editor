@@ -83,8 +83,8 @@ export interface UICallbacks {
     onZoom:            (factor: number) => void;
     onNavigate:        () => void;
     onEditOpen:        () => void;
-    onEditChange:      () => boolean;
-    onEditCommit:      () => void;
+    onEditChange:      (clearDesign?: boolean) => boolean;
+    onEditCommit:      (clearDesign?: boolean) => void;
     onEditRevert:      () => void;
     onSave:            () => void;
     onLoad:            () => void;
@@ -957,10 +957,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         wipeEl.disabled = false;
     }
 
-    function applyAndCommitPatternEdit() {
+    function applyAndCommitPatternEdit(clearDesign = false) {
         editPreviewActive = true;
-        if (cb.onEditChange()) {
-            cb.onEditCommit();
+        if (cb.onEditChange(clearDesign)) {
+            cb.onEditCommit(clearDesign);
             enterDesignForCommand();
         } else cb.onEditRevert();
         editPreviewActive = false;
@@ -1009,7 +1009,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     el("edit-reset").addEventListener("click", () => {
         const wipeEl = el<HTMLInputElement>("edit-wipe");
         wipeEl.checked = true;
-        if (isInspectorOpen("pattern")) applyAndCommitPatternEdit();
+        if (isInspectorOpen("pattern")) applyAndCommitPatternEdit(true);
         wipeEl.checked = false;
         refreshWipeAvailability();
     });

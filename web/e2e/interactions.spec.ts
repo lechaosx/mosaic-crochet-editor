@@ -152,7 +152,7 @@ test("Pattern presents direct properties with contextual resize feedback", async
 
     await expect(page.getByLabel("Centre opening width")).toBeAttached();
     await expect(page.getByLabel("Centre opening height")).toBeAttached();
-    await expect(page.getByRole("button", { name: "Clear drawing" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clear design" })).toBeVisible();
     await expect(page.locator("#edit-summary")).toBeHidden();
 
     await page.locator("#edit-width").fill("10");
@@ -311,7 +311,7 @@ test("Pattern extent switches restore cells clipped by a smaller preview", async
     )).toEqual(baseline);
 });
 
-test("Clear drawing restores natural colours immediately and is undoable", async ({ page }) => {
+test("Clear design restores natural colours immediately and is undoable", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 0, 1);
     const cell = await cellCoord(page, 0, 1);
@@ -320,7 +320,7 @@ test("Clear drawing restores natural colours immediately and is undoable", async
     await page.getByRole("button", { name: "Pattern" }).click();
     const fittedCell = await cellCoord(page, 0, 1);
 
-    await page.getByRole("button", { name: "Clear drawing" }).click();
+    await page.getByRole("button", { name: "Clear design" }).click();
 
     expect(await pixelRGB(page, fittedCell.cx, fittedCell.cy)).toEqual(B);
     expect(await historyLength(page)).toBe(beforeReset + 1);

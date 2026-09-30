@@ -786,6 +786,7 @@ interface PatternEditSnapshot {
     pixels: Uint8Array;
     float: Float | null;
     axes: Axis[];
+    recipes: GridRecipe[];
     activeRecipeId: string | null;
 }
 
@@ -799,6 +800,7 @@ function patternEditSnapshot(state: Readonly<SessionState>): PatternEditSnapshot
         pixels: state.pixels.slice(),
         float: state.float ? { ...state.float, pixels: state.float.pixels.slice() } : null,
         axes: [...state.axes],
+        recipes: state.recipes,
         activeRecipeId: state.activeRecipeId,
     };
 }
@@ -825,6 +827,7 @@ function samePatternEditSnapshot(a: PatternEditSnapshot, b: PatternEditSnapshot)
         && (a.float === null) === (b.float === null)
         && (a.float === null || b.float === null || arraysEqual(a.float.pixels, b.float.pixels))
         && axesEqual(a.axes, b.axes)
+        && gridRecipesEqual(a.recipes, b.recipes)
         && a.activeRecipeId === b.activeRecipeId;
 }
 
@@ -840,7 +843,7 @@ function onEditOpen() {
 function captureEditBaseline() {
     editBaseline = patternEditSnapshot(store.state);
 }
-function onEditChange(): boolean {
+function onEditChange(clearDesign = false): boolean {
     if (!editBaseline) captureEditBaseline();
     const baseline = editBaseline!;
     if (!editSessionSource) editSessionSource = patternEditSnapshot(store.state);
@@ -858,10 +861,12 @@ function onEditChange(): boolean {
     const settings = readEditSettings();
     const summary = patternChangeSummary(settings, source, edited);
     ui.setEditSummary(summary.width, summary.height, summary.preserved, summary.added, summary.removed);
-    fitToView(
-        viewport.canvas, viewport.view, pattern, store.state.rotation, preferences.labelsVisible,
-        ui.getCanvasWorkspace(),
-    );
+    if (!clearDesign) {
+        fitToView(
+            viewport.canvas, viewport.view, pattern, store.state.rotation, preferences.labelsVisible,
+            ui.getCanvasWorkspace(),
+        );
+    }
     const restoreSessionSource = !settings.wipe
         && samePatternGeometry(pattern, sessionSource.pattern);
     applyingPatternPreview = true;
@@ -871,6 +876,7 @@ function onEditChange(): boolean {
                 s.pattern = sessionSource.pattern;
                 s.pixels = sessionSource.pixels.slice();
                 s.axes = [...sessionSource.axes];
+                s.recipes = sessionSource.recipes;
                 s.float = sessionSource.float
                     ? { ...sessionSource.float, pixels: sessionSource.float.pixels.slice() }
                     : null;
@@ -879,7 +885,11 @@ function onEditChange(): boolean {
             }
             s.pattern = pattern;
             s.pixels = pixels;
-            s.axes = sessionSource.axes.filter(axis => axisIsProjectValid(axis, pattern));
+            s.axes = clearDesign ? [] : sessionSource.axes.filter(axis => axisIsProjectValid(axis, pattern));
+            s.recipes = clearDesign
+                ? [{ ...emptyGridRecipe(), id: sessionSource.recipes[0].id }]
+                : sessionSource.recipes;
+            if (clearDesign) s.activeRecipeId = null;
             s.float = null;
         }, { persist: false });
     } finally {
@@ -890,20 +900,12 @@ function onEditChange(): boolean {
     refreshSymmetryUi();
     return true;
 }
-function onEditCommit() {
+function onEditCommit(clearDesign = false) {
+    if (clearDesign) patternHistorySession = false;
     if (!editBaseline) return;
     const baseline = editBaseline;
     editBaseline = null;
-    const changed = JSON.stringify(baseline.pattern) !== JSON.stringify(store.state.pattern)
-        || !arraysEqual(baseline.pixels, store.state.pixels)
-        || baseline.float?.x !== store.state.float?.x
-        || baseline.float?.y !== store.state.float?.y
-        || baseline.float?.w !== store.state.float?.w
-        || baseline.float?.h !== store.state.float?.h
-        || (baseline.float === null) !== (store.state.float === null)
-        || (baseline.float !== null && store.state.float !== null
-            && !arraysEqual(baseline.float.pixels, store.state.float.pixels))
-        || !axesEqual(baseline.axes, store.state.axes);
+    const changed = !samePatternEditSnapshot(baseline, store.state);
     if (changed && patternHistorySession) {
         applyingPatternPreview = true;
         try {
@@ -922,7 +924,7 @@ function onEditCommit() {
             applyingPatternPreview = false;
             savingPatternHistory = false;
         }
-        patternHistorySession = true;
+        patternHistorySession = !clearDesign;
     }
     ui.syncEditInputs(store.state.pattern);
 }
@@ -942,6 +944,7 @@ function onEditRevert() {
             pixels: baseline.pixels,
             float: baseline.float,
             axes: baseline.axes,
+            recipes: baseline.recipes,
             activeRecipeId: baseline.activeRecipeId,
         }, { persist: false });
     } finally {
