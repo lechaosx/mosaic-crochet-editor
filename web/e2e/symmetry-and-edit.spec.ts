@@ -421,8 +421,18 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
             const selected = await cellCoord(page, x, 1);
             expect(await pixelRGB(page, selected.cx, selected.cy)).toEqual([0, 0, 0]);
         }
+        const outsideYarns = await page.evaluate(() => {
+            const { document } = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+            const packed = atob(document.pixels);
+            return [1, 4, 5, 6].map(x => {
+                const index = document.state.canvasWidth + x;
+                return (packed.charCodeAt(index >> 3) >> (index & 7)) & 1;
+            });
+        });
+        expect(outsideYarns).toEqual([1, 1, 1, 1]);
         for (const x of [1, 4, 5, 6]) {
-            const outside = await cellCoord(page, x, 1);
+            // The vertical mirror guide crosses cell 4's centre.
+            const outside = await cellCoord(page, x === 4 ? x - 0.2 : x, 1);
             expect(await pixelRGB(page, outside.cx, outside.cy), `cell ${x},1`).toEqual([255, 255, 255]);
         }
     });

@@ -80,6 +80,12 @@ export function observeCanvasResize(
     new ResizeObserver(() => { update(); onResize(); }).observe(canvas);
 }
 
+export interface InstructionSeam {
+    start: { x: number; y: number; dx: number; dy: number };
+    end: { x: number; y: number; dx: number; dy: number };
+    invalid: boolean;
+}
+
 // Render-internal state: animation, presentation caches. No coordinate-
 // transform fields here — those live on `Viewport`. `lastStore` is the rAF
 // callback's only handle to fresh data (animation frames don't carry args).
@@ -112,9 +118,8 @@ export interface RendererState {
     previewRepeatGuides: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
-    instructionStarts: readonly { x: number; y: number; nextX: number; nextY: number; invalid: boolean }[];
+    instructionSeam: InstructionSeam | null;
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
-    instructionBoundaryCoords: PackedInstructionCoordinates | null;
     instructionInvalidCoords: PackedInstructionCoordinates | null;
 }
 
@@ -139,9 +144,8 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         previewRepeatGuides:    false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
-        instructionStarts: [],
+        instructionSeam: null,
         instructionGuidanceCoords: null,
-        instructionBoundaryCoords: null,
         instructionInvalidCoords: null,
     };
 }
@@ -496,9 +500,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     renderInstructionErrors(ctx, view, dpr, pattern, committedPixels, rs.instructionInvalidCoords, dangerColor);
     renderHighlightSymbols(ctx, view, dpr, rs.colors, dangerColor, pattern, committedPixels, store.plan, m,
         guidanceOpacity / 100, rs.instructionGuidanceCoords);
-    renderInstructionBoundary(ctx, view, dpr, pattern, rs.instructionBoundaryCoords, accentColor);
-    renderInstructionStarts(ctx, view, dpr, rs.instructionStarts, accentColor, dangerColor, m);
-    (window as unknown as { __test_instruction_starts__?: typeof rs.instructionStarts }).__test_instruction_starts__ = rs.instructionStarts;
+    renderInstructionSeam(ctx, view, dpr, rs.instructionSeam, accentColor, dangerColor, m);
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
     const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
     const activeRecipe = activeRecipeId === null ? null : recipes.find(recipe => recipe.id === activeRecipeId) ?? null;
@@ -628,82 +630,63 @@ function tracedSparseBoundary(selection: ReadonlySet<string>): number[][] {
     return paths;
 }
 
-function renderInstructionStarts(
+function renderInstructionSeam(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    starts: readonly { x: number; y: number; nextX: number; nextY: number; invalid: boolean }[],
-    accentColor: string, dangerColor: string, m: DOMMatrix,
+    seam: InstructionSeam | null, accentColor: string, dangerColor: string, m: DOMMatrix,
 ) {
-    const geometry: {
-        startCentre: { x: number; y: number };
-        shaft: { x: number; y: number };
-        tip: { x: number; y: number };
-        direction: { x: number; y: number };
-        bounds: { left: number; top: number; right: number; bottom: number };
-    }[] = [];
-    if (starts.length === 0) {
-        (window as unknown as { __test_instruction_arrow_geometry__?: typeof geometry })
-            .__test_instruction_arrow_geometry__ = geometry;
+    if (!seam) {
+        (window as unknown as { __test_instruction_seam_geometry__?: unknown })
+            .__test_instruction_seam_geometry__ = null;
         return;
     }
+    const { start, end } = seam;
+    const sx = start.x + 0.5 - start.dx * 0.5;
+    const sy = start.y + 0.5 - start.dy * 0.5;
+    const ex = end.x + 0.5 + end.dx * 0.5;
+    const ey = end.y + 0.5 + end.dy * 0.5;
+    const edge = (x: number, y: number, dx: number) => dx !== 0
+        ? [x, y - 0.5, x, y + 0.5]
+        : [x - 0.5, y, x + 0.5, y];
+    const edges = [edge(sx, sy, start.dx)];
+    if (sx !== ex || sy !== ey) edges.push(edge(ex, ey, end.dx));
     const cell = view.zoom * dpr;
-    const length = Math.min(cell * 0.2, 12);
+    const depth = Math.min(0.32, 12 * dpr / cell);
+    const halfBase = Math.min(0.22, 8 * dpr / cell);
+    const triangle = [
+        [sx - start.dy * halfBase, sy + start.dx * halfBase],
+        [sx + start.dy * halfBase, sy - start.dx * halfBase],
+        [sx + start.dx * depth, sy + start.dy * depth],
+    ];
+    const screenTriangle = triangle.map(([x, y]) => {
+        const point = m.transformPoint({ x, y });
+        return [point.x, point.y];
+    });
+    (window as unknown as { __test_instruction_seam_geometry__?: unknown })
+        .__test_instruction_seam_geometry__ = { edges, triangle, screenTriangle };
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.lineWidth = Math.min(2.5, Math.max(1.5, length * 0.18));
-    for (const start of starts) {
-        const from = m.transformPoint({ x: start.x + 0.5, y: start.y + 0.5 });
-        const next = m.transformPoint({ x: start.nextX + 0.5, y: start.nextY + 0.5 });
-        const magnitude = Math.hypot(next.x - from.x, next.y - from.y);
-        if (magnitude === 0) continue;
-        const dx = (next.x - from.x) / magnitude;
-        const dy = (next.y - from.y) / magnitude;
-        const tipGap = Math.min(cell * 0.28, 12);
-        let tipX = from.x - dx * tipGap, tipY = from.y - dy * tipGap;
-        let shaftX = tipX - dx * length, shaftY = tipY - dy * length;
-        const side = length * 0.38;
-        const headA = { x: tipX - dx * side - dy * side, y: tipY - dy * side + dx * side };
-        const headB = { x: tipX - dx * side + dy * side, y: tipY - dy * side - dx * side };
-        const xs = [shaftX, tipX, headA.x, headB.x];
-        const ys = [shaftY, tipY, headA.y, headB.y];
-        const margin = Math.max(2, ctx.lineWidth);
-        const shiftX = Math.min(...xs) < margin
-            ? margin - Math.min(...xs)
-            : Math.max(...xs) > ctx.canvas.width - margin
-                ? ctx.canvas.width - margin - Math.max(...xs)
-                : 0;
-        const shiftY = Math.min(...ys) < margin
-            ? margin - Math.min(...ys)
-            : Math.max(...ys) > ctx.canvas.height - margin
-                ? ctx.canvas.height - margin - Math.max(...ys)
-                : 0;
-        tipX += shiftX; tipY += shiftY;
-        shaftX += shiftX; shaftY += shiftY;
-        geometry.push({
-            startCentre: { x: from.x, y: from.y },
-            shaft: { x: shaftX, y: shaftY },
-            tip: { x: tipX, y: tipY },
-            direction: { x: dx, y: dy },
-            bounds: {
-                left: Math.min(shaftX, tipX, headA.x + shiftX, headB.x + shiftX) - ctx.lineWidth / 2,
-                top: Math.min(shaftY, tipY, headA.y + shiftY, headB.y + shiftY) - ctx.lineWidth / 2,
-                right: Math.max(shaftX, tipX, headA.x + shiftX, headB.x + shiftX) + ctx.lineWidth / 2,
-                bottom: Math.max(shaftY, tipY, headA.y + shiftY, headB.y + shiftY) + ctx.lineWidth / 2,
-            },
-        });
-        ctx.strokeStyle = start.invalid ? dangerColor : accentColor;
+    const color = seam.invalid ? dangerColor : accentColor;
+    for (const [width, stroke] of [[4, "#161618"], [2, color]] as const) {
+        ctx.lineWidth = width / view.zoom;
+        ctx.strokeStyle = stroke;
         ctx.beginPath();
-        ctx.moveTo(shaftX, shaftY);
-        ctx.lineTo(tipX, tipY);
-        ctx.lineTo(headA.x + shiftX, headA.y + shiftY);
-        ctx.moveTo(tipX, tipY);
-        ctx.lineTo(headB.x + shiftX, headB.y + shiftY);
+        for (const [x1, y1, x2, y2] of edges) {
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+        }
         ctx.stroke();
     }
+    ctx.beginPath();
+    ctx.moveTo(triangle[0][0], triangle[0][1]);
+    ctx.lineTo(triangle[1][0], triangle[1][1]);
+    ctx.lineTo(triangle[2][0], triangle[2][1]);
+    ctx.closePath();
+    ctx.lineWidth = 1 / view.zoom;
+    ctx.strokeStyle = "#161618";
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fill();
     ctx.restore();
-    (window as unknown as { __test_instruction_arrow_geometry__?: typeof geometry })
-        .__test_instruction_arrow_geometry__ = geometry;
 }
 
 function renderInstructionErrors(
@@ -732,37 +715,6 @@ function renderInstructionErrors(
     ctx.lineWidth = Math.max(2 / (view.zoom * dpr), 0.08);
     for (const { x, y } of visibleCoords) {
         ctx.strokeRect(x + 0.08, y + 0.08, 0.84, 0.84);
-    }
-    ctx.restore();
-}
-
-function renderInstructionBoundary(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    pattern: PatternState, coords: PackedInstructionCoordinates | null, color: string,
-) {
-    if (!coords) {
-        (window as unknown as { __test_instruction_boundary_paths__?: number[][] }).__test_instruction_boundary_paths__ = [];
-        return;
-    }
-    const { canvasWidth: W, canvasHeight: H } = pattern;
-    const mask = new Uint8Array(W * H);
-    coords.forEach((x, y) => {
-        if (x >= 0 && x < W && y >= 0 && y < H) mask[y * W + x] = 1;
-    });
-    const paths = tracedBoundary(mask, W, H);
-    (window as unknown as { __test_instruction_boundary_paths__?: number[][] }).__test_instruction_boundary_paths__ = paths;
-    if (paths.length === 0) return;
-    ctx.save();
-    ctx.lineJoin = "round";
-    for (const [width, stroke] of [[6, "#161618"], [3, color]] as const) {
-        ctx.lineWidth = width / (view.zoom * dpr);
-        ctx.strokeStyle = stroke;
-        ctx.beginPath();
-        for (const path of paths) {
-            ctx.moveTo(path[0], path[1]);
-            for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
-        }
-        ctx.stroke();
     }
     ctx.restore();
 }

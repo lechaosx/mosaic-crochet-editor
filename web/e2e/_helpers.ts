@@ -7,9 +7,11 @@ import { Page } from "@playwright/test";
 declare global {
     interface Window {
         __test_matrix__?: DOMMatrix;
-        __test_instruction_starts__?: readonly {
-            x: number; y: number; nextX: number; nextY: number; invalid: boolean;
-        }[];
+        __test_instruction_seam_geometry__?: {
+            edges: number[][];
+            triangle: number[][];
+            screenTriangle: number[][];
+        } | null;
         __test_instruction_yields__?: readonly { index: number; recomputed: boolean }[];
         __test_on_instruction_yield__?: (yielded: { index: number; recomputed: boolean }) => void;
     }

@@ -2,7 +2,7 @@ import { Tool, SymKey, PatternState, Axis, GridRecipe } from "@mosaic/logic/type
 import type { SelectMode } from "@mosaic/logic/selection";
 import type { OverlayAction } from "@mosaic/logic/paint";
 import { el, setRadio, clampInputDisplay, radioValue } from "./dom";
-import { renderPatternColourPreview, type CanvasWorkspace } from "./render";
+import { renderPatternColourPreview, type CanvasWorkspace, type InstructionSeam } from "./render";
 import type { PackedInstructionCoordinates } from "./instruction-coordinates";
 import { DEFAULT_APP_PREFERENCES } from "./preferences";
 
@@ -127,7 +127,7 @@ export interface InstructionOverviewUnit {
     invalid: boolean;
     guidanceCoords: PackedInstructionCoordinates;
     invalidCoords: PackedInstructionCoordinates;
-    start: { x: number; y: number; nextX: number; nextY: number } | null;
+    seam: Omit<InstructionSeam, "invalid"> | null;
 }
 
 export interface InstructionsView {

@@ -196,19 +196,16 @@ test("Pattern palette edits refresh the open Crochet chart and yarn markers", as
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"] .instructions-unit-number'))
         .toHaveCSS("background-color", "rgb(18, 52, 86)");
     expect(await pixelRGB(page, chartCell.cx, chartCell.cy)).toEqual([18, 52, 86]);
-    await page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]').click();
-    const palettePixels = await page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
-        const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
-        let accent = 0;
-        let danger = 0;
-        for (let i = 0; i < pixels.length; i += 4) {
-            if (pixels[i] === 0 && pixels[i + 1] === 255 && pixels[i + 2] === 0) accent++;
-            if (pixels[i] === 255 && pixels[i + 1] === 0 && pixels[i + 2] === 255) danger++;
-        }
-        return { accent, danger };
+    const seamPixel = () => page.evaluate(() => {
+        const triangle = window.__test_instruction_seam_geometry__!.screenTriangle;
+        const x = triangle.reduce((sum, point) => sum + point[0], 0) / 3;
+        const y = triangle.reduce((sum, point) => sum + point[1], 0) / 3;
+        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        return Array.from(canvas.getContext("2d")!.getImageData(Math.round(x), Math.round(y), 1, 1).data).slice(0, 3);
     });
-    expect(palettePixels.accent).toBeGreaterThan(0);
-    expect(palettePixels.danger).toBeGreaterThan(0);
+    expect(await seamPixel()).toEqual([0, 255, 0]);
+    await page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]').click();
+    expect(await seamPixel()).toEqual([255, 0, 255]);
 });
 
 test("Fit uses the whole canvas width while an inspector is open", async ({ page }) => {
@@ -571,34 +568,6 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
 });
 
-test("Crochet canvas arrow follows the current unit's alternate direction", async ({ page }) => {
-    await bootApp(page);
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
-    const forward = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(forward).toHaveLength(1);
-    expect(forward![0].invalid).toBe(false);
-
-    await page.getByText("Alternate direction", { exact: true }).click();
-    const alternate = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(forward![0].nextX).toBeGreaterThan(forward![0].x);
-    expect(alternate![0].nextX).toBeLessThan(alternate![0].x);
-    expect(alternate![0].y).toBe(forward![0].y);
-});
-
-test("Crochet shows only the current unit's start arrow", async ({ page }) => {
-    await bootApp(page);
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    expect(await page.evaluate(() => window.__test_instruction_starts__)).toHaveLength(1);
-    const first = (await page.evaluate(() => window.__test_instruction_starts__))![0];
-    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
-    const second = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(second).toHaveLength(1);
-    expect(second![0].y).not.toBe(first.y);
-});
-
 test("long Crochet instructions keep a full-height square yarn number and readable current text", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
@@ -631,141 +600,128 @@ test("long Crochet instructions keep a full-height square yarn number and readab
     expect(enlargedText!.height).toBeLessThanOrEqual(enlargedButton!.height);
 });
 
-test("the current row arrow stays inside the chart beside nearby row numbers", async ({ page }) => {
+test("Crochet marks only the current row's start and end seams", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const lane = async () => page.evaluate(() => {
-        const edge = window.__test_matrix__!.transformPoint({ x: 0, y: 0 }).x;
-        const arrow = (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
-            bounds: { left: number; right: number };
-        }> }).__test_instruction_arrow_geometry__![0];
-        return { edge, arrow };
+    const rowTopPixel = () => page.evaluate(() => {
+        const point = window.__test_matrix__!.transformPoint({ x: 4.5, y: 8 });
+        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        return Array.from(canvas.getContext("2d")!.getImageData(Math.round(point.x), Math.round(point.y), 1, 1).data);
     });
-    const first = await lane();
-    expect(first.arrow.bounds.left).toBeGreaterThanOrEqual(first.edge);
+    const grid = await rowTopPixel();
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const crochetGrid = await rowTopPixel();
+    for (let channel = 0; channel < 3; channel++) {
+        expect(Math.abs(crochetGrid[channel] - grid[channel])).toBeLessThan(4);
+    }
+    const first = await page.evaluate(() => window.__test_instruction_seam_geometry__);
+    expect(first!.edges).toEqual([[0, 8, 0, 9], [9, 8, 9, 9]]);
+    expect(first!.triangle[0][0]).toBe(0);
+    expect(first!.triangle[1][0]).toBe(0);
+    expect(first!.triangle[2][0]).toBeGreaterThan(0);
+    expect(first!.triangle[2][0]).toBeLessThan(1);
     await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
+    expect((await page.evaluate(() => window.__test_instruction_seam_geometry__))!.edges)
+        .toEqual([[0, 7, 0, 8], [9, 7, 9, 8]]);
     await page.getByText("Alternate direction", { exact: true }).click();
-    const second = await lane();
-    expect(second.arrow.bounds.left).toBeGreaterThanOrEqual(second.edge);
+    const alternate = await page.evaluate(() => window.__test_instruction_seam_geometry__);
+    expect(alternate!.edges).toEqual([[9, 7, 9, 8], [0, 7, 0, 8]]);
+    expect(alternate!.triangle[0][0]).toBe(9);
+    expect(alternate!.triangle[1][0]).toBe(9);
+    expect(alternate!.triangle[2][0]).toBeLessThan(9);
+    await page.getByRole("button", { name: "Back to Design" }).click();
+    expect(await page.evaluate(() => window.__test_instruction_seam_geometry__)).toBeNull();
 });
 
-test("Crochet outlines the current row on the chart", async ({ page }) => {
-    await bootApp(page);
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const edge = async () => page.evaluate(() =>
-        (window as typeof window & { __test_instruction_boundary_paths__?: number[][] })
-            .__test_instruction_boundary_paths__ ?? []);
-    const first = await edge();
-    expect(first.length).toBeGreaterThan(0);
-    expect([...new Set(first.flat().filter((_, index) => index % 2 === 1))].sort())
-        .toEqual([8, 9]);
-    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
-    const second = await edge();
-    expect(second.length).toBeGreaterThan(0);
-    expect([...new Set(second.flat().filter((_, index) => index % 2 === 1))].sort())
-        .toEqual([7, 8]);
-    expect(second).not.toEqual(first);
-});
-
-test("the current round edge and arrow follow the same chart ring", async ({ page }) => {
+test("a complete round marks the shared seam and points into its first stitch", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
-    await page.locator("#edit-rounds").fill("2");
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const geometry = async () => page.evaluate(() => ({
-        arrows: window.__test_instruction_starts__ ?? [],
-        paths: (window as typeof window & { __test_instruction_boundary_paths__?: number[][] })
-            .__test_instruction_boundary_paths__ ?? [],
-    }));
-    const first = await geometry();
-    expect(first.arrows).toHaveLength(1);
-    expect(first.paths.length).toBeGreaterThan(0);
-    await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
-    const second = await geometry();
-    expect(second.arrows).toHaveLength(1);
-    expect(second.paths).not.toEqual(first.paths);
-    const xs = second.paths.flat().filter((_, index) => index % 2 === 0);
-    const ys = second.paths.flat().filter((_, index) => index % 2 === 1);
-    expect(second.arrows[0].x + 0.5).toBeGreaterThan(Math.min(...xs));
-    expect(second.arrows[0].x + 0.5).toBeLessThan(Math.max(...xs));
-    expect(second.arrows[0].y + 0.5).toBeGreaterThan(Math.min(...ys));
-    expect(second.arrows[0].y + 0.5).toBeLessThan(Math.max(...ys));
-});
-
-test("the final round keeps its edge and arrow while showing full-chart guidance", async ({ page }) => {
-    await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
-    await page.getByText("Centre-out", { exact: true }).click();
+    await page.locator("#edit-inner-width").fill("1");
+    await page.locator("#edit-inner-height").fill("1");
     await page.locator("#edit-rounds").fill("3");
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    await page.locator("#instructions-units .instructions-unit").last().click();
-    const state = await page.evaluate(() => ({
-        filtered: (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
-            .__test_instruction_guidance__?.filtered,
-        arrows: window.__test_instruction_starts__?.length,
-        paths: (window as typeof window & { __test_instruction_boundary_paths__?: number[][] })
-            .__test_instruction_boundary_paths__?.length,
-    }));
-    expect(state.filtered).toBe(false);
-    expect(state.arrows).toBe(1);
-    expect(state.paths).toBeGreaterThan(0);
+    await page.locator('.instructions-unit[aria-label^="Round 3,"]').click();
+    const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
+    expect(seam!.edges).toEqual([[2, 0, 2, 1]]);
+    expect(seam!.triangle[0][0]).toBe(2);
+    expect(seam!.triangle[1][0]).toBe(2);
+    expect(seam!.triangle[2][0]).toBeGreaterThan(1);
+    expect(seam!.triangle[2][0]).toBeLessThan(2);
+    expect(await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
+            .__test_instruction_guidance__?.filtered)).toBe(false);
+    await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
+    await page.getByText("Alternate direction", { exact: true }).click();
+    const reversed = await page.evaluate(() => window.__test_instruction_seam_geometry__);
+    expect(reversed!.edges).toEqual([[3, 1, 3, 2], [1, 3, 2, 3]]);
+    expect(reversed!.triangle[2][0]).toBeGreaterThan(3);
 });
 
-test("Crochet canvas arrows sit before and point into their first stitch", async ({ page }) => {
+for (const extent of ["Half", "Quarter"]) {
+    test(`${extent} rounds mark separate start and end seams`, async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Pattern" }).click();
+        await page.getByText("Centre-out", { exact: true }).click();
+        await page.getByText(extent, { exact: true }).click();
+        await page.locator("#edit-inner-width").fill("1");
+        await page.locator("#edit-inner-height").fill("1");
+        await page.locator("#edit-rounds").fill("3");
+        await page.locator("#btn-export").click();
+        await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+        await page.locator('.instructions-unit[aria-label^="Round 3,"]').click();
+        const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
+        expect(seam!.edges).toEqual(extent === "Half"
+            ? [[0, 0, 1, 0], [6, 0, 7, 0]]
+            : [[0, 0, 1, 0], [4, 3, 4, 4]]);
+        expect(seam!.triangle[0][1]).toBe(0);
+        expect(seam!.triangle[1][1]).toBe(0);
+        expect(seam!.triangle[2][1]).toBeGreaterThan(0);
+        expect(seam!.triangle[2][1]).toBeLessThan(1);
+    });
+}
+
+test("the seam triangle rotates with its cell and is painted in the accent colour", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const geometry = await page.evaluate(() =>
-        (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
-            startCentre: { x: number; y: number };
-            shaft: { x: number; y: number };
-            tip: { x: number; y: number };
-            direction: { x: number; y: number };
-        }> }).__test_instruction_arrow_geometry__?.[0]);
-    expect(geometry).toBeTruthy();
-    const project = (point: { x: number; y: number }) =>
-        point.x * geometry!.direction.x + point.y * geometry!.direction.y;
-    expect(project(geometry!.shaft)).toBeLessThan(project(geometry!.tip));
-    expect(project(geometry!.tip)).toBeLessThan(project(geometry!.startCentre));
-});
-
-test("Crochet canvas arrows stay visible and rotate with the chart", async ({ page }) => {
-    await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
-    await page.locator("#edit-height").fill("1");
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-
-    const arrowGeometry = async () => page.evaluate(() => {
-            const geometry = (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
-                shaft: { x: number; y: number }; tip: { x: number; y: number };
-                direction: { x: number; y: number };
-            }> }).__test_instruction_arrow_geometry__?.[0];
-            if (!geometry) throw new Error("instruction arrow hook missing");
-            const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-            return { ...geometry, width: canvas.width, height: canvas.height };
-        });
-
-    const before = await arrowGeometry();
-    expect(Math.abs(before.direction.x)).toBeGreaterThan(Math.abs(before.direction.y));
-    expect([before.shaft, before.tip].some(point =>
-        point.x >= 0 && point.x <= before.width && point.y >= 0 && point.y <= before.height)).toBe(true);
+    const geometry = () => page.evaluate(() => {
+        const seam = window.__test_instruction_seam_geometry__!;
+        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        const points = seam.screenTriangle;
+        const x = points.reduce((sum, p) => sum + p[0], 0) / 3;
+        const y = points.reduce((sum, p) => sum + p[1], 0) / 3;
+        const colour = Array.from(canvas.getContext("2d")!.getImageData(Math.round(x), Math.round(y), 1, 1).data);
+        const midX = (points[0][0] + points[1][0]) / 2;
+        const midY = (points[0][1] + points[1][1]) / 2;
+        return { colour, dx: points[2][0] - midX, dy: points[2][1] - midY, points,
+            width: canvas.width, height: canvas.height,
+            mappedBase: window.__test_matrix__!.transformPoint({ x: 0, y: 8.5 }).toJSON() };
+    });
+    const before = await geometry();
+    expect(before.colour.slice(0, 3)).toEqual([214, 83, 163]);
+    expect(before.dx).toBeGreaterThan(0);
+    expect(before.dy).toBeCloseTo(0);
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(300);
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(300);
-    const after = await arrowGeometry();
-    expect(Math.abs(after.direction.y)).toBeGreaterThan(Math.abs(after.direction.x));
-    expect([after.shaft, after.tip].some(point =>
-        point.x >= 0 && point.x <= after.width && point.y >= 0 && point.y <= after.height)).toBe(true);
+    const after = await geometry();
+    expect(after.colour).toEqual(before.colour);
+    expect(after.dy).toBeGreaterThan(0);
+    expect(after.dx).toBeCloseTo(0);
+    expect((after.points[0][0] + after.points[1][0]) / 2).toBeCloseTo(after.mappedBase.x);
+    expect((after.points[0][1] + after.points[1][1]) / 2).toBeCloseTo(after.mappedBase.y);
+    for (const point of after.points) {
+        expect(point[0]).toBeGreaterThanOrEqual(0);
+        expect(point[0]).toBeLessThanOrEqual(after.width);
+        expect(point[1]).toBeGreaterThanOrEqual(0);
+        expect(point[1]).toBeLessThanOrEqual(after.height);
+    }
 });
 
-test("a one-cell quarter round has a canvas start arrow", async ({ page }) => {
+test("a single-cell Quarter has two endpoint seams and an inward triangle", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
@@ -773,15 +729,42 @@ test("a one-cell quarter round has a canvas start arrow", async ({ page }) => {
     await page.locator("#edit-inner-width").fill("0");
     await page.locator("#edit-inner-height").fill("0");
     await page.locator("#edit-rounds").fill("1");
-
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const forward = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(forward).toHaveLength(1);
-    expect(forward![0].nextX === forward![0].x && forward![0].nextY === forward![0].y).toBe(false);
+    const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
+    expect(seam!.edges).toEqual([[0, 0, 0, 1], [1, 0, 1, 1]]);
+    expect(seam!.triangle[0][0]).toBe(0);
+    expect(seam!.triangle[1][0]).toBe(0);
+    expect(seam!.triangle[2][0]).toBeGreaterThan(0);
+    expect(seam!.triangle[2][0]).toBeLessThan(1);
 });
 
-test("partial-round start arrows do not overlap their number lane", async ({ page }) => {
+test("an adjacent first and last stitch share a seam only in a Full round", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-width").fill("2");
+    await page.locator("#edit-height").fill("2");
+    await page.keyboard.press("Escape");
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    expect((await page.evaluate(() => window.__test_instruction_seam_geometry__))!.edges)
+        .toEqual([[0, 1, 0, 2], [2, 1, 2, 2]]);
+    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.locator("#edit-inner-width").fill("0");
+    await page.locator("#edit-inner-height").fill("0");
+    await page.locator("#edit-rounds").fill("1");
+    await page.locator("#btn-export").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
+    expect(seam!.edges).toEqual([[1, 1, 2, 1]]);
+    expect(seam!.triangle[0][1]).toBe(1);
+    expect(seam!.triangle[1][1]).toBe(1);
+    expect(seam!.triangle[2][1]).toBeLessThan(1);
+});
+
+test("partial-round seams and triangles clear the number lane after rotation", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
@@ -789,65 +772,46 @@ test("partial-round start arrows do not overlap their number lane", async ({ pag
     await page.locator("#edit-rounds").fill("3");
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-
-    const expectClearance = async () => {
+    await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
+    const clearance = async () => {
         const geometry = await page.evaluate(() => {
-            const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+            const seam = window.__test_instruction_seam_geometry__!;
+            const m = window.__test_matrix__!;
+            const paths = [seam.screenTriangle, ...seam.edges.map(([x1, y1, x2, y2]) => {
+                const a = m.transformPoint({ x: x1, y: y1 });
+                const b = m.transformPoint({ x: x2, y: y2 });
+                return [[a.x, a.y], [b.x, b.y]];
+            })];
             return {
-                width: canvas.width,
-                height: canvas.height,
-                arrows: (window as typeof window & { __test_instruction_arrow_geometry__?: Array<{
-                    bounds: { left: number; top: number; right: number; bottom: number };
-                }> }).__test_instruction_arrow_geometry__ ?? [],
+                bounds: paths.map(points => ({
+                    left: Math.min(...points.map(p => p[0])) - 2,
+                    top: Math.min(...points.map(p => p[1])) - 2,
+                    right: Math.max(...points.map(p => p[0])) + 2,
+                    bottom: Math.max(...points.map(p => p[1])) + 2,
+                })),
                 labels: (window as typeof window & { __test_instruction_label_geometry__?: Array<{
                     bounds: { left: number; top: number; right: number; bottom: number };
                 }> }).__test_instruction_label_geometry__ ?? [],
             };
         });
-        expect(geometry.arrows).toHaveLength(1);
+        expect(geometry.bounds).toHaveLength(3);
         expect(geometry.labels).toHaveLength(3);
-        for (const arrow of geometry.arrows) {
-            expect(arrow.bounds.left).toBeGreaterThanOrEqual(0);
-            expect(arrow.bounds.top).toBeGreaterThanOrEqual(0);
-            expect(arrow.bounds.right).toBeLessThanOrEqual(geometry.width);
-            expect(arrow.bounds.bottom).toBeLessThanOrEqual(geometry.height);
-            for (const label of geometry.labels) {
-                const horizontalGap = Math.max(label.bounds.left - arrow.bounds.right, arrow.bounds.left - label.bounds.right, 0);
-                const verticalGap = Math.max(label.bounds.top - arrow.bounds.bottom, arrow.bounds.top - label.bounds.bottom, 0);
-                expect(Math.hypot(horizontalGap, verticalGap)).toBeGreaterThanOrEqual(2);
+        for (const bounds of geometry.bounds) {
+            for (const { bounds: label } of geometry.labels) {
+                const dx = Math.max(label.left - bounds.right, bounds.left - label.right, 0);
+                const dy = Math.max(label.top - bounds.bottom, bounds.top - label.bottom, 0);
+                expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(2);
             }
         }
     };
-    await expectClearance();
-    await page.getByRole("button", { name: "Rotate view right" }).click();
-    await page.waitForTimeout(300);
-    await page.getByRole("button", { name: "Rotate view right" }).click();
-    await page.waitForTimeout(300);
-    await expectClearance();
-});
-
-test("round arrows follow Alternate direction", async ({ page }) => {
-    await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
-    await page.getByText("Centre-out", { exact: true }).click();
-    await page.locator("#edit-rounds").fill("2");
-
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const forward = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(forward).toHaveLength(1);
-
-    await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
-    const round2Forward = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(round2Forward).toHaveLength(1);
-
+    await clearance();
     await page.getByText("Alternate direction", { exact: true }).click();
-    const alternate = await page.evaluate(() => window.__test_instruction_starts__);
-    expect(alternate).toHaveLength(1);
-    expect(alternate![0]).not.toMatchObject({
-        x: round2Forward![0].x, y: round2Forward![0].y,
-        nextX: round2Forward![0].nextX, nextY: round2Forward![0].nextY,
-    });
+    await clearance();
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+    await page.getByRole("button", { name: "Rotate view right" }).click();
+    await page.waitForTimeout(300);
+    await clearance();
 });
 
 test("Crochet renders through the current row and no future rows", async ({ page }) => {

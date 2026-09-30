@@ -1043,9 +1043,8 @@ async function onInstructions() {
         cancelled = true;
         if (instructionsView === dlg) instructionsView = null;
         instructionsPreviewStore = null;
-        rs.instructionStarts = [];
+        rs.instructionSeam = null;
         rs.instructionGuidanceCoords = null;
-        rs.instructionBoundaryCoords = null;
         rs.instructionInvalidCoords = null;
         ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
         renderCanvas();
@@ -1088,10 +1087,9 @@ async function onInstructions() {
         const selectedUnit = completedUnits === null
             ? null
             : previewUnits[completedUnits - 1] ?? null;
-        rs.instructionStarts = selectedUnit?.start ? [{ ...selectedUnit.start, invalid: selectedUnit.invalid }] : [];
+        rs.instructionSeam = selectedUnit?.seam ? { ...selectedUnit.seam, invalid: selectedUnit.invalid } : null;
         rs.instructionGuidanceCoords = completedUnits !== null && completedUnits < previewUnits.length
             ? selectedUnit?.guidanceCoords ?? null : null;
-        rs.instructionBoundaryCoords = selectedUnit?.guidanceCoords ?? null;
         rs.instructionInvalidCoords = selectedUnit?.invalidCoords ?? null;
         renderCanvas();
     });
@@ -1112,22 +1110,36 @@ async function onInstructions() {
     let completedUnits = loadLiveProgress(progressFingerprint, totalUnits);
     ui.setCrochetProgress(hasLiveProgress(progressFingerprint, totalUnits));
     let generatedUnits: readonly CachedInstructionUnit[] = [];
+    // Reversed corner groups can jump diagonally; markers must stay on cell edges.
+    const edgeDirection = (dx: number, dy: number) => Math.abs(dx) >= Math.abs(dy)
+        ? { dx: Math.sign(dx), dy: 0 } : { dx: 0, dy: Math.sign(dy) };
     const directionalUnit = (unit: CachedInstructionUnit, index: number): InstructionOverviewUnit => {
         const reversed = dlg.alternate() && index % 2 === 1;
         const direction = reversed ? unit.reversedStartDirection : unit.startDirection;
-        const width = store.state.pattern.canvasWidth;
+        const pattern = store.state.pattern;
+        const width = pattern.canvasWidth;
+        const coords = reversed ? unit.reversedWorkedCoords : unit.workedCoords;
+        const last = coords.length - 2;
+        const sharedEdge = pattern.mode === "round"
+            && pattern.canvasWidth === pattern.virtualWidth && pattern.canvasHeight === pattern.virtualHeight
+            && Math.abs(coords[0] - coords[last]) + Math.abs(coords[1] - coords[last + 1]) === 1;
+        const startDirection = sharedEdge
+            ? edgeDirection(coords[0] - coords[last], coords[1] - coords[last + 1])
+            : edgeDirection(direction[2] - direction[0], direction[3] - direction[1]);
+        const endDirection = sharedEdge || last === 0 ? startDirection
+            : edgeDirection(coords[last] - coords[last - 2], coords[last + 1] - coords[last - 1]);
         return {
             label: unit.label,
             yarn: unit.yarn,
             color: unit.yarn === "A" ? store.state.colorA : store.state.colorB,
             text: reversed ? unit.reversedText : unit.text,
             invalid: unit.invalid,
-            guidanceCoords: packInstructionCoordinates(
-                reversed ? unit.reversedWorkedCoords : unit.workedCoords,
-                width,
-            ),
+            guidanceCoords: packInstructionCoordinates(coords, width),
             invalidCoords: packInstructionCoordinates(unit.invalidWorkedCoords, width),
-            start: direction.length >= 4 ? { x: direction[0], y: direction[1], nextX: direction[2], nextY: direction[3] } : null,
+            seam: direction.length >= 4 ? {
+                start: { x: direction[0], y: direction[1], ...startDirection },
+                end: { x: coords[last], y: coords[last + 1], ...endDirection },
+            } : null,
         };
     };
     let previewUnits: readonly InstructionOverviewUnit[] = [];

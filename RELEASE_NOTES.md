@@ -5,7 +5,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 ## 30 September 2026
 
 - Pattern colour samples follow construction and extent, with diagonal mirror guides and marching selection outlines; colour resets are unavailable when the default is already selected. Invalid overlay warnings use outward stitch positions.
-- Crochet highlights the current row or round boundary and direction, with compact instructions and row numbers on yarn-coloured squares.
+- Crochet marks the current row or round's start and end, with a triangle pointing from its seam into the first stitch, compact instructions, and row numbers on yarn-coloured squares.
 - Clear design removes drawing, selections, repeats, and mirror axes together, with Undo restoring them.
 - Mirrors and repeats copy each edit's resulting yarn state. Saved selections use a row list and open through selection tools, with independent horizontal and vertical mirrors for both columns and rows of copies.
 
