@@ -53,6 +53,6 @@ Run the complete test suite before submitting changes:
 npm run test
 ```
 
-Useful narrower commands are `npm run test:rust`, `npm run test:logic`, `npm run test:web`, and `npm run test:e2e`. Run `npm run build` for a production build in `web/dist/`.
+Useful narrower commands are `npm run test:tooling`, `npm run test:rust`, `npm run test:logic`, `npm run test:web`, and `npm run test:e2e`. Run `npm run build` for a production build in `web/dist/`.
 
 Pushes to `master` deploy to GitHub Pages through GitHub Actions.

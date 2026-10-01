@@ -9,16 +9,18 @@
     "build": "npm run build:wasm && npm run build:web",
     "dev:rust": "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler --dev'",
     "dev:web": "npm run dev --workspace web",
-    "dev": "npm run dev:rust & npm run dev:web",
+    "dev": "concurrently --kill-others --success first \"npm:dev:rust\" \"npm:dev:web\"",
+    "test:tooling": "node --test tests/*.test.mjs",
     "test:rust": "cargo fmt --all -- --check && cargo clippy --workspace && cargo test",
     "test:logic":    "npm run build:wasm && npm run test --workspace logic",
     "test:mutation": "npm run build:wasm && stryker run",
     "test:web":      "npm run build:wasm && npm run test --workspace web",
     "test:e2e":      "npm run build && npm run test:e2e --workspace web",
-    "test":          "npm run build && npm run test:rust && npm run test --workspace logic && npm run test --workspace web && npm run test:e2e --workspace web"
+    "test":          "npm run test:tooling && npm run build && npm run test:rust && npm run test --workspace logic && npm run test --workspace web && npm run test:e2e --workspace web"
   },
   "workspaces": ["wasm", "logic", "web"],
   "devDependencies": {
-    "@stryker-mutator/core": "^10.0.0"
+    "@stryker-mutator/core": "^10.0.0",
+    "concurrently": "^10.0.5"
   }
 }
