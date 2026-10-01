@@ -9,7 +9,7 @@
     "build": "npm run build:wasm && npm run build:web",
     "dev:rust": "cargo-watch --watch core/src --watch wasm/src -s 'wasm-pack build wasm --target bundler --dev'",
     "dev:web": "npm run dev --workspace web",
-    "dev": "concurrently --kill-others --success first \"npm:dev:rust\" \"npm:dev:web\"",
+    "dev": "exec concurrently --kill-others --success first \"npm:dev:rust\" \"npm:dev:web\"",
     "test:tooling": "node --test tests/*.test.mjs",
     "test:rust": "cargo fmt --all -- --check && cargo clippy --workspace && cargo test",
     "test:logic":    "npm run build:wasm && npm run test --workspace logic",

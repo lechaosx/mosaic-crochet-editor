@@ -46,7 +46,7 @@ async function running(pid) {
   }
 }
 
-async function withDev(run, exitCodes = { rust: 7, web: 8 }) {
+async function withDev(run, { shellMode, exitCodes = { rust: 7, web: 8 } }) {
   const cwd = await mkdtemp(join(tmpdir(), 'mosaic-dev-test-'));
   let dev;
   let output = '';
@@ -64,7 +64,17 @@ async function withDev(run, exitCodes = { rust: 7, web: 8 }) {
       },
     }));
     await symlink(join(root, 'node_modules'), join(cwd, 'node_modules'));
-    dev = spawn('npm', ['run', 'dev'], { cwd, detached: true });
+    const env = { ...process.env };
+    if (shellMode === 'waiting') {
+      // A trailing builtin prevents shells from implicitly execing their final command.
+      env.npm_config_script_shell = join(cwd, 'script-shell');
+      await writeFile(env.npm_config_script_shell,
+        String.raw`#!/bin/sh
+exec /bin/sh -c "$2; status=\$?; exit \"\$status\""
+`,
+        { mode: 0o755 });
+    }
+    dev = spawn('npm', ['run', 'dev'], { cwd, detached: true, env });
     dev.on('error', error => { spawnError = error; });
     for (const stream of [dev.stdout, dev.stderr]) {
       stream.on('data', data => {
@@ -91,40 +101,42 @@ async function withDev(run, exitCodes = { rust: 7, web: 8 }) {
   }
 }
 
-for (const role of ['rust', 'web']) {
-  test(`npm run dev propagates ${role} failure and stops the other process tree`, async () => {
-    await withDev(async ({ workers, cwd, result, output }) => {
-      await writeFile(join(cwd, `${role}.stop`), '');
-      await waitFor(() => result(), output);
-      assert.notEqual(result().code, 0, output());
-      for (const pid of workers[role === 'rust' ? 'web' : 'rust']) {
-        await waitFor(async () => !(await running(pid)), output);
-      }
+for (const shellMode of ['default', 'waiting']) {
+  for (const role of ['rust', 'web']) {
+    test(`npm run dev propagates ${role} failure and stops the other process tree (${shellMode} shell)`, async () => {
+      await withDev(async ({ workers, cwd, result, output }) => {
+        await writeFile(join(cwd, `${role}.stop`), '');
+        await waitFor(() => result(), output);
+        assert.notEqual(result().code, 0, output());
+        for (const pid of workers[role === 'rust' ? 'web' : 'rust']) {
+          await waitFor(async () => !(await running(pid)), output);
+        }
+      }, { shellMode });
     });
-  });
-}
+  }
 
-for (const signal of ['SIGINT', 'SIGTERM']) {
-  test(`npm run dev stops both process trees on ${signal}`, async () => {
-    await withDev(async ({ dev, workers, result, output }) => {
-      dev.kill(signal);
-      await waitFor(() => result(), output);
-      for (const pid of Object.values(workers).flat()) {
-        await waitFor(async () => !(await running(pid)), output);
-      }
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    test(`npm run dev stops both process trees on ${signal} (${shellMode} shell)`, async () => {
+      await withDev(async ({ dev, workers, result, output }) => {
+        dev.kill(signal);
+        await waitFor(() => result(), output);
+        for (const pid of Object.values(workers).flat()) {
+          await waitFor(async () => !(await running(pid)), output);
+        }
+      }, { shellMode });
     });
-  });
-}
+  }
 
-for (const role of ['rust', 'web']) {
-  test(`npm run dev stops the other process tree when ${role} finishes successfully`, async () => {
-    await withDev(async ({ workers, cwd, result, output }) => {
-      await writeFile(join(cwd, `${role}.stop`), '');
-      await waitFor(() => result(), output);
-      assert.equal(result().code, 0, output());
-      for (const pid of workers[role === 'rust' ? 'web' : 'rust']) {
-        await waitFor(async () => !(await running(pid)), output);
-      }
-    }, { rust: 0, web: 0 });
-  });
+  for (const role of ['rust', 'web']) {
+    test(`npm run dev stops the other process tree when ${role} finishes successfully (${shellMode} shell)`, async () => {
+      await withDev(async ({ workers, cwd, result, output }) => {
+        await writeFile(join(cwd, `${role}.stop`), '');
+        await waitFor(() => result(), output);
+        assert.equal(result().code, 0, output());
+        for (const pid of workers[role === 'rust' ? 'web' : 'rust']) {
+          await waitFor(async () => !(await running(pid)), output);
+        }
+      }, { shellMode, exitCodes: { rust: 0, web: 0 } });
+    });
+  }
 }
