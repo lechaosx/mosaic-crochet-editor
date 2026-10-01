@@ -86,7 +86,8 @@ pub fn row_walk_with_traversal(
 ) -> Vec<IVec2> {
     let mut coords: Vec<_> = row_walk_at(size, row_index).collect();
     let starts_right = traversal.origin == RowOrigin::Right;
-    let alternates = traversal.schedule == DirectionSchedule::Alternate && row_index % 2 == 1;
+    let alternates =
+        traversal.schedule == DirectionSchedule::Alternate && !row_index.is_multiple_of(2);
     if starts_right != alternates {
         coords.reverse();
     }

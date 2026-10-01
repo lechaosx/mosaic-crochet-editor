@@ -91,7 +91,7 @@ pub fn row_work_at(
     row_index: usize,
 ) -> Vec<WorkStep> {
     let unit = WorkUnitId::Row(row_index as u32 + 1);
-    let yarn = if row_index % 2 == 0 {
+    let yarn = if row_index.is_multiple_of(2) {
         YarnSlot::A
     } else {
         YarnSlot::B
@@ -112,7 +112,7 @@ pub fn row_work_at(
             }
         })
         .collect();
-    if alternate && row_index % 2 == 1 {
+    if alternate && !row_index.is_multiple_of(2) {
         steps.reverse();
     }
     steps
@@ -185,7 +185,7 @@ pub fn round_work_at(
 ) -> Vec<WorkStep> {
     let round = round_index as i32 + 1;
     let unit = WorkUnitId::Round(round_index as u32 + 1);
-    let yarn = if round_index % 2 == 0 {
+    let yarn = if round_index.is_multiple_of(2) {
         YarnSlot::A
     } else {
         YarnSlot::B
@@ -226,7 +226,7 @@ pub fn round_work_at(
         }
     }
 
-    if alternate && round_index % 2 == 1 {
+    if alternate && !round_index.is_multiple_of(2) {
         groups.reverse();
     }
     groups.into_iter().flatten().collect()

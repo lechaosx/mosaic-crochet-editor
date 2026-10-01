@@ -212,7 +212,7 @@ impl InstructionSession {
             InstructionMode::Row { .. } => InstructionUnitKind::Row,
             InstructionMode::Round { .. } => InstructionUnitKind::Round,
         };
-        let yarn = if index % 2 == 0 {
+        let yarn = if index.is_multiple_of(2) {
             InstructionYarn::A
         } else {
             InstructionYarn::B

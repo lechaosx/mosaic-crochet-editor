@@ -48,7 +48,9 @@ const EFFECTIVE_TRANSFORM_CLAIM_LIMIT: usize = MAX_TRANSFORM_CLAIMS;
 
 fn has_active_repeat(transforms: &[f64]) -> bool {
     transforms
-        .chunks_exact(TRANSFORM_STRIDE)
+        .as_chunks::<TRANSFORM_STRIDE>()
+        .0
+        .iter()
         .any(|chunk| matches!(chunk[0] as i32, KIND_REPEAT_X | KIND_REPEAT_Y) && chunk[2] > 0.0)
 }
 
@@ -79,7 +81,7 @@ pub fn transformed_patch_targets(
     let mut repeat_x = (1_i64, 0_i64);
     let mut repeat_y = (1_i64, 0_i64);
 
-    for chunk in records.chunks_exact(TRANSFORM_STRIDE) {
+    for chunk in records.as_chunks::<TRANSFORM_STRIDE>().0 {
         let kind = chunk[0] as i32;
         let a = chunk[1];
         let b = chunk[2];
