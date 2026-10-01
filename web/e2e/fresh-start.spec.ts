@@ -10,10 +10,16 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
 
     const about = page.getByRole("dialog", { name: "Mosaic Crochet Editor" });
     await expect(about).toBeVisible();
-    await expect(about.getByText("Latest release 30 September 2026")).toBeVisible();
+    const latestHeading = about.locator("#about-release-notes h3").first();
+    await expect(latestHeading).toHaveText(/^\d{1,2} [A-Z][a-z]+ \d{4}$/);
+    await expect(about.locator("#about-updated")).toHaveText(await latestHeading.textContent() ?? "");
     await expect(about.locator("#about-version")).toHaveCount(0);
     await expect(about.getByRole("heading", { name: "Release notes" })).toBeVisible();
-    await expect(about.locator("#about-release-notes")).toContainText("May 2026");
+    const entries = about.locator(".about-release-notes-entry");
+    expect(await entries.count()).toBeGreaterThan(0);
+    await expect(entries.first().locator("li").first()).not.toBeEmpty();
+    await expect(entries.last().locator("h3")).not.toBeEmpty();
+    await expect(entries.last().locator("li").first()).not.toBeEmpty();
     await expect(about.getByText(`© ${new Date().getFullYear()} Drahomír Dlabaja`)).toBeVisible();
     await expect(about.getByRole("button", { name: "New" })).toBeFocused();
     await expect(about.getByRole("button", { name: "Open" })).toBeVisible();

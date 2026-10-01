@@ -2,6 +2,10 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 1 October 2026
+
+- Crochet instruction lines wrap to show their full text, and Half and Quarter round numbers sit immediately above the chart.
+
 ## 30 September 2026
 
 - Pattern colour samples follow construction and extent, with diagonal mirror guides and marching selection outlines; colour resets are unavailable when the default is already selected. Invalid overlay warnings appear as exclamation marks at outward stitch positions.

@@ -268,7 +268,7 @@ export function fitToView(
     } else if (pattern.mode === "round" && pattern.offsetY !== 0) {
         const halfWidth = 0.34 * String(pattern.rounds).length;
         const includeRoundLabel = (x: number) => {
-            include(x - W / 2, -H / 2 - 1.1, halfWidth, 0.28);
+            include(x - W / 2, -H / 2 - 0.3, halfWidth, 0.28);
         };
         includeRoundLabel(0.5);
         includeRoundLabel(pattern.rounds - 0.5);
@@ -936,7 +936,7 @@ function renderRoundLabels(
             cx = px + 0.5; cy = py + 0.5;
         } else {
             if (i >= W) continue;
-            cx = i + 0.5; cy = -1.1;
+            cx = i + 0.5; cy = -0.3;
         }
         const label = String(rounds - i);
         const p = m.transformPoint({ x: cx, y: cy });

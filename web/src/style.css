@@ -1046,7 +1046,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .instructions-unit {
   --unit-size: max(var(--hit), calc(var(--font-sm) * 1.4 + 2 * var(--space-2)));
   width: 100%;
-  height: var(--unit-size);
+  min-height: var(--unit-size);
   display: grid;
   grid-template-columns: var(--unit-size) minmax(0, 1fr);
   align-items: stretch;
@@ -1075,6 +1075,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 .instructions-unit-number {
+  align-self: center;
   width: var(--unit-size);
   height: var(--unit-size);
   display: grid;
@@ -1090,9 +1091,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
   padding: var(--space-2) var(--space-3);
   color: var(--fg-2);
   font: var(--font-sm)/1.4 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .instructions-current {

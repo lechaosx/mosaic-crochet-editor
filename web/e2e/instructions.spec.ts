@@ -448,7 +448,7 @@ test("Crochet lines are compact progress controls", async ({ page }) => {
     expect(marker.height).toBeGreaterThan(0);
     expect(marker.height).toBe(button.height);
     expect(marker.width).toBe(marker.height);
-    await expect(first.locator("code")).toHaveCSS("white-space", "nowrap");
+    await expect(first.locator("code")).toHaveCSS("white-space", "normal");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-y", "auto");
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-x", "hidden");
     const workspace = await page.locator(".workspace").boundingBox();
@@ -578,7 +578,7 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
 });
 
-test("long Crochet instructions keep a full-height square yarn number and readable current text", async ({ page }) => {
+test("long Crochet instructions wrap completely beside a square yarn number", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("50");
@@ -595,19 +595,44 @@ test("long Crochet instructions keep a full-height square yarn number and readab
     const row = page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]');
     await row.click();
     expect((await row.locator("code").textContent())!.length).toBeGreaterThan(60);
-    const marker = await row.locator(".instructions-unit-number").boundingBox();
-    const button = await row.boundingBox();
-    expect(marker!.height).toBeCloseTo(button!.height, 0);
-    expect(marker!.width).toBeCloseTo(marker!.height, 0);
-    await expect(row.locator("code")).toHaveCSS("white-space", "nowrap");
     await expect(page.locator("#instructions-current-text")).toHaveText(await row.locator("code").textContent() ?? "");
-    await page.addStyleTag({ content: "html { font-size: 200%; }" });
-    const enlargedMarker = await row.locator(".instructions-unit-number").boundingBox();
-    const enlargedButton = await row.boundingBox();
-    const enlargedText = await row.locator("code").boundingBox();
-    expect(enlargedMarker!.width).toBeCloseTo(enlargedMarker!.height, 0);
-    expect(enlargedMarker!.height).toBeCloseTo(enlargedButton!.height, 0);
-    expect(enlargedText!.height).toBeLessThanOrEqual(enlargedButton!.height);
+    for (const [width, fontScale] of [[1600, 100], [360, 100], [360, 200]]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.addStyleTag({ content: `html { font-size: ${fontScale}%; }` });
+        await row.scrollIntoViewIfNeeded();
+        const layout = await row.evaluate(item => {
+            const text = item.querySelector("code")!;
+            const range = document.createRange();
+            range.selectNodeContents(text);
+            return {
+                marker: item.querySelector(".instructions-unit-number")!.getBoundingClientRect().toJSON(),
+                button: item.getBoundingClientRect().toJSON(),
+                text: text.getBoundingClientRect().toJSON(),
+                lines: Array.from(range.getClientRects(), rect => rect.toJSON()),
+                lineHeight: parseFloat(getComputedStyle(text).lineHeight),
+                clientWidth: text.clientWidth, scrollWidth: text.scrollWidth,
+                listWidth: document.getElementById("instructions-units")!.clientWidth,
+            };
+        });
+        expect(layout.text.height).toBeGreaterThan(layout.lineHeight * 2);
+        expect(layout.lines.length).toBeGreaterThan(1);
+        expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
+        expect(layout.button.width).toBeLessThanOrEqual(layout.listWidth);
+        expect(layout.marker.width).toBeCloseTo(layout.marker.height, 0);
+        expect(layout.marker.y + layout.marker.height / 2).toBeCloseTo(layout.button.y + layout.button.height / 2, 0);
+        for (const line of layout.lines) {
+            expect(line.left).toBeGreaterThanOrEqual(layout.text.left);
+            expect(line.right).toBeLessThanOrEqual(layout.text.right + 1);
+            expect(line.top).toBeGreaterThanOrEqual(layout.button.top);
+            expect(line.bottom).toBeLessThanOrEqual(layout.button.bottom);
+        }
+        await expect(row).toHaveAttribute("aria-current", "step");
+        await page.getByRole("button", { name: "Forward one row" }).click();
+        await expect(page.locator("#instructions-live-progress")).toHaveText("3 / 9");
+        await page.getByRole("button", { name: "Back one row" }).click();
+        await expect(row).toHaveAttribute("aria-current", "step");
+        await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    }
 });
 
 test("Crochet marks only the current row's beginning seam", async ({ page }) => {
@@ -851,54 +876,114 @@ test("an adjacent first and last stitch share a seam only in a Full round", asyn
     expect(seam!.triangle[2][1]).toBeLessThan(1);
 });
 
-test("partial-round seams and triangles clear the number lane after rotation", async ({ page }) => {
+for (const extent of ["Full", "Half", "Quarter"]) {
+    test(`${extent} round numbers keep their historical chart anchors and remain visible in Fit`, async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Pattern" }).click();
+        await page.getByText("Centre-out", { exact: true }).click();
+        await page.getByText(extent, { exact: true }).click();
+        await page.locator("#edit-inner-width").fill("1");
+        await page.locator("#edit-inner-height").fill("1");
+        await page.locator("#edit-rounds").fill("3");
+        await page.keyboard.press("Escape");
+        for (const [width, height] of [[1280, 800], [360, 740], [852, 393]]) {
+            await page.setViewportSize({ width, height });
+            for (const crochet of [false, true]) {
+                if (crochet) {
+                    await page.locator("#btn-export").click();
+                    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+                    const finalRound = page.locator('.instructions-unit[aria-label^="Round 3,"]');
+                    if (await finalRound.getAttribute("aria-current") !== "step") await finalRound.click();
+                }
+                for (const rotated of [false, true]) {
+                    if (rotated) {
+                        await page.getByRole("button", { name: "Rotate view right" }).click();
+                        await page.waitForTimeout(300);
+                    }
+                    await page.getByRole("button", { name: "Fit view" }).click();
+                    const labels = await page.evaluate(() => {
+                        const m = window.__test_matrix__!;
+                        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+                        const geometry = (window as typeof window & { __test_instruction_label_geometry__?: Array<{
+                            anchor: { x: number; y: number };
+                            bounds: { left: number; top: number; right: number; bottom: number };
+                        }> }).__test_instruction_label_geometry__!;
+                        const ctx = canvas.getContext("2d")!;
+                        return geometry.map(({ anchor, bounds }) => {
+                            const point = m.inverse().transformPoint(anchor);
+                            const left = Math.max(0, Math.floor(bounds.left));
+                            const top = Math.max(0, Math.floor(bounds.top));
+                            const right = Math.min(canvas.width, Math.ceil(bounds.right));
+                            const bottom = Math.min(canvas.height, Math.ceil(bounds.bottom));
+                            const pixels = ctx.getImageData(left, top, right - left, bottom - top).data;
+                            let brightPixels = 0;
+                            for (let i = 0; i < pixels.length; i += 4) {
+                                if (pixels[i] > 120 && pixels[i + 1] > 120 && pixels[i + 2] > 120) brightPixels++;
+                            }
+                            return { x: point.x, y: point.y, bounds, brightPixels, width: canvas.width, height: canvas.height };
+                        });
+                    });
+                    expect(labels).toHaveLength(3);
+                    labels.forEach((label, i) => {
+                        expect(label.x).toBeCloseTo(i + 0.5);
+                        expect(label.y).toBeCloseTo(extent === "Full" ? i + 0.5 : -0.3);
+                        expect(label.bounds.left).toBeGreaterThanOrEqual(0);
+                        expect(label.bounds.top).toBeGreaterThanOrEqual(0);
+                        expect(label.bounds.right).toBeLessThanOrEqual(label.width);
+                        expect(label.bounds.bottom).toBeLessThanOrEqual(label.height);
+                        expect(label.brightPixels).toBeGreaterThan(0);
+                    });
+                }
+                await page.getByRole("button", { name: /Reset view orientation/ }).click();
+                await page.waitForTimeout(300);
+                if (crochet) await page.locator("#btn-export").click();
+            }
+        }
+    });
+}
+
+test("partial-round beginning markers leave the historical number glyphs readable after rotation", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Quarter", { exact: true }).click();
     await page.locator("#edit-rounds").fill("3");
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
-    const clearance = async () => {
-        const geometry = await page.evaluate(() => {
-            const seam = window.__test_instruction_seam_geometry__!;
-            const m = window.__test_matrix__!;
-            const paths = [seam.screenTriangle, ...seam.edges.map(([x1, y1, x2, y2]) => {
-                const a = m.transformPoint({ x: x1, y: y1 });
-                const b = m.transformPoint({ x: x2, y: y2 });
-                return [[a.x, a.y], [b.x, b.y]];
-            })];
-            return {
-                bounds: paths.map(points => ({
-                    left: Math.min(...points.map(p => p[0])) - 2,
-                    top: Math.min(...points.map(p => p[1])) - 2,
-                    right: Math.max(...points.map(p => p[0])) + 2,
-                    bottom: Math.max(...points.map(p => p[1])) + 2,
-                })),
-                labels: (window as typeof window & { __test_instruction_label_geometry__?: Array<{
-                    bounds: { left: number; top: number; right: number; bottom: number };
-                }> }).__test_instruction_label_geometry__ ?? [],
-            };
-        });
-        expect(geometry.bounds).toHaveLength(2);
-        expect(geometry.labels).toHaveLength(3);
-        for (const bounds of geometry.bounds) {
-            for (const { bounds: label } of geometry.labels) {
-                const dx = Math.max(label.left - bounds.right, bounds.left - label.right, 0);
-                const dy = Math.max(label.top - bounds.bottom, bounds.top - label.bottom, 0);
-                expect(Math.hypot(dx, dy)).toBeGreaterThanOrEqual(2);
+    await page.keyboard.press("Escape");
+    const labelInk = () => page.evaluate(() => {
+        const geometry = (window as typeof window & { __test_instruction_label_geometry__?: Array<{
+            bounds: { left: number; top: number; right: number; bottom: number };
+        }> }).__test_instruction_label_geometry__!;
+        const ctx = (document.getElementById("canvas") as HTMLCanvasElement).getContext("2d")!;
+        return geometry.map(({ bounds }) => {
+            const pixels = ctx.getImageData(Math.floor(bounds.left), Math.floor(bounds.top),
+                Math.ceil(bounds.right) - Math.floor(bounds.left), Math.ceil(bounds.bottom) - Math.floor(bounds.top)).data;
+            const ink: number[] = [];
+            for (let i = 0; i < pixels.length; i += 4) {
+                if (pixels[i] > 100 && pixels[i + 1] > 100 && pixels[i + 2] > 100
+                    && Math.abs(pixels[i] - pixels[i + 1]) <= 2
+                    && pixels[i + 2] - pixels[i] >= 3 && pixels[i + 2] - pixels[i] <= 15) ink.push(i);
             }
+            return ink;
+        });
+    });
+    for (const rotated of [false, true]) {
+        if (rotated) {
+            await page.getByRole("button", { name: "Rotate view right" }).click();
+            await page.waitForTimeout(300);
+            await page.getByRole("button", { name: "Rotate view right" }).click();
+            await page.waitForTimeout(300);
         }
-    };
-    await clearance();
-    await page.getByText("Alternate direction", { exact: true }).click();
-    await clearance();
-    await page.getByRole("button", { name: "Rotate view right" }).click();
-    await page.waitForTimeout(300);
-    await page.getByRole("button", { name: "Rotate view right" }).click();
-    await page.waitForTimeout(300);
-    await clearance();
+        await page.getByRole("button", { name: "Fit view" }).click();
+        const plain = await labelInk();
+        plain.forEach(ink => expect(ink.length).toBeGreaterThan(0));
+        await page.locator("#btn-export").click();
+        await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+        await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
+        expect(await labelInk()).toEqual(plain);
+        await page.getByText("Alternate direction", { exact: true }).click();
+        expect(await labelInk()).toEqual(plain);
+        await page.locator("#btn-export").click();
+    }
 });
 
 test("Crochet renders through the current row and no future rows", async ({ page }) => {
