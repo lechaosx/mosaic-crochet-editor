@@ -901,7 +901,7 @@ for (const extent of ["Full", "Half", "Quarter"]) {
                         await page.waitForTimeout(300);
                     }
                     await page.getByRole("button", { name: "Fit view" }).click();
-                    const labels = await page.evaluate(() => {
+                    const { labels, viewUnchanged } = await page.evaluate(() => {
                         const m = window.__test_matrix__!;
                         const canvas = document.getElementById("canvas") as HTMLCanvasElement;
                         const geometry = (window as typeof window & { __test_instruction_label_geometry__?: Array<{
@@ -909,20 +909,37 @@ for (const extent of ["Full", "Half", "Quarter"]) {
                             bounds: { left: number; top: number; right: number; bottom: number };
                         }> }).__test_instruction_label_geometry__!;
                         const ctx = canvas.getContext("2d")!;
-                        return geometry.map(({ anchor, bounds }) => {
+                        const samples = geometry.map(({ anchor, bounds }) => {
                             const point = m.inverse().transformPoint(anchor);
                             const left = Math.max(0, Math.floor(bounds.left));
                             const top = Math.max(0, Math.floor(bounds.top));
                             const right = Math.min(canvas.width, Math.ceil(bounds.right));
                             const bottom = Math.min(canvas.height, Math.ceil(bounds.bottom));
                             const pixels = ctx.getImageData(left, top, right - left, bottom - top).data;
-                            let brightPixels = 0;
-                            for (let i = 0; i < pixels.length; i += 4) {
-                                if (pixels[i] > 120 && pixels[i + 1] > 120 && pixels[i + 2] > 120) brightPixels++;
-                            }
-                            return { x: point.x, y: point.y, bounds, brightPixels, width: canvas.width, height: canvas.height };
+                            return { x: point.x, y: point.y, bounds, pixels, left, top, right, bottom };
                         });
+                        const numbers = document.getElementById("labels-on") as HTMLInputElement;
+                        const matrix = m.toFloat64Array();
+                        // Compare the same view with numbers hidden; antialiasing depends on the system font.
+                        numbers.click();
+                        try {
+                            const viewUnchanged = Array.from(window.__test_matrix__!.toFloat64Array())
+                                .every((value, i) => value === matrix[i]);
+                            const labels = samples.map(({ x, y, bounds, pixels, left, top, right, bottom }) => {
+                                const hidden = ctx.getImageData(left, top, right - left, bottom - top).data;
+                                let inkPixels = 0;
+                                for (let i = 0; i < pixels.length; i += 4) {
+                                    if (pixels[i] !== hidden[i] || pixels[i + 1] !== hidden[i + 1]
+                                        || pixels[i + 2] !== hidden[i + 2]) inkPixels++;
+                                }
+                                return { x, y, bounds, inkPixels, width: canvas.width, height: canvas.height };
+                            });
+                            return { labels, viewUnchanged };
+                        } finally {
+                            numbers.click();
+                        }
                     });
+                    expect(viewUnchanged).toBe(true);
                     expect(labels).toHaveLength(3);
                     labels.forEach((label, i) => {
                         expect(label.x).toBeCloseTo(i + 0.5);
@@ -931,7 +948,8 @@ for (const extent of ["Full", "Half", "Quarter"]) {
                         expect(label.bounds.top).toBeGreaterThanOrEqual(0);
                         expect(label.bounds.right).toBeLessThanOrEqual(label.width);
                         expect(label.bounds.bottom).toBeLessThanOrEqual(label.height);
-                        expect(label.brightPixels).toBeGreaterThan(0);
+                        expect(label.inkPixels, `${extent} label ${3 - i}, ${width}×${height}, crochet=${crochet}, rotated=${rotated}`)
+                            .toBeGreaterThan(0);
                     });
                 }
                 await page.getByRole("button", { name: /Reset view orientation/ }).click();
