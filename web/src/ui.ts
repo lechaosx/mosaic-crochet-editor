@@ -1179,7 +1179,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
             currentInstruction.hidden = currentUnit === null;
             if (currentUnit) {
                 currentInstructionText.textContent =
-                    currentUnit.text.slice(currentUnit.text.indexOf(":") + 1).trim();
+                    currentUnit.text.slice(currentUnit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0");
             }
             livePreviewListeners.forEach(f => f(current));
             unitElements[Math.min(liveCompleted, total - 1)]?.scrollIntoView({ block: "nearest" });
@@ -1256,7 +1256,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
                 meta.textContent = unit.label.replace(/^\D+/, "");
                 meta.dataset.yarn = unit.yarn;
                 const text = document.createElement("code");
-                text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim();
+                text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0");
                 item.append(meta, text);
                 row.append(item);
                 unitsList.append(row);

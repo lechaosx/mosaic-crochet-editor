@@ -1075,9 +1075,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 
 .instructions-unit-number {
-  align-self: center;
   width: var(--unit-size);
-  height: var(--unit-size);
   display: grid;
   place-items: center;
   color: #fff;

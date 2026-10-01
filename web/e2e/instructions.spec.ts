@@ -578,7 +578,7 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
 });
 
-test("long Crochet instructions wrap completely beside a square yarn number", async ({ page }) => {
+test("long Crochet instructions wrap between stitch counts beside a yarn number that fills the row height", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("50");
@@ -594,21 +594,32 @@ test("long Crochet instructions wrap completely beside a square yarn number", as
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const row = page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]');
     await row.click();
-    expect((await row.locator("code").textContent())!.length).toBeGreaterThan(60);
-    await expect(page.locator("#instructions-current-text")).toHaveText(await row.locator("code").textContent() ?? "");
-    for (const [width, fontScale] of [[1600, 100], [360, 100], [360, 200]]) {
-        await page.setViewportSize({ width, height: 900 });
+    const instruction = (await row.locator("code").textContent())!;
+    expect(instruction.length).toBeGreaterThan(60);
+    expect(instruction).toContain("\u00a0×\u00a0");
+    expect(instruction).not.toContain(" × ");
+    expect(await page.locator("#instructions-current-text").textContent()).toBe(instruction);
+    for (const [width, height, fontScale] of [[1600, 900, 100], [360, 900, 100], [844, 390, 100], [360, 900, 200]]) {
+        await page.setViewportSize({ width, height });
         await page.addStyleTag({ content: `html { font-size: ${fontScale}%; }` });
         await row.scrollIntoViewIfNeeded();
         const layout = await row.evaluate(item => {
             const text = item.querySelector("code")!;
             const range = document.createRange();
             range.selectNodeContents(text);
+            const marker = item.querySelector(".instructions-unit-number")!;
             return {
-                marker: item.querySelector(".instructions-unit-number")!.getBoundingClientRect().toJSON(),
+                marker: marker.getBoundingClientRect().toJSON(),
+                shortMarker: document.querySelector(".instructions-unit-number")!.getBoundingClientRect().toJSON(),
                 button: item.getBoundingClientRect().toJSON(),
                 text: text.getBoundingClientRect().toJSON(),
                 lines: Array.from(range.getClientRects(), rect => rect.toJSON()),
+                stitchCounts: Array.from(text.textContent!.matchAll(/[a-z]+\u00a0×\u00a0\d+/g), match => {
+                    const countRange = document.createRange();
+                    countRange.setStart(text.firstChild!, match.index);
+                    countRange.setEnd(text.firstChild!, match.index + match[0].length);
+                    return Array.from(countRange.getClientRects(), rect => rect.toJSON());
+                }),
                 lineHeight: parseFloat(getComputedStyle(text).lineHeight),
                 clientWidth: text.clientWidth, scrollWidth: text.scrollWidth,
                 listWidth: document.getElementById("instructions-units")!.clientWidth,
@@ -618,8 +629,15 @@ test("long Crochet instructions wrap completely beside a square yarn number", as
         expect(layout.lines.length).toBeGreaterThan(1);
         expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth);
         expect(layout.button.width).toBeLessThanOrEqual(layout.listWidth);
-        expect(layout.marker.width).toBeCloseTo(layout.marker.height, 0);
-        expect(layout.marker.y + layout.marker.height / 2).toBeCloseTo(layout.button.y + layout.button.height / 2, 0);
+        expect(layout.marker.height).toBeCloseTo(layout.button.height, 0);
+        expect(layout.marker.height).toBeGreaterThan(layout.marker.width);
+        expect(layout.marker.width).toBeCloseTo(layout.shortMarker.width, 0);
+        expect(layout.marker.top).toBeCloseTo(layout.button.top, 0);
+        expect(layout.marker.bottom).toBeCloseTo(layout.button.bottom, 0);
+        expect(layout.stitchCounts.length).toBeGreaterThan(0);
+        for (const count of layout.stitchCounts) {
+            expect(count).toHaveLength(1);
+        }
         for (const line of layout.lines) {
             expect(line.left).toBeGreaterThanOrEqual(layout.text.left);
             expect(line.right).toBeLessThanOrEqual(layout.text.right + 1);
@@ -1135,6 +1153,8 @@ test("Crochet reports copy completion", async ({ page }) => {
     await expect(status).toHaveText("Copied");
     copied = await page.evaluate(() => (window as typeof window & { __copied?: string }).__copied ?? "");
     expect(copied.split("\n")[0]).toMatch(/^Row 1 · Yarn A: /);
+    expect(copied).toContain("sc × 9");
+    expect(copied).not.toContain("\u00a0");
 });
 
 test("Crochet reports clipboard failure", async ({ page }) => {

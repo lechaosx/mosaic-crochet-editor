@@ -4,7 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 1 October 2026
 
-- Crochet instruction lines wrap to show their full text, and Half and Quarter round numbers sit immediately above the chart.
+- Crochet instruction lines wrap between stitch counts to show their full text, yarn-coloured number blocks span each instruction's full height, and Half and Quarter round numbers sit immediately above the chart.
 
 ## 30 September 2026
 
