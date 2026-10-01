@@ -6,7 +6,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { defineConfig, type PluginOption } from "vitest/config";
 import wasm from "vite-plugin-wasm";
-import { buildReleaseNotes } from "./build/release-notes";
+import { buildReleaseNotes } from "./build/release-notes.ts";
 
 const releaseNotesPath = fileURLToPath(new URL("../RELEASE_NOTES.md", import.meta.url));
 
@@ -56,6 +56,8 @@ export default defineConfig({
     plugins: [wasm(), wasmFullReload(), generatedReleaseNotes()],
     base: "./",
     build: { target: "esnext" },
+    // jsdom workers run in Node, so WASM imports must use the server loader.
+    environments: process.env.VITEST ? { client: { consumer: "server" } } : undefined,
     optimizeDeps: { exclude: ["@mosaic/wasm"] },
     server: {
         watch: {
@@ -67,8 +69,7 @@ export default defineConfig({
         // Tests that need DOM / localStorage opt in via a per-file
         // `// @vitest-environment jsdom` annotation at the top.
         coverage: {
-            // Istanbul (not V8): Bun doesn't expose V8 coverage APIs.
-            provider: "istanbul",
+            provider: "v8",
             include:  ["src/**/*.ts"],
             // Exclude pure DOM glue and the boot file — not unit-testable
             // here, covered by Playwright E2E.

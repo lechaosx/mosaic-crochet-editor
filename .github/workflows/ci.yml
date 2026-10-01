@@ -19,9 +19,9 @@ jobs:
     name: Rust checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -37,11 +37,11 @@ jobs:
     name: WASM build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@nightly
         with:
           targets: wasm32-unknown-unknown
-      - uses: actions/cache@v5
+      - uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index/
@@ -49,9 +49,11 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-wasm-${{ hashFiles('**/Cargo.lock') }}
-      - run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-      - uses: oven-sh/setup-bun@v2
-      - run: bun run build:wasm
+      - run: cargo install wasm-pack --version 0.15.0 --locked
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm run build:wasm
       - uses: actions/upload-artifact@v7
         with:
           name: pkg
@@ -62,43 +64,49 @@ jobs:
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci
       - uses: actions/download-artifact@v8
         with:
           name: pkg
           path: wasm/pkg/
-      - run: bun run --cwd logic typecheck
-      - run: bun run --cwd logic test
+      - run: npm run typecheck --workspace logic
+      - run: npm run test --workspace logic
 
   test-io:
     name: IO layer tests
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci
       - uses: actions/download-artifact@v8
         with:
           name: pkg
           path: wasm/pkg/
-      - run: bun run --cwd web test
+      - run: npm run test --workspace web
 
   build-app:
     name: App build
     needs: build-wasm
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci
       - uses: actions/download-artifact@v8
         with:
           name: pkg
           path: wasm/pkg/
-      - run: bun run build:web
+      - run: npm run build:web
       - uses: actions/upload-artifact@v7
         with:
           name: web-dist
@@ -109,16 +117,18 @@ jobs:
     needs: build-app
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+      - run: npm ci
       - uses: actions/download-artifact@v8
         with:
           name: web-dist
           path: web/dist/
-      - run: bunx playwright install chromium --with-deps
+      - run: npx playwright install chromium --with-deps
         working-directory: web
-      - run: bun run --cwd web test:e2e
+      - run: npm run test:e2e --workspace web
 
   deploy:
     name: Deploy to GitHub Pages
@@ -133,9 +143,9 @@ jobs:
         with:
           name: web-dist
           path: web/dist/
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: web/dist/
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -41,8 +41,8 @@ The development environment requires [Nix](https://nixos.org/) with flakes enabl
 
 ```sh
 nix develop
-bun install
-bun run dev
+npm ci
+npm run dev
 ```
 
 The development server runs at [http://localhost:5173](http://localhost:5173). Vite reloads TypeScript changes immediately; Rust changes rebuild the WebAssembly package first.
@@ -50,9 +50,9 @@ The development server runs at [http://localhost:5173](http://localhost:5173). V
 Run the complete test suite before submitting changes:
 
 ```sh
-bun run test
+npm run test
 ```
 
-Useful narrower commands are `bun run test:rust`, `bun run test:logic`, `bun run test:web`, and `bun run test:e2e`. Run `bun run build` for a production build in `web/dist/`.
+Useful narrower commands are `npm run test:rust`, `npm run test:logic`, `npm run test:web`, and `npm run test:e2e`. Run `npm run build` for a production build in `web/dist/`.
 
 Pushes to `master` deploy to GitHub Pages through GitHub Actions.

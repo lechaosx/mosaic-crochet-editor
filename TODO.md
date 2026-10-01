@@ -10,7 +10,7 @@ Items remain here until they are implemented, rejected, or deliberately promoted
 - Start behavioural work with a failing test at the appropriate Rust, Vitest, or Playwright layer.
 - Keep refactoring in a separate commit from functional changes.
 - Update README and RELEASE_NOTES for user-visible changes. Update FEATURES or ARCHITECTURE only when the change establishes or revises a durable decision.
-- Run the smallest relevant checks during development and `bun run test` before completing a change.
+- Run the smallest relevant checks during development and `npm run test` before completing a change.
 - Stop after each independently valuable slice and reassess the remaining work.
 
 ## Open product gates

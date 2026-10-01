@@ -2,3 +2,5 @@ target/
 node_modules/
 wasm/pkg/
 .direnv/
+stryker-tmp/
+reports/

@@ -89,8 +89,8 @@ Keeping the docs accurate takes priority over keeping responses short. Always up
 Tests live in three layers — all three must stay green and current with the code:
 
 - **Rust** (`cargo test`) — geometry, paint primitives, exporter logic. Add a test for any new Rust function or any bug fix that's reproducible in Rust.
-- **TS unit** (`bun run --cwd web test`, Vitest) — `web/tests/*.test.ts`. Covers `store`, `selection`, `paint`, `clipboard`, `symmetry`, `storage`, `history`, `pattern`, `types`. Add or update a test whenever you change behaviour in one of these modules. jsdom is per-file via `// @vitest-environment jsdom`.
-- **E2E** (`bun run --cwd web test:e2e`, Playwright) — `web/e2e/*.spec.ts`. Covers full user flows (boot, tools, paint, selection, move, copy/cut/paste, symmetry, edit popover). Add a spec for any new user-visible flow or any bug fix that needed a manual UX verification.
+- **TS unit** (`npm run test --workspace web`, Vitest) — `web/tests/*.test.ts`. Covers `store`, `selection`, `paint`, `clipboard`, `symmetry`, `storage`, `history`, `pattern`, `types`. Add or update a test whenever you change behaviour in one of these modules. jsdom is per-file via `// @vitest-environment jsdom`.
+- **E2E** (`npm run test:e2e --workspace web`, Playwright) — `web/e2e/*.spec.ts`. Covers full user flows (boot, tools, paint, selection, move, copy/cut/paste, symmetry, edit popover). Add a spec for any new user-visible flow or any bug fix that needed a manual UX verification.
 
 ### Rules
 
@@ -98,4 +98,4 @@ Tests live in three layers — all three must stay green and current with the co
 - Pick the right layer: Rust for geometry, Vitest for module logic, Playwright for UX flows. A change touching more than one layer gets tests in each.
 - Renaming / removing API: update the tests in the same response. Never leave tests referencing the old shape.
 - Tests aren't optional. If a change can be tested, it should be. If it genuinely can't (e.g. visual render details), say so explicitly in the commit / PR rationale.
-- `bun run test` at the root chains all three; run it before declaring work done.
+- `npm run test` at the root chains all three; run it before declaring work done.

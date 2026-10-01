@@ -9,8 +9,7 @@
         packages = with pkgs; [
           rustup
           wasm-pack
-          bun
-          nodejs        # Stryker (mutation testing) needs node — its Babel/AJV imports rely on Node's CJS-default unwrap that Bun doesn't reproduce
+          nodejs_26
           cargo-watch
           cargo-edit       # `cargo upgrade` for bumping Cargo.toml versions
           cargo-outdated   # `cargo outdated` for spotting available upgrades

@@ -10,6 +10,6 @@ panic          = "abort"
 strip          = "symbols"
 
 [workspace.dependencies]
-glam         = "0.32"
-ndarray      = "0.17"
-wasm-bindgen = "0.2"
+glam         = "0.33.11"
+ndarray      = "0.17.2"
+wasm-bindgen = "0.2.129"
