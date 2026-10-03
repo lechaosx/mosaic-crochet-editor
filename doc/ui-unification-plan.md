@@ -14,7 +14,7 @@ The plan preserves the boundaries in [FEATURES.md](../FEATURES.md), [ARCHITECTUR
 
 - Keep the app as lightweight and fast as practical. A dependency must remove enough complexity to justify its runtime, integration, and maintenance cost.
 - Keep one authoritative editor state, one persistent canvas, and the existing browser-independent logic / browser UI / Rust domain boundaries.
-- Use feature-oriented vertical slices with explicit module ownership and narrow cross-feature contracts. Shared controls own presentation primitives; application composition coordinates features rather than owning all feature behavior.
+- Preserve the existing structure while steering changes through the focused interfaces and one-way dependency rules in ARCHITECTURE. Deliver coherent end-to-end changes; `main` may coordinate modules and implement glue or small supporting operations. Extract only boundaries justified by the work, not a layer containing every controller or a mandatory owner per feature.
 - Prefer concrete code and a few reusable constructs over a generic UI framework built inside the app.
 - Use consistent wording, icons, spacing, control placement, focus, selection, unavailable states, and error feedback.
 - Mouse, touch, pen, and keyboard produce the same authored outcomes. Alternative buttons and modifiers accelerate actions available through visible controls.
@@ -157,19 +157,6 @@ Verification: Vitest logic tests for clipboard atomicity; web history and migrat
 
 Acceptance: shared command semantics, atomic failures, recoverable history, and no loss of existing selection content.
 
-### 2a. Establish feature ownership without changing behavior
-
-Scope: browser feature commands, interaction lifetimes, presentation modules, and their composition after chunk 2 is accepted and committed.
-
-- Audit the presentation extraction against the vertical-slice constraint in ARCHITECTURE. Give cohesive feature behavior and presentation explicit owners; keep cross-feature wiring at the application boundary.
-- Move browser-independent operations only when their current ownership contradicts the existing package boundary. Preserve the single committed state owner, domain authority, persistent canvas, and native control contracts.
-- Keep dependencies narrow and explicit. Shared UI primitives must not acquire feature policy, and feature modules must not become alternate state stores or a generic controller framework.
-- Keep this a separate behavior-preserving phase and commit before further functional changes. Extract only boundaries justified by existing responsibilities and the remaining approved changes.
-
-Verification: existing unit/browser behavior, build/type checks, full root suite, preserved focus/canvas identity, and independent ownership review.
-
-Acceptance: feature-oriented ownership rather than a file-size split, with no authored or interaction behavior change.
-
 ### 3. Apply the shared visual and wording language
 
 Scope: shared styling and controls, Pattern, Settings, list presentation, and status wording.
@@ -289,8 +276,7 @@ Acceptance: every requirement below has evidence, final performance is explained
 | Plan review | Approved | Native implementation, variant/pointer mappings, and Whole pattern progress approved. Sol implements and reviews; Luna handles scoped supporting checks. |
 | 0. Baseline / gates | Accepted | Baseline committed in `a9d3bf2`; local-selection conversion approved. |
 | 1. Presentation refactor | Accepted | `bbef2fb`; six concrete panel mounts and a type-only UI facade. Independent review, full root suite, and comparison pass. |
-| 2. Commands / history / atomic failures | Accepted | Independent review and full root suite pass; command, cancellation, palette-history, project replacement, and clipboard regressions reproduced before fixes. |
-| 2a. Feature ownership | Not started | Separate structural phase after chunk 2; vertical slices and narrow composition contracts. |
+| 2. Commands / history / atomic failures | Accepted | `112cba8`; independent review and full root suite pass; command, cancellation, palette-history, project replacement, and clipboard regressions reproduced before fixes. |
 | 3. Visual and wording language | Not started | |
 | 4. Tool groups / temporary actions | Not started | |
 | 5. Global mirror centers | Not started | Prove global-axis conversion lossless. |

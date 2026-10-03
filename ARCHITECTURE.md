@@ -24,7 +24,9 @@ web (DOM, canvas, browser I/O)
 
 ## Code design constraints
 
-- Code follows feature-oriented vertical slices with explicit module ownership within the package boundaries. Application composition coordinates features through narrow contracts; shared modules own established cross-feature primitives. — **your decision**
+- Modules have cohesive responsibilities and focused interfaces rather than collecting unrelated implementations by technical role. Shared modules expose semantically coherent primitives; callers should not depend on a broad module to use one small, architecturally appropriate part. Application composition, including `main`, may coordinate modules and implement glue or small supporting operations. — **your decision**
+- Module dependencies follow meaningful abstraction boundaries and remain one-way and acyclic. Pass functions at a boundary when a direct import would make an abstraction depend on a concrete implementation. Interfaces should make correct use straightforward and misuse difficult. — **your decision**
+- Prefer data-oriented transformations with explicit inputs and outputs, pure functions, and algebraic data types where practical. Application wiring stays together at the composition boundary; effects are explicit and confined to modules that require them. — **your decision**
 - Stateful objects are justified by an invariant they enforce or a resource lifetime they own. Otherwise, prefer free functions with explicit state and dependencies; do not hide mutable state in module singletons or factory closures. — **your decision**
 - Violations of caller-owned preconditions are assertions in development and tests. Ordinary guards are reserved for documented runtime drops caused by legitimate user actions, such as off-canvas or structurally absent cells. — **your decision**
 
