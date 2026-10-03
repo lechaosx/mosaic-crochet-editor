@@ -841,11 +841,13 @@ test("Open restores a global mirror without resetting Crochet progress", async (
 });
 
 test("Open leaves an identical global-mirror project view unchanged", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);
     await page.keyboard.press("v");
     await expect.poll(() => page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.axes.length,
     )).toBe(1);
+    await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.waitForTimeout(300);
     const project = await page.evaluate(() => {

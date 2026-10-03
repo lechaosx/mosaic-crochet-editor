@@ -17,7 +17,6 @@ export function mountSettings(
     el<HTMLInputElement>("labels-on")   .addEventListener("change", cb.onLabelsVisibleChange);
     el<HTMLInputElement>("lock-invalid").addEventListener("change", cb.onLockInvalidChange);
     el("settings-about").addEventListener("click", () => {
-        inspector.close();
         cb.onAbout();
     });
 

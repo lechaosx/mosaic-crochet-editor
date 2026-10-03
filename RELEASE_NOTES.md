@@ -2,6 +2,12 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 3 October 2026
+
+- Undo and Redo work from Crochet, return to Design, and restore project colours and the final position of keyboard moves using the chosen Move action.
+- About preserves Settings and protects the chart from document shortcuts; cancelled gestures and failed Paste preserve the active selection and chart.
+- Opening a different project, New, and Example reset chart orientation and fit the pattern to the workspace.
+
 ## 1 October 2026
 
 - Crochet instruction lines wrap between stitch counts to show their full text, yarn-coloured number blocks span each instruction's full height, and Half and Quarter round numbers sit immediately above the chart.

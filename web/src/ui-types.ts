@@ -110,7 +110,7 @@ export interface InstructionsView {
     onAlternate: (cb: () => void) => void;
     onLivePreview: (cb: (completedUnits: number | null) => void) => void;
     onClose:     (cb: () => void) => void;
-    close:       () => void;
+    close:       (restoreFocus?: boolean) => void;
 }
 
 export type InspectorPanel = "selection" | "move" | "settings" | "transforms" | "pattern";

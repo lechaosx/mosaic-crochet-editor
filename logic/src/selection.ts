@@ -170,7 +170,7 @@ export function matchedCutMask(
 }
 
 // Clip a float to only the cells within canvas bounds.
-// Returns null when ALL cells are out of bounds (caller should destroy the float).
+// Returns null when ALL cells are out of bounds.
 // Returns the original float object (no allocation) when nothing needs clipping.
 export function clipFloatToCanvas(f: Float, W: number, H: number): Float | null {
     let minX = W, minY = H, maxX = -1, maxY = -1;

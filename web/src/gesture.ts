@@ -126,7 +126,7 @@ export function mountGestures(
     function release(e: PointerEvent) {
         if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
             mode = "idle";
-            canvas.releasePointerCapture(e.pointerId);
+            if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
             return;
         }
         if (!pointers.has(e.pointerId)) return;
@@ -148,7 +148,7 @@ export function mountGestures(
     function cancel(e: PointerEvent) {
         if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
             mode = "idle";
-            canvas.releasePointerCapture(e.pointerId);
+            if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
             return;
         }
         if (!pointers.has(e.pointerId)) return;
@@ -165,6 +165,21 @@ export function mountGestures(
 
     canvas.addEventListener("pointerup", release);
     canvas.addEventListener("pointercancel", cancel);
+    canvas.addEventListener("lostpointercapture", cancel);
+    function cancelAll(): boolean {
+        if (mode === "idle") return false;
+        const painting = mode === "paint";
+        mode = "idle";
+        const captured = [...pointers.keys(), pan.pointerId];
+        pointers.clear();
+        for (const pointerId of captured) {
+            if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+        }
+        if (painting) cb.onPaintCancel();
+        cb.onHover(null, null, null, null);
+        return true;
+    }
+    window.addEventListener("blur", cancelAll);
     canvas.addEventListener("pointerleave", e => {
         if (mode === "idle" && !pointers.has(e.pointerId)) cb.onHover(null, null, null, null);
     });
@@ -175,4 +190,5 @@ export function mountGestures(
         zoomAt(canvas, view, e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
         cb.onView();
     }, { passive: false });
+    return { cancel: cancelAll };
 }

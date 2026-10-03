@@ -257,7 +257,7 @@ test("swatch selection marches while visible and pauses for reduced motion and c
     await expect.poll(bitmap).not.toBe(hidden);
 });
 
-test("Pattern colour resets use fixed app defaults and contrast suggestions stay outside undo", async ({ page }) => {
+test("Pattern colour resets use fixed app defaults and contrast suggestions are undoable", async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("mosaic-preferences", JSON.stringify({
         version: 1,
         guidanceOpacity: 100,
@@ -302,7 +302,7 @@ test("Pattern colour resets use fixed app defaults and contrast suggestions stay
     await expect(accent).toHaveValue("#00838f");
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    )).toBe(historyBefore);
+    )).toBe(historyBefore + 1);
 
     await page.getByRole("button", { name: "Reset accent colour" }).click();
     await expect(accent).toHaveValue("#d653a3");

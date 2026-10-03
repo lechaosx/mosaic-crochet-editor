@@ -228,6 +228,7 @@ type Gesture =
     | { kind: "move";
         guidePickPending: boolean;
         mode: MoveMode;
+        mask: Float | null;
         drag: { anchorX: number; anchorY: number; startDx: number; startDy: number } | null;
         prePixels: Uint8Array | null;
         preFloat: Float | null;
@@ -251,8 +252,8 @@ const AXIS_HIT_TOLERANCE = 0.4;
 
 let gesture: Gesture | null = null;
 let gestureFeedbackShown = false;
-let ctrlArrowStamped = false;                        // bake happens once per Ctrl-down
-let maskArrowState: { preFloat: Float } | null = null; // non-null while Alt+Arrow is active
+let keyboardMove: { key: string; mode: MoveMode; baseline: SessionState; mask: Float | null } | null = null;
+let ctrlArrowStamped = false;
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -702,14 +703,14 @@ function resetProjectColor(kind: "danger" | "accent") {
     store.commit(s => {
         if (kind === "danger") s.dangerColorOverride = null;
         else s.accentColorOverride = null;
-    }, { recompute: false });
+    }, { recompute: false, history: true });
 }
 function findContrastColors() {
     const colors = contrastingProjectColors(store.state.colorA, store.state.colorB);
     store.commit(s => {
         s.dangerColorOverride = colors.danger;
         s.accentColorOverride = colors.accent;
-    }, { recompute: false });
+    }, { recompute: false, history: true });
 }
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
@@ -753,16 +754,22 @@ function toggleNavigate() {
 // `pasteClipboard` itself only touches state; the tool switch is a UI side
 // effect that lives here in the orchestrator.
 function onPaste() {
+    if (!pasteClipboard(store, finishKeyboardMove)) {
+        ui.setCanvasFeedback(clipboardCellCount() === 0
+            ? "Clipboard is empty · copy a selection first"
+            : "Copied selection cannot fit this pattern · no cells land on the chart");
+        return;
+    }
     ui.setCanvasFeedback(null);
     if (store.state.activeTool !== "move") setTool("move");
-    pasteClipboard(store);
 }
 function onCopy() {
     copyFloat(store);
     ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
 }
-function onCut() { cutFloat(store); }
+function onCut() { finishKeyboardMove(); cutFloat(store); }
 function onDeselect() {
+    finishKeyboardMove();
     ui.setCanvasFeedback(null);
     deselect(store);
 }
@@ -955,7 +962,9 @@ function applyRestored(r: Restored) {
     store.replace(
         { ...store.state, pattern: r.pattern, pixels: r.pixels, float: r.float,
           axes: r.axes, recipes: r.recipes, activeRecipeId: r.activeRecipeId,
-          colorA: r.colorA, colorB: r.colorB },
+          colorA: r.colorA, colorB: r.colorB,
+          dangerColorOverride: r.dangerColorOverride === undefined ? store.state.dangerColorOverride : r.dangerColorOverride,
+          accentColorOverride: r.accentColorOverride === undefined ? store.state.accentColorOverride : r.accentColorOverride },
         { persist: true },
     );
     (document.getElementById("color-a") as HTMLInputElement).value = r.colorA;
@@ -965,14 +974,20 @@ function applyRestored(r: Restored) {
     refreshSymmetryUi();
 }
 function undo() {
+    if (document.querySelector("dialog:modal")) return;
+    finishKeyboardMove();
+    gestureInputs.cancel();
     patternHistorySession = false;
     const r = historyUndo();
-    if (r) applyRestored(r);
+    if (r) { instructionsView?.close(false); applyRestored(r); }
 }
 function redo() {
+    if (document.querySelector("dialog:modal")) return;
+    finishKeyboardMove();
+    gestureInputs.cancel();
     patternHistorySession = false;
     const r = historyRedo();
-    if (r) applyRestored(r);
+    if (r) { instructionsView?.close(false); applyRestored(r); }
 }
 
 // ── Save / load ──────────────────────────────────────────────────────────────
@@ -1005,9 +1020,12 @@ async function onLoad() {
         closeAbout();
         return;
     }
+    instructionsView?.close(false);
     if (!sameAuthoredPattern(loaded.pattern, loaded.pixels)) clearCrochetProgress();
+    rs.targetRotation = null;
+    rs.rotAnim = null;
     fitToView(
-        viewport.canvas, viewport.view, loaded.pattern, store.state.rotation,
+        viewport.canvas, viewport.view, loaded.pattern, 0,
         ui.getCanvasWorkspace(),
     );
     store.replace(
@@ -1015,7 +1033,7 @@ async function onLoad() {
           colorA: loaded.colorA, colorB: loaded.colorB, axes: loaded.axes,
           dangerColorOverride: loaded.dangerColorOverride ?? null,
           accentColorOverride: loaded.accentColorOverride ?? null,
-          recipes: loaded.recipes, activeRecipeId: null, float: null },
+          recipes: loaded.recipes, activeRecipeId: null, float: null, rotation: 0 },
         { history: true, persist: true },
     );
     closeAbout();
@@ -1312,10 +1330,13 @@ syncCrochetProgressControl();
 
 function beginFreshPattern() {
     const fresh = defaultSession();
+    instructionsView?.close(false);
     fresh.pixels = initialize_row_pattern(
         fresh.pattern.canvasWidth, fresh.pattern.canvasHeight,
     ).slice();
     if (!sameAuthoredPattern(fresh.pattern, fresh.pixels)) clearCrochetProgress();
+    rs.targetRotation = null;
+    rs.rotAnim = null;
     fitToView(
         viewport.canvas, viewport.view, fresh.pattern, fresh.rotation,
         ui.getCanvasWorkspace(),
@@ -1336,6 +1357,9 @@ function beginFreshPattern() {
 
 function useExample() {
     const example = exampleSession();
+    instructionsView?.close(false);
+    rs.targetRotation = null;
+    rs.rotAnim = null;
     fitToView(
         viewport.canvas, viewport.view, example.pattern, example.rotation,
         ui.getCanvasWorkspace(),
@@ -1366,7 +1390,7 @@ const clientToPattern = (cx: number, cy: number) => {
     return { x, y, inside };
 };
 
-mountGestures(viewport.canvas, viewport.view, clientToPattern, {
+const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     primaryColor: () => store.state.primaryColor,
     onPaintStart: (color, mods) => {
         if (instructionsOpen || editBaseline) {
@@ -1386,14 +1410,13 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
                 const clipped = clipFloatToCanvas(preFloat, W, H);
                 if (!clipped) {
-                    // Float entirely off-canvas — destroy it, don't start a drag.
-                    store.commit(s => { s.float = null; }, { history: true });
+                    ui.setCanvasFeedback("Selection is outside the pattern · move it onto the chart first");
                     return;
                 }
                 prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; s.float = clipped; }, { persist: false });
-                gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat: clipped, preRecipes, preActiveRecipeId };
+                gesture = { kind: "move", guidePickPending: true, mode, mask: clipped, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
                 return;
             } else if (mode === "duplicate" && preFloat) {
                 // Pre-stamp the float into canvas so the duplicate is
@@ -1402,7 +1425,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; }, { persist: false });
             }
-            gesture = { kind: "move", guidePickPending: true, mode, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
+            gesture = { kind: "move", guidePickPending: true, mode, mask: null, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
             return;
         }
         if (tool === "select") {
@@ -1509,7 +1532,7 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
                 if (isMaskOnly) {
                     // Mirror canvas content at the new position into float.pixels
                     // so visiblePixels stays a no-op and the marquee shows the shape.
-                    const pf = gesture.preFloat!;
+                    const pf = gesture.mask!;
                     const newFP = new Uint8Array(pf.w * pf.h);
                     for (let ly = 0; ly < pf.h; ly++) {
                         for (let lx = 0; lx < pf.w; lx++) {
@@ -1677,9 +1700,9 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
         gesture = null;
     },
     onPaintCancel: () => {
+        if (!gesture) return;
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
-        if (!gesture) return;
         if (gesture.kind === "move") {
             const { prePixels, preFloat, preRecipes, preActiveRecipeId } = gesture;
             gesture = null;
@@ -1737,6 +1760,8 @@ mountGestures(viewport.canvas, viewport.view, clientToPattern, {
     navigate:     () => instructionsOpen || navigateLatched || navigateMomentary,
 });
 
+document.addEventListener("pointerdown", finishKeyboardMove, { capture: true });
+
 viewport.canvas.addEventListener("pointermove", event => {
     if (instructionsOpen || event.buttons || !rs.previewRepeatGuides) return;
     const frac = screenToPatternFrac(
@@ -1754,10 +1779,96 @@ viewport.canvas.addEventListener("pointerdown", () => {
 });
 
 // ── Keyboard shortcuts ───────────────────────────────────────────────────────
+function finishKeyboardMove() {
+    if (!keyboardMove) return;
+    const move = keyboardMove;
+    keyboardMove = null;
+    if (move.mode === "mask-only" && store.state.float) {
+        const lifted = liftCells(store.state.pixels, store.state.pattern, shiftedFloatMask(store.state));
+        store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; syncActiveGridRecipe(s); }, { history: true });
+    } else store.commit(() => {}, { recompute: false, render: false, history: true });
+}
+
+function cancelKeyboardMove() {
+    if (!keyboardMove) return false;
+    const baseline = keyboardMove.baseline;
+    keyboardMove = null;
+    ctrlArrowStamped = false;
+    store.commit(s => {
+        s.pixels = baseline.pixels;
+        s.float = baseline.float;
+        s.recipes = baseline.recipes;
+        s.activeRecipeId = baseline.activeRecipeId;
+    });
+    return true;
+}
+
+function moveWithArrow(e: KeyboardEvent) {
+    if (keyboardMove && keyboardMove.key !== e.key) finishKeyboardMove();
+    if (!keyboardMove) {
+        const mode: MoveMode = e.altKey ? "mask-only" : e.ctrlKey || e.metaKey ? "duplicate" : selectionMoveMode;
+        const mask = mode === "mask-only"
+            ? clipFloatToCanvas(store.state.float!, store.state.pattern.canvasWidth, store.state.pattern.canvasHeight)
+            : null;
+        if (mode === "mask-only" && !mask) {
+            ui.setCanvasFeedback("Selection is outside the pattern · move it onto the chart first");
+            return;
+        }
+        ui.setCanvasFeedback(null);
+        keyboardMove = { key: e.key, mode, baseline: { ...store.state }, mask };
+        const ctrlDuplicate = mode === "duplicate" && (e.ctrlKey || e.metaKey);
+        if (mode === "mask-only" || mode === "duplicate" && !(ctrlDuplicate && ctrlArrowStamped)) store.commit(s => {
+            s.pixels = visiblePixels(s);
+            if (mode === "mask-only") s.float = mask;
+        }, { persist: false });
+        if (ctrlDuplicate) ctrlArrowStamped = true;
+    }
+    const move = keyboardMove;
+    const step = e.shiftKey ? 5 : 1;
+    const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+    const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+    store.commit(s => {
+        if (!s.float) return;
+        const f = s.float;
+        let x = f.x + dx, y = f.y + dy;
+        let pixels = f.pixels;
+        if (move.mode === "mask-only" && move.mask) {
+            const mask = move.mask;
+            const W = s.pattern.canvasWidth, H = s.pattern.canvasHeight;
+            x = Math.max(0, Math.min(W - mask.w, x));
+            y = Math.max(0, Math.min(H - mask.h, y));
+            pixels = new Uint8Array(mask.w * mask.h);
+            for (let ly = 0; ly < mask.h; ly++) for (let lx = 0; lx < mask.w; lx++) {
+                if (mask.pixels[ly * mask.w + lx] !== 0)
+                    pixels[ly * mask.w + lx] = s.pixels[(y + ly) * W + x + lx];
+            }
+        }
+        s.float = { ...f, x, y, pixels };
+        syncActiveGridRecipe(s, { x: x - f.x, y: y - f.y });
+    }, { persist: false });
+}
+
 document.addEventListener("keydown", e => {
+    if (document.querySelector("dialog:modal")) return;
+    if (e.key === "Escape" && document.querySelector(":popover-open")) return;
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo(); else undo();
+        return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault(); redo(); return;
+    }
     if (instructionsOpen) return;
+    if (e.key === "Escape" && (gestureInputs.cancel() || cancelKeyboardMove())) {
+        e.preventDefault(); return;
+    }
+    if (e.key.startsWith("Arrow") && t === viewport.canvas
+        && store.state.activeTool === "move" && store.state.float) {
+        e.preventDefault(); moveWithArrow(e); return;
+    }
     if (e.code === "Space" && t === viewport.canvas) {
         e.preventDefault();
         if (!e.repeat) {
@@ -1775,93 +1886,25 @@ document.addEventListener("keydown", e => {
         return;
     }
     if (e.ctrlKey || e.metaKey) {
-        if (e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
-        else if (e.key === "y" || (e.shiftKey && (e.key === "Z" || e.key === "z"))) { e.preventDefault(); redo(); }
-        else if (e.key === "a" && !e.shiftKey) { e.preventDefault(); selectAll(store); }
-        else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); deselect(store); }
+        if (e.key === "a" && !e.shiftKey) { e.preventDefault(); finishKeyboardMove(); selectAll(store); }
+        else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); onDeselect(); }
         else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); onCopy(); }
-        else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); cutFloat(store); }
+        else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); onCut(); }
         else if (e.key === "v" && !e.shiftKey) { e.preventDefault(); onPaste(); }
-        else if (e.key.startsWith("Arrow") && t === viewport.canvas
-            && store.state.activeTool === "move" && store.state.float) {
-            e.preventDefault();
-            const step = e.shiftKey ? 5 : 1;
-            const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
-            const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
-            store.commit(state => {
-                if (!ctrlArrowStamped && state.float) {
-                    state.pixels     = visiblePixels(state);
-                    ctrlArrowStamped = true;
-                }
-                if (state.float) {
-                    state.float = { ...state.float, x: state.float.x + ddx, y: state.float.y + ddy };
-                    syncActiveGridRecipe(state, { x: ddx, y: ddy });
-                }
-            }, { history: !e.repeat });
-        }
         return;
     }
-    if (e.altKey) {
-        if (e.key.startsWith("Arrow") && t === viewport.canvas
-            && store.state.activeTool === "move" && store.state.float) {
-            e.preventDefault();
-            const step = e.shiftKey ? 5 : 1;
-            const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
-            const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
-            store.commit(state => {
-                if (!maskArrowState && state.float) {
-                    const W = state.pattern.canvasWidth, H = state.pattern.canvasHeight;
-                    state.pixels = visiblePixels(state);
-                    const clipped = clipFloatToCanvas(state.float, W, H);
-                    if (!clipped) { state.float = null; return; }   // entirely off-canvas — destroy
-                    state.float = clipped;
-                    maskArrowState = { preFloat: clipped };
-                }
-                if (state.float && maskArrowState) {
-                    const pf = maskArrowState.preFloat;
-                    const W = state.pattern.canvasWidth, H = state.pattern.canvasHeight;
-                    const rawX = state.float.x + ddx, rawY = state.float.y + ddy;
-                    const newX = Math.max(0, Math.min(W - pf.w, rawX));
-                    const newY = Math.max(0, Math.min(H - pf.h, rawY));
-                    const newFP = new Uint8Array(pf.w * pf.h);
-                    for (let ly = 0; ly < pf.h; ly++) {
-                        for (let lx = 0; lx < pf.w; lx++) {
-                            if (pf.pixels[ly * pf.w + lx] === 0) continue;
-                            const cx = newX + lx, cy = newY + ly;
-                            if (!outOfBounds(cx, cy, W, H))
-                                newFP[ly * pf.w + lx] = state.pixels[cy * W + cx];
-                        }
-                    }
-                    const translation = { x: newX - state.float.x, y: newY - state.float.y };
-                    state.float = { ...state.float, x: newX, y: newY, pixels: newFP };
-                    syncActiveGridRecipe(state, translation);
-                }
-            }, { history: !e.repeat });
-        }
-        return;
-    }
+    if (e.altKey) return;
     if (e.key === "Escape") {
         if (store.state.float) { e.preventDefault(); anchorFloat(store); }
         return;
     }
     if (e.key === "Delete") {
+        finishKeyboardMove();
         if (store.state.float) { e.preventDefault(); deleteFloat(store); }
         return;
     }
-    if (e.key.startsWith("Arrow")) {
-        if (t !== viewport.canvas) return;
-        if (store.state.activeTool !== "move" || !store.state.float) return;
-        e.preventDefault();
-        const step = e.shiftKey ? 5 : 1;
-        const ddx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
-        const ddy = e.key === "ArrowUp"   ? -step : e.key === "ArrowDown"  ? step : 0;
-        store.commit(state => {
-            state.float = { ...state.float!, x: state.float!.x + ddx, y: state.float!.y + ddy };
-            syncActiveGridRecipe(state, { x: ddx, y: ddy });
-        }, { history: !e.repeat });
-        return;
-    }
     const k = e.key.toLowerCase();
+    if (["v", "h", "c", "d", "a", "t"].includes(k)) finishKeyboardMove();
     if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
     else if (k === "e") setTool("eraser");
@@ -1882,26 +1925,17 @@ document.addEventListener("keydown", e => {
 });
 
 document.addEventListener("keyup", e => {
+    if (keyboardMove && (e.key === keyboardMove.key || ["Alt", "Control", "Meta"].includes(e.key))) finishKeyboardMove();
+    if (e.key === "Control" || e.key === "Meta") ctrlArrowStamped = false;
     if (e.code === "Space") {
         navigateMomentary = false;
         ui.setViewState(store.state.rotation, navigateLatched);
-    } else if (e.key === "Alt") {
-        if (maskArrowState && store.state.float) {
-            const shifted = shiftedFloatMask(store.state);
-            const lifted  = liftCells(store.state.pixels, store.state.pattern, shifted);
-            store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; }, { history: true });
-        }
-        maskArrowState   = null;
-        ctrlArrowStamped = false;
-    } else if (e.key === "Control" || e.key === "Meta") {
-        ctrlArrowStamped = false;
-        maskArrowState   = null;   // safety reset
     }
 });
 
 window.addEventListener("blur", () => {
+    cancelKeyboardMove();
     ctrlArrowStamped = false;
-    maskArrowState   = null;
     navigateMomentary = false;
     ui.setViewState(store.state.rotation, navigateLatched);
 });

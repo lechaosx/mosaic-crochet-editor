@@ -11,7 +11,7 @@ import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "
 
 const HISTORY_KEY        = "mosaic-history";
 const LEGACY_HISTORY_KEY = "mosaic-history-v4";
-const HISTORY_VERSION    = 5;
+const HISTORY_VERSION    = 6;
 const MAX                = 64;
 
 interface SnapshotV4 {
@@ -28,6 +28,9 @@ interface Snapshot {
         pixels: string;
         colorA: string;
         colorB: string;
+        // Missing legacy values preserve the current override; null restores the app default.
+        dangerColorOverride?: string | null;
+        accentColorOverride?: string | null;
     };
     selection: PackedFloat | null;
     transforms: {
@@ -37,7 +40,7 @@ interface Snapshot {
     };
 }
 interface HistoryBlob {
-    version:   5;
+    version:   6;
     snapshots: Snapshot[];
     index:     number;
 }
@@ -46,10 +49,10 @@ function migrateHistory(value: unknown): HistoryBlob | null {
     if (typeof value !== "object" || value === null) return null;
     const data = value as Record<string, unknown>;
     if (!Array.isArray(data.snapshots) || typeof data.index !== "number") return null;
-    if (data.version === HISTORY_VERSION) {
+    if (data.version === HISTORY_VERSION || data.version === 5) {
         if (!data.snapshots.every(snapshot => typeof snapshot === "object" && snapshot !== null
             && typeof (snapshot as Record<string, unknown>).document === "object")) return null;
-        return data as unknown as HistoryBlob;
+        return { ...data, version: HISTORY_VERSION } as unknown as HistoryBlob;
     }
     if (data.version !== undefined) return null;
     if (!data.snapshots.every(snapshot => typeof snapshot === "object" && snapshot !== null
@@ -74,9 +77,10 @@ function read(): HistoryBlob | null {
     const raw = current ?? localStorage.getItem(LEGACY_HISTORY_KEY);
     if (!raw) return null;
     try {
-        const history = migrateHistory(JSON.parse(raw));
+        const parsed = JSON.parse(raw);
+        const history = migrateHistory(parsed);
         if (!history) return null;
-        if (sourceKey === LEGACY_HISTORY_KEY) write(history);
+        if (sourceKey === LEGACY_HISTORY_KEY || parsed.version !== HISTORY_VERSION) write(history);
         return history;
     } catch { return null; }
 }
@@ -101,6 +105,8 @@ function snapshotFrom(s: Readonly<SessionState>): Snapshot {
         document: {
             state: s.pattern, pixels: packPixels(s.pixels),
             colorA: s.colorA, colorB: s.colorB,
+            dangerColorOverride: s.dangerColorOverride,
+            accentColorOverride: s.accentColorOverride,
         },
         selection: s.float ? packFloat(s.float) : null,
         transforms: { axes: s.axes, recipes: storedGridRecipes(s.recipes), activeRecipeId: s.activeRecipeId },
@@ -113,6 +119,8 @@ function snapshotsEqual(a: Snapshot, b: Snapshot): boolean {
         && JSON.stringify(a.transforms) === JSON.stringify(b.transforms)
         && a.document.colorA === b.document.colorA
         && a.document.colorB === b.document.colorB
+        && a.document.dangerColorOverride === b.document.dangerColorOverride
+        && a.document.accentColorOverride === b.document.accentColorOverride
         && JSON.stringify(a.document.state) === JSON.stringify(b.document.state);
 }
 
@@ -168,6 +176,8 @@ export interface Restored {
     activeRecipeId: string | null;
     colorA:  string;
     colorB:  string;
+    dangerColorOverride?: string | null;
+    accentColorOverride?: string | null;
 }
 
 function restoredAt(h: HistoryBlob): Restored {
@@ -192,6 +202,8 @@ function restoredAt(h: HistoryBlob): Restored {
         ),
         colorA:  s.document.colorA,
         colorB:  s.document.colorB,
+        dangerColorOverride: s.document.dangerColorOverride,
+        accentColorOverride: s.document.accentColorOverride,
     };
 }
 

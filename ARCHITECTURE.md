@@ -24,6 +24,7 @@ web (DOM, canvas, browser I/O)
 
 ## Code design constraints
 
+- Code follows feature-oriented vertical slices with explicit module ownership within the package boundaries. Application composition coordinates features through narrow contracts; shared modules own established cross-feature primitives. — **your decision**
 - Stateful objects are justified by an invariant they enforce or a resource lifetime they own. Otherwise, prefer free functions with explicit state and dependencies; do not hide mutable state in module singletons or factory closures. — **your decision**
 - Violations of caller-owned preconditions are assertions in development and tests. Ordinary guards are reserved for documented runtime drops caused by legitimate user actions, such as off-canvas or structurally absent cells. — **your decision**
 
@@ -35,7 +36,7 @@ State is classified by meaning, not by whichever storage mechanism currently hol
 |---|---|---|
 | Project document | Pattern geometry and cells, yarn definitions, global mirror axes, saved repeat definitions, and project-specific display overrides travel in `.mcw`. | **your decision** |
 | Editor workspace | Active tools, live selection, current repeat source, and other resume-editing context may be recovered locally but are not part of the portable project. | **your decision** |
-| Undo and redo | Reversible authored edits and relevant editing context have their own browser-local history; view-only state and crochet progress are excluded. | **your decision** |
+| Undo and redo | Reversible authored edits and relevant editing context have their own browser-local history, including yarns and project Danger/Accent overrides; camera navigation, browser preferences, and crochet progress are excluded. | **your decision**; project-palette distinction: **Agent's choice** |
 | Preferences | App-wide display defaults are browser-local and remain separate from both project documents and recovery snapshots. | **your decision** |
 | Crochet progress | Progress is browser-local, keyed to compatible pattern geometry, and is neither project content nor an authored edit. | **your decision** |
 

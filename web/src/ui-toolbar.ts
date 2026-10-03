@@ -7,7 +7,7 @@ export function mountToolbar(
     cb: Pick<UICallbacks, "onTool" | "onOverlayAction" | "onUndo" | "onRedo" | "onRotate"
         | "onResetRotation" | "onFit" | "onZoom" | "onNavigate" | "onSave" | "onLoad">,
     inspector: Pick<InspectorControls, "open">,
-    syncCanvasChromeInsets: () => void, enterDesignForCommand: () => void) {
+    syncCanvasChromeInsets: () => void) {
     /* ── Tool buttons ─────────────────────────────────────────────────── */
     const toolButtons: Record<Tool, HTMLButtonElement> = {
         pencil:  el("tool-pencil"),
@@ -60,14 +60,8 @@ export function mountToolbar(
     }
 
     /* ── History and canvas view ─────────────────────────────────────── */
-    el("btn-undo").addEventListener("click", () => {
-        enterDesignForCommand();
-        cb.onUndo();
-    });
-    el("btn-redo").addEventListener("click", () => {
-        enterDesignForCommand();
-        cb.onRedo();
-    });
+    el("btn-undo").addEventListener("click", cb.onUndo);
+    el("btn-redo").addEventListener("click", cb.onRedo);
     el("rotate-cw") .addEventListener("click", () => cb.onRotate( 45));
     el("rotate-ccw").addEventListener("click", () => cb.onRotate(-45));
     el("view-rotation-reset").addEventListener("click", cb.onResetRotation);
@@ -123,10 +117,7 @@ export function mountToolbar(
 
     /* ── Save / load / Instructions ─────────────────────────────────── */
     el("btn-save")  .addEventListener("click", cb.onSave);
-    el("btn-load").addEventListener("click", () => {
-        enterDesignForCommand();
-        cb.onLoad();
-    });
+    el("btn-load").addEventListener("click", cb.onLoad);
 
     mountToolbarLayout();
 

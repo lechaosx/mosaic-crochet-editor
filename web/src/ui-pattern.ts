@@ -267,6 +267,8 @@ export function mountPattern(
 
     el<HTMLInputElement>("danger-color")      .addEventListener("input",  cb.onDangerColorChange);
     el<HTMLInputElement>("accent-color")      .addEventListener("input",  cb.onAccentColorChange);
+    el<HTMLInputElement>("danger-color")      .addEventListener("change", cb.onColorCommit);
+    el<HTMLInputElement>("accent-color")      .addEventListener("change", cb.onColorCommit);
     el("danger-color-reset").addEventListener("click", cb.onDangerColorReset);
     el("accent-color-reset").addEventListener("click", cb.onAccentColorReset);
     el("find-contrast-colors").addEventListener("click", cb.onFindContrastColors);

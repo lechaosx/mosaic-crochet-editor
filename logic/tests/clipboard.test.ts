@@ -171,6 +171,49 @@ describe("cutFloat with offset", () => {
 });
 
 describe("pasteClipboard", () => {
+    test("an unusable destination preserves the active selection and performs no commit", () => {
+        copyFloat(new Store(rowSession(9, 9, {
+            float: makeFloat([{ x: 8, y: 8, v: 2 }]),
+        })));
+        const original = makeFloat([{ x: 0, y: 0, v: 2 }]);
+        const recipe = gridRecipeFromFloat(original);
+        const dest = storeOf({ float: original, recipes: [recipe], activeRecipeId: recipe.id });
+        const pixels = dest.state.pixels;
+        let commits = 0;
+        let prepared = false;
+        dest.addObserver(() => commits++);
+        expect(pasteClipboard(dest, () => { prepared = true; })).toBe(false);
+        expect(dest.state.float).toBe(original);
+        expect(dest.state.pixels).toBe(pixels);
+        expect(dest.state.activeRecipeId).toBe(recipe.id);
+        expect(dest.state.recipes).toEqual([recipe]);
+        expect(commits).toBe(0);
+        expect(prepared).toBe(false);
+    });
+
+    test("pasting over a selection records one complete authored action", () => {
+        copyFloat(storeOf({ float: makeFloat([{ x: 1, y: 1, v: 2 }]) }));
+        const dest = storeOf({ float: makeFloat([{ x: 0, y: 0, v: 2 }]) });
+        const snapshots: unknown[] = [];
+        dest.setHistoryFn(state => snapshots.push({ pixels: state.pixels.slice(), float: state.float }));
+        expect(pasteClipboard(dest)).toBe(true);
+        expect(snapshots).toHaveLength(1);
+        expect(dest.state.pixels[0]).toBe(2);
+        expect(dest.state.float!.x).toBe(1);
+    });
+
+    test("accepted paste prepares the current selection before its authored snapshot", () => {
+        copyFloat(storeOf({ float: makeFloat([{ x: 1, y: 1, v: 2 }]) }));
+        const original = makeFloat([{ x: 0, y: 0, v: 2 }]);
+        const dest = storeOf({ float: original });
+        const events: string[] = [];
+        dest.setHistoryFn(() => events.push("history"));
+        expect(pasteClipboard(dest, () => {
+            expect(dest.state.float).toBe(original);
+            events.push("prepare");
+        })).toBe(true);
+        expect(events).toEqual(["prepare", "history"]);
+    });
     test("paste populates the active empty selection slot", () => {
         const copied = makeFloat([{ x: 1, y: 1, v: 2 }]);
         copyFloat(storeOf({ pixels: filledPixels(3, 3, 1), float: copied }));

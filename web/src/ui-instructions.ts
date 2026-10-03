@@ -224,7 +224,7 @@ export function mountInstructions(
             onAlternate: (f) => altListeners.push(f),
             onLivePreview: (f) => livePreviewListeners.push(f),
             onClose:     (f) => closeListeners.push(f),
-            close: () => close(true),
+            close,
         };
     }
 

@@ -72,15 +72,30 @@ describe("historySave / historyReset", () => {
         expect(canUndo()).toBe(true);
     });
 
-    test("project contrast overrides stay outside undo history", () => {
+    test("project contrast overrides are authored history, including explicit defaults", () => {
         const baseline = rowSession(3, 3);
         historyReset(baseline);
-        historySave({ ...baseline, dangerColorOverride: "#123456" });
+        historySave({ ...baseline, dangerColorOverride: "#123456", accentColorOverride: "#abcdef" });
+        expect(canUndo()).toBe(true);
+        expect(historyUndo()).toMatchObject({ dangerColorOverride: null, accentColorOverride: null });
+        expect(historyRedo()).toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: "#abcdef" });
+        historySave(baseline);
+        expect(historyPeek()).toMatchObject({ dangerColorOverride: null, accentColorOverride: null });
+    });
 
-        expect(canUndo()).toBe(false);
-        expect(historyPeek()).not.toHaveProperty("dangerColorOverride");
-        expect(JSON.parse(localStorage.getItem("mosaic-history")!).snapshots[0].document)
-            .not.toHaveProperty("dangerColorOverride");
+    test("legacy missing overrides remain unknown while explicit null remains a default", () => {
+        historyReset(rowSession(3, 3));
+        const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
+        raw.version = 5;
+        delete raw.snapshots[0].document.dangerColorOverride;
+        delete raw.snapshots[0].document.accentColorOverride;
+        localStorage.setItem("mosaic-history", JSON.stringify(raw));
+        historySave(rowSession(3, 3, { dangerColorOverride: "#123456", accentColorOverride: null }));
+        expect(historyUndo()).not.toBeNull();
+        expect(historyPeek()!.dangerColorOverride).toBeUndefined();
+        expect(historyPeek()!.accentColorOverride).toBeUndefined();
+        expect(historyRedo()).toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: null });
+        expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(6);
     });
 
     test("saved recipes are part of history and survive undo", () => {

@@ -335,7 +335,7 @@ test("Alt+drag re-lifts canvas content at new position on release", async ({ pag
     expect(await pixelRGB(page, c.cx, c.cy)).toEqual([0, 0, 0]);   // A ← re-lift cut canvas to baseline
 });
 
-test("Alt+Arrow destroys float when it is entirely outside the canvas", async ({ page }) => {
+test("Alt+Arrow preserves float when it is entirely outside the canvas", async ({ page }) => {
     await bootApp(page);
     // Paint A at (0,1) so we can detect if the float re-lands there unexpectedly.
     await page.keyboard.press("p");
@@ -345,17 +345,12 @@ test("Alt+Arrow destroys float when it is entirely outside the canvas", async ({
     await clickCell(page, 1, 1);
     await page.keyboard.press("m");
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
-    // Alt+ArrowRight: without fix the float jumps to (0,1) and re-lifts the A there.
-    // With fix it is destroyed immediately (no float, no jump).
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float);
     await page.keyboard.down("Alt");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.up("Alt");
-    // If float survived (bug): ArrowRight + Escape would stamp A at (1,1).
-    await page.keyboard.press("ArrowRight");
-    await page.keyboard.press("Escape");
-    const c = await cellCoord(page, 1, 1);
-    const [r] = await pixelRGB(page, c.cx, c.cy);
-    expect(r).toBeGreaterThan(200);   // B (white) — float destroyed, not jumped
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float)).toEqual(before);
+    await expect(page.locator("#status-feedback")).toContainText("Selection is outside the pattern");
 });
 
 test("Alt+Arrow clips float to in-bounds cells — does not jump or expand selection", async ({ page }) => {

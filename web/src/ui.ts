@@ -168,6 +168,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     });
     document.addEventListener("keydown", event => {
         if (event.key !== "Escape" || activeInspector === null) return;
+        if (document.querySelector("dialog:modal, :popover-open")) return;
         event.preventDefault();
         event.stopImmediatePropagation();
         closeInspector();
@@ -176,7 +177,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const inspector: InspectorControls = {
         isOpen: isInspectorOpen, open: openInspector, close: closeInspector, focusFirst: focusFirstInspectorControl,
     };
-    const toolbar = mountToolbar(cb, inspector, syncCanvasChromeInsets, enterDesignForCommand);
+    const toolbar = mountToolbar(cb, inspector, syncCanvasChromeInsets);
     const selection = mountSelection(cb, inspector, syncCanvasChromeInsets);
     const pattern = mountPattern(cb, inspector, enterDesignForCommand);
     finishPatternEdit = pattern.finishPatternEdit;

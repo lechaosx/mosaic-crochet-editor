@@ -64,7 +64,7 @@ describe("browser persistence migrations", () => {
         expect(localStorage.getItem("mosaic-pattern-v4")).toBeNull();
     });
 
-    test("migrates the unversioned history v4 blob into bounded v5 snapshots", () => {
+    test("migrates the unversioned history v4 blob without inventing historical project colours", () => {
         const session = rowSession(3, 3, { axes: addAxis([], "H", 3, 3) });
         localStorage.setItem("mosaic-history-v4", JSON.stringify({
             snapshots: [{
@@ -84,7 +84,7 @@ describe("browser persistence migrations", () => {
         });
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-history")!);
-        expect(migrated.version).toBe(5);
+        expect(migrated.version).toBe(6);
         expect(migrated.snapshots[0]).toEqual({
             document: {
                 state: session.pattern,
