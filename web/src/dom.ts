@@ -38,13 +38,49 @@ export function setMessage(target: HTMLElement, message: string | null) {
     target.hidden = message === null;
 }
 
-export function iconAction(glyph: string, label: string, title = label): HTMLButtonElement {
+export function icon(name: string): SVGSVGElement {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.classList.add("tool-icon");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const use = document.createElementNS(svg.namespaceURI, "use");
+    use.setAttribute("href", `#icon-${name}`);
+    svg.append(use);
+    return svg;
+}
+
+export function iconAction(name: string, label: string, title = label): HTMLButtonElement {
     const button = document.createElement("button");
     button.className = "btn btn--icon";
-    button.textContent = glyph;
+    button.type = "button";
+    button.append(icon(name));
     button.setAttribute("aria-label", label);
     button.title = title;
     return button;
+}
+
+export function syncList<T>(list: HTMLElement, items: readonly T[], key: string,
+    id: (item: T) => string, create: (item: T) => HTMLElement,
+    update: (row: HTMLElement, item: T, index: number) => void) {
+    const remaining = new Map(Array.from(list.children, child => {
+        const row = child as HTMLElement;
+        return [row.dataset[key]!, row];
+    }));
+    const itemIds = new Set(items.map(id));
+    remaining.forEach((row, rowId) => {
+        if (!itemIds.has(rowId)) {
+            row.remove();
+            remaining.delete(rowId);
+        }
+    });
+    items.forEach((item, index) => {
+        const itemId = id(item);
+        const row = remaining.get(itemId) ?? create(item);
+        remaining.delete(itemId);
+        row.dataset[key] = itemId;
+        update(row, item, index);
+        if (list.children[index] !== row) list.insertBefore(row, list.children[index] ?? null);
+    });
 }
 
 export function listRow(list: HTMLElement, key: string, id: string | undefined): HTMLElement | undefined {

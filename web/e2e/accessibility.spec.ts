@@ -93,7 +93,7 @@ test("yarn controls expose direct selection and Pattern owns editing actions", a
     const swap = page.getByRole("button", { name: "Swap yarn colours" });
     await expect(page.locator("#edit-yarn")).toHaveCount(0);
     await expect(swap).toBeVisible();
-    await expect(swap).toHaveText("⇄");
+    await expect(swap).toHaveText("");
     await yarnB.click();
 
     const before = await page.evaluate(() => ({
@@ -114,8 +114,8 @@ test("double-click and long-press invoke the chosen yarn picker from the dock", 
     await bootApp(page);
     const yarnA = page.getByRole("button", { name: "Yarn A", exact: true });
     const yarnB = page.getByRole("button", { name: "Yarn B", exact: true });
-    const colorA = page.getByLabel("Yarn A colour");
-    const colorB = page.getByLabel("Yarn B colour");
+    const colorA = page.locator("#edit-pattern-widget").getByLabel("Yarn A", { exact: true });
+    const colorB = page.locator("#edit-pattern-widget").getByLabel("Yarn B", { exact: true });
     await colorA.evaluate(input => input.addEventListener("click", event => {
         event.preventDefault();
         (input as HTMLElement).dataset.pickerInvoked = "true";

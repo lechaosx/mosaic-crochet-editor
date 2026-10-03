@@ -252,7 +252,7 @@ export function mountPattern(
                 : s.canvasWidth === s.virtualWidth ? "half" : "quarter";
             setRadio("edit-submode", sub);
             patternColourPreview.dataset.extent = sub;
-            patternColourPreview.style.aspectRatio = sub === "half" ? "7 / 4" : "1";
+            patternColourPreview.style.aspectRatio = "1";
             el<HTMLInputElement>("edit-inner-width") .value = String(innerW);
             el<HTMLInputElement>("edit-inner-height").value = String(innerH);
             el<HTMLInputElement>("edit-rounds")      .value = String(s.rounds);

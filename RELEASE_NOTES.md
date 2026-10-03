@@ -7,6 +7,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Undo and Redo work from Crochet, return to Design, and restore project colours and the final position of keyboard moves using the chosen Move action.
 - About preserves Settings and protects the chart from document shortcuts; cancelled gestures and failed Paste preserve the active selection and chart.
 - Opening a different project, New, and Example reset chart orientation and fit the pattern to the workspace.
+- Pattern, selections, mirrors, and Crochet share clearer controls and feedback using project colours, with stable selection actions, consistent preview scales, and undimmed instruction yarns.
 
 ## 1 October 2026
 

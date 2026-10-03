@@ -40,12 +40,12 @@ test("Centre-out colour preview follows Full, Half, and Quarter extents", async 
     await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
     const preview = page.getByRole("img", { name: /Centre-out colour preview/ });
     const images: string[] = [];
-    for (const [extent, ratio] of [["full", 1], ["half", 7 / 4], ["quarter", 1]] as const) {
+    for (const extent of ["full", "half", "quarter"] as const) {
         await page.locator(`label:has(input[name="edit-submode"][value="${extent}"])`).click();
         await expect.poll(async () => {
             const box = await preview.boundingBox();
             return box!.width / box!.height;
-        }).toBeCloseTo(ratio, 1);
+        }).toBeCloseTo(1, 1);
         const image = await preview.evaluate(element => {
             const canvas = element.querySelector("canvas")!;
             const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -95,8 +95,8 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
 
-    await expect(page.getByLabel("Yarn A colour")).toHaveValue("#000000");
-    await expect(page.getByLabel("Yarn B colour")).toHaveValue("#ffffff");
+    await expect(page.locator("#edit-pattern-widget").getByLabel("Yarn A", { exact: true })).toHaveValue("#000000");
+    await expect(page.locator("#edit-pattern-widget").getByLabel("Yarn B", { exact: true })).toHaveValue("#ffffff");
     await expect(page.getByRole("button", { name: "Swap yarn colours" })).toBeVisible();
     for (const name of [
         "Reset Yarn A to default", "Reset Yarn B to default",
@@ -107,7 +107,7 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
         await expect(reset).toHaveText("");
         await expect(reset).toBeDisabled();
     }
-    await page.getByLabel("Yarn A colour").fill("#123456");
+    await page.locator("#edit-pattern-widget").getByLabel("Yarn A", { exact: true }).fill("#123456");
     await expect(page.getByRole("button", { name: "Reset Yarn A to default" })).toBeEnabled();
     await page.getByRole("button", { name: "Reset Yarn A to default" }).click();
     await expect(page.getByRole("button", { name: "Reset Yarn A to default" })).toBeDisabled();
@@ -116,8 +116,8 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     await expect(preview).toBeVisible();
     await expect(page.getByText("× overlay stitch · ! invalid overlay placement")).toHaveCount(0);
     await expect(page.locator("#edit-yarn")).toHaveCount(0);
-    const danger = page.getByLabel("Project danger colour");
-    const accent = page.getByLabel("Project accent colour");
+    const danger = page.getByLabel("Danger", { exact: true });
+    const accent = page.getByLabel("Accent", { exact: true });
     for (const picker of [danger, accent]) {
         expect(await picker.evaluate(element => {
             const style = getComputedStyle(element);
@@ -156,8 +156,8 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
 
     await expect(page.locator("#show-guidance")).toHaveCount(0);
     await expect(page.getByRole("slider", { name: "Guidance opacity" })).toHaveAttribute("min", "0");
-    await expect(settings.getByLabel("Project danger colour")).toHaveCount(0);
-    await expect(settings.getByLabel("Project accent colour")).toHaveCount(0);
+    await expect(settings.getByLabel("Danger", { exact: true })).toHaveCount(0);
+    await expect(settings.getByLabel("Accent", { exact: true })).toHaveCount(0);
     await expect(page.locator("label:has(#lock-invalid)"))
         .toHaveAttribute("title", "Block new marks on cells that cannot host an overlay");
 });
@@ -222,7 +222,7 @@ test.describe("responsive pattern swatch", () => {
 test("swatch shows its diagonal mirror in the project accent colour", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
-    await page.getByLabel("Project accent colour").fill("#123456");
+    await page.getByLabel("Accent", { exact: true }).fill("#123456");
     expect(await page.locator("#pattern-preview-canvas").evaluate((canvas: HTMLCanvasElement) => {
         const ctx = canvas.getContext("2d")!;
         let accentPixels = 0;
@@ -269,8 +269,8 @@ test("Pattern colour resets use fixed app defaults and contrast suggestions are 
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
 
-    const danger = page.getByLabel("Project danger colour");
-    const accent = page.getByLabel("Project accent colour");
+    const danger = page.getByLabel("Danger", { exact: true });
+    const accent = page.getByLabel("Accent", { exact: true });
     await expect(danger).toHaveValue("#ff0000");
     await expect(accent).toHaveValue("#d653a3");
 
@@ -297,7 +297,7 @@ test("Pattern colour resets use fixed app defaults and contrast suggestions are 
     const historyBefore = await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
     );
-    await page.getByRole("button", { name: "Find contrasting colors" }).click();
+    await page.getByRole("button", { name: "Find contrast" }).click();
     await expect(danger).toHaveValue("#d32f2f");
     await expect(accent).toHaveValue("#00838f");
     expect(await page.evaluate(() =>
@@ -310,12 +310,12 @@ test("Pattern colour resets use fixed app defaults and contrast suggestions are 
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.accentColorOverride,
     )).toBeNull();
 
-    await page.getByLabel("Yarn A colour").fill("#112233");
-    await page.getByLabel("Yarn B colour").fill("#445566");
+    await page.locator("#edit-pattern-widget").getByLabel("Yarn A", { exact: true }).fill("#112233");
+    await page.locator("#edit-pattern-widget").getByLabel("Yarn B", { exact: true }).fill("#445566");
     await page.getByRole("button", { name: "Reset Yarn A to default" }).click();
     await page.getByRole("button", { name: "Reset Yarn B to default" }).click();
-    await expect(page.getByLabel("Yarn A colour")).toHaveValue("#000000");
-    await expect(page.getByLabel("Yarn B colour")).toHaveValue("#ffffff");
+    await expect(page.locator("#edit-pattern-widget").getByLabel("Yarn A", { exact: true })).toHaveValue("#000000");
+    await expect(page.locator("#edit-pattern-widget").getByLabel("Yarn B", { exact: true })).toHaveValue("#ffffff");
 });
 
 test("opening project contrast overrides keeps app defaults and Crochet progress", async ({ page }) => {
@@ -346,8 +346,8 @@ test("opening project contrast overrides keeps app defaults and Crochet progress
     expect(await page.evaluate(() => localStorage.getItem("mosaic-preferences"))).toBe(defaults);
     await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
     await page.getByRole("button", { name: "Pattern" }).click();
-    await expect(page.getByLabel("Project danger colour")).toHaveValue("#123456");
-    await expect(page.getByLabel("Project accent colour")).toHaveValue("#abcdef");
+    await expect(page.getByLabel("Danger", { exact: true })).toHaveValue("#123456");
+    await expect(page.getByLabel("Accent", { exact: true })).toHaveValue("#abcdef");
 });
 
 test("app preferences survive reload and are not part of undo or recovery snapshots", async ({ page }) => {
@@ -433,7 +433,7 @@ test("Crochet summarizes errors without prose or navigation", async ({ page }) =
     await clickCell(page, 1, 0);
 
     await page.locator("#btn-export").click();
-    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("2 errors");
+    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("2 invalid placements");
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByText(/unresolved|draft|resolve chart/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();

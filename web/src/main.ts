@@ -146,6 +146,7 @@ const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const saved    = loadFromLocalStorage();
 let preferences: AppPreferences = loadAppPreferences();
 const rs       = makeRendererState(preferences);
+let projectColorsSynced = false;
 const store    = new Store(saved ?? defaultSession());
 const aboutDialog = document.getElementById("about-dialog") as HTMLDialogElement;
 const aboutReleaseNotes = document.getElementById("about-release-notes") as HTMLElement;
@@ -297,6 +298,7 @@ function syncSelectPreview() {
 }
 
 function renderCanvas() {
+    syncProjectColorInputs(store.state);
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
 
@@ -589,7 +591,7 @@ function onCreateRecipe() {
 }
 
 function onActivateRecipe(id: string) {
-    if (!activateGridRecipe(store, id)) refreshRecipeUi("This recipe's source is not available on the chart.");
+    if (!activateGridRecipe(store, id)) refreshRecipeUi("This selection's source is not available on the chart.");
     else refreshRecipeUi();
 }
 
@@ -1955,6 +1957,11 @@ function syncPreferenceInputs() {
 function syncProjectColorInputs(s: Readonly<SessionState>) {
     const danger = s.dangerColorOverride ?? DEFAULT_APP_PREFERENCES.dangerColor;
     const accent = s.accentColorOverride ?? DEFAULT_APP_PREFERENCES.accentColor;
+    if (projectColorsSynced && rs.projectColors.dangerColor === danger && rs.projectColors.accentColor === accent) return;
+    projectColorsSynced = true;
+    rs.projectColors = { dangerColor: danger, accentColor: accent };
+    document.documentElement.style.setProperty("--danger", danger);
+    document.documentElement.style.setProperty("--accent", accent);
     (document.getElementById("danger-color") as HTMLInputElement).value = danger;
     (document.getElementById("accent-color") as HTMLInputElement).value = accent;
     ui.setProjectColors(danger, accent);

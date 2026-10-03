@@ -198,7 +198,8 @@ function mountToolbarLayout() {
         const cs = getComputedStyle(documentBar);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
         const gap     = parseFloat(cs.columnGap) || 0;
-        compactBelow = padding + gap * 2 + modeGroup.offsetWidth + fileGroup.offsetWidth + viewGroup.offsetWidth;
+        compactBelow = padding + gap * 2 + modeGroup.offsetWidth
+            + 2 * Math.max(fileGroup.offsetWidth, viewGroup.offsetWidth);
     }
 
     function applyLayout() {
@@ -207,10 +208,23 @@ function mountToolbarLayout() {
         documentBar.classList.toggle("document-bar--compact", useCompact);
     }
 
-    function update() { measure(); applyLayout(); }
+    function update() {
+        const focused = compactActions.find(button => button === document.activeElement);
+        const menuOpen = morePopover.matches(":popover-open");
+        measure();
+        applyLayout();
+        if (menuOpen && compact) {
+            positionPopover(morePopover, moreButton, "left");
+            morePopover.showPopover();
+        }
+        if (focused) (focused.getClientRects().length > 0 ? focused : moreButton).focus();
+    }
 
     update();
     window.addEventListener("resize", applyLayout);
+    const layoutObserver = new ResizeObserver(update);
+    layoutObserver.observe(documentBar);
+    layoutObserver.observe(modeGroup);
 
     if (document.fonts && document.fonts.ready) {
         document.fonts.ready.then(update);

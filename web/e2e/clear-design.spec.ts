@@ -105,7 +105,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
     expect(await page.evaluate(() => localStorage.getItem("mosaic-preferences"))).toBe(preferencesBefore);
     await expect(page.getByRole("button", { name: "Navigate" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", { name: "Clear design" }))
-        .toHaveAttribute("title", "Clear drawing, selections, repeats, and mirror axes");
+        .toHaveAttribute("title", "Clear drawing, selections, repeats, and mirrors");
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
     )).toBe(historyBefore + 1);

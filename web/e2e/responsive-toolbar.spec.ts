@@ -165,6 +165,7 @@ test("Fit centres Crochet on the full canvas behind its panel", async ({ page })
 test("Fit keeps rotated half-round numbers inside a phone canvas", async ({ page }) => {
     await page.setViewportSize({ width: 820, height: 1180 });
     await bootApp(page);
+    if (!await page.locator("#btn-edit").isVisible()) await page.locator("#btn-more").click();
     await page.locator("#btn-edit").click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Half", { exact: true }).click();
@@ -321,7 +322,8 @@ test("constrained panels overlay the canvas and move status above their visible 
     const status = await page.locator("#status").boundingBox();
     expect(status!.y + status!.height).toBeLessThanOrEqual(dock!.y + 1);
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    if (!await page.locator("#btn-edit").isVisible()) await page.locator("#btn-more").click();
+    await page.locator("#btn-edit").click();
     const canvasAfter = await page.locator(".canvas-area").boundingBox();
     const inspector = await page.locator("#inspector-host").boundingBox();
     expect(inspector!.y).toBeGreaterThan(canvas!.y);
@@ -384,6 +386,7 @@ test("inspector controls keep their state while the same host recomposes", async
 
     await page.getByRole("button", { name: "Close inspector" }).click();
     await expect(page.locator("#inspector-host")).toBeHidden();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    if (!await page.locator("#btn-edit").isVisible()) await page.locator("#btn-more").click();
+    await page.locator("#btn-edit").click();
     await expect(page.locator("#edit-width")).toHaveValue("20");
 });

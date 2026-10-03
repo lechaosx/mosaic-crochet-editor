@@ -45,7 +45,7 @@ test("canvas view controls zoom, fit, rotate, and reset without editing", async 
     const reset = controls.locator("#view-rotation-reset");
     await expect(reset).toHaveAccessibleName("Reset view orientation from 45°");
     const arrow = reset.locator(".view-orientation-arrow");
-    await expect(arrow).toHaveText("↑");
+    await expect(arrow).toBeVisible();
     await expect(arrow).toHaveCSS("transform", "matrix(0.707107, 0.707107, -0.707107, 0.707107, 0, 0)");
     await reset.click();
     await page.waitForTimeout(350);

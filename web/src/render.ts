@@ -101,6 +101,7 @@ export interface RendererState {
     // hole sentinel — render loops skip; `null` makes accidental reads fail loud.
     colors: (string | null)[];
     preferences: AppPreferences;
+    projectColors: Pick<AppPreferences, "dangerColor" | "accentColor">;
     // A selection drag shows its resulting membership, not the old marquee.
     hideCommittedSelection: boolean;
     selectPreviewMask: Uint8Array | null;
@@ -134,6 +135,7 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         lastStore:      null,
         colors:         [null, "#000000", "#ffffff"],
         preferences,
+        projectColors: { dangerColor: preferences.dangerColor, accentColor: preferences.accentColor },
         hideCommittedSelection: false,
         selectPreviewMask:      null,
         dragRect:               null,
@@ -362,12 +364,7 @@ function updateFavicon(
     if (link) link.href = faviconCanvas.toDataURL("image/png");
 }
 
-export function renderPatternColourPreview(
-    canvas: HTMLCanvasElement, mode: PatternState["mode"],
-    subMode: "full" | "half" | "quarter",
-    colorA: string, colorB: string, dangerColor: string, accentColor: string,
-    opacity: number, antsElapsedMs: number,
-) {
+export function patternColourPreviewSample(mode: PatternState["mode"], subMode: "full" | "half" | "quarter") {
     const { pattern, pixels } = applyEditSettings(mode === "row"
         ? { mode, width: PREVIEW_CELLS, height: PREVIEW_CELLS, wipe: true }
         : { mode, innerWidth: 1, innerHeight: 1, rounds: 3, subMode, wipe: true });
@@ -376,8 +373,8 @@ export function renderPatternColourPreview(
         pixels[6 * W + 2] = pixels[6 * W + 2] === 1 ? 2 : 1;
         for (const y of [2, 3]) pixels[y * W + 5] = pixels[y * W + 5] === 1 ? 2 : 1;
     } else {
-        for (const y of [4, 5]) {
-            const index = (y - pattern.offsetY) * W + 1;
+        for (const [x, y] of [[3, 4], [3, 5], [1, 4]]) {
+            const index = (y - pattern.offsetY) * W + x - pattern.offsetX;
             pixels[index] = pixels[index] === 1 ? 2 : 1;
         }
     }
@@ -385,6 +382,17 @@ export function renderPatternColourPreview(
         ? build_highlight_plan_row(pixels, W, H)
         : build_highlight_plan_round(pixels, W, H, pattern.virtualWidth, pattern.virtualHeight,
             pattern.offsetX, pattern.offsetY, pattern.rounds);
+    return { pattern, pixels, plan };
+}
+
+export function renderPatternColourPreview(
+    canvas: HTMLCanvasElement, mode: PatternState["mode"],
+    subMode: "full" | "half" | "quarter",
+    colorA: string, colorB: string, dangerColor: string, accentColor: string,
+    opacity: number, antsElapsedMs: number,
+) {
+    const { pattern, pixels, plan } = patternColourPreviewSample(mode, subMode);
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
     const ctx = canvas.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
     const width = Math.round(canvas.clientWidth * dpr);
@@ -394,7 +402,7 @@ export function renderPatternColourPreview(
         canvas.height = height;
     }
     const padding = 8 * dpr;
-    const cell = Math.min((width - 2 * padding) / W, (height - 2 * padding) / H);
+    const cell = Math.min(width - 2 * padding, height - 2 * padding) / PREVIEW_CELLS;
     const panX = (width - W * cell) / 2;
     const panY = (height - H * cell) / 2;
     const view = { panX: panX / dpr, panY: panY / dpr, zoom: cell / dpr };
@@ -451,8 +459,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
 function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
     const { pattern, pixels, float, axes, recipes, activeRecipeId } = store.state;
     const { guidanceOpacity, labelsVisible } = rs.preferences;
-    const dangerColor = store.state.dangerColorOverride ?? rs.preferences.dangerColor;
-    const accentColor = store.state.accentColorOverride ?? rs.preferences.accentColor;
+    const { dangerColor, accentColor } = rs.projectColors;
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { canvas, view, dpr } = vp;
 

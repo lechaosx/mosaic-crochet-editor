@@ -26,8 +26,8 @@ export function mountInstructions(
         const label = open
             ? "Back to Design"
             : hasCrochetProgress ? "Continue Crocheting" : "Begin Crocheting";
-        const errors = crochetErrors === 1 ? "1 invalid stitch" : `${crochetErrors} invalid stitches`;
-        crochetMode.textContent = label;
+        const errors = crochetErrors === 1 ? "1 invalid placement" : `${crochetErrors} invalid placements`;
+        el("crochet-mode-label").textContent = label;
         crochetMode.title = (open
             ? "Return to pattern design"
             : hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions")
@@ -55,11 +55,13 @@ export function mountInstructions(
         const closeListeners: (() => void)[] = [];
         const livePreviewListeners: ((completedUnits: number | null) => void)[] = [];
         const unitElements: HTMLButtonElement[] = [];
+        const unitRows = new Map<string, HTMLElement>();
         let liveUnits: readonly InstructionOverviewUnit[] = [];
         let liveCompleted = 0;
         let liveProgressChanged = (_completedUnits: number) => true;
         let isBusy = true;
         beforeOpen();
+        unitsList.replaceChildren();
         const onAlt = () => altListeners.forEach(f => f());
         alternateChk.addEventListener("change", onAlt);
         canvas.removeAttribute("aria-describedby");
@@ -155,14 +157,16 @@ export function mountInstructions(
                 instructionText += (instructionText ? "\n" : "") + line;
             },
             appendUnit: (unit) => {
-                const row = document.createElement("li");
-                const item = document.createElement("button");
+                const row = unitRows.get(unit.label) ?? document.createElement("li");
+                unitRows.set(unit.label, row);
+                row.dataset.instructionLabel = unit.label;
+                const item = row.querySelector("button") ?? document.createElement("button");
                 item.type = "button";
                 item.disabled = isBusy;
                 item.className = "instructions-unit";
                 item.classList.toggle("instructions-unit--invalid", unit.invalid);
-                item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}${unit.invalid ? ", contains invalid stitches" : ""}`);
-                item.title = `Go to ${unit.label}, Yarn ${unit.yarn}${unit.invalid ? " · contains invalid stitches" : ""}`;
+                item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}${unit.invalid ? ", contains invalid placements" : ""}`);
+                item.title = `Go to ${unit.label}, Yarn ${unit.yarn}${unit.invalid ? " · contains invalid placements" : ""}`;
                 const index = unitElements.length;
                 item.onclick = () => {
                     if (isBusy || index >= liveUnits.length) return;
@@ -170,16 +174,21 @@ export function mountInstructions(
                     liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
                     renderCrochet();
                 };
-                const meta = document.createElement("span");
+                const marker = item.querySelector<HTMLElement>(".instructions-unit-marker") ?? document.createElement("span");
+                marker.className = "instructions-unit-marker";
+                marker.setAttribute("aria-hidden", "true");
+                const meta = item.querySelector<HTMLElement>(".instructions-unit-number") ?? document.createElement("span");
                 meta.className = "instructions-unit-number";
                 meta.style.backgroundColor = unit.color;
                 meta.textContent = unit.label.replace(/^\D+/, "");
                 meta.dataset.yarn = unit.yarn;
-                const text = document.createElement("code");
+                const text = item.querySelector("code") ?? document.createElement("code");
                 text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0");
-                item.append(meta, text);
-                row.append(item);
-                unitsList.append(row);
+                if (!item.parentElement) {
+                    item.append(marker, meta, text);
+                    row.append(item);
+                    unitsList.append(row);
+                }
                 unitElements.push(item);
             },
             clearText: () => {
@@ -187,7 +196,6 @@ export function mountInstructions(
                 exportActionStatus.textContent = "";
             },
             clearUnits: () => {
-                unitsList.replaceChildren();
                 unitElements.length = 0;
                 liveUnits = [];
                 liveCompleted = 0;
@@ -195,6 +203,14 @@ export function mountInstructions(
                 refreshCrochetAvailability();
             },
             setLivePlan: (units, completedUnits, onProgress) => {
+                const labels = new Set(units.map(unit => unit.label));
+                Array.from(unitsList.children).forEach(row => {
+                    const label = (row as HTMLElement).dataset.instructionLabel!;
+                    if (!labels.has(label)) {
+                        row.remove();
+                        unitRows.delete(label);
+                    }
+                });
                 liveUnits = units;
                 liveCompleted = units.length === 0
                     ? 0
@@ -205,7 +221,7 @@ export function mountInstructions(
                 renderCrochet();
             },
             setErrors: (count) => {
-                instructionErrors.textContent = count === 1 ? "1 error" : `${count} errors`;
+                instructionErrors.textContent = count === 1 ? "1 invalid placement" : `${count} invalid placements`;
                 instructionErrors.hidden = count === 0;
             },
             setYarnColors: (a, b) => {

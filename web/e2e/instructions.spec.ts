@@ -289,23 +289,23 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
     await clickCell(page, 0, 1);
 
-    const crochet = page.getByRole("button", { name: "Begin Crocheting — 1 invalid stitch" });
+    const crochet = page.getByRole("button", { name: "Begin Crocheting — 1 invalid placement" });
     await expect(crochet).toHaveText("Begin Crocheting");
     await expect(crochet).toHaveClass(/btn--danger/);
     await page.locator("#btn-export").click();
-    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("1 error");
+    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("1 invalid placement");
     await expect(page.locator('.instructions-unit[aria-label="Row 8, Yarn B"]')).toContainText("oc");
     const invalidUnit = page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]');
     await expect(invalidUnit).toContainText("oc");
     await expect(invalidUnit).toHaveClass(/instructions-unit--invalid/);
-    await expect(invalidUnit).toHaveAccessibleName(/contains invalid stitches/);
+    await expect(invalidUnit).toHaveAccessibleName(/contains invalid placements/);
     await expect(invalidUnit.locator(".instructions-unit-number")).toHaveCSS("background-color", "rgb(0, 0, 0)");
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
     await invalidUnit.click();
     await expect(invalidUnit).toHaveClass(/instructions-unit--current-invalid/);
-    await expect(invalidUnit).toHaveCSS("box-shadow", /rgb\(255, 0, 0\)/);
+    await expect(invalidUnit.locator(".instructions-unit-marker")).toBeVisible();
     const invalidGlyphs = await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: {
             invalidGlyphCoords: Array<{ x: number; y: number }>;
@@ -337,7 +337,8 @@ for (const mode of ["row", "round"] as const) {
             });
         pixels[x] = 2;
         const chooserPromise = page.waitForEvent("filechooser");
-        await page.getByRole("button", { name: "Open" }).click();
+        if (!await page.locator("#btn-load").isVisible()) await page.locator("#btn-more").click();
+        await page.locator("#btn-load").click();
         await (await chooserPromise).setFiles({
             name: `top-edge-invalid-${mode}.mcw`,
             mimeType: "application/json",
@@ -350,7 +351,7 @@ for (const mode of ["row", "round"] as const) {
                 pixels, colorA: "#000000", colorB: "#ffffff",
             })),
         });
-        await expect(page.getByRole("button", { name: "Begin Crocheting — 1 invalid stitch" })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Begin Crocheting — 1 invalid placement" })).toBeVisible();
         if (mode === "round") {
             await page.keyboard.press("r");
             await page.keyboard.press("r");

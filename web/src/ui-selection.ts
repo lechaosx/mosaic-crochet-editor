@@ -1,5 +1,5 @@
 import type { Tool, GridRecipe } from "@mosaic/logic/types";
-import { el, radioValue, setRadio, setPressed, setMessage, iconAction, listRow } from "./dom";
+import { el, radioValue, setRadio, setPressed, setMessage, iconAction, listRow, syncList } from "./dom";
 import type { UICallbacks, SelectionMode, SelectionMoveMode, InspectorControls } from "./ui-types";
 
 export function mountSelection(
@@ -79,9 +79,12 @@ export function mountSelection(
         (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(key => {
             modeButtons[key].disabled = !hasSelection;
         });
-        selectionCopy.hidden = !hasSelection;
-        selectionCut.hidden = !hasSelection;
-        selectionDeselect.hidden = !hasSelection;
+        selectionCopy.disabled = !hasSelection;
+        selectionCut.disabled = !hasSelection;
+        selectionDeselect.disabled = !hasSelection;
+        selectionCopy.title = hasSelection ? "Copy selected cells (Ctrl+C)" : "Select cells to copy";
+        selectionCut.title = hasSelection ? "Cut selected cells (Ctrl+X)" : "Select cells to cut";
+        selectionDeselect.title = hasSelection ? "Place content and remove the selection (Escape)" : "No selection to deselect";
         selectionPaste.disabled = !hasClip;
         selectionPaste.title = hasClip ? "Paste copied cells (Ctrl+V)" : "Nothing copied";
         (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(key => {
@@ -169,34 +172,43 @@ export function mountSelection(
             projectedRecipes = recipes;
             projectedActiveRecipeId = activeId;
             selectedRecipeId = currentId;
-            recipeList.replaceChildren(...recipes.map((recipe, index) => {
+            syncList(recipeList, recipes, "recipeId", recipe => recipe.id, recipe => {
                 const row = document.createElement("li");
                 row.className = "recipe-list-row";
                 row.dataset.recipeId = recipe.id;
                 const activate = document.createElement("button");
                 activate.className = "btn btn--ghost recipe-list-activate";
                 const name = document.createElement("span");
-                name.textContent = `Selection ${index + 1}`;
+                name.className = "recipe-list-name";
+                const marker = document.createElement("span");
+                marker.className = "recipe-list-marker";
+                marker.textContent = "✓";
+                marker.setAttribute("aria-hidden", "true");
                 const detail = document.createElement("span");
                 detail.className = "recipe-list-detail";
-                detail.textContent = recipe.source.mask.length === 0
-                    ? "Empty" : `${recipe.source.w}\u00a0×\u00a0${recipe.source.h}`;
-                activate.append(name, detail);
+                activate.append(marker, name, detail);
                 activate.title = "Select this saved selection";
                 activate.dataset.recipeId = recipe.id;
                 activate.dataset.recipeAction = "activate";
-                activate.setAttribute("aria-pressed", String(recipe.id === currentId));
                 activate.addEventListener("click", () => cb.onActivateRecipe(recipe.id));
-                const remove = iconAction("×", `Delete selection ${index + 1}`,
-                    recipes.length === 1 ? "At least one selection is required" : `Delete selection ${index + 1}`);
+                const remove = iconAction("delete", "Delete selection");
                 remove.dataset.recipeId = recipe.id;
                 remove.dataset.recipeAction = "delete";
-                remove.disabled = recipes.length === 1;
                 remove.addEventListener("click", () => cb.onDeleteRecipe(recipe.id));
                 row.append(activate, remove);
                 return row;
-            }));
-            if (focused) {
+            }, (row, recipe, index) => {
+                const activate = row.querySelector<HTMLButtonElement>("[data-recipe-action='activate']")!;
+                activate.querySelector(".recipe-list-name")!.textContent = `Selection ${index + 1}`;
+                activate.lastElementChild!.textContent = recipe.source.mask.length === 0
+                    ? "Empty" : `${recipe.source.w}\u00a0×\u00a0${recipe.source.h}`;
+                setPressed(activate, recipe.id === currentId);
+                const remove = row.querySelector<HTMLButtonElement>("[data-recipe-action='delete']")!;
+                remove.setAttribute("aria-label", `Delete selection ${index + 1}`);
+                remove.title = recipes.length === 1 ? "At least one selection is required" : `Delete selection ${index + 1}`;
+                remove.disabled = recipes.length === 1;
+            });
+            if (focused && (!focused.isConnected || focused.disabled)) {
                 const fallback = recipes.find(recipe => recipe.id === focusedId)
                     ?? recipes[Math.min(focusedIndex, recipes.length - 1)];
                 const row = listRow(recipeList, "recipeId", fallback?.id);

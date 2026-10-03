@@ -1,5 +1,5 @@
 import type { Axis, SymKey } from "@mosaic/logic/types";
-import { el, setMessage, iconAction, listRow } from "./dom";
+import { el, setMessage, iconAction, listRow, syncList, setPressed, icon } from "./dom";
 import type { UICallbacks, InspectorControls } from "./ui-types";
 
 // ─── Global Mirror button ids ─────────────────────────────────────────────────
@@ -38,7 +38,7 @@ export function mountMirrors(
         replicateSelection.disabled = !hasSelection || !hasTransforms;
         replicateSelection.title = !hasTransforms
             ? "Add a Global Mirror axis first"
-            : !hasSelection ? "Select cells to apply Global Mirror" : "Apply Global Mirror (T)";
+            : !hasSelection ? "Select cells to stamp global mirror copies" : "Stamp global mirror copies from the current selection (T)";
         const state = !hasTransforms ? "none" : "live";
         const label = state === "none"
             ? "Global Mirror: no axes configured"
@@ -70,7 +70,6 @@ export function mountMirrors(
         if (coordinate === "c" && "c" in a) return a.c;
         throw new Error("Axis coordinate does not match its kind.");
     }
-    const KIND_GLYPH: Record<SymKey, string> = { V: "↔", H: "↕", C: "⊕", D1: "╲", D2: "╱" };
     const KIND_NAME: Record<SymKey, string> = {
         V: "vertical",
         H: "horizontal",
@@ -79,17 +78,17 @@ export function mountMirrors(
         D2: "anti-diagonal",
     };
 
+    let projectedAxes: ReadonlyArray<Axis> = [];
     function setAxes(axes: ReadonlyArray<Axis>) {
-        // Axis lists stay small in normal editor use, so rebuilding avoids
-        // stateful DOM diffing without affecting interaction latency.
-        symList.replaceChildren(...axes.map((a, index) => {
+        projectedAxes = axes;
+        syncList(symList, axes, "axisKey", axis => `${axis.id}:${axis.kind}`, a => {
             const row = document.createElement("div");
             row.className = "sym-list-row" + (a.active ? "" : " is-inactive");
             row.dataset.axisId = a.id;
 
             const kind = document.createElement("span");
             kind.className = "sym-list-row__kind";
-            kind.textContent = KIND_GLYPH[a.kind];
+            kind.append(icon(`mirror-${a.kind.toLowerCase()}`));
 
             const pos = document.createElement("div");
             pos.className = "sym-list-row__pos";
@@ -108,12 +107,13 @@ export function mountMirrors(
                 const input = document.createElement("input");
                 input.type = "number";
                 input.step = coordinate === "c" ? "1" : "0.5";
+                input.dataset.coordinate = coordinate;
                 input.value = String(axisField(a, coordinate));
                 input.setAttribute("aria-label", `${KIND_NAME[a.kind][0].toUpperCase()}${KIND_NAME[a.kind].slice(1)} axis ${coordinate} position`);
                 input.addEventListener("change", () => {
                     const value = input.valueAsNumber;
                     if (!Number.isFinite(value)) {
-                        input.value = String(axisField(a, coordinate));
+                        input.value = String(axisField(projectedAxes.find(axis => axis.id === a.id)!, coordinate));
                         return;
                     }
                     const updated = cb.onAxisPosition(a.id, { [coordinate]: value });
@@ -135,7 +135,7 @@ export function mountMirrors(
 
             const description = `${KIND_NAME[a.kind]} axis at ${formatPosition(a)}`;
 
-            const toggle = iconAction(a.active ? "●" : "○", `${a.active ? "Disable" : "Enable"} ${description}`);
+            const toggle = iconAction("check", `${a.active ? "Disable" : "Enable"} ${description}`);
             toggle.type = "button";
             toggle.dataset.axisAction = "toggle";
             toggle.addEventListener("click", () => {
@@ -144,11 +144,12 @@ export function mountMirrors(
                 replacement?.querySelector<HTMLButtonElement>("[data-axis-action='toggle']")?.focus();
             });
 
-            const del = iconAction("×", `Delete ${description}`);
+            const del = iconAction("delete", `Delete ${description}`);
             del.type = "button";
             del.dataset.axisAction = "delete";
             del.addEventListener("click", () => {
-                const fallback = axes[index + 1] ?? axes[index - 1];
+                const index = projectedAxes.findIndex(axis => axis.id === a.id);
+                const fallback = projectedAxes[index + 1] ?? projectedAxes[index - 1];
                 cb.onDeleteAxis(a.id);
                 if (fallback) {
                     const replacement = listRow(symList, "axisId", fallback.id);
@@ -161,7 +162,21 @@ export function mountMirrors(
 
             row.append(kind, pos, toggle, del);
             return row;
-        }));
+        }, (row, a) => {
+            row.classList.toggle("is-inactive", !a.active);
+            row.querySelector(".sym-list-row__pos > span")!.textContent = formatPosition(a);
+            row.querySelectorAll<HTMLInputElement>("input").forEach(input => {
+                input.value = String(axisField(a, input.dataset.coordinate as "x" | "y" | "c"));
+            });
+            const description = `${KIND_NAME[a.kind]} axis at ${formatPosition(a)}`;
+            const toggle = row.querySelector<HTMLButtonElement>("[data-axis-action='toggle']")!;
+            setPressed(toggle, a.active);
+            toggle.title = `${a.active ? "Disable" : "Enable"} ${description}`;
+            toggle.setAttribute("aria-label", toggle.title);
+            const del = row.querySelector<HTMLButtonElement>("[data-axis-action='delete']")!;
+            del.title = `Delete ${description}`;
+            del.setAttribute("aria-label", del.title);
+        });
     }
 
     return { setAxes, setTransformState, setTransformError };

@@ -315,7 +315,7 @@ test("project colour resets and contrast suggestions each undo in one step", asy
     await page.locator("#danger-color").fill("#123456");
     await page.locator("#accent-color").fill("#abcdef");
     const before = (await recovery(page)).document;
-    for (const name of ["Reset danger colour", "Reset accent colour", "Find contrasting colors"]) {
+    for (const name of ["Reset danger colour", "Reset accent colour", "Find contrast"]) {
         await page.getByRole("button", { name, exact: true }).click();
         await page.getByRole("button", { name: "Undo", exact: true }).click();
         expect((await recovery(page)).document).toEqual(before);

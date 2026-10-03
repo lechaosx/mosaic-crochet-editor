@@ -49,6 +49,25 @@
     <symbol id="icon-copy" viewBox="0 0 24 24">
       <rect x="8" y="8" width="11" height="11" rx="1"/><path d="M16 8V5H5v11h3"/>
     </symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="icon-delete" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></symbol>
+    <symbol id="icon-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></symbol>
+    <symbol id="icon-swap" viewBox="0 0 24 24"><path d="M4 7h16m-4-3 4 3-4 3M20 17H4m4-3-4 3 4 3"/></symbol>
+    <symbol id="icon-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M12 4a8 8 0 0 1 0 16" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="icon-settings" viewBox="0 0 24 24"><path d="m10 3-.6 3-2.6 1-2.5-1-2 3 2 2v2l-2 2 2 3 2.5-1 2.6 1 .6 3h4l.6-3 2.6-1 2.5 1 2-3-2-2v-2l2-2-2-3-2.5 1-2.6-1-.6-3Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="icon-back" viewBox="0 0 24 24"><path d="M20 12H4m6-6-6 6 6 6"/></symbol>
+    <symbol id="icon-forward" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+    <symbol id="icon-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="icon-rotate-left" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></symbol>
+    <symbol id="icon-rotate-right" viewBox="0 0 24 24"><path d="M20 12A8 8 0 1 1 17.66 6.34L20 8.68M20 4v4.68h-4.68"/></symbol>
+    <symbol id="icon-up" viewBox="0 0 24 24"><path d="M12 20V4m-6 6 6-6 6 6"/></symbol>
+    <symbol id="icon-mirror-v" viewBox="0 0 24 24"><path d="M12 3v18M4 7h4v10H4Zm12 0h4v10h-4Z"/></symbol>
+    <symbol id="icon-mirror-h" viewBox="0 0 24 24"><path d="M3 12h18M7 4h10v4H7Zm0 12h10v4H7Z"/></symbol>
+    <symbol id="icon-mirror-c" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M5 10a7 7 0 0 1 12-3l2 2V4M19 14A7 7 0 0 1 7 17l-2-2v5"/></symbol>
+    <symbol id="icon-mirror-d1" viewBox="0 0 24 24"><path d="m4 4 16 16M4 11v9h9ZM11 4h9v9Z"/></symbol>
+    <symbol id="icon-mirror-d2" viewBox="0 0 24 24"><path d="M20 4 4 20M4 4v9l9-9ZM20 11v9h-9Z"/></symbol>
   </svg>
   <header class="document-bar" id="document-bar">
       <div class="document-actions g-file">
@@ -61,14 +80,14 @@
         <span id="recovery-status" class="document-status" role="status" aria-label="Browser recovery" aria-live="polite" hidden></span>
       </div>
       <div class="document-actions g-mode" role="group" aria-label="Crochet workspace">
-        <button class="btn" id="btn-export" type="button" aria-pressed="false" title="Start crochet instructions" aria-controls="instructions-workspace">Begin Crocheting</button>
+        <button class="btn" id="btn-export" type="button" aria-pressed="false" title="Start crochet instructions" aria-controls="instructions-workspace"><span id="crochet-mode-label">Begin Crocheting</span></button>
       </div>
       <div class="document-actions g-hlrot">
-        <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false">⚙</button>
+        <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
       </div>
       <div id="document-error" class="document-error" role="alert" hidden>
         <span id="document-error-message"></span>
-        <button class="btn btn--icon btn--ghost" id="document-error-dismiss" type="button" aria-label="Dismiss document error" title="Dismiss document error">×</button>
+        <button class="btn btn--icon btn--ghost" id="document-error-dismiss" type="button" aria-label="Dismiss document error" title="Dismiss document error"><svg class="tool-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
       </div>
   </header>
 
@@ -97,7 +116,7 @@
         <span class="dock-group-label" aria-hidden="true">Arrange</span>
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-select"/></svg></button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
-        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the mask only" aria-label="Move" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
+        <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the selection area" aria-label="Move" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
         <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Global Mirror: no axes configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Global Mirror: no axes configured"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
       </div>
 
@@ -121,13 +140,13 @@
           <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate" data-workspace="design"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
           <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>
           <div class="canvas-control-group">
-            <button class="btn btn--icon" id="view-zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
-            <button class="btn btn--icon" id="view-zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+            <button class="btn btn--icon" id="view-zoom-out" type="button" aria-label="Zoom out" title="Zoom out"><svg class="tool-icon" aria-hidden="true"><use href="#icon-minus"/></svg></button>
+            <button class="btn btn--icon" id="view-zoom-in" type="button" aria-label="Zoom in" title="Zoom in"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg></button>
           </div>
           <div class="canvas-control-group">
-            <button class="btn btn--icon" id="rotate-ccw" type="button" title="Rotate view left (Shift+R)" aria-label="Rotate view left">↺</button>
-            <button class="btn btn--icon" id="view-rotation-reset" type="button" title="Reset view orientation" aria-label="Reset view orientation"><span id="view-orientation-arrow" class="view-orientation-arrow" aria-hidden="true">↑</span></button>
-            <button class="btn btn--icon" id="rotate-cw" type="button" title="Rotate view right (R)" aria-label="Rotate view right">↻</button>
+            <button class="btn btn--icon" id="rotate-ccw" type="button" title="Rotate view left (Shift+R)" aria-label="Rotate view left"><svg class="tool-icon" aria-hidden="true"><use href="#icon-rotate-left"/></svg></button>
+            <button class="btn btn--icon" id="view-rotation-reset" type="button" title="Reset view orientation" aria-label="Reset view orientation"><span id="view-orientation-arrow" class="view-orientation-arrow" aria-hidden="true"><svg class="tool-icon"><use href="#icon-up"/></svg></span></button>
+            <button class="btn btn--icon" id="rotate-cw" type="button" title="Rotate view right (R)" aria-label="Rotate view right"><svg class="tool-icon" aria-hidden="true"><use href="#icon-rotate-right"/></svg></button>
           </div>
         </div>
       </div>
@@ -145,7 +164,7 @@
             <h1 id="about-title">Mosaic Crochet Editor</h1>
             <p class="about-updated">Latest release <span id="about-updated"></span></p>
           </div>
-          <button class="btn btn--icon btn--ghost" id="about-close" type="button" aria-label="Close About" title="Close About">×</button>
+          <button class="btn btn--icon btn--ghost" id="about-close" type="button" aria-label="Close About" title="Close About"><svg class="tool-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
         </header>
         <p>Design alternating-yarn mosaic crochet charts, preview overlay stitches, and follow chart-derived crochet instructions in your browser.</p>
         <section class="about-release-notes-region" aria-labelledby="about-release-notes-title">
@@ -173,11 +192,11 @@
           <span class="toggle-track"></span>
           Alternate direction
         </label>
+        <span id="instructions-errors" class="instructions-errors warning" role="status" aria-label="Crochet errors" aria-live="polite" hidden></span>
         <span id="export-progress" class="instructions-progress" hidden></span>
         <span id="export-action-status" class="instructions-action-status" role="status" aria-label="Copy instructions status" aria-live="polite"></span>
         <button class="btn btn--icon" id="export-copy" type="button" aria-label="Copy instructions" title="Copy compressed instructions"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-copy"/></svg></button>
       </div>
-      <span id="instructions-errors" class="instructions-errors" role="status" aria-label="Crochet errors" aria-live="polite" hidden></span>
       <section class="instructions-crochet">
         <div class="instructions-sequence">
           <p class="warning instructions-live-save-warning" id="instructions-live-save-warning" role="alert" title="Keep this tab open to retain your place" hidden>Progress not saved</p>
@@ -187,9 +206,9 @@
             <code id="instructions-current-text"></code>
           </div>
           <div class="instructions-live-actions">
-            <button class="btn btn--icon" id="instructions-live-back" type="button" title="Back one work unit">←</button>
+            <button class="btn btn--icon" id="instructions-live-back" type="button" title="Back one work unit"><svg class="tool-icon" aria-hidden="true"><use href="#icon-back"/></svg></button>
             <span id="instructions-live-progress" role="status" aria-live="polite"></span>
-            <button class="btn btn--icon" id="instructions-live-forward" type="button" title="Forward one work unit">→</button>
+            <button class="btn btn--icon" id="instructions-live-forward" type="button" title="Forward one work unit"><svg class="tool-icon" aria-hidden="true"><use href="#icon-forward"/></svg></button>
           </div>
         </div>
       </section>
@@ -198,7 +217,7 @@
     <aside id="inspector-host" class="inspector-host" aria-labelledby="inspector-title" hidden>
       <header class="inspector-header">
         <strong id="inspector-title">Inspector</strong>
-        <button class="btn btn--icon btn--ghost" id="inspector-close" type="button" aria-label="Close inspector" title="Close inspector (Escape)">×</button>
+        <button class="btn btn--icon btn--ghost" id="inspector-close" type="button" aria-label="Close inspector" title="Close inspector (Escape)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
       </header>
       <div class="inspector-content">
   <section id="selection-popover" class="inspector-panel" role="dialog" aria-label="Selection" hidden>
@@ -231,28 +250,28 @@
           <div class="field-row"><label for="recipe-up">Additional up</label><input id="recipe-up" type="number" min="0" value="0"></div>
           <div class="field-row"><label for="recipe-down">Additional down</label><input id="recipe-down" type="number" min="0" value="0"></div>
           <span class="popover-label">Columns</span>
-          <label><input id="recipe-column-mirror-horizontal" type="checkbox"> Mirror column copies horizontally</label>
-          <label><input id="recipe-column-mirror-vertical" type="checkbox"> Mirror column copies vertically</label>
+          <label class="independent-toggle"><input id="recipe-column-mirror-horizontal" type="checkbox"><span>Mirror column copies horizontally</span></label>
+          <label class="independent-toggle"><input id="recipe-column-mirror-vertical" type="checkbox"><span>Mirror column copies vertically</span></label>
           <div class="field-row"><label for="recipe-gap-x">Horizontal gap</label><input id="recipe-gap-x" type="number" min="0" value="0"></div>
           <div class="field-row"><label for="recipe-column-offset">Vertical offset between columns</label><input id="recipe-column-offset" type="number" value="0"></div>
           <span class="popover-label">Rows</span>
-          <label><input id="recipe-row-mirror-horizontal" type="checkbox"> Mirror row copies horizontally</label>
-          <label><input id="recipe-row-mirror-vertical" type="checkbox"> Mirror row copies vertically</label>
+          <label class="independent-toggle"><input id="recipe-row-mirror-horizontal" type="checkbox"><span>Mirror row copies horizontally</span></label>
+          <label class="independent-toggle"><input id="recipe-row-mirror-vertical" type="checkbox"><span>Mirror row copies vertically</span></label>
           <div class="field-row"><label for="recipe-gap-y">Vertical gap</label><input id="recipe-gap-y" type="number" min="0" value="0"></div>
           <div class="field-row"><label for="recipe-row-offset">Horizontal offset between rows</label><input id="recipe-row-offset" type="number" value="0"></div>
         </div>
         <div id="recipe-rotation-controls" class="field-group" hidden>
           <div class="field-row"><label for="recipe-centre-x">Centre x</label><input id="recipe-centre-x" type="number" step="0.5" value="0"></div>
           <div class="field-row"><label for="recipe-centre-y">Centre y</label><input id="recipe-centre-y" type="number" step="0.5" value="0"></div>
-          <div class="segmented" role="group" aria-label="Quarter turns">
-            <label><input id="recipe-turn-90" type="checkbox" value="90"> 90°</label>
-            <label><input id="recipe-turn-180" type="checkbox" value="180"> 180°</label>
-            <label><input id="recipe-turn-270" type="checkbox" value="270"> 270°</label>
+          <div class="toggle-choices" role="group" aria-label="Quarter turns">
+            <label class="independent-toggle"><input id="recipe-turn-90" type="checkbox" value="90"><span>90°</span></label>
+            <label class="independent-toggle"><input id="recipe-turn-180" type="checkbox" value="180"><span>180°</span></label>
+            <label class="independent-toggle"><input id="recipe-turn-270" type="checkbox" value="270"><span>270°</span></label>
           </div>
-          <label><input id="recipe-mirror-horizontal" type="checkbox"> Horizontal mirror copy</label>
-          <label><input id="recipe-mirror-vertical" type="checkbox"> Vertical mirror copy</label>
+          <label class="independent-toggle"><input id="recipe-mirror-horizontal" type="checkbox"><span>Horizontal mirror copy</span></label>
+          <label class="independent-toggle"><input id="recipe-mirror-vertical" type="checkbox"><span>Vertical mirror copy</span></label>
         </div>
-        <button class="btn" id="recipe-apply" type="button" title="Copy the source selection to every repeat instance">Apply current selection</button>
+        <button class="btn" id="recipe-apply" type="button" title="Stamp the saved selection into its local repeat instances">Stamp copies</button>
       </div>
       <div id="recipe-error" class="warning" role="alert" hidden></div>
     </div>
@@ -290,17 +309,17 @@
     <div class="popover-row">
       <span class="popover-label">Global mirrors</span>
       <div class="sym-add-row">
-        <button class="btn btn--icon" id="add-sym-v"  title="Add vertical mirror (V)"     aria-label="Add vertical">↔</button>
-        <button class="btn btn--icon" id="add-sym-h"  title="Add horizontal mirror (H)"   aria-label="Add horizontal">↕</button>
-        <button class="btn btn--icon" id="add-sym-c"  title="Add central rotation (C)"    aria-label="Add central">⊕</button>
-        <button class="btn btn--icon" id="add-sym-d1" title="Add diagonal ╲ (D)"          aria-label="Add diagonal">╲</button>
-        <button class="btn btn--icon" id="add-sym-d2" title="Add anti-diagonal ╱ (A)"     aria-label="Add anti-diagonal">╱</button>
+        <button class="btn btn--icon" id="add-sym-v"  title="Add vertical mirror (V)"     aria-label="Add vertical"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-v"/></svg></button>
+        <button class="btn btn--icon" id="add-sym-h"  title="Add horizontal mirror (H)"   aria-label="Add horizontal"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-h"/></svg></button>
+        <button class="btn btn--icon" id="add-sym-c"  title="Add point symmetry (180°) (C)" aria-label="Add central"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-c"/></svg></button>
+        <button class="btn btn--icon" id="add-sym-d1" title="Add diagonal ╲ (D)"          aria-label="Add diagonal"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-d1"/></svg></button>
+        <button class="btn btn--icon" id="add-sym-d2" title="Add anti-diagonal ╱ (A)"     aria-label="Add anti-diagonal"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-d2"/></svg></button>
       </div>
     </div>
     <div id="sym-list" class="sym-list" aria-label="Axes"></div>
     <div class="transform-usage">
       <div class="popover-row">
-        <button class="btn" id="replicate-selection" title="Stamp global mirror copies from the current selection (T)" disabled>Apply Global Mirror</button>
+        <button class="btn" id="replicate-selection" title="Stamp global mirror copies from the current selection (T)" disabled>Stamp copies</button>
       </div>
       <div id="transform-error" class="warning" role="alert" hidden></div>
     </div>
@@ -308,9 +327,12 @@
 
   <!-- ── Pattern inspector ────────────────────────────────────────────── -->
   <section id="edit-pattern-widget" class="inspector-panel" aria-label="Pattern" hidden>
+    <div class="property-actions">
     <div class="segmented" role="radiogroup" aria-label="Pattern geometry">
       <label><input type="radio" name="edit-mode" value="row" checked> Rows</label>
       <label><input type="radio" name="edit-mode" value="round"> Centre-out</label>
+    </div>
+    <button class="btn btn--icon btn--destructive" id="edit-reset" type="button" aria-label="Clear design" title="Clear drawing, selections, repeats, and mirrors"><svg class="tool-icon" aria-hidden="true"><use href="#icon-delete"/></svg></button>
     </div>
 
     <div id="edit-row-controls" class="field-group">
@@ -346,51 +368,51 @@
 
     <div id="edit-error" class="warning" role="alert" hidden></div>
     <input type="checkbox" id="edit-wipe" hidden>
-    <button class="btn" id="edit-reset" type="button" title="Clear drawing, selections, repeats, and mirror axes">Clear design</button>
     <p id="edit-summary" class="pattern-summary" role="status" hidden></p>
 
     <div class="field-group pattern-colours" role="group" aria-label="Pattern colours">
       <div class="popover-row">
-        <label class="popover-label" for="color-a">Yarn A colour</label>
+        <span class="popover-label">Pattern colours</span>
         <div class="setting-color">
-          <input type="color" id="color-a" value="#000000" aria-label="Yarn A colour">
+          <button class="btn btn--icon" id="swap-yarns" type="button" aria-label="Swap yarn colours" title="Swap Yarn A and Yarn B colours"><svg class="tool-icon" aria-hidden="true"><use href="#icon-swap"/></svg></button>
+          <button class="btn btn--icon" id="find-contrast-colors" type="button" aria-label="Find contrast" title="Choose Danger and Accent colours that contrast with both yarns"><svg class="tool-icon" aria-hidden="true"><use href="#icon-contrast"/></svg></button>
+        </div>
+      </div>
+      <div class="popover-row">
+        <label class="popover-label" for="color-a">Yarn A</label>
+        <div class="setting-color">
+          <input type="color" id="color-a" value="#000000" aria-label="Yarn A">
           <button class="btn btn--icon pattern-colour-reset" id="color-a-reset" type="button" aria-label="Reset Yarn A to default" title="Reset Yarn A to the app default">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+            <svg class="tool-icon" aria-hidden="true"><use href="#icon-reset"/></svg>
           </button>
         </div>
       </div>
       <div class="popover-row">
-        <label class="popover-label" for="color-b">Yarn B colour</label>
+        <label class="popover-label" for="color-b">Yarn B</label>
         <div class="setting-color">
-          <input type="color" id="color-b" value="#ffffff" aria-label="Yarn B colour">
+          <input type="color" id="color-b" value="#ffffff" aria-label="Yarn B">
           <button class="btn btn--icon pattern-colour-reset" id="color-b-reset" type="button" aria-label="Reset Yarn B to default" title="Reset Yarn B to the app default">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+            <svg class="tool-icon" aria-hidden="true"><use href="#icon-reset"/></svg>
           </button>
         </div>
       </div>
-      <div class="pattern-colour-actions">
-        <button class="btn btn--icon" id="swap-yarns" type="button" aria-label="Swap yarn colours" title="Swap Yarn A and Yarn B colours">⇄</button>
-      </div>
       <div class="popover-row" title="Colour used for invalid ! markers.">
-        <label class="popover-label" for="danger-color">Project danger colour</label>
+        <label class="popover-label" for="danger-color">Danger</label>
         <div class="setting-color">
-          <input type="color" id="danger-color" value="#ff0000" aria-label="Project danger colour">
+          <input type="color" id="danger-color" value="#ff0000" aria-label="Danger">
           <button class="btn btn--icon pattern-colour-reset" id="danger-color-reset" type="button" aria-label="Reset danger colour" title="Reset danger to the app default">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+            <svg class="tool-icon" aria-hidden="true"><use href="#icon-reset"/></svg>
           </button>
         </div>
       </div>
       <div class="popover-row" title="Colour used for selections and transform guides.">
-        <label class="popover-label" for="accent-color">Project accent colour</label>
+        <label class="popover-label" for="accent-color">Accent</label>
         <div class="setting-color">
-          <input type="color" id="accent-color" value="#d653a3" aria-label="Project accent colour">
+          <input type="color" id="accent-color" value="#d653a3" aria-label="Accent">
           <button class="btn btn--icon pattern-colour-reset" id="accent-color-reset" type="button" aria-label="Reset accent colour" title="Reset accent to the app default">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></svg>
+            <svg class="tool-icon" aria-hidden="true"><use href="#icon-reset"/></svg>
           </button>
         </div>
-      </div>
-      <div class="pattern-contrast-actions">
-        <button class="btn" id="find-contrast-colors" type="button" title="Choose distinct danger and accent colours that contrast with both yarns">Find contrasting colors</button>
       </div>
       <div id="pattern-colour-preview" class="pattern-colour-preview" data-mode="row" role="img" aria-label="Rows colour preview with selection, grid, mirror, valid overlay, and invalid overlay" title="× overlay stitch · ! invalid overlay placement">
         <canvas id="pattern-preview-canvas" aria-hidden="true"></canvas>
