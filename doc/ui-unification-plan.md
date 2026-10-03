@@ -18,7 +18,7 @@ The plan preserves the boundaries in [FEATURES.md](../FEATURES.md), [ARCHITECTUR
 - Use consistent wording, icons, spacing, control placement, focus, selection, unavailable states, and error feedback.
 - Mouse, touch, pen, and keyboard produce the same authored outcomes. Alternative buttons and modifiers accelerate actions available through visible controls.
 - Keep undo coherent: authored changes are reversible, continuous edits produce one action, and cancellation restores the starting state.
-- Keep supported project files, recovery, and history compatible. Rejected operations leave the active session intact.
+- Keep supported project files, recovery, and history compatible, with the approved local-selection conversion below. Pattern stitches, geometry, and colours remain unchanged during migration. Rejected operations leave the active session intact.
 - Additional inconsistencies discovered within these workflows are in scope when they can be reproduced and fixed without introducing a new product capability.
 
 ### Defaults proposed for approval
@@ -30,7 +30,7 @@ The plan preserves the boundaries in [FEATURES.md](../FEATURES.md), [ARCHITECTUR
 | Tool variants | Rectangle selection and Wand each offer Replace / Add / Subtract; Move offers Move content / Duplicate / Move area; Overlay offers Place / Clear / Invert. Each group remembers its chosen variant. |
 | Variant discovery | Normal click activates the displayed variant. Hold, a visible clickable menu affordance, and keyboard access open the same labelled menu. Opening or dismissing the menu does not change the chosen variant. No hover-only opening. |
 | Local transformations | Each saved selection has one active choice: None, Grid, Circle, or Mirror. Switching categories retains that selection's settings for later reuse; only the chosen category executes. None retains the selection and disables its local transform. Global mirrors remain independent. |
-| Local Mirror | Use the same center and independent types as global mirrors: vertical, horizontal, both diagonals, and point symmetry (180°). Scope reflection composition to the saved source. This proposed composition requires the legacy-selection policy below; existing selections do not always compose reflections. |
+| Local Mirror | Use the same center and independent types as global mirrors: vertical, horizontal, both diagonals, and point symmetry (180°). Scope reflection composition to the saved source. Apply the approved legacy-selection conversion below. |
 | Circle | Exact 90°, 180°, and 270° copies around a draggable center. Arbitrary-angle resampling is outside this change. |
 | Grid anchors | Two handles edit column and row step vectors, including the existing gap and offset parameters. Source placement remains a Move operation. Repeat counts and alternating reflection settings remain available in the inspector. |
 | Whole pattern | An extra final Crochet entry displays the authored project and outward warnings. Selecting it retains the last instruction progress; selecting a real instruction updates progress using the existing convention. The overview is transient: reopening Crochet resumes the stored instruction. It does not add a generated instruction or mark work completed. |
@@ -51,15 +51,24 @@ The tool-variant proposal replaces the earlier layout with three permanently vis
 
 Space-drag, the visible Navigate control, and touch pan/zoom remain navigation routes. In authoring families, middle-click changes from pan to the action above. For selection, Shift means Add and takes precedence over Ctrl/Cmd Subtract. For movement, Alt means Move area and takes precedence over Ctrl/Cmd Duplicate. Resolve an explicit modifier before the button accelerator, then the chosen variant; apply the same rule to pointer and keyboard commands. Pin these combinations with tests. A temporary action never changes the remembered variant or selected yarn.
 
-### Compatibility decision required before local transform implementation
+### Approved local-transform compatibility policy
 
 Current saved transformation selections can contain both quarter-turn copies and horizontal/vertical reflection copies. They use explicitly selected copies rather than the closure of reflection axes. A replacement with exclusive Circle/Mirror categories and composed reflections therefore cannot be assumed to preserve all existing definitions.
 
 For example, a source cell at `(3, 3)` around center `(2, 2)` with horizontal and vertical copies currently produces `(3, 3)`, `(1, 3)`, and `(3, 1)`. Composing both reflections also produces `(1, 1)`. Even a reflection-only selection can change behavior; the issue is not limited to mixed rotation/reflection definitions.
 
-Before chunk 6, present a migration table and executable fixtures covering rotation-only, single/combined reflection-only, mixed rotation/reflection, and dormant settings. Demonstrate equality of transformed destinations, source mapping, live drawing, stamping, and composed output for every supported legacy shape. Chunk 5 has its own independent lossless migration check for global axes.
+The user approved changed selection behavior while preserving the pattern on 3 October 2026. Keep None / Grid / Circle / Mirror and convert legacy definitions as follows:
 
-Prefer a lossless conversion into the new model. If a supported definition cannot be represented, stop chunk 6 and request an explicit policy: adjust the proposed category/composition model to retain the existing capability, or approve a deliberate behavior change with its migration effects. Do not discard reflection or rotation settings, materialize copies as a substitute for a reusable transform, invent a hidden legacy mode, or silently split selections with different live-edit behavior. Independent UI, command, and global-mirror chunks can finish while this decision remains open.
+| Legacy definition | Active category after conversion |
+|---|---|
+| Grid, including alternating reflections | Grid; centered settings remain dormant. |
+| Rotation with any quarter-turn copies, including mixed reflections | Circle; reflection settings remain dormant. |
+| Rotation with reflections but no quarter turns | Mirror; selected mirrors compose. |
+| Rotation with no copies | Circle; do not infer None from an empty definition. |
+
+Retain dormant settings, selection identity, source bounds, and source membership. Legacy `mirrorHorizontal` reflects X and maps to the vertical mirror type; `mirrorVertical` reflects Y and maps to the horizontal type. Conversion must not change authored cells, pattern geometry, yarns, or palette overrides. It may change subsequent live drawing, generated instances, and stamping from old selections; show a clear notice when an import or recovered session changes those behaviors.
+
+Fixtures must cover rotation-only, single/combined reflection-only, mixed rotation/reflection, empty definitions, and dormant settings through project files, recovery, and history. Verify unchanged pattern content and source membership, the documented destination changes, inverse source mapping, live drawing, stamping, and output composition. Do not materialize copies, invent a hidden legacy mode, or split selections to simulate old behavior. Global axes retain the independent lossless migration requirement in chunk 5.
 
 ## Shared language and contracts
 
@@ -200,13 +209,13 @@ Acceptance: one understandable mirror center per row, lossless supported-file be
 
 ### 6. Introduce exclusive selection transforms and canvas anchors
 
-Prerequisite: chunk 5 and the legacy local-transform compatibility decision, including combined reflections and mixed rotation/reflection copies.
+Prerequisite: chunk 5. The local-transform migration policy above is approved, including combined reflections and mixed rotation/reflection copies.
 
 Scope: saved selection definitions and activation, local transform evaluation, inspector and guides, project/recovery/history boundaries.
 
 - Implement None / Grid / Circle / Mirror with one active category per selection. None leaves the selection usable for painting, copying, and movement. Grid's alternating reflections remain grid properties rather than a second active category. Mirror uses the global center/type controls and the approved composition policy, scoped to its saved source; keep global and local activation independent.
 - Keep saved selections as persistent movable sources. Preserve source identity and source/result mapping when editing a generated instance, moving a source, stamping, saving, and generating instructions.
-- Apply the approved lossless migration for existing selections and dormant settings; verify round trips through project files, recovery, and history.
+- Apply the approved conversion for existing selections and dormant settings; preserve pattern content and verify round trips through project files, recovery, and history.
 - Use the shared list and property treatments, consistent independent mirror toggles, and Stamp copies.
 - Add Grid's two step handles, Circle's center point, and Mirror's center point. Grid handles apply the same gap/offset changes and alternate-spacing synchronization as the corresponding fields; they do not collapse alternating reflections or change repeat counts. Display the relevant alternate layout as guides, and clamp/snap drags to the existing valid parameter domain. Local handles are visible and interactive only with Rectangle or Wand selection tools active. Passive guides may remain available to show the scope of subsequent painting.
 - Provide precision fields for all handles. Screen-sized hit targets, overlapping-handle disambiguation, rotated views, snapping, and touch input must preserve geometry. Global mirror handles are editable through the mirror context; local handles use the selection context.
@@ -215,7 +224,7 @@ Scope: saved selection definitions and activation, local transform evaluation, i
 
 Verification: logic selection, repeat evaluator, paint, source mapping, and serialization tests; relevant Rust tests; web repeat-render/history/migration tests; Playwright for every category, None, fields/handles, tool-dependent visibility, source movement, inverse instance editing, conflicts, cancel, Undo/Redo, stamping, composed save, and instruction generation.
 
-Acceptance: exactly one active local transformation, understandable editable anchors, consistent history, and no silent legacy behavior loss.
+Acceptance: exactly one active local transformation, understandable editable anchors, consistent history, unchanged migrated pattern content, and disclosed selection-behavior changes.
 
 ### 7. Add Whole pattern navigation and finish the consistency audit
 
@@ -253,7 +262,7 @@ Acceptance: every requirement below has evidence, final performance is explained
 | Selections / Mirrors | Exclusive local category with None; center-based global mirrors; appropriate anchors; center-only mirror dragging; coherent stamping and edit history. |
 | Crochet | Readable errors using project Danger; undimmed yarn/number blocks; visible selected/error markers; ordinary Back to Design; focused last instruction plus explicit Whole pattern; wrapping without unintended progress reset. |
 | Edge cases | Modal shortcuts, empty/unusable Paste, held-key Undo/Redo, focus restoration, cancellation, lost capture, blur, geometry changes, and overlapping handles have behavioral coverage. |
-| Compatibility | Supported `.mcw`, recovery, and history migrations preserve cells, transforms, source mapping, colors, and relevant workspace/progress state. Invalid operations/imports are atomic. |
+| Compatibility | Supported `.mcw`, recovery, and history migrations preserve pattern content, global transforms, source membership, colors, and relevant workspace/progress state. Local definitions follow the approved conversion. Invalid operations/imports are atomic. |
 | Accessibility | Keyboard, touch, pen, screen-reader semantics, enlarged text, browser zoom, reduced motion, and high contrast remain usable with adequate hit targets and non-color cues. |
 | Performance / maintainability | Measured comparison with baseline; no unexplained regressions; modest shared code, explicit state/commands, stable DOM updates, and no redundant domain implementation. |
 | Delivery | Focused red/green evidence, independent reviewer acceptance per chunk, separate structural/functional commits, complete root suite passing, and canonical docs updated. |
@@ -263,13 +272,13 @@ Acceptance: every requirement below has evidence, final performance is explained
 | Chunk | Status | Commit / verification / remaining decisions |
 |---|---|---|
 | Plan review | Approved | Native implementation, variant/pointer mappings, and Whole pattern progress approved. Sol implements and reviews; Luna handles scoped supporting checks. |
-| 0. Baseline / gates | Accepted | Fresh full root suite passes; browser evidence independently reviewed. Local-transform migration question presented to the user. |
-| 1. Presentation refactor | Not started | |
+| 0. Baseline / gates | Accepted | Baseline committed in `a9d3bf2`; local-selection conversion approved. |
+| 1. Presentation refactor | Accepted | Six concrete panel mounts and a type-only UI facade; persistent canvas/state preserved. Independent review, full root suite, and comparison pass. |
 | 2. Commands / history / atomic failures | Not started | |
 | 3. Visual and wording language | Not started | |
 | 4. Tool groups / temporary actions | Not started | |
 | 5. Global mirror centers | Not started | Prove global-axis conversion lossless. |
-| 6. Selection transforms / anchors | Not started | Legacy local-transform policy is a prerequisite. |
+| 6. Selection transforms / anchors | Not started | Selection conversion approved; pattern content must remain unchanged. |
 | 7. Crochet / final acceptance | Not started | |
 
 ### Starting evidence
@@ -282,3 +291,9 @@ Acceptance: every requirement below has evidence, final performance is explained
 - The drawing samples use the app's 9 × 9 chart and include both yarn-changing clicks and clicks that leave the existing yarn unchanged. They are a small interaction baseline, not a large-chart benchmark. Mutation counts include UI updates outside the renderer. Opening Settings focused `#hl-opacity` (“Guidance opacity”); desktop and touch sessions reported no page errors. Existing Playwright coverage checks shared canvas identity and viewport preservation through Crochet plus focus on Crochet entry and return (`web/e2e/instructions.spec.ts`).
 - MutationObserver medians per operation: drawing 48 records, mirrored drawing 47, width edits 153, Crochet stepping 10. Whole-body observation includes UI updates and animation; compare like-for-like rather than interpreting these as isolated renderer costs.
 - Global-axis migration fixtures reproduce identical orbits with disabled/repeated axes and odd/even and single-row/column canvases. Legacy local-transform fixtures demonstrate changed destinations, live painting, inverse edits, stamping, and persisted output under strict category conversion. Evidence: `/tmp/mosaic-compatibility-audit.test.ts` and `/tmp/mosaic-compatibility-audit.config.mjs`; four production-evaluator tests pass. This proves the chunk 6 policy gate is necessary; chunk 5 can proceed losslessly.
+
+### Chunk 1 verification
+
+- Existing behavior is covered without new source-structure assertions: `npm run test` passes 12 tooling, 204 core Rust, 8 WASM, 350 logic, 88 web unit, and 273 browser tests, including production build, formatting, and Clippy.
+- `/tmp/mosaic-crochet-refactor.json` and screenshots preserve the baseline separately. Settings focus remains `hl-opacity`; browser errors remain empty. DOM mutation distributions match the baseline for drawing, transformed drawing, width edits, Crochet stepping, and touch drawing. Timing results vary across flows; one comparison run does not establish a timing regression.
+- JavaScript: 145,882 raw / 42,126 gzip `-9` bytes; compressed delta +145 bytes (0.35%). CSS is unchanged. No runtime dependencies added. No durable document claim or release note changes are needed for this behavior-preserving refactor.
