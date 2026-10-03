@@ -27,3 +27,26 @@ export function setRadio(name: string, value: string) {
     const radio = document.querySelector<HTMLInputElement>(`[name="${name}"][value="${value}"]`);
     if (radio) radio.checked = true;
 }
+
+export function setPressed(button: HTMLElement, pressed: boolean, className = "btn--active") {
+    button.classList.toggle(className, pressed);
+    button.setAttribute("aria-pressed", String(pressed));
+}
+
+export function setMessage(target: HTMLElement, message: string | null) {
+    target.textContent = message ?? "";
+    target.hidden = message === null;
+}
+
+export function iconAction(glyph: string, label: string, title = label): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.className = "btn btn--icon";
+    button.textContent = glyph;
+    button.setAttribute("aria-label", label);
+    button.title = title;
+    return button;
+}
+
+export function listRow(list: HTMLElement, key: string, id: string | undefined): HTMLElement | undefined {
+    return Array.from(list.children).find(child => (child as HTMLElement).dataset[key] === id) as HTMLElement | undefined;
+}

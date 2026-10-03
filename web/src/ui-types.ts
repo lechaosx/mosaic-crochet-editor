@@ -1,0 +1,123 @@
+import type { Tool, SymKey, PatternState, Axis, GridRecipe } from "@mosaic/logic/types";
+import type { SelectMode } from "@mosaic/logic/selection";
+import type { OverlayAction } from "@mosaic/logic/paint";
+import type { CanvasWorkspace, InstructionSeam } from "./render";
+import type { PackedInstructionCoordinates } from "./instruction-coordinates";
+
+export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
+export type SelectionMode = SelectMode;
+
+export interface UICallbacks {
+    onTool:            (t: Tool) => void;
+    onOverlayAction:   (action: OverlayAction) => void;
+    onSelectionMoveMode: (mode: SelectionMoveMode) => void;
+    onSelectionMode:     (mode: SelectionMode) => void;
+    onSelectionCopy:     () => void;
+    onSelectionCut:      () => void;
+    onSelectionPaste:    () => void;
+    onSelectionDeselect: () => void;
+    onPrimaryColor:    (slot: 1 | 2) => void;
+    onSwapYarns:       () => void;
+    onResetYarnColor:  (slot: 1 | 2) => void;
+    onColorChange:     () => void;
+    onColorCommit:     () => void;
+    onAddAxis:         (k: SymKey) => void;
+    onToggleAxis:      (id: string) => void;
+    onDeleteAxis:      (id: string) => void;
+    onAxisPosition:    (id: string, position: { x?: number; y?: number; c?: number }) => Axis | null;
+    onCreateRecipe:    () => void;
+    onActivateRecipe:  (id: string) => void;
+    onDeleteRecipe:    (id: string) => void;
+    onRecipeChange:    (id: string, change: Partial<GridRecipe>) => void;
+    onApplyRecipe:     () => void;
+    onTransformPopoverToggle: (open: boolean) => void;
+    onReplicateSelection: () => void;
+    onHighlightChange:        () => void;
+    onDangerColorChange:      () => void;
+    onAccentColorChange:      () => void;
+    onDangerColorReset:       () => void;
+    onAccentColorReset:       () => void;
+    onFindContrastColors:     () => void;
+    onLabelsVisibleChange:    () => void;
+    onLockInvalidChange: () => void;
+    onUndo:            () => void;
+    onRedo:            () => void;
+    onRotate:          (delta: number) => void;
+    onResetRotation:   () => void;
+    onFit:             () => void;
+    onZoom:            (factor: number) => void;
+    onNavigate:        () => void;
+    onEditOpen:        () => void;
+    onEditChange:      (clearDesign?: boolean) => boolean;
+    onEditCommit:      (clearDesign?: boolean) => void;
+    onEditRevert:      () => void;
+    onSave:            () => void;
+    onLoad:            () => void;
+    onInstructions:    () => void;
+    onAbout:           () => void;
+}
+
+export interface UIHandle {
+    setTool:            (t: Tool) => void;
+    setOverlayAction:   (action: OverlayAction) => void;
+    setSelectionState:  (selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) => void;
+    setSelectionMode:   (tool: Tool, mode: SelectionMode, hasSelection: boolean) => void;
+    setCanvasFeedback:  (message: string | null) => void;
+    setPrimary:         (slot: 1 | 2) => void;
+    setColors:          (a: string, b: string) => void;
+    setProjectColors:   (danger: string, accent: string) => void;
+    setAxes:            (axes: ReadonlyArray<Axis>) => void;
+    setRecipes:         (recipes: ReadonlyArray<GridRecipe>, activeId: string | null) => void;
+    setRecipeError:     (message: string | null) => void;
+    setTransformState:  (hasSelection: boolean, hasTransforms: boolean) => void;
+    setTransformError:  (message: string | null) => void;
+    setHistory:         (undo: boolean, redo: boolean) => void;
+    setCrochetProgress: (hasProgress: boolean) => void;
+    setCrochetErrors:   (count: number) => void;
+    setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
+    setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
+    getCanvasWorkspace: () => CanvasWorkspace;
+    setViewState:       (rotation: number, navigating: boolean) => void;
+    setEditError:       (message: string | null) => void;
+    setEditSummary:     (width: number, height: number, preserved: number, added: number, removed: number) => void;
+    syncEditInputs:     (s: PatternState) => void;
+    openInstructions:   () => InstructionsView;
+}
+
+export interface InstructionOverviewUnit {
+    label: string;
+    yarn: "A" | "B";
+    color: string;
+    text: string;
+    invalid: boolean;
+    guidanceCoords: PackedInstructionCoordinates;
+    seam: Omit<InstructionSeam, "invalid"> | null;
+}
+
+export interface InstructionsView {
+    setProgress: (count: number, total: number) => void;
+    endProgress: () => void;
+    appendLine:  (line: string) => void;
+    appendUnit:  (unit: InstructionOverviewUnit) => void;
+    clearText:   () => void;
+    clearUnits:  () => void;
+    setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
+                  onProgress: (completedUnits: number) => boolean) => void;
+    setErrors:   (count: number) => void;
+    setYarnColors: (a: string, b: string) => void;
+    alternate:   () => boolean;
+    setBusy:     (busy: boolean) => void;
+    onAlternate: (cb: () => void) => void;
+    onLivePreview: (cb: (completedUnits: number | null) => void) => void;
+    onClose:     (cb: () => void) => void;
+    close:       () => void;
+}
+
+export type InspectorPanel = "selection" | "move" | "settings" | "transforms" | "pattern";
+
+export interface InspectorControls {
+    isOpen: (panel: InspectorPanel) => boolean;
+    open: (panel: InspectorPanel, title: string, trigger?: HTMLElement) => void;
+    close: (restoreFocus?: boolean) => void;
+    focusFirst: (panel: InspectorPanel) => void;
+}
