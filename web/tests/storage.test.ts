@@ -18,7 +18,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(saveToLocalStorage(session)).toBe(true);
         expect(loadFromLocalStorage()).toMatchObject({ toolVariants });
         const recovered = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        expect(recovered.version).toBe(8);
+        expect(recovered.version).toBe(9);
         expect(recovered.workspace.toolVariants).toEqual(toolVariants);
         expect(recovered.document.toolVariants).toBeUndefined();
     });
@@ -39,7 +39,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(restored.toolVariants).toEqual({ select: "replace", wand: "replace", move: "move", overlay: "place" });
         expect(restored.pixels).toEqual(session.pixels);
         expect(restored.pattern).toEqual(session.pattern);
-        expect(JSON.parse(localStorage.getItem("mosaic-recovery")!).version).toBe(8);
+        expect(JSON.parse(localStorage.getItem("mosaic-recovery")!).version).toBe(9);
     });
     test("reports a failed recovery write without throwing", () => {
         const originalSetItem = Storage.prototype.setItem;
@@ -142,6 +142,10 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         saveToLocalStorage(rowSession(3, 3));
         const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         delete raw.workspace.recipes;
+        raw.version = 8;
+        for (const recipe of raw.workspace.recipes ?? []) {
+            delete recipe.mirrorCentreX; delete recipe.mirrorCentreY; delete recipe.mirrorTypes;
+        }
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
         const restored = loadFromLocalStorage()!;
@@ -162,6 +166,10 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         delete stored.rotationCentreX;
         delete stored.rotationCentreY;
         delete stored.rotationTurns;
+        raw.version = 8;
+        for (const recipe of raw.workspace.recipes ?? []) {
+            delete recipe.mirrorCentreX; delete recipe.mirrorCentreY; delete recipe.mirrorTypes;
+        }
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
         expect(loadFromLocalStorage()!.recipes[0]).toMatchObject({
@@ -174,15 +182,15 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         });
     });
 
-    test("recovery normalizes distinct legacy alternate gaps", () => {
+    test("recovery retains alternate gaps in current records", () => {
         const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
         recipe.columnSpacingAlternate = 7;
         recipe.rowSpacingAlternate = 8;
         saveToLocalStorage(rowSession(3, 3, { recipes: [recipe] }));
 
         expect(loadFromLocalStorage()!.recipes[0]).toMatchObject({
-            columnSpacingAlternate: 0,
-            rowSpacingAlternate: 0,
+            columnSpacingAlternate: 7,
+            rowSpacingAlternate: 8,
         });
     });
 
@@ -194,6 +202,10 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         saveToLocalStorage(rowSession(3, 3, { recipes: [recipe] }));
         const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         Object.assign(raw.workspace.recipes[0], malformed);
+        raw.version = 8;
+        for (const recipe of raw.workspace.recipes ?? []) {
+            delete recipe.mirrorCentreX; delete recipe.mirrorCentreY; delete recipe.mirrorTypes;
+        }
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 
         const restored = loadFromLocalStorage()!;
@@ -316,7 +328,7 @@ describe("saveToFile", () => {
 
         await expect(saveToFile(session)).resolves.toBe(true);
         const file = JSON.parse(written);
-        expect(file).toMatchObject({ version: 5, mirrors: session.mirrors });
+        expect(file).toMatchObject({ version: 6, mirrors: session.mirrors });
         expect(file.recipes).toHaveLength(1);
         expect(file).toMatchObject({
             dangerColorOverride: "#123456",

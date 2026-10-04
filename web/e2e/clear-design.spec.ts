@@ -95,7 +95,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
     expect(cleared.workspace.recipes[0]).toMatchObject({
         source: { x: 0, y: 0, w: 0, h: 0, mask: [] },
         mode: "grid", left: 0, right: 0, up: 0, down: 0,
-        rotationTurns: [], mirrorHorizontal: false, mirrorVertical: false,
+        rotationTurns: [], mirrorTypes: [],
     });
     expect(cleared.workspace.activeRecipeId).toBe(cleared.workspace.recipes[0].id);
     expect(cleared.workspace.activeTool).toBe(before.workspace.activeTool);

@@ -263,7 +263,7 @@ test("composed mirror drawing survives a new-format Save, Open, and recovery rel
     await page.locator("#btn-save").click();
     await expect.poll(() => page.evaluate(() => (window as unknown as { savedMcw?: string }).savedMcw)).toBeTruthy();
     const saved = await page.evaluate(() => (window as unknown as { savedMcw: string }).savedMcw);
-    expect(JSON.parse(saved)).toMatchObject({ version: 5, mirrors: before.workspace.mirrors });
+    expect(JSON.parse(saved)).toMatchObject({ version: 6, mirrors: before.workspace.mirrors });
     await page.locator("[data-mirror-action='toggle']").click();
     const chooser = page.waitForEvent("filechooser"); await page.locator("#btn-load").click();
     await (await chooser).setFiles({ name: "composed-centre.mcw", mimeType: "application/json", buffer: Buffer.from(saved) });

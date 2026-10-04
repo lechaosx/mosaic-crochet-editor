@@ -100,31 +100,42 @@ export function activateGridRecipe(store: Store, id: string): boolean {
 }
 
 export type ApplyGridRecipeResult = "applied" | "unchanged" | "no-selection" | "conflict";
+export type GridRecipeStamp = { result: "applied"; pixels: Uint8Array }
+    | { result: Exclude<ApplyGridRecipeResult, "applied"> };
 
-export function applyGridRecipe(store: Store): ApplyGridRecipeResult {
-    const recipe = activeGridRecipe(store.state);
-    const float = store.state.float;
-    if (!recipe || !float || !recipeHasSource(recipe)) return "no-selection";
+export function gridRecipeStamp(state: Readonly<SessionState>): GridRecipeStamp {
+    const recipe = activeGridRecipe(state);
+    const float = state.float;
+    if (!recipe || !float || !recipeHasSource(recipe)) return { result: "no-selection" };
     const evaluated = evaluateGridRecipe(recipe);
     const sources = recipeSourceCells(recipe);
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    const { canvasWidth: W, canvasHeight: H } = state.pattern;
     if (evaluated.conflicts.some(cell =>
-        !outOfBounds(cell.x, cell.y, W, H) && store.state.pixels[cell.y * W + cell.x] !== 0
-    )) return "conflict";
-    const next = store.state.pixels.slice();
+        !outOfBounds(cell.x, cell.y, W, H) && state.pixels[cell.y * W + cell.x] !== 0
+    )) return { result: "conflict" };
+    const next = state.pixels.slice();
     let changed = false;
     for (const cell of evaluated.cells) {
         const source = sources[cell.sourceIndex];
         if (cell.x === source.x && cell.y === source.y) continue;
-        if (outOfBounds(cell.x, cell.y, W, H) || store.state.pixels[cell.y * W + cell.x] === 0) continue;
+        if (outOfBounds(cell.x, cell.y, W, H) || state.pixels[cell.y * W + cell.x] === 0) continue;
         const value = float.pixels[(source.y - float.y) * float.w + source.x - float.x];
         if (value !== 0 && next[cell.y * W + cell.x] !== value) {
             next[cell.y * W + cell.x] = value;
             changed = true;
         }
     }
-    if (!changed) return "unchanged";
-    store.commit(s => { s.pixels = next; }, { history: true });
+    return changed ? { result: "applied", pixels: next } : { result: "unchanged" };
+}
+
+export function applyGridRecipe(store: Store, beforeCommit?: () => void): ApplyGridRecipeResult {
+    const stamp = gridRecipeStamp(store.state);
+    if (stamp.result !== "applied") return stamp.result;
+    if (beforeCommit) {
+        beforeCommit();
+        return applyGridRecipe(store);
+    }
+    store.commit(s => { s.pixels = stamp.pixels; }, { history: true });
     return "applied";
 }
 

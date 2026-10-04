@@ -1,10 +1,10 @@
 import { PatternState, Tool, ToolVariants, defaultToolVariants, Axis, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
-import { decodeMcw, encodeMcw, ProjectDocument } from "@mosaic/logic/mcw";
+import { decodeMcwWithMigration, encodeMcw, ProjectDocument } from "@mosaic/logic/mcw";
 import { axisIsProjectValid, migrateAxes, mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
-import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
+import { legacySelectionBehaviorChanged, normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 import {
     AppPreferences,
     DEFAULT_APP_PREFERENCES,
@@ -14,7 +14,7 @@ import {
 
 const RECOVERY_KEY        = "mosaic-recovery";
 const LEGACY_RECOVERY_KEY = "mosaic-pattern-v4";
-const RECOVERY_VERSION    = 8;
+const RECOVERY_VERSION    = 9;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 function recoveryColorOverride(value: unknown): string | null {
@@ -88,14 +88,14 @@ interface RecoveryV7 {
     workspace: RecoveryV6["workspace"] & { toolVariants: ToolVariants };
 }
 
-interface RecoveryV8 {
-    version: 8;
+interface RecoveryV9 {
+    version: 9;
     document: RecoveryV7["document"];
     workspace: Omit<RecoveryV7["workspace"], "axes"> & { mirrors: MirrorCenter[] };
 }
 
 interface MigratedRecovery {
-    recovery: RecoveryV8;
+    recovery: RecoveryV9;
     preferences?: AppPreferences;
 }
 
@@ -145,7 +145,7 @@ function recoveryFromV5(data: RecoveryV5): MigratedRecovery {
     };
 }
 
-function migrateRecoveryAxes(recovery: RecoveryV7): RecoveryV8 {
+function migrateRecoveryAxes(recovery: RecoveryV7): RecoveryV9 {
     const { axes = [], ...workspace } = recovery.workspace;
     return { version: RECOVERY_VERSION, document: recovery.document,
         workspace: { ...workspace, mirrors: migrateAxes(axes.filter(axis => axisIsProjectValid(axis, recovery.document.state)), recovery.document.state) },
@@ -155,11 +155,11 @@ function migrateRecoveryAxes(recovery: RecoveryV7): RecoveryV8 {
 function migrateRecovery(value: unknown): MigratedRecovery | null {
     if (typeof value !== "object" || value === null) return null;
     const data = value as Record<string, unknown>;
-    if (data.version === RECOVERY_VERSION) {
+    if (data.version === RECOVERY_VERSION || data.version === 8) {
         if (typeof data.document !== "object" || data.document === null
             || typeof data.workspace !== "object" || data.workspace === null) return null;
-        const recovery = data as unknown as RecoveryV8;
-        return { recovery: { ...recovery, workspace: { ...recovery.workspace, liveTransforms: true } } };
+        const recovery = data as unknown as RecoveryV9;
+        return { recovery: { ...recovery, version: RECOVERY_VERSION, workspace: { ...recovery.workspace, liveTransforms: true } } };
     }
     if (data.version === 7 || data.version === 6) {
         if (typeof data.document !== "object" || data.document === null
@@ -181,7 +181,7 @@ function migrateRecovery(value: unknown): MigratedRecovery | null {
     return null;
 }
 
-function recoveryFromSession(s: Readonly<SessionState>): RecoveryV8 {
+function recoveryFromSession(s: Readonly<SessionState>): RecoveryV9 {
     return {
         version: RECOVERY_VERSION,
         document: {
@@ -212,7 +212,7 @@ export function saveToLocalStorage(s: Readonly<SessionState>): boolean {
     }
 }
 
-export function loadFromLocalStorage(): SessionState | null {
+export function loadFromLocalStorage(onMigration?: () => void): SessionState | null {
     const current = localStorage.getItem(RECOVERY_KEY);
     const sourceKey = current === null ? LEGACY_RECOVERY_KEY : RECOVERY_KEY;
     const saved = current ?? localStorage.getItem(LEGACY_RECOVERY_KEY);
@@ -226,7 +226,10 @@ export function loadFromLocalStorage(): SessionState | null {
         assertPatternDimensions(document.state);
         const mirrors = readMirrorRecords(workspace.mirrors);
         if (!mirrors) return null;
-        const recipes = restoreGridRecipes(workspace.recipes);
+        const legacy = (parsed as { version: number }).version < RECOVERY_VERSION;
+        const recipes = restoreGridRecipes(workspace.recipes, legacy);
+        if (!legacy && (!Array.isArray(workspace.recipes)
+            || (workspace.recipes.length > 0 && recipes.length !== workspace.recipes.length))) throw new TypeError("Invalid recovered selections.");
         const float = workspace.float ? unpackFloat(workspace.float) : null;
         const restored: SessionState = {
             pattern:          document.state,
@@ -249,11 +252,12 @@ export function loadFromLocalStorage(): SessionState | null {
             float,
             rotation:         workspace.rotation ?? 0,
         };
+        if (legacy && legacySelectionBehaviorChanged(workspace.recipes)) onMigration?.();
         if (preferences && !hasStoredAppPreferences()) saveAppPreferences(preferences);
         if (sourceKey === LEGACY_RECOVERY_KEY
             || recovery.version !== (parsed as { version?: number }).version) {
             try {
-                localStorage.setItem(RECOVERY_KEY, JSON.stringify(recovery));
+                localStorage.setItem(RECOVERY_KEY, JSON.stringify(recoveryFromSession(restored)));
                 localStorage.removeItem(LEGACY_RECOVERY_KEY);
             } catch {
                 return restored;
@@ -320,7 +324,7 @@ export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
     }
 }
 
-export function loadFromFile(): Promise<LoadedFile | null> {
+export function loadFromFile(onMigration?: () => void): Promise<LoadedFile | null> {
     return new Promise((resolve, reject) => {
         const input = Object.assign(document.createElement("input"), { type: "file", accept: ".mcw,application/json" });
         input.addEventListener("change", () => {
@@ -329,7 +333,9 @@ export function loadFromFile(): Promise<LoadedFile | null> {
             const reader = new FileReader();
             reader.onload = () => {
                 try {
-                    resolve(decodeMcw(reader.result as string));
+                    const loaded = decodeMcwWithMigration(reader.result as string);
+                    if (loaded.selectionBehaviorChanged) onMigration?.();
+                    resolve(loaded.project);
                 } catch (error) {
                     reject(error instanceof Error ? error : new Error("Invalid pattern file."));
                 }

@@ -5,7 +5,7 @@ import type { UICallbacks, InspectorControls } from "./ui-types";
 export function mountSelection(
     cb: Pick<UICallbacks, "onSelectionCopy" | "onSelectionCut"
         | "onSelectionPaste" | "onSelectionDeselect" | "onCreateRecipe" | "onActivateRecipe"
-        | "onDeleteRecipe" | "onRecipeChange" | "onApplyRecipe">,
+        | "onDeleteRecipe" | "onRecipeChange" | "onRecipeCommit" | "onRecipeRevert" | "onApplyRecipe">,
     inspector: Pick<InspectorControls, "isOpen" | "close">, syncCanvasChromeInsets: () => void) {
     /* ── Selection card ──────────────────────────────────────────────── */
     const selectionStatus = el("status-selection");
@@ -76,55 +76,77 @@ export function mountSelection(
     const recipeCentreX = el<HTMLInputElement>("recipe-centre-x");
     const recipeCentreY = el<HTMLInputElement>("recipe-centre-y");
     const recipeTurns = [90, 180, 270].map(turn => el<HTMLInputElement>(`recipe-turn-${turn}`));
-    const recipeMirrorHorizontal = el<HTMLInputElement>("recipe-mirror-horizontal");
-    const recipeMirrorVertical = el<HTMLInputElement>("recipe-mirror-vertical");
+    const mirrorCentreX = el<HTMLInputElement>("recipe-mirror-centre-x");
+    const mirrorCentreY = el<HTMLInputElement>("recipe-mirror-centre-y");
+    const mirrorTypes = ["v", "h", "d1", "d2", "c"].map(type => el<HTMLInputElement>(`recipe-mirror-${type}`));
+    const mirrorControls = el("recipe-mirror-controls");
     const recipeError = el("recipe-error");
     let selectedRecipeId: string | null = null;
     let projectedRecipes: ReadonlyArray<GridRecipe> | null = null;
     let projectedActiveRecipeId: string | null | undefined;
     el("recipe-create").addEventListener("click", cb.onCreateRecipe);
     el("recipe-apply").addEventListener("click", cb.onApplyRecipe);
-    const recipeInputs = [
-        recipeLeft, recipeRight, recipeUp, recipeDown,
-        recipeGapX, recipeGapY, recipeColumnMirrorHorizontal, recipeColumnMirrorVertical,
-        recipeRowMirrorHorizontal, recipeRowMirrorVertical,
-        recipeColumnOffset, recipeRowOffset, recipeCentreX, recipeCentreY,
-        ...recipeTurns, recipeMirrorHorizontal, recipeMirrorVertical,
-        ...document.querySelectorAll<HTMLInputElement>('[name="recipe-mode"]'),
-    ];
     function syncRecipeSections() {
         const mode = radioValue("recipe-mode");
         recipeGridControls.hidden = mode !== "grid";
-        recipeRotationControls.hidden = mode !== "rotation";
+        recipeRotationControls.hidden = mode !== "circle";
+        mirrorControls.hidden = mode !== "mirror";
+        el<HTMLButtonElement>("recipe-apply").disabled = mode === "none";
     }
-    recipeInputs.forEach(input => input.addEventListener("change", event => {
-        const id = selectedRecipeId;
-        if (!id) return;
-        syncRecipeSections();
-        const change: Partial<GridRecipe> = {
-            mode: radioValue("recipe-mode") as GridRecipe["mode"],
-            left: recipeLeft.valueAsNumber,
-            right: recipeRight.valueAsNumber,
-            up: recipeUp.valueAsNumber,
-            down: recipeDown.valueAsNumber,
-            columnSpacing: recipeGapX.valueAsNumber,
-            rowSpacing: recipeGapY.valueAsNumber,
-            columnOffset: recipeColumnOffset.valueAsNumber,
-            rowOffset: recipeRowOffset.valueAsNumber,
-            columnMirrorHorizontal: recipeColumnMirrorHorizontal.checked,
-            columnMirrorVertical: recipeColumnMirrorVertical.checked,
-            rowMirrorHorizontal: recipeRowMirrorHorizontal.checked,
-            rowMirrorVertical: recipeRowMirrorVertical.checked,
-            rotationCentreX: recipeCentreX.valueAsNumber,
-            rotationCentreY: recipeCentreY.valueAsNumber,
-            rotationTurns: recipeTurns.filter(input => input.checked).map(input => Number(input.value)) as GridRecipe["rotationTurns"],
-            mirrorHorizontal: recipeMirrorHorizontal.checked,
-            mirrorVertical: recipeMirrorVertical.checked,
-        };
-        if (event.target === recipeGapX) change.columnSpacingAlternate = recipeGapX.valueAsNumber;
-        if (event.target === recipeGapY) change.rowSpacingAlternate = recipeGapY.valueAsNumber;
-        cb.onRecipeChange(id, change);
-    }));
+    const gridNumbers: [HTMLInputElement, keyof GridRecipe][] = [
+        [recipeLeft, "left"], [recipeRight, "right"], [recipeUp, "up"], [recipeDown, "down"],
+        [recipeGapX, "columnSpacing"], [recipeGapY, "rowSpacing"],
+        [recipeColumnOffset, "columnOffset"], [recipeRowOffset, "rowOffset"],
+    ];
+    function update(change: Partial<GridRecipe>, preview = false) {
+        return selectedRecipeId !== null && cb.onRecipeChange(selectedRecipeId, change, preview);
+    }
+    for (const [input, field] of gridNumbers) {
+        const change = () => ({ [field]: input.valueAsNumber,
+            ...(input === recipeGapX ? { columnSpacingAlternate: input.valueAsNumber } : {}),
+            ...(input === recipeGapY ? { rowSpacingAlternate: input.valueAsNumber } : {}) });
+        input.addEventListener("input", () => update(change(), true));
+        input.addEventListener("change", () => { update(change(), true); cb.onRecipeCommit(); });
+        input.addEventListener("keydown", event => {
+            if (event.key === "Enter") { event.preventDefault(); update(change(), true); cb.onRecipeCommit(); }
+        });
+    }
+    for (const [inputs, apply, fields] of [
+        [[recipeCentreX, recipeCentreY], el("recipe-centre-apply"), ["rotationCentreX", "rotationCentreY"]],
+        [[mirrorCentreX, mirrorCentreY], el("recipe-mirror-centre-apply"), ["mirrorCentreX", "mirrorCentreY"]],
+    ] as const) {
+        const preview = () => update({ [fields[0]]: inputs[0].valueAsNumber, [fields[1]]: inputs[1].valueAsNumber }, true);
+        const commit = () => { preview(); cb.onRecipeCommit(); };
+        inputs.forEach(input => {
+            input.addEventListener("input", preview);
+            input.addEventListener("keydown", event => {
+                if (event.key === "Enter") { event.preventDefault(); commit(); }
+            });
+        });
+        apply.addEventListener("click", commit);
+    }
+    for (const [input, field] of [
+        [recipeColumnMirrorHorizontal, "columnMirrorHorizontal"], [recipeColumnMirrorVertical, "columnMirrorVertical"],
+        [recipeRowMirrorHorizontal, "rowMirrorHorizontal"], [recipeRowMirrorVertical, "rowMirrorVertical"],
+    ] as const) input.addEventListener("change", () => update({ [field]: input.checked }));
+    recipeTurns.forEach(input => input.addEventListener("change", () => update({
+        rotationTurns: recipeTurns.filter(input => input.checked).map(input => Number(input.value)) as GridRecipe["rotationTurns"],
+    })));
+    mirrorTypes.forEach(input => input.addEventListener("change", () => update({
+        mirrorTypes: mirrorTypes.filter(input => input.checked).map(input => input.value) as GridRecipe["mirrorTypes"],
+    })));
+    document.querySelectorAll<HTMLInputElement>('[name="recipe-mode"]').forEach(input =>
+        input.addEventListener("change", () => { update({ mode: input.value as GridRecipe["mode"] }); syncRecipeSections(); }));
+    recipeControls.addEventListener("keydown", event => {
+        if (event.key === "Escape" && document.activeElement instanceof HTMLInputElement
+            && document.activeElement.type === "number") {
+            event.preventDefault(); event.stopPropagation(); cb.onRecipeRevert();
+        }
+    });
+    document.addEventListener("pointerdown", event => {
+        if (!recipeControls.contains(event.target as Node)) cb.onRecipeCommit();
+    }, true);
+    window.addEventListener("blur", cb.onRecipeRevert);
     function setRecipes(recipes: ReadonlyArray<GridRecipe>, activeId: string | null) {
         const currentId = activeId ?? recipes[0]?.id ?? null;
         if (recipes !== projectedRecipes || activeId !== projectedActiveRecipeId) {
@@ -198,8 +220,9 @@ export function mountSelection(
         recipeCentreX.value = String(active.rotationCentreX);
         recipeCentreY.value = String(active.rotationCentreY);
         recipeTurns.forEach(input => { input.checked = active.rotationTurns.includes(Number(input.value) as 90 | 180 | 270); });
-        recipeMirrorHorizontal.checked = active.mirrorHorizontal;
-        recipeMirrorVertical.checked = active.mirrorVertical;
+        mirrorCentreX.value = String(active.mirrorCentreX);
+        mirrorCentreY.value = String(active.mirrorCentreY);
+        mirrorTypes.forEach(input => { input.checked = active.mirrorTypes.includes(input.value as GridRecipe["mirrorTypes"][number]); });
         syncRecipeSections();
     }
     function setRecipeError(message: string | null) { setMessage(recipeError, message); }

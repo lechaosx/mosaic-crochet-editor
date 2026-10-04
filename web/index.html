@@ -240,9 +240,11 @@
       <div class="popover-row"><span class="popover-label">Selections</span><button class="btn" id="recipe-create" type="button" title="Create and select an empty selection">New selection</button></div>
       <ul id="recipe-list" aria-label="Selections"></ul>
       <div id="recipe-controls" hidden>
-        <div class="segmented" role="radiogroup" aria-label="Repeat type">
+        <div class="segmented" role="radiogroup" aria-label="Selection transform">
+          <label><input id="recipe-mode-none" type="radio" name="recipe-mode" value="none"> None</label>
           <label><input id="recipe-mode-grid" type="radio" name="recipe-mode" value="grid" checked> Grid</label>
-          <label><input id="recipe-mode-rotation" type="radio" name="recipe-mode" value="rotation"> Transformations</label>
+          <label><input id="recipe-mode-circle" type="radio" name="recipe-mode" value="circle"> Circle</label>
+          <label><input id="recipe-mode-mirror" type="radio" name="recipe-mode" value="mirror"> Mirror</label>
         </div>
         <div id="recipe-grid-controls" class="field-group">
           <div class="field-row"><label for="recipe-left">Additional left</label><input id="recipe-left" type="number" min="0" value="0"></div>
@@ -263,13 +265,24 @@
         <div id="recipe-rotation-controls" class="field-group" hidden>
           <div class="field-row"><label for="recipe-centre-x">Centre x</label><input id="recipe-centre-x" type="number" step="0.5" value="0"></div>
           <div class="field-row"><label for="recipe-centre-y">Centre y</label><input id="recipe-centre-y" type="number" step="0.5" value="0"></div>
+          <button class="btn btn--icon btn--ghost" id="recipe-centre-apply" type="button" aria-label="Apply Circle centre position" title="Apply Circle centre position (Enter)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-check"/></svg></button>
           <div class="toggle-choices" role="group" aria-label="Quarter turns">
             <label class="independent-toggle"><input id="recipe-turn-90" type="checkbox" value="90"><span>90°</span></label>
             <label class="independent-toggle"><input id="recipe-turn-180" type="checkbox" value="180"><span>180°</span></label>
             <label class="independent-toggle"><input id="recipe-turn-270" type="checkbox" value="270"><span>270°</span></label>
           </div>
-          <label class="independent-toggle"><input id="recipe-mirror-horizontal" type="checkbox"><span>Horizontal mirror copy</span></label>
-          <label class="independent-toggle"><input id="recipe-mirror-vertical" type="checkbox"><span>Vertical mirror copy</span></label>
+        </div>
+        <div id="recipe-mirror-controls" class="field-group" hidden>
+          <div class="field-row"><label for="recipe-mirror-centre-x">Centre x</label><input id="recipe-mirror-centre-x" type="number" step="0.5" value="0"></div>
+          <div class="field-row"><label for="recipe-mirror-centre-y">Centre y</label><input id="recipe-mirror-centre-y" type="number" step="0.5" value="0"></div>
+          <button class="btn btn--icon btn--ghost" id="recipe-mirror-centre-apply" type="button" aria-label="Apply Mirror centre position" title="Apply Mirror centre position (Enter)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-check"/></svg></button>
+          <div class="toggle-choices" role="group" aria-label="Selection mirror types">
+            <label class="independent-toggle"><input id="recipe-mirror-v" type="checkbox" value="V"><span>Vertical</span></label>
+            <label class="independent-toggle"><input id="recipe-mirror-h" type="checkbox" value="H"><span>Horizontal</span></label>
+            <label class="independent-toggle"><input id="recipe-mirror-d1" type="checkbox" value="D1"><span>Diagonal</span></label>
+            <label class="independent-toggle"><input id="recipe-mirror-d2" type="checkbox" value="D2"><span>Anti-diagonal</span></label>
+            <label class="independent-toggle"><input id="recipe-mirror-c" type="checkbox" value="C"><span>Point symmetry (180°)</span></label>
+          </div>
         </div>
         <button class="btn" id="recipe-apply" type="button" title="Stamp the saved selection into its local repeat instances">Stamp copies</button>
       </div>

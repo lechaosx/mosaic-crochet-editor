@@ -72,7 +72,7 @@ describe(".mcw codec", () => {
 
         const encoded = JSON.parse(encodeMcw(document));
         expect(encoded).toMatchObject({
-            version: 5,
+            version: 6,
             state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
             pixels: "Cg==",
             colorA: "#010203",
@@ -137,6 +137,7 @@ describe(".mcw codec", () => {
                 columnMirrorHorizontal: false, columnMirrorVertical: false,
                 rowMirrorHorizontal: false, rowMirrorVertical: false,
                 rotationCentreX: 1, rotationCentreY: 0, rotationTurns: [],
+                mirrorCentreX: 1, mirrorCentreY: 0, mirrorTypes: [],
             }],
         };
         expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(new Uint8Array([1, 0, 1]));
@@ -174,6 +175,7 @@ describe(".mcw codec", () => {
                 columnMirrorHorizontal: false, columnMirrorVertical: false,
                 rowMirrorHorizontal: false, rowMirrorVertical: false,
                 rotationCentreX: (mask.length - 1) / 2, rotationCentreY: 0, rotationTurns: [],
+                mirrorCentreX: (mask.length - 1) / 2, mirrorCentreY: 0, mirrorTypes: [],
             }],
         };
 
@@ -196,6 +198,7 @@ describe(".mcw codec", () => {
         encoded.recipes[0].columnOrientation = "same";
         encoded.recipes[0].rowOrientation = "same";
         for (const field of ["columnMirrorHorizontal", "columnMirrorVertical", "rowMirrorHorizontal", "rowMirrorVertical"]) delete encoded.recipes[0][field];
+        for (const field of ["mirrorCentreX", "mirrorCentreY", "mirrorTypes"]) delete encoded.recipes[0][field];
         delete encoded.recipes[0].mode;
         delete encoded.recipes[0].columnSpacingAlternate;
         delete encoded.recipes[0].rowSpacingAlternate;
@@ -218,7 +221,7 @@ describe(".mcw codec", () => {
             x: 2, y: 1, w: 1, h: 1, pixels: new Uint8Array([1]),
         });
         Object.assign(recipe, {
-            mode: "rotation",
+            mode: "circle",
             rotationCentreX: 1,
             rotationCentreY: 1,
             rotationTurns: [90, 270],
@@ -234,7 +237,7 @@ describe(".mcw codec", () => {
         expect(decodeMcw(encodeMcw(document)).recipes).toEqual([recipe]);
     });
 
-    test("normalizes legacy alternate gaps to the visible single gap", () => {
+    test("preserves retained alternate gaps in current project files", () => {
         const recipe = gridRecipeFromFloat({
             x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([1, 0, 1]),
         });
@@ -252,7 +255,7 @@ describe(".mcw codec", () => {
         expect(restored).toMatchObject({
             id: recipe.id,
             columnSpacing: 0,
-            columnSpacingAlternate: 0,
+            columnSpacingAlternate: 1,
         });
     });
 
@@ -347,8 +350,8 @@ describe(".mcw codec", () => {
     });
 
     test("identifies a future file version", () => {
-        expect(() => decodeMcw(JSON.stringify({ version: 6 })))
-            .toThrow("This pattern uses unsupported .mcw version 6.");
+        expect(() => decodeMcw(JSON.stringify({ version: 7 })))
+            .toThrow("This pattern uses unsupported .mcw version 7.");
     });
 });
 
@@ -426,7 +429,7 @@ test("v4 preserves all four grid mirror flags and v3 migrates its orientations",
         columnMirrorHorizontal: true, columnMirrorVertical: true, rowMirrorHorizontal: true, rowMirrorVertical: true };
     const encoded = JSON.parse(encodeMcw({ pattern: { mode: "row", canvasWidth: 4, canvasHeight: 4 },
         pixels: new Uint8Array(16).fill(1), colorA: "#000000", colorB: "#ffffff", mirrors: [], recipes: [recipe] }));
-    expect(encoded.version).toBe(5);
+    expect(encoded.version).toBe(6);
     expect(decodeMcw(JSON.stringify(encoded)).recipes[0]).toMatchObject(recipe);
     for (const field of ["columnMirrorHorizontal", "columnMirrorVertical", "rowMirrorHorizontal", "rowMirrorVertical"]) {
         const invalid = structuredClone(encoded);

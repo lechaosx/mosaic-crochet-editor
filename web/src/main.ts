@@ -8,7 +8,7 @@ import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indi
 import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction } from "@mosaic/logic/tool-input";
 import { makeViewport, makeRendererState, observeCanvasResize,
-         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateCoordinates } from "./render";
+         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, selectionTransformHandles, type SelectionTransformHandle, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
@@ -16,7 +16,7 @@ import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitiali
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
          mirrorIsProjectValid, mirrorsForPattern } from "@mosaic/logic/symmetry";
 import { mirrorsToFlat } from "@mosaic/logic/symmetry";
-import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual } from "@mosaic/logic/grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withGridStep, withRecipeSource } from "@mosaic/logic/grid-recipes";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
@@ -26,7 +26,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          previewSelectRectMask,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection, createGridRecipe,
-         activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe,
+         activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe, gridRecipeStamp,
          syncActiveGridRecipe } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, paintOps } from "@mosaic/logic/paint";
@@ -139,11 +139,13 @@ function editableMirrorTolerance(): number {
     return 22 / viewport.view.zoom;
 }
 const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
-const saved    = loadFromLocalStorage();
+let selectionMigrationNotice = false;
+const saved    = loadFromLocalStorage(() => { selectionMigrationNotice = true; });
 let preferences: AppPreferences = loadAppPreferences();
 const rs       = makeRendererState(preferences);
 let projectColorsSynced = false;
 const store    = new Store(saved ?? defaultSession());
+if (saved) historyEnsureInitialized(store.state, () => { selectionMigrationNotice = true; });
 const aboutDialog = document.getElementById("about-dialog") as HTMLDialogElement;
 const aboutReleaseNotes = document.getElementById("about-release-notes") as HTMLElement;
 const currentReleaseHash = aboutReleaseNotes.dataset.currentHash!;
@@ -225,6 +227,7 @@ type Gesture =
         preRecipes: GridRecipe[];
         preActiveRecipeId: string | null;
       }
+    | { kind: "recipe-drag"; id: string; handle: SelectionTransformHandle; preRecipes: GridRecipe[] }
     | { kind: "mirror-drag";
         id: string;
         preMirrors: MirrorCenter[];
@@ -308,6 +311,8 @@ function syncSelectPreview() {
 
 function renderCanvas() {
     syncProjectColorInputs(store.state);
+    rs.selectionHandlesVisible = !instructionsOpen && !rs.previewRepeatGuides
+        && (store.state.activeTool === "select" || store.state.activeTool === "wand");
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
 
@@ -341,8 +346,12 @@ store.setRenderer(s => {
 let patternHistorySession = false;
 let savingPatternHistory = false;
 let applyingPatternPreview = false;
+let recipeEditBaseline: GridRecipe[] | null = null;
+let recipeHistorySession = false;
+let savingRecipeHistory = false;
 store.setHistoryFn(s => {
     if (!savingPatternHistory) patternHistorySession = false;
+    if (!savingRecipeHistory) recipeHistorySession = false;
     historySave(s);
 });
 store.setPersistFn(s => {
@@ -632,42 +641,92 @@ function refreshRecipeUi(error: string | null = null) {
 }
 
 function onCreateRecipe() {
+    finishAuthoredInput();
     createGridRecipe(store);
     refreshRecipeUi();
 }
 
 function onActivateRecipe(id: string) {
+    finishAuthoredInput();
     if (!activateGridRecipe(store, id)) refreshRecipeUi("This selection's source is not available on the chart.");
     else refreshRecipeUi();
 }
 
 function onDeleteRecipe(id: string) {
+    finishAuthoredInput();
     deleteGridRecipe(store, id);
     refreshRecipeUi();
 }
 
-function onRecipeChange(id: string, change: Partial<GridRecipe>) {
+function onRecipeChange(id: string, change: Partial<GridRecipe>, preview = false): boolean {
+    const previous = store.state.recipes.find(candidate => candidate.id === id);
+    if (preview && previous && gridRecipesEqual([previous], [{ ...previous, ...change, enabled: true }])) return true;
+    if (!preview || (!recipeEditBaseline && gesture?.kind !== "recipe-drag")) finishAuthoredInput();
     const recipe = store.state.recipes.find(candidate => candidate.id === id);
-    if (!recipe) return;
-    const updated = {
-        ...recipe,
-        ...change,
-        enabled: true,
-        columnSpacingAlternate: change.columnSpacingAlternate ?? recipe.columnSpacingAlternate,
-        rowSpacingAlternate: change.rowSpacingAlternate ?? recipe.rowSpacingAlternate,
-    };
+    if (!recipe) return false;
+    if (preview && !recipeEditBaseline) recipeEditBaseline = store.state.recipes;
+    const updated = { ...recipe, ...change, enabled: true };
     const visible = visiblePixels(store.state);
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    const error = gridRecipeError(updated, (x, y) =>
-        !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0
-    );
-    if (error) { refreshRecipeUi(error); return; }
-    store.commit(s => { s.recipes = s.recipes.map(candidate => candidate.id === id ? updated : candidate); }, { history: true });
+    const error = gridRecipeError(updated, (x, y) => !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0);
+    if (error) {
+        if (preview) ui.setRecipeError(error); else refreshRecipeUi(error);
+        return false;
+    }
+    if (!gridRecipesEqual([recipe], [updated])) store.commit(s => {
+        s.recipes = s.recipes.map(candidate => candidate.id === id ? updated : candidate);
+    }, { recompute: false, history: !preview, persist: !preview });
+    refreshRecipeUi();
+    return true;
+}
+
+function onRecipeCommit() {
+    const baseline = recipeEditBaseline;
+    recipeEditBaseline = null;
+    if (!baseline) return;
+    if (baseline && !gridRecipesEqual(baseline, store.state.recipes)) {
+        savingRecipeHistory = true;
+        try {
+            if (recipeHistorySession) recipeHistorySession = historyReplaceCurrent(store.state);
+            else {
+                store.commit(() => {}, { recompute: false, render: false, history: true });
+                recipeHistorySession = true;
+            }
+            saveToLocalStorage(store.state);
+            ui.setHistory(canUndo(), canRedo());
+        } finally { savingRecipeHistory = false; }
+    }
+    ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
+}
+
+function onRecipeRevert() {
+    if (gesture?.kind === "recipe-drag") { gestureInputs.cancel(); return; }
+    const baseline = recipeEditBaseline;
+    recipeEditBaseline = null;
+    if (baseline) store.commit(s => { s.recipes = baseline; }, { recompute: false });
     refreshRecipeUi();
 }
 
 function onApplyRecipe() {
-    const result = applyGridRecipe(store);
+    let result;
+    if (gesture?.kind === "select" && gesture.rect) {
+        const rect = gesture.rect;
+        const projected = { ...store.state, ...liftCells(visiblePixels(store.state), store.state.pattern,
+            previewSelectRectMask(store.state, rect.startX, rect.startY, rect.endX, rect.endY, gesture.mode)) };
+        const recipe = projected.recipes.find(recipe => recipe.id === projected.activeRecipeId) ?? projected.recipes[0];
+        if (projected.float) {
+            const { canvasWidth: W, canvasHeight: H } = projected.pattern;
+            const error = gridRecipeError(withRecipeSource(recipe, projected.float),
+                (x, y) => !outOfBounds(x, y, W, H) && projected.pixels[y * W + x] !== 0);
+            if (error) { refreshRecipeUi(error); return; }
+            syncActiveGridRecipe(projected);
+        }
+        result = gridRecipeStamp(projected).result;
+        if (result === "applied") {
+            finishAuthoredInput();
+            result = applyGridRecipe(store);
+        }
+    } else result = applyGridRecipe(store, recipeEditBaseline || gesture || keyboardMove ? finishAuthoredInput : undefined);
     refreshRecipeUi(result === "no-selection" ? "Select cells for this selection first."
         : result === "conflict" ? "Repeat instances overlap." : null);
 }
@@ -683,6 +742,7 @@ function setTool(t: Tool) {
     ui.setCanvasFeedback(null);
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
+    renderCanvas();
 }
 function setToolVariant<K extends keyof ToolVariants>(tool: K, variant: ToolVariants[K]) {
     store.commit(s => { s.toolVariants = { ...s.toolVariants, [tool]: variant }; }, { recompute: false, render: false });
@@ -800,6 +860,7 @@ function onCopy() {
     ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 }
 function finishAuthoredInput() {
+    onRecipeCommit();
     finishKeyboardMove();
     gestureInputs.finish();
     clearExecutingAction();
@@ -1052,13 +1113,15 @@ async function onSave() {
 async function onLoad() {
     ui.setDocumentError(null);
     let loaded: LoadedFile | null;
+    let selectionBehaviorChanged = false;
     try {
-        loaded = await loadFromFile();
+        loaded = await loadFromFile(() => { selectionBehaviorChanged = true; });
     } catch (error) {
         ui.setDocumentError(error instanceof Error ? error.message : "Invalid pattern file.");
         return;
     }
     if (!loaded) return;
+    if (selectionBehaviorChanged) ui.setDocumentNotice("Saved selection transforms were converted: Circle uses chosen turns; Mirror composes its types. Pattern stitches and colours are unchanged.");
     if (sameProject(loaded)) {
         closeAbout();
         return;
@@ -1331,6 +1394,8 @@ const ui: UIHandle = mountUI({
     onActivateRecipe,
     onDeleteRecipe,
     onRecipeChange,
+    onRecipeCommit,
+    onRecipeRevert,
     onApplyRecipe,
     onTransformPopoverToggle,
     onReplicateSelection,
@@ -1462,6 +1527,17 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 return;
             }
         }
+        const recipe = activeGridRecipe(store.state);
+        if (recipe && (store.state.activeTool === "select" || store.state.activeTool === "wand") && !rs.previewRepeatGuides) {
+            const frac = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
+            const hit = selectionTransformHandles(recipe, viewport.view.zoom, rs.visualRotation).find(handle =>
+                Math.hypot(frac.x - handle.x, frac.y - handle.y) < editableMirrorTolerance());
+            if (hit) {
+                viewport.canvas.style.cursor = "grabbing";
+                gesture = { kind: "recipe-drag", id: recipe.id, handle: hit, preRecipes: store.state.recipes };
+                return;
+            }
+        }
         const action = resolveToolInput(store.state.activeTool, store.state.toolVariants, store.state.primaryColor, { button, ...mods });
         showExecutingAction(action);
         const tool = action.kind === "paint" ? action.tool : action.kind;
@@ -1576,6 +1652,30 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             }
             return;
         }
+        if (gesture.kind === "recipe-drag") {
+            const g = gesture;
+            const recipe = store.state.recipes.find(value => value.id === g.id)!;
+            const frac = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
+            if (g.handle.kind === "column" || g.handle.kind === "row") {
+                const updated = withGridStep(recipe, g.handle.kind, {
+                    x: frac.x - g.handle.offsetX - recipe.source.x, y: frac.y - g.handle.offsetY - recipe.source.y,
+                });
+                onRecipeChange(g.id, updated, true);
+            } else {
+                let x = snapHalf(frac.x - 0.5), y = snapHalf(frac.y - 0.5);
+                const needsParity = recipe.mode === "circle" ? recipe.rotationTurns.some(turn => turn !== 180)
+                    : recipe.mirrorTypes.some(type => type === "D1" || type === "D2");
+                if (needsParity && !Number.isInteger(x - y)) {
+                    const options = [{ x: x - 0.5, y }, { x: x + 0.5, y }, { x, y: y - 0.5 }, { x, y: y + 0.5 }];
+                    options.sort((a, b) => (a.x - (frac.x - 0.5)) ** 2 + (a.y - (frac.y - 0.5)) ** 2
+                        - (b.x - (frac.x - 0.5)) ** 2 - (b.y - (frac.y - 0.5)) ** 2);
+                    ({ x, y } = options[0]);
+                }
+                onRecipeChange(g.id, recipe.mode === "circle" ? { rotationCentreX: x, rotationCentreY: y }
+                    : { mirrorCentreX: x, mirrorCentreY: y }, true);
+            }
+            return;
+        }
         if (gesture.kind === "mirror-drag") {
             const frac = screenToPatternFrac(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
@@ -1669,6 +1769,12 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             ui.setCanvasFeedback(null);
             return;
         }
+        if (gesture.kind === "recipe-drag") {
+            gesture = null;
+            onRecipeCommit();
+            viewport.canvas.style.cursor = "";
+            return;
+        }
         if (gesture.kind === "mirror-drag") {
             const g = gesture;
             const moved = !mirrorsEqual(g.preMirrors, store.state.mirrors);
@@ -1722,6 +1828,13 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 s.recipes = preRecipes;
                 s.activeRecipeId = preActiveRecipeId;
             });
+            return;
+        }
+        if (gesture.kind === "recipe-drag") {
+            const { preRecipes } = gesture;
+            gesture = null; recipeEditBaseline = null;
+            store.commit(s => { s.recipes = preRecipes; }, { recompute: false });
+            refreshRecipeUi(); viewport.canvas.style.cursor = "";
             return;
         }
         if (gesture.kind === "mirror-drag") {
@@ -1975,6 +2088,7 @@ ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
 ui.setRecoveryStatus(saved ? "recovered" : "saved");
+if (selectionMigrationNotice) ui.setDocumentNotice("Recovered selection transforms were converted: Circle uses chosen turns; Mirror composes its types. Pattern stitches and colours are unchanged.");
 ui.setCrochetErrors(crochetErrorCount());
 
 if (saved) {
@@ -1983,7 +2097,6 @@ if (saved) {
         ui.getCanvasWorkspace(),
     );
     refreshSymmetryUi();
-    historyEnsureInitialized(store.state);
     renderCanvas();
 } else {
     const { pattern, pixels } = applyEditSettings();

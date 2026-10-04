@@ -36,6 +36,46 @@ pub const MAX_SYMMETRY_ORBIT_CELLS: usize = 1_048_576;
 pub const MAX_REPEAT_POSITIONS: usize = 4_096;
 pub const MAX_TRANSFORM_CLAIMS: usize = 1_048_576;
 
+// A shared centre has at most eight orientations. Local selection copies must
+// retain orientations whose intermediate reflections lie outside the chart.
+pub fn centered_transform_placements(x: f64, y: f64, kinds: &[u8]) -> Vec<[f64; 6]> {
+    let generators: Vec<[i8; 4]> = kinds
+        .iter()
+        .map(|kind| match *kind as i32 {
+            KIND_V => [-1, 0, 0, 1],
+            KIND_H => [1, 0, 0, -1],
+            KIND_C => [-1, 0, 0, -1],
+            KIND_D1 => [0, 1, 1, 0],
+            KIND_D2 => [0, -1, -1, 0],
+            _ => panic!("unsupported centred transform"),
+        })
+        .collect();
+    let mut orientations = vec![[1_i8, 0, 0, 1]];
+    let mut index = 0;
+    while index < orientations.len() {
+        let m = orientations[index];
+        for g in &generators {
+            let next = [
+                g[0] * m[0] + g[1] * m[2],
+                g[0] * m[1] + g[1] * m[3],
+                g[2] * m[0] + g[3] * m[2],
+                g[2] * m[1] + g[3] * m[3],
+            ];
+            if !orientations.contains(&next) {
+                orientations.push(next);
+            }
+        }
+        index += 1;
+    }
+    orientations
+        .iter()
+        .map(|m| {
+            let [a, b, c, d] = m.map(f64::from);
+            [a, b, c, d, x - a * x - b * y, y - c * x - d * y]
+        })
+        .collect()
+}
+
 // Keep cap tests cheap while exercising the same production branch.
 #[cfg(test)]
 const EFFECTIVE_ORBIT_LIMIT: usize = 4;
@@ -923,6 +963,78 @@ pub fn cut_to_natural_round(
 // ─────────────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn centered_axis_and_diagonal_have_eight_distinct_off_axis_destinations() {
+        let placements = super::centered_transform_placements(2.0, 2.0, &[0, 3]);
+        let mut destinations: Vec<_> = placements
+            .iter()
+            .map(|m| {
+                (
+                    (m[0] * 3.0 + m[1] * 4.0 + m[4]) as i32,
+                    (m[2] * 3.0 + m[3] * 4.0 + m[5]) as i32,
+                )
+            })
+            .collect();
+        destinations.sort();
+        assert_eq!(
+            destinations,
+            vec![
+                (0, 1),
+                (0, 3),
+                (1, 0),
+                (1, 4),
+                (3, 0),
+                (3, 4),
+                (4, 1),
+                (4, 3)
+            ]
+        );
+    }
+    #[test]
+    fn centered_mirrors_close_outside_chart_bounds() {
+        let placements = super::centered_transform_placements(-0.5, -0.5, &[0, 3]);
+        let mut destinations: Vec<_> = placements
+            .iter()
+            .map(|m| {
+                (
+                    (m[0] * 3.0 + m[1] * 3.0 + m[4]) as i32,
+                    (m[2] * 3.0 + m[3] * 3.0 + m[5]) as i32,
+                )
+            })
+            .collect();
+        destinations.sort();
+        destinations.dedup();
+        assert_eq!(destinations, vec![(-4, -4), (-4, 3), (3, -4), (3, 3)]);
+    }
+
+    #[test]
+    fn centered_vertical_and_horizontal_include_composed_point_symmetry() {
+        let placements = super::centered_transform_placements(2.0, 2.0, &[0, 1]);
+        let mut destinations: Vec<_> = placements
+            .iter()
+            .map(|m| {
+                (
+                    (m[0] * 3.0 + m[1] * 4.0 + m[4]) as i32,
+                    (m[2] * 3.0 + m[3] * 4.0 + m[5]) as i32,
+                )
+            })
+            .collect();
+        destinations.sort();
+        assert_eq!(destinations, vec![(1, 0), (1, 4), (3, 0), (3, 4)]);
+    }
+
+    #[test]
+    fn centered_diagonals_preserve_half_integer_lattice_and_point_meaning() {
+        let placements = super::centered_transform_placements(2.5, 3.5, &[3, 4, 2]);
+        assert_eq!(placements.len(), 4);
+        assert!(
+            placements
+                .iter()
+                .all(|m| m[4].fract() == 0.0 && m[5].fract() == 0.0)
+        );
+        let point = super::centered_transform_placements(2.5, 3.5, &[2]);
+        assert_eq!(point[1], [-1.0, 0.0, 0.0, -1.0, 5.0, 7.0]);
+    }
     use super::*;
     use crate::common::{COLOR_A, COLOR_B, get_color_index, get_round_from_edge};
 

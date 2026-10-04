@@ -45,7 +45,7 @@ test.each([3, 4])("supported v%s files migrate losslessly and round-trip center 
     expect(loaded.recipes[0]).toMatchObject({ id: recipe.id, rowMirrorVertical: true,
         source: { x: 1, y: 1, w: 2, h: 2, mask: new Uint8Array([1, 0, 0, 1]) } });
     expect(decodeMcw(encodeMcw(loaded))).toEqual(loaded);
-    expect(JSON.parse(encodeMcw(loaded))).toMatchObject({ version: 5, mirrors: loaded.mirrors });
+    expect(JSON.parse(encodeMcw(loaded))).toMatchObject({ version: 6, mirrors: loaded.mirrors });
     expect(JSON.parse(encodeMcw(loaded))).not.toHaveProperty("axes");
 });
 

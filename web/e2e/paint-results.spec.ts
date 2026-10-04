@@ -34,7 +34,7 @@ test("Overlay rotates its edited supporting pixel with a saved selection", async
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 1, 2);
-    await page.locator("label:has(#recipe-mode-rotation)").click();
+    await page.locator("label:has(#recipe-mode-circle)").click();
     await page.locator("#recipe-centre-x").fill("2");
     await page.locator("#recipe-centre-y").fill("2");
     await page.locator("label:has(#recipe-turn-90)").click();

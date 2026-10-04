@@ -7,6 +7,25 @@ use mosaic_crochet_core::{common, export, pattern, tools, walk};
 use ndarray::Array2;
 use wasm_bindgen::prelude::*;
 
+#[wasm_bindgen]
+pub fn centered_transform_placements(x: f64, y: f64, kinds: &[u8]) -> Vec<f64> {
+    tools::centered_transform_placements(x, y, kinds)
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+#[cfg(test)]
+mod centered_placement_tests {
+    #[test]
+    fn flat_records_preserve_affine_order_and_half_cell_centre() {
+        assert_eq!(
+            super::centered_transform_placements(2.5, 3.5, &[0]),
+            vec![1.0, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 5.0, 0.0]
+        );
+    }
+}
+
 // ─── Plan record format ───────────────────────────────────────────────────────
 // `build_highlight_plan_*` returns a flat `Int16Array` with stride 4:
 //   [type, dir, wrong_x, wrong_y, ...]

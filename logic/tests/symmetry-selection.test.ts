@@ -140,29 +140,44 @@ describe("replicateSelection", () => {
 
 });
 
+test("local stamp settles an accepted held input before reading the committed source", () => {
+    const float = makeFloat([{ x: 0, y: 1, v: 2 }]);
+    const recipe = { ...gridRecipeFromFloat(float), right: 1 };
+    const store = new Store(rowSession(5, 3, { pixels: filledPixels(5, 3, 1), float,
+        recipes: [recipe], activeRecipeId: recipe.id }));
+    const settle = vi.fn(() => {
+        const moved = makeFloat([{ x: 2, y: 1, v: 2 }]);
+        store.commit(s => { s.float = moved; s.recipes = [{ ...recipe, source: { ...recipe.source, x: 2 } }]; });
+    });
+    expect(applyGridRecipe(store, settle)).toBe("applied");
+    expect(settle).toHaveBeenCalledOnce();
+    expect(store.state.pixels[5 + 3]).toBe(2);
+    expect(store.state.pixels[5 + 1]).toBe(1);
+});
+
 describe("saved recipe lifecycle", () => {
-    test("apply ignores transform conflicts that only land outside the chart", () => {
+    test("apply ignores off-chart conflicts and keeps the chart unchanged", () => {
         const source = makeFloat([
             { x: 0, y: 0, v: 1 },
-            { x: 0, y: 1, v: 2 },
+            { x: 0, y: 2, v: 2 },
+            { x: 0, y: 3, v: 1 },
         ]);
         const recipe = gridRecipeFromFloat(source);
         Object.assign(recipe, {
-            mode: "rotation",
-            rotationCentreX: 1.5,
-            rotationCentreY: 0.5,
-            rotationTurns: [180, 270],
-            mirrorHorizontal: true,
+            mode: "circle",
+            rotationCentreX: 0,
+            rotationCentreY: 1,
+            rotationTurns: [90, 270],
         });
-        const store = new Store(rowSession(2, 3, {
-            pixels: filledPixels(2, 3, 2),
+        const store = new Store(rowSession(1, 4, {
+            pixels: filledPixels(1, 4, 2),
             float: source,
             recipes: [recipe],
             activeRecipeId: recipe.id,
         }));
 
-        expect(applyGridRecipe(store)).toBe("applied");
-        expect(store.state.pixels[2 * 2 + 1]).toBe(1);
+        expect(applyGridRecipe(store)).toBe("unchanged");
+        expect(store.state.pixels).toEqual(filledPixels(1, 4, 2));
     });
 
     test("apply clips destinations outside the chart instead of rejecting valid instances", () => {

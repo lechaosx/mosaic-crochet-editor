@@ -102,7 +102,7 @@ describe("historySave / historyReset", () => {
         expect(historyPeek()!.dangerColorOverride).toBeUndefined();
         expect(historyPeek()!.accentColorOverride).toBeUndefined();
         expect(historyRedo()).toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: null });
-        expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(7);
+        expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(8);
     });
 
     test("saved recipes are part of history and survive undo", () => {
@@ -138,6 +138,10 @@ describe("historySave / historyReset", () => {
         historyReset(rowSession(3, 3));
         const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
         raw.snapshots[0].transforms.recipes = [{ id: "bad" }];
+        raw.version = 7;
+        for (const recipe of raw.snapshots[0].transforms.recipes ?? []) {
+            delete recipe.mirrorCentreX; delete recipe.mirrorCentreY; delete recipe.mirrorTypes;
+        }
         localStorage.setItem("mosaic-history", JSON.stringify(raw));
 
         expect(historyPeek()!.recipes).toHaveLength(1);
@@ -157,6 +161,10 @@ describe("historySave / historyReset", () => {
         delete stored.rotationCentreX;
         delete stored.rotationCentreY;
         delete stored.rotationTurns;
+        raw.version = 7;
+        for (const recipe of raw.snapshots[0].transforms.recipes ?? []) {
+            delete recipe.mirrorCentreX; delete recipe.mirrorCentreY; delete recipe.mirrorTypes;
+        }
         localStorage.setItem("mosaic-history", JSON.stringify(raw));
 
         expect(historyPeek()!.recipes[0]).toMatchObject({
@@ -169,15 +177,15 @@ describe("historySave / historyReset", () => {
         });
     });
 
-    test("history normalizes distinct legacy alternate gaps", () => {
+    test("history retains alternate gaps in current records", () => {
         const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
         recipe.columnSpacingAlternate = 7;
         recipe.rowSpacingAlternate = 8;
         historyReset(rowSession(3, 3, { recipes: [recipe] }));
 
         expect(historyPeek()!.recipes[0]).toMatchObject({
-            columnSpacingAlternate: 0,
-            rowSpacingAlternate: 0,
+            columnSpacingAlternate: 7,
+            rowSpacingAlternate: 8,
         });
     });
 

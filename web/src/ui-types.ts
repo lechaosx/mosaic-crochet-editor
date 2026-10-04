@@ -25,7 +25,9 @@ export interface UICallbacks {
     onCreateRecipe:    () => void;
     onActivateRecipe:  (id: string) => void;
     onDeleteRecipe:    (id: string) => void;
-    onRecipeChange:    (id: string, change: Partial<GridRecipe>) => void;
+    onRecipeChange:    (id: string, change: Partial<GridRecipe>, preview?: boolean) => boolean;
+    onRecipeCommit:    () => void;
+    onRecipeRevert:    () => void;
     onApplyRecipe:     () => void;
     onTransformPopoverToggle: (open: boolean) => void;
     onReplicateSelection: () => void;
@@ -73,6 +75,7 @@ export interface UIHandle {
     setCrochetErrors:   (count: number) => void;
     setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
     setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
+    setDocumentNotice:  (message: string) => void;
     getCanvasWorkspace: () => CanvasWorkspace;
     setViewState:       (rotation: number, navigating: boolean) => void;
     setEditError:       (message: string | null) => void;

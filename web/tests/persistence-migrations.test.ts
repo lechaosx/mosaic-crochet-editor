@@ -47,7 +47,7 @@ describe("browser persistence migrations", () => {
         expect(restored!.float).toEqual(session.float);
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        expect(migrated.version).toBe(8);
+        expect(migrated.version).toBe(9);
         expect(migrated.document).toMatchObject({ state: session.pattern, colorA: session.colorA, colorB: session.colorB });
         expect(migrated.workspace).toMatchObject({
             mirrors: migrateAxes([valid], session.pattern),
@@ -84,8 +84,8 @@ describe("browser persistence migrations", () => {
         });
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-history")!);
-        expect(migrated.version).toBe(7);
-        expect(migrated.snapshots[0]).toEqual({
+        expect(migrated.version).toBe(8);
+        expect(migrated.snapshots[0]).toMatchObject({
             document: {
                 state: session.pattern,
                 pixels: packPixels(session.pixels),
@@ -95,6 +95,8 @@ describe("browser persistence migrations", () => {
             selection: null,
             transforms: { mirrors: migrateAxes(axes, session.pattern) },
         });
+        expect(migrated.snapshots[0].transforms.recipes).toHaveLength(1);
+        expect(migrated.snapshots[0].transforms.recipes[0].source.mask).toEqual([]);
         expect(localStorage.getItem("mosaic-history-v4")).toBeNull();
     });
 

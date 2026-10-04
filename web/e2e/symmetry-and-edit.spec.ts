@@ -203,15 +203,14 @@ test("whole-selection mirror copies apply around the transformation centre", asy
     await clickCell(page, 3, 2);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await dragCells(page, 2, 2, 3, 2);
-    await page.locator("label:has(#recipe-mode-rotation)").click();
-    await page.locator("#recipe-centre-x").fill("4");
-    await page.locator("#recipe-centre-y").fill("3");
-    await page.locator("#recipe-mirror-horizontal").check();
-    await page.locator("#recipe-mirror-vertical").check();
-    await page.locator("#recipe-mirror-vertical").dispatchEvent("change");
+    await page.locator("label:has(#recipe-mode-mirror)").click();
+    await page.locator("#recipe-mirror-centre-x").fill("4");
+    await page.locator("#recipe-mirror-centre-y").fill("3");
+    await page.locator("#recipe-mirror-v").check();
+    await page.locator("#recipe-mirror-h").check();
     await page.locator("#recipe-apply").click();
 
-    for (const [x, y] of [[2, 2], [3, 2], [5, 2], [6, 2], [2, 4], [3, 4]] as const) {
+    for (const [x, y] of [[2, 2], [3, 2], [5, 2], [6, 2], [2, 4], [3, 4], [5, 4], [6, 4]] as const) {
         const cell = await cellCoord(page, x, y);
         expect(await pixelRGB(page, cell.cx, cell.cy), `${x},${y}`).toEqual([0, 0, 0]);
     }
@@ -285,7 +284,7 @@ test("rotation repeat applies selected quarters and live drawing from an instanc
     await clickCell(page, 5, 3);
     await page.locator("#recipe-right").fill("2");
     await page.locator("#recipe-right").dispatchEvent("change");
-    await page.locator("label:has(#recipe-mode-rotation)").click();
+    await page.locator("label:has(#recipe-mode-circle)").click();
     await page.locator("#recipe-centre-x").fill("4");
     await page.locator("#recipe-centre-y").fill("3");
     for (const turn of [90, 180, 270]) await page.locator(`label:has(#recipe-turn-${turn})`).click();
@@ -360,14 +359,14 @@ test("rejected saved-repeat values, modes, and turns return controls to stored s
     await expect(page.locator("#recipe-error")).toContainText(/counts/i);
     await expect(left).toHaveValue("0");
 
-    await page.locator("#recipe-mode-rotation").evaluate(input => { input.value = "unsupported"; });
-    await page.locator("label:has(#recipe-mode-rotation)").click();
+    await page.locator("#recipe-mode-circle").evaluate(input => { input.value = "unsupported"; });
+    await page.locator("label:has(#recipe-mode-circle)").click();
     await expect(page.locator("#recipe-error")).toContainText(/mode/i);
     await expect(page.locator("#recipe-mode-grid")).toBeChecked();
-    await expect(page.locator("#recipe-mode-rotation")).not.toBeChecked();
+    await expect(page.locator("#recipe-mode-circle")).not.toBeChecked();
 
-    await page.locator("#recipe-mode-rotation").evaluate(input => { input.value = "rotation"; });
-    await page.locator("label:has(#recipe-mode-rotation)").click();
+    await page.locator("#recipe-mode-circle").evaluate(input => { input.value = "circle"; });
+    await page.locator("label:has(#recipe-mode-circle)").click();
     await page.locator("#recipe-centre-x").fill("2.5");
     await page.locator("#recipe-centre-x").dispatchEvent("change");
     await page.locator("label:has(#recipe-turn-180)").click();
@@ -377,7 +376,7 @@ test("rejected saved-repeat values, modes, and turns return controls to stored s
     const stored = await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0],
     );
-    expect(stored).toMatchObject({ left: 0, mode: "rotation", rotationTurns: [] });
+    expect(stored).toMatchObject({ left: 0, mode: "circle", rotationTurns: [] });
 });
 
 test("live paint keeps a packed repeat that lands in a sparse source hole", async ({ page }) => {
@@ -773,11 +772,11 @@ test("Load rejects a future file without replacing the active session", async ({
     await chooser.setFiles({
         name: "future.mcw",
         mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify({ version: 6 })),
+        buffer: Buffer.from(JSON.stringify({ version: 7 })),
     });
 
     const alert = page.getByRole("alert");
-    await expect(alert).toContainText("This pattern uses unsupported .mcw version 6.");
+    await expect(alert).toContainText("This pattern uses unsupported .mcw version 7.");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
 
     await page.setViewportSize({ width: 360, height: 740 });

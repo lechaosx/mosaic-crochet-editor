@@ -150,6 +150,10 @@ input  { font: inherit; color: inherit; }
   border: 1px solid var(--danger);
   border-radius: var(--radius-1);
 }
+.document-notice {
+  background: var(--bg-1);
+  border-color: var(--fg-2);
+}
 
 .workspace {
   position: relative;

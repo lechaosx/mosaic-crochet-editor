@@ -118,9 +118,23 @@ export function mountToolbar(
     let documentErrorReturn: "load" | "save" = "load";
     function setDocumentError(message: string | null, returnTo: "load" | "save" = "load") {
         const error = el("document-error");
+        error.setAttribute("role", "alert");
+        error.classList.remove("document-notice");
+        const dismiss = el("document-error-dismiss");
+        dismiss.setAttribute("aria-label", "Dismiss document error");
+        dismiss.title = "Dismiss document error";
         if (message !== null) documentErrorReturn = returnTo;
         el("document-error-message").textContent = message ?? "";
         error.hidden = message === null;
+    }
+    function setDocumentNotice(message: string) {
+        setDocumentError(message);
+        const notice = el("document-error");
+        notice.setAttribute("role", "status");
+        notice.classList.add("document-notice");
+        const dismiss = el("document-error-dismiss");
+        dismiss.setAttribute("aria-label", "Dismiss document notice");
+        dismiss.title = "Dismiss document notice";
     }
     el("document-error-dismiss").addEventListener("click", () => {
         setDocumentError(null);
@@ -149,7 +163,7 @@ export function mountToolbar(
 
     mountToolbarLayout();
 
-    return { setTool, setToolVariants, setExecutingAction, setCanvasFeedback, setHistory, setRecoveryStatus, setDocumentError, setViewState };
+    return { setTool, setToolVariants, setExecutingAction, setCanvasFeedback, setHistory, setRecoveryStatus, setDocumentError, setDocumentNotice, setViewState };
 }
 // ─── Toolbar layout ──────────────────────────────────────────────────────────
 function mountToolbarLayout() {

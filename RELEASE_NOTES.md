@@ -4,10 +4,10 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 4 October 2026
 
+- Saved selections choose None, Grid, Circle, or Mirror while retaining their settings, with precise previews, canvas handles, clearer source/copy outlines, and disclosed conversion of older transform behavior.
 - Rectangle, Wand, Move, and Overlay remember their chosen actions in accessible tool menus; mouse buttons and modifiers provide temporary actions with visible tool and yarn feedback.
-- Fit keeps large charts centred with editable edge cells clear of overlay panels.
+- Fit keeps large charts centred and editable around overlay panels; rejected files explain the error without moving the view.
 - Global mirrors combine independent types around editable centres, with precise coordinates, centre handles, and compatible recovery of older mirror definitions.
-- Rejected project files explain the error without moving the current chart view.
 
 ## 3 October 2026
 

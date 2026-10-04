@@ -1,3 +1,5 @@
+import { centered_transform_placements } from "@mosaic/wasm";
+
 export const MAX_REPEAT_POSITIONS = 4_096;
 export const MAX_TRANSFORM_CLAIMS = 1_048_576;
 
@@ -60,6 +62,44 @@ export interface PackedGridEvaluation {
 export interface TransformPlacement {
     map: (cell: TransformSourceCell) => TransformSourceCell;
     unmap: (cell: TransformSourceCell) => TransformSourceCell;
+}
+
+export function evaluateCenteredMirrors(
+    source: ReadonlyArray<TransformSourceCell>, x: number, y: number, kinds: Uint8Array,
+): PackedGridEvaluation {
+    const matrices = centered_transform_placements(x, y, kinds);
+    const placements: TransformPlacement[] = [];
+    for (let i = 0; i < matrices.length; i += 6) {
+        const [a, b, c, d, tx, ty] = matrices.slice(i, i + 6);
+        placements.push({
+            map: cell => ({ x: safeAdd(safeAdd(a * cell.x, b * cell.y), tx),
+                y: safeAdd(safeAdd(c * cell.x, d * cell.y), ty) }),
+            unmap: cell => {
+                const dx = safeSubtract(cell.x, tx), dy = safeSubtract(cell.y, ty);
+                return { x: safeAdd(a * dx, c * dy), y: safeAdd(b * dx, d * dy) };
+            },
+        });
+    }
+    if (source.length > Math.floor(MAX_TRANSFORM_CLAIMS / placements.length)) {
+        throw new RangeError("Selection cannot exceed 1,048,576 transform claims.");
+    }
+    const claims = new Map<string, CellClaim>();
+    const instances = placements.map(placement => source.map((cell, sourceIndex) => {
+        const mapped = placement.map(cell);
+        addClaim(claims, mapped.x, mapped.y, sourceIndex);
+        return { ...mapped, sourceIndex };
+    }));
+    const ordered = [...claims.values()].sort((a, b) => a.y - b.y || a.x - b.x);
+    return { source, placements, instances,
+        columnStep: { x: 0, y: 0 }, columnStepAlternate: { x: 0, y: 0 },
+        rowStep: { x: 0, y: 0 }, rowStepAlternate: { x: 0, y: 0 },
+        cells: ordered.filter(claim => claim.sourceIndices.size === 1).map(claim => ({
+            x: claim.x, y: claim.y, sourceIndex: claim.sourceIndices.values().next().value!,
+        })),
+        conflicts: ordered.filter(claim => claim.sourceIndices.size > 1).map(claim => ({
+            x: claim.x, y: claim.y, sourceIndices: [...claim.sourceIndices].sort((a, b) => a - b),
+        })),
+    };
 }
 
 export function evaluatePackedGrid(

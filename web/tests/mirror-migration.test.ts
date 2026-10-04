@@ -39,7 +39,7 @@ test.each([4, 5, 6, 7])("recovery v%s preserves authored and workspace data whil
     if (version >= 6) expect(loaded).toMatchObject({ dangerColorOverride: "#fedcba", accentColorOverride: "#123456" });
     if (version === 7) expect(loaded.toolVariants).toEqual(workspace.toolVariants);
     const migrated = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-    expect(migrated.version).toBe(8);
+    expect(migrated.version).toBe(9);
     expect(migrated.workspace.mirrors).toEqual(mirrors);
     expect(migrated.workspace).not.toHaveProperty("axes");
 });
@@ -62,6 +62,6 @@ test.each([undefined, 5, 6])("history v%s preserves axis identity and authored s
         expect(historyPeek()!.activeRecipeId).toBe(recipe.id);
         expect(historyPeek()!).toMatchObject({ dangerColorOverride: null, accentColorOverride: "#abcdef" });
     }
-    expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(7);
+    expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(8);
     expect(JSON.parse(localStorage.getItem("mosaic-history")!).snapshots[0].transforms).not.toHaveProperty("axes");
 });

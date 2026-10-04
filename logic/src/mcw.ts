@@ -1,10 +1,10 @@
 import { assertPatternDimensions } from "./pattern";
 import { b64ToU8, packPixels, u8ToB64, unpackPixels } from "./storage";
 import { axisIsProjectValid, migrateAxes, mirrorIsProjectValid, readMirrorRecords } from "./symmetry";
-import { emptyGridRecipe, gridRecipeError } from "./grid-recipes";
+import { emptyGridRecipe, legacySelectionBehaviorChanged, restoreGridRecipes } from "./grid-recipes";
 import type { Axis, MirrorCenter, GridRecipe, PatternState } from "./types";
 
-export const MCW_VERSION = 5;
+export const MCW_VERSION = 6;
 
 // This is the complete editable project boundary. Workspace controls,
 // selection state, app preferences, and history deliberately stay outside it.
@@ -27,8 +27,8 @@ interface McwV2 {
     colorB:  string;
 }
 
-interface McwV5 extends Omit<McwV2, "version"> {
-    version: 5;
+interface McwV6 extends Omit<McwV2, "version"> {
+    version: 6;
     mirrors: MirrorCenter[];
     recipes?: unknown[];
     dangerColorOverride?: string;
@@ -54,71 +54,26 @@ function unpackMask(source: string, length: number): Uint8Array {
 }
 
 function readRecipes(value: unknown, legacy = false): GridRecipe[] {
-    if (value === undefined) return [emptyGridRecipe()];
+    if (value === undefined && legacy) return [emptyGridRecipe()];
     if (!Array.isArray(value)) throw invalidFile();
-    const ids = new Set<string>();
-    const recipes = value.map(item => {
-        if (!isRecord(item) || !isRecord(item.source) || typeof item.id !== "string" || ids.has(item.id)
-            || typeof item.enabled !== "boolean" || typeof item.source.x !== "number"
-            || typeof item.source.y !== "number" || typeof item.source.w !== "number"
-            || typeof item.source.h !== "number" || typeof item.source.mask !== "string") throw invalidFile();
-        ids.add(item.id);
-        if (!Number.isSafeInteger(item.source.w) || !Number.isSafeInteger(item.source.h)
+    const decoded = value.map(item => {
+        if (!isRecord(item) || !isRecord(item.source) || typeof item.source.mask !== "string"
+            || typeof item.source.w !== "number" || typeof item.source.h !== "number"
+            || !Number.isSafeInteger(item.source.w) || !Number.isSafeInteger(item.source.h)
             || item.source.w < 0 || item.source.h < 0
             || (item.source.w === 0) !== (item.source.h === 0)) throw invalidFile();
-        const number = (key: string) => {
-            if (typeof item[key] !== "number") throw invalidFile();
-            return item[key] as number;
-        };
-        const optionalNumber = (key: string, fallback: number) => {
-            if (item[key] === undefined) return fallback;
-            return number(key);
-        };
-        const boolean = (key: string) => {
-            if (typeof item[key] !== "boolean") throw invalidFile();
-            return item[key] as boolean;
-        };
-        if (legacy && [item.columnOrientation, item.rowOrientation]
-            .some(value => value !== "same" && value !== "alternate-mirrored")) throw invalidFile();
-        let mask: Uint8Array;
-        try { mask = unpackMask(item.source.mask, item.source.w * item.source.h); }
-        catch { throw invalidFile(); }
-        const columnSpacing = number("columnSpacing");
-        const rowSpacing = number("rowSpacing");
-        const mode = item.mode ?? "grid";
-        if (mode !== "grid" && mode !== "rotation") throw invalidFile();
-        const rotationTurns = item.rotationTurns ?? [];
-        if (!Array.isArray(rotationTurns)
-            || rotationTurns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) throw invalidFile();
-        if ((item.mirrorHorizontal !== undefined && typeof item.mirrorHorizontal !== "boolean")
-            || (item.mirrorVertical !== undefined && typeof item.mirrorVertical !== "boolean")) throw invalidFile();
-        const recipe: GridRecipe = {
-            id: item.id, enabled: true,
-            source: { x: item.source.x, y: item.source.y, w: item.source.w, h: item.source.h, mask },
-            mode,
-            left: number("left"), right: number("right"), up: number("up"), down: number("down"),
-            columnSpacing, rowSpacing,
-            columnSpacingAlternate: columnSpacing,
-            rowSpacingAlternate: rowSpacing,
-            columnOffset: number("columnOffset"), rowOffset: number("rowOffset"),
-            columnMirrorHorizontal: legacy ? item.columnOrientation === "alternate-mirrored" : boolean("columnMirrorHorizontal"),
-            columnMirrorVertical: legacy ? false : boolean("columnMirrorVertical"),
-            rowMirrorHorizontal: legacy ? false : boolean("rowMirrorHorizontal"),
-            rowMirrorVertical: legacy ? item.rowOrientation === "alternate-mirrored" : boolean("rowMirrorVertical"),
-            rotationCentreX: optionalNumber("rotationCentreX", item.source.x + (item.source.w - 1) / 2),
-            rotationCentreY: optionalNumber("rotationCentreY", item.source.y + (item.source.h - 1) / 2),
-            rotationTurns: rotationTurns as GridRecipe["rotationTurns"],
-            mirrorHorizontal: item.mirrorHorizontal === undefined ? false : item.mirrorHorizontal === true,
-            mirrorVertical: item.mirrorVertical === undefined ? false : item.mirrorVertical === true,
-        };
-        if (gridRecipeError(recipe) !== null) throw invalidFile();
-        return recipe;
+        return { ...item, id: item.id, source: { ...item.source,
+            mask: Array.from(unpackMask(item.source.mask, item.source.w * item.source.h)) } };
     });
-    return recipes.length > 0 ? recipes : [emptyGridRecipe()];
+    const recipes = restoreGridRecipes(decoded, legacy);
+    if (decoded.some((value, index) => value.id !== recipes[index]?.id)
+        || (value.length !== recipes.length && value.length !== 0)) throw invalidFile();
+    if (!legacy && recipes.length === 0) throw invalidFile();
+    return recipes;
 }
 
-function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV5["recipes"] {
-    const checked = readRecipes(recipes.map(recipe => ({ ...recipe, source: {
+function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV6["recipes"] {
+    const checked = readRecipes((recipes.length ? recipes : [emptyGridRecipe()]).map(recipe => ({ ...recipe, source: {
         ...recipe.source,
         mask: packMask(recipe.source.mask),
     } })));
@@ -187,7 +142,7 @@ export function encodeMcw(document: Readonly<ProjectDocument>): string {
     }
     const mirrors = readMirrorRecords(document.mirrors);
     if (!mirrors || !mirrors.every(mirror => mirrorIsProjectValid(mirror, document.pattern))) throw invalidFile();
-    const file: McwV5 = {
+    const file: McwV6 = {
         version: MCW_VERSION,
         state: document.pattern,
         pixels: packPixels(document.pixels),
@@ -204,6 +159,10 @@ export function encodeMcw(document: Readonly<ProjectDocument>): string {
 }
 
 export function decodeMcw(source: string): ProjectDocument {
+    return decodeMcwWithMigration(source).project;
+}
+
+export function decodeMcwWithMigration(source: string): { project: ProjectDocument; selectionBehaviorChanged: boolean } {
     let parsed: unknown;
     try {
         parsed = JSON.parse(source);
@@ -214,7 +173,7 @@ export function decodeMcw(source: string): ProjectDocument {
     if (typeof parsed.version === "number" && Number.isInteger(parsed.version) && parsed.version > MCW_VERSION) {
         throw new Error(`This pattern uses unsupported .mcw version ${parsed.version}.`);
     }
-    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4 && parsed.version !== MCW_VERSION) throw invalidFile();
+    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4 && parsed.version !== 5 && parsed.version !== MCW_VERSION) throw invalidFile();
 
     const common = readCommon(parsed);
     const expectedLength = common.pattern.canvasWidth * common.pattern.canvasHeight;
@@ -223,18 +182,18 @@ export function decodeMcw(source: string): ProjectDocument {
             || !parsed.pixels.every(pixel => Number.isInteger(pixel) && pixel >= 0 && pixel <= 2)) {
             throw invalidFile();
         }
-        return {
+        return { project: {
             ...common, pixels: new Uint8Array(parsed.pixels), mirrors: [], recipes: [emptyGridRecipe()],
             dangerColorOverride: null, accentColorOverride: null,
-        };
+        }, selectionBehaviorChanged: false };
     }
     if (typeof parsed.pixels !== "string") throw invalidFile();
     try {
-        const recipes = parsed.version >= 3 ? readRecipes(parsed.recipes, parsed.version === 3) : [emptyGridRecipe()];
-        const mirrors = parsed.version === MCW_VERSION ? readMirrorRecords(parsed.mirrors)
+        const recipes = parsed.version >= 3 ? readRecipes(parsed.recipes, parsed.version < MCW_VERSION) : [emptyGridRecipe()];
+        const mirrors = parsed.version >= 5 ? readMirrorRecords(parsed.mirrors)
             : parsed.version >= 3 ? migrateAxes(readAxes(parsed.axes, common.pattern), common.pattern) : [];
         if (!mirrors || !mirrors.every(mirror => mirrorIsProjectValid(mirror, common.pattern))) throw invalidFile();
-        return {
+        const document: ProjectDocument = {
             ...common,
             pixels: unpackPixels(parsed.pixels, common.pattern),
             mirrors,
@@ -242,6 +201,8 @@ export function decodeMcw(source: string): ProjectDocument {
             dangerColorOverride: parsed.version >= 3 ? readColorOverride(parsed.dangerColorOverride) : null,
             accentColorOverride: parsed.version >= 3 ? readColorOverride(parsed.accentColorOverride) : null,
         };
+        return { project: document,
+            selectionBehaviorChanged: parsed.version < MCW_VERSION && legacySelectionBehaviorChanged(parsed.recipes) };
     } catch {
         throw invalidFile();
     }

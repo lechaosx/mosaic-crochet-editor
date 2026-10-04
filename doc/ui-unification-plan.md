@@ -97,6 +97,14 @@ Selected, executing, focused, unavailable, and invalid are separate states. Use 
 - Keep internal terms such as recipe, float, bitmask, and mask out of product controls and feedback. Retain those terms where they precisely describe internal code.
 - Keep the existing British-English convention for colour and centre. Tooltips carry shortcuts and non-obvious scope rather than repeating the visible label alone.
 
+### Tool density and mirror hierarchy
+
+Grouped tools occupy the same compact icon footprint as ordinary tools. A small variant indication, hold, and keyboard access expose the labelled menu; the chosen action remains identifiable through its icon, tooltip, and accessible description. Do not widen the authoring dock to display variant names.
+
+Global Mirror separates the compact list of centres from the selected centre's settings. Rows identify, select, enable, and delete a centre; only the selected centre exposes position and mirror-type editing. Position, reflection types, and stamping form distinct sections rather than repeating all controls inside every row. Preserve independent types, centre-only canvas editing, focus, precision validation, and undo semantics.
+
+Restore the distinction between directly chosen mirror types and types implied by their composition at that same centre: a softer control state and visually distinct passive guides. Derive this presentation from the authoritative transform closure, not a second reflection implementation. Implied types remain derived; they do not become saved generators, authored actions, or draggable axes. Keep independent explicit toggles and existing clipped global drawing behavior unchanged, and do not infer a common centre across separate records.
+
 ## Orchestrated execution protocol
 
 The top-level agent remains the orchestrator and owns acceptance, scope, cross-chunk consistency, and the execution ledger below. For each implementation chunk:
@@ -229,6 +237,18 @@ Verification: logic selection, repeat evaluator, paint, source mapping, and seri
 
 Acceptance: exactly one active local transformation, understandable editable anchors, consistent history, unchanged migrated pattern content, and disclosed selection-behavior changes.
 
+### 6a. Compact tools and focus the global mirror inspector
+
+Scope: authoring dock and tool-group presentation, global mirror inspector, and directly affected browser flows. This addresses the user's review of the last accepted interface before proceeding to Crochet.
+
+- Give grouped and ordinary tools the same icon-sized footprint, with a subtle clickable variant indication instead of permanent action labels and a second full-width button. Preserve hold, keyboard, chosen/executing feedback, touch use, and menu positioning.
+- Use compact global mirror rows and one selected-centre editor with a deliberate position/type hierarchy. Keep enabled state and row selection distinct; inactive centres remain editable.
+- Restore softer implied-type controls and distinguish implied guides from explicitly chosen axes around each centre. Preserve explicit choices and existing transform output; the derived state must disappear when its generators are removed and never enter files or history.
+- Preserve paired-coordinate validation, centre handles, gesture settlement, lossless persistence, and Stamp copies' existing global scope.
+- Verify representative desktop, phone, enlarged-text, reduced-motion, and high-contrast views visually. Pin preserved interaction and focus outcomes through browser tests rather than private style or subjective pixel assertions.
+
+Acceptance: a narrow tool dock, recognizable variant tools, and a focused global-mirror inspector without changing transform semantics or adding dependencies. Fresh implementation/review and a complete root suite precede its local commit.
+
 ### 7. Add Whole pattern navigation and finish the consistency audit
 
 Scope: Crochet view/progress composition, remaining cross-workflow defects, documentation, and performance acceptance.
@@ -281,8 +301,9 @@ Acceptance: every requirement below has evidence, final performance is explained
 | 2. Commands / history / atomic failures | Accepted | `112cba8`; independent review and full root suite pass; command, cancellation, palette-history, project replacement, and clipboard regressions reproduced before fixes. |
 | 3. Visual and wording language | Accepted | `a760d37`; independent review and full root suite pass; shared controls, stable lists, project-colour feedback, consistent samples, and responsive focus verified. |
 | 4. Tool groups / temporary actions | Accepted | `7f5c323`; independent review and full root suite pass; grouped controls, captured temporary actions, recovery, and gesture/command boundaries verified. |
-| 5. Global mirror centers | Accepted | Independent review and full root suite pass; lossless legacy conversion, centre/type editing, centre-only dragging, and persistent migrations verified. Commit pending. |
-| 6. Selection transforms / anchors | Not started | Selection conversion approved; pattern content must remain unchanged. |
+| 5. Global mirror centers | Accepted | `c51da05`; independent review and full root suite pass; lossless legacy conversion, centre/type editing, centre-only dragging, and persistent migrations verified. |
+| 6. Selection transforms / anchors | Accepted | Independent correctness review and complete root suite pass; exclusive categories, source/copy contrast, editable anchors, and disclosed legacy conversion verified. Dock/global-inspector density remains assigned to 6a. |
+| 6a. Compact tools / focused global mirrors | Not started | User review requires icon-sized variant tools and a structured selected-centre editor. |
 | 7. Crochet / final acceptance | Not started | |
 
 ### Starting evidence
@@ -336,3 +357,13 @@ Acceptance: every requirement below has evidence, final performance is explained
 - Independent review also reproduced failed-Open error presentation moving the rotated chart. A minimal alert overlay preserves the canvas rectangle and absolute chart position when shown or dismissed on desktop and phone; malformed files retain document/recovery/history, and long Save errors remain readable. Evidence: `/tmp/mosaic-mirror-centers-evidence.md`, `/tmp/mosaic-review-mirror-browser.mjs`, `/tmp/mosaic-review-mirror-snap.test.ts`, and `/tmp/mosaic-chunk5-full.log`.
 - Isolated comparison: `/tmp/mosaic-crochet-mirror-centers-idle.json` and screenshots. The harness now creates the equivalent vertical mirror through Add mirror and its type toggle; measured drawing workloads and the frozen baseline are unchanged. Median / p90 milliseconds: initial canvas 49.54 / 64.55, drawing 27.35 / 29.44, mirrored drawing 27.83 / 35.98, width edits 61.00 / 62.11, cached Crochet reopen 132.97 / 133.60, Crochet stepping 61.96 / 64.47, and touch drawing 43.90 / 45.44. Small automation/animation-frame samples vary and do not establish speed improvements. No page errors; Settings focus remains unchanged.
 - Mutation medians are 45 drawing, 45 mirrored drawing, 151 width edits, and 10 Crochet stepping. The expanded centre row adds coordinate/type presentation updates during width edits; drawing and stepping remain unchanged from chunk 4. Production gzip `-9`: JavaScript 46,097 bytes (160,470 raw), CSS 5,596 (25,698 raw), +713 and +37 from chunk 4. No runtime dependencies were added. Desktop, phone, enlarged-text, reduced-motion, and forced-colour views were inspected.
+
+### Chunk 6 verification
+
+- Final root `npm run test` passes: 12 tooling, 208 core Rust, 9 WASM, 370 logic, 229 web unit, and 399 browser tests, including production build, formatting, and Clippy. Independent review ran focused logic/storage/history/render/native tests, 124 browser flows, and separate live-browser diagnostics; no outstanding correctness findings remain. Evidence: `/tmp/mosaic-selection-transforms-evidence.md`, `/tmp/mosaic-review-selection.test.ts`, `/tmp/mosaic-review-selection-browser.mjs`, and `/tmp/mosaic-chunk6-full.log`.
+- Expected failures preceded exclusive category execution, retained independent centres, Grid step editing, paired precision previews, cancellation, and accepted/rejected Stamp settlement. Source and generated-instance editing, inverse mapping, both-centre source translation, bounded local closure, and composed Save/instructions preserve authored Full/Half/Quarter extents. Independent geometry diagnostics cover all 32 Mirror type combinations, half-grid/off-chart centres, eight orientations, inverse supporting coordinates, dormant settings, conflicts, and safety caps.
+- Supported project 3–5, recovery 5–8, and history 5–7 fixtures cover Grid with dormant settings, turns-only, either single reflection, combined reflections, mixed turns/reflections, and empty rotation. They verify source identity/sparse membership, unchanged authored content and palettes, retained dormant values, scoped notices, and Undo/Redo. New project/recovery/history versions are 6/9/8. Migration feedback is neutral transient presentation data, returned by the pure file decoder after validation and excluded from authored state.
+- Independent review identified numeric-string/null acceptance and serialization-key-order-dependent identical Open. Actual failing public-boundary and rotated-browser assertions preceded strict type validation and concrete semantic equality; reordering independent types/turns or JSON keys now preserves camera, workspace, and history. Modern incomplete records reject atomically while genuine older omissions retain their defaults. Expanded already-passing policy coverage caught a deliberately broken conversion; the mutation was restored before verification.
+- Repeated copies now have readily visible contrast-backed dashed outlines; the editable source has a stronger continuous perimeter. CSS-sized handles and outlines remain usable at phone DPR 3, rotated views, multiple zoom levels, and white/black Accent. The stronger swatch outline exposed a real preview-scale/centering regression; clipping it to the sample chart restored existing preview assertions. Desktop/phone and default/white/black palette screenshots were inspected without encoding aesthetic tuning in tests. The user's dock and global-inspector feedback is explicitly deferred to the next refinement chunk, not considered final visual acceptance.
+- Isolated comparison artifacts: `/tmp/mosaic-crochet-selection-transforms-idle.json` and `/tmp/mosaic-crochet-selection-transforms-repeat.json`. First-run median / p90 milliseconds: initial canvas 55.29 / 66.90, drawing 29.83 / 43.93, mirrored drawing 27.99 / 32.37, width edits 47.15 / 62.55, cached Crochet reopen 132.96 / 133.72, Crochet stepping 62.52 / 66.33, touch drawing 45.24 / 45.97. Repeat initial canvas is 58.61 / 63.30 versus frozen baseline 44.06 / 46.56; the initial-frame increase is recorded and will be reassessed with the final compact interface. These small automation/frame samples are not time-to-usable measurements or speed claims. Both runs report no page errors and unchanged Settings focus.
+- Mutation medians are 46 drawing, 46 mirrored drawing, 156 width edits, and 10 Crochet stepping, compared with chunk 5's 45/45/151/10. Production gzip `-9`: JavaScript 48,849 bytes (171,075 raw), CSS 5,586 (25,763 raw), +2,752 and −10 from chunk 5. No runtime dependencies were added.

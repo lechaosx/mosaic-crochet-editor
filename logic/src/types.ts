@@ -46,7 +46,7 @@ export interface GridRecipe {
     id:                  string;
     enabled:             boolean;
     source:              GridRecipeSource;
-    mode:                "grid" | "rotation";
+    mode:                "none" | "grid" | "circle" | "mirror";
     left:                number;
     right:               number;
     up:                  number;
@@ -64,8 +64,9 @@ export interface GridRecipe {
     rotationCentreX:     number;
     rotationCentreY:     number;
     rotationTurns:       (90 | 180 | 270)[];
-    mirrorHorizontal:    boolean;
-    mirrorVertical:      boolean;
+    mirrorCentreX:       number;
+    mirrorCentreY:       number;
+    mirrorTypes:         SymKey[];
 }
 
 // A "float" is a lifted selection layer positioned at absolute canvas-cell

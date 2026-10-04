@@ -170,6 +170,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         if (document.querySelector("dialog:modal, :popover-open")) return;
         event.preventDefault();
         event.stopImmediatePropagation();
+        if (activeInspector === "selection") {
+            cb.onRecipeRevert();
+            if (event.target instanceof HTMLInputElement && event.target.type === "number") return;
+        }
         closeInspector();
     }, true);
 

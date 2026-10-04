@@ -114,6 +114,7 @@ export interface RendererState {
     selectionDashOffset: number;
     selectedMirrorId: string | null;
     previewRepeatGuides: boolean;
+    selectionHandlesVisible: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
     instructionSeam: InstructionSeam | null;
@@ -140,6 +141,7 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         selectionDashOffset:    0,
         selectedMirrorId:       null,
         previewRepeatGuides:    false,
+        selectionHandlesVisible: false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
         instructionSeam: null,
@@ -433,7 +435,9 @@ export function renderPatternColourPreview(
     }
     const dashOffset = Math.floor(antsElapsedMs / 1000 * ANTS_SCREEN_PX_PER_SEC / ANTS_STEP_PX)
         * ANTS_STEP_PX / cell;
-    renderSelection(ctx, view, dpr, pattern, selection, accentColor, dashOffset);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+    renderSelection(ctx, view, pattern, selection, accentColor, dashOffset);
+    ctx.restore();
 }
 
 // ── Top-level entry ────────────────────────────────────────────────────────
@@ -506,7 +510,8 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     if (activeRecipe && float
         && float.x === activeRecipe.source.x && float.y === activeRecipe.source.y
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
-        renderRecipeInstances(ctx, view, dpr, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
+        renderRecipeInstances(ctx, view, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
+        if (rs.selectionHandlesVisible) renderRecipeHandles(ctx, view, activeRecipe, accentColor, rs.visualRotation);
     }
     renderSymmetryGuides(ctx, view, dpr, pattern, mirrors, accentColor, rs.selectedMirrorId, rs.previewRepeatGuides);
     // During a drag, the preview wins even when empty (drag started outside
@@ -524,15 +529,15 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
                 shifted[cy * W + cx] = 1;
             }
         }
-        renderSelection(ctx, view, dpr, pattern, shifted, accentColor, dashOffsetSnapped);
+        renderSelection(ctx, view, pattern, shifted, accentColor, dashOffsetSnapped);
     }
     if (rs.selectPreviewMask) {
-        renderSelection(ctx, view, dpr, pattern, rs.selectPreviewMask, accentColor, dashOffsetSnapped);
+        renderSelection(ctx, view, pattern, rs.selectPreviewMask, accentColor, dashOffsetSnapped);
     }
     if (rs.dragRect) {
         ctx.save();
         ctx.globalAlpha = rs.selectPreviewMask ? 0.45 : 1;
-        renderDragRect(ctx, view, dpr, rs.dragRect, accentColor, dashOffsetSnapped);
+        renderDragRect(ctx, view, rs.dragRect, accentColor, dashOffsetSnapped);
         ctx.restore();
     }
     if (labelsVisible) {
@@ -542,16 +547,82 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 }
 
 function renderRecipeInstances(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number, pattern: PatternState,
+    ctx: CanvasRenderingContext2D, view: ViewState, pattern: PatternState,
     pixels: Uint8Array, recipe: GridRecipe, color: string, dashOffset: number,
 ) {
     const paths = recipeInstancePaths(pattern, pixels, recipe);
     ctx.save();
-    ctx.globalAlpha = 0.42;
-    for (const instance of paths) renderSelectionPaths(ctx, view, dpr, instance, color, dashOffset);
+    for (const instance of paths) {
+        ctx.beginPath();
+        for (const path of instance) {
+            ctx.moveTo(path[0], path[1]);
+            for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
+        }
+        ctx.setLineDash([8 / view.zoom, 4 / view.zoom]);
+        ctx.lineDashOffset = dashOffset;
+        ctx.lineWidth = 5 / view.zoom; ctx.strokeStyle = "#111"; ctx.stroke();
+        ctx.lineWidth = 3 / view.zoom; ctx.strokeStyle = "#fff"; ctx.stroke();
+        ctx.lineWidth = 2 / view.zoom; ctx.strokeStyle = color;
+        ctx.stroke();
+    }
     ctx.restore();
     (window as unknown as { __test_repeat_outlines__?: { paths: number[][][]; dashOffset: number } })
         .__test_repeat_outlines__ = { paths, dashOffset };
+}
+
+export interface SelectionTransformHandle {
+    kind: "column" | "row" | "centre";
+    x: number; y: number;
+    offsetX: number; offsetY: number;
+}
+
+export function selectionTransformHandles(recipe: GridRecipe, zoom: number, rotation: number): SelectionTransformHandle[] {
+    if (recipe.source.mask.length === 0 || recipe.mode === "none") return [];
+    if (recipe.mode === "circle" || recipe.mode === "mirror") return [{ kind: "centre",
+        x: (recipe.mode === "circle" ? recipe.rotationCentreX : recipe.mirrorCentreX) + 0.5,
+        y: (recipe.mode === "circle" ? recipe.rotationCentreY : recipe.mirrorCentreY) + 0.5,
+        offsetX: 0, offsetY: 0 }];
+    const evaluated = evaluateGridRecipe(recipe);
+    const handles: SelectionTransformHandle[] = [
+        { kind: "column", x: recipe.source.x + evaluated.columnStep.x, y: recipe.source.y + evaluated.columnStep.y, offsetX: 0, offsetY: 0 },
+        { kind: "row", x: recipe.source.x + evaluated.rowStep.x, y: recipe.source.y + evaluated.rowStep.y, offsetX: 0, offsetY: 0 },
+    ];
+    if (Math.hypot(handles[0].x - handles[1].x, handles[0].y - handles[1].y) * zoom < 48) {
+        const angle = rotation * Math.PI / 180;
+        handles.forEach((handle, index) => {
+            const offset = (index === 0 ? -24 : 24) / zoom;
+            handle.offsetX = Math.cos(angle) * offset; handle.offsetY = -Math.sin(angle) * offset;
+            handle.x += handle.offsetX; handle.y += handle.offsetY;
+        });
+    }
+    return handles;
+}
+
+function renderRecipeHandles(ctx: CanvasRenderingContext2D, view: ViewState, recipe: GridRecipe, color: string, rotation: number) {
+    const px = 1 / view.zoom;
+    const handles = selectionTransformHandles(recipe, view.zoom, rotation);
+    ctx.save(); ctx.setLineDash([]); ctx.lineWidth = 2 * px;
+    if (recipe.mode === "grid") {
+        const evaluated = evaluateGridRecipe(recipe);
+        ctx.strokeStyle = color;
+        for (const step of [evaluated.columnStep, evaluated.rowStep, evaluated.columnStepAlternate, evaluated.rowStepAlternate]) {
+            ctx.beginPath(); ctx.moveTo(recipe.source.x, recipe.source.y);
+            ctx.lineTo(recipe.source.x + step.x, recipe.source.y + step.y); ctx.stroke();
+        }
+    }
+    for (const handle of handles) {
+        ctx.beginPath(); ctx.moveTo(handle.x - handle.offsetX, handle.y - handle.offsetY); ctx.lineTo(handle.x, handle.y);
+        ctx.strokeStyle = color; ctx.stroke();
+        ctx.save(); ctx.translate(handle.x, handle.y); ctx.rotate(-rotation * Math.PI / 180);
+        ctx.beginPath();
+        if (handle.kind === "centre") ctx.arc(0, 0, 7 * px, 0, Math.PI * 2);
+        else ctx.rect(-8 * px, -8 * px, 16 * px, 16 * px);
+        ctx.fillStyle = "#161618"; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.stroke();
+        ctx.fillStyle = color; ctx.font = `bold ${11 * px}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(handle.kind === "column" ? "C" : handle.kind === "row" ? "R" : "+", 0, 0);
+        ctx.restore();
+    }
+    ctx.restore();
 }
 
 export function recipeInstancePaths(
@@ -720,59 +791,46 @@ function tracedBoundary(selection: Uint8Array, W: number, H: number): number[][]
 }
 
 function renderSelection(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    ctx: CanvasRenderingContext2D, view: ViewState,
     pattern: PatternState, selection: Uint8Array | null,
     color: string, dashOffset: number,
 ) {
     if (!selection) return;
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
-    renderSelectionPaths(ctx, view, dpr, tracedBoundary(selection, W, H), color, dashOffset);
+    renderSelectionPaths(ctx, view, tracedBoundary(selection, W, H), color, dashOffset);
 }
 
 function renderSelectionPaths(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    ctx: CanvasRenderingContext2D, view: ViewState,
     paths: ReadonlyArray<ReadonlyArray<number>>, color: string, dashOffset: number,
 ) {
-    const lw   = 3.0 / (view.zoom * dpr);
-    const dash = 6   / (view.zoom * dpr);
+    const px = 1 / view.zoom;
+    const dash = 6 * px;
 
     ctx.save();
-    ctx.lineWidth      = lw;
-    ctx.setLineDash([dash, dash]);
-    ctx.lineDashOffset = dashOffset;
-    ctx.strokeStyle    = color;
+    ctx.setLineDash([]);
     ctx.beginPath();
     for (const path of paths) {
         ctx.moveTo(path[0], path[1]);
         for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
     }
-    ctx.stroke();
+    ctx.lineWidth = 7 * px; ctx.strokeStyle = "#111"; ctx.stroke();
+    ctx.lineWidth = 5 * px; ctx.strokeStyle = "#fff"; ctx.stroke();
+    ctx.lineWidth = 3 * px; ctx.strokeStyle = color; ctx.stroke();
+    ctx.lineWidth = px; ctx.strokeStyle = "#111";
+    ctx.setLineDash([dash, dash]); ctx.lineDashOffset = dashOffset; ctx.stroke();
     ctx.restore();
 }
 
-// Marching-ants outline of the in-flight drag rect — same style as the
-// selection outline so the visual reads consistently. Shows the full sweep
-// even when the rect crosses the canvas border. The actually-committed
-// selection (clipped to canvas, holes excluded) only appears after release.
+// The sweep includes off-canvas cells; the committed source clips them out.
 function renderDragRect(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    ctx: CanvasRenderingContext2D, view: ViewState,
     r: { x1: number; y1: number; x2: number; y2: number },
     color: string, dashOffset: number,
 ) {
-    const lw   = 3.0 / (view.zoom * dpr);
-    const dash = 6   / (view.zoom * dpr);
     const x1 = Math.min(r.x1, r.x2), y1 = Math.min(r.y1, r.y2);
     const x2 = Math.max(r.x1, r.x2) + 1, y2 = Math.max(r.y1, r.y2) + 1;
-    ctx.save();
-    ctx.lineWidth      = lw;
-    ctx.setLineDash([dash, dash]);
-    ctx.lineDashOffset = dashOffset;
-    ctx.strokeStyle    = color;
-    // One closed subpath so the dash offset flows around the rectangle.
-    ctx.beginPath();
-    ctx.moveTo(x1, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y1);
-    ctx.stroke();
-    ctx.restore();
+    renderSelectionPaths(ctx, view, [[x1, y1, x2, y1, x2, y2, x1, y2, x1, y1]], color, dashOffset);
 }
 
 // ── Drawing helpers ────────────────────────────────────────────────────────

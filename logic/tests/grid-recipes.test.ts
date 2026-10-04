@@ -49,7 +49,7 @@ describe("saved grid recipes", () => {
         expect(restoreGridRecipes([legacy])[0].enabled).toBe(true);
     });
 
-    test("normalizes legacy alternate gaps to the visible single-gap values", () => {
+    test("retains modern alternate gaps without changing the primary gap", () => {
         const recipe = gridRecipeFromFloat({
             x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([1, 0, 1]),
         });
@@ -65,28 +65,27 @@ describe("saved grid recipes", () => {
         expect(restored).toMatchObject({
             id: recipe.id,
             columnSpacing: 0,
-            columnSpacingAlternate: 0,
+            columnSpacingAlternate: 1,
         });
         expect(evaluateGridRecipe(restored)).toMatchObject({
             columnStep: { x: 1, y: 0 },
-            columnStepAlternate: { x: 1, y: 0 },
+            columnStepAlternate: { x: 2, y: 0 },
         });
     });
 
     test("can ignore recipe conflicts outside a paintable chart", () => {
         const recipe = gridRecipeFromFloat({
-            x: 0, y: 0, w: 1, h: 2, pixels: new Uint8Array([1, 1]),
+            x: 0, y: 0, w: 1, h: 3, pixels: new Uint8Array([1, 0, 1]),
         });
         Object.assign(recipe, {
-            mode: "rotation",
-            rotationCentreX: 1.5,
-            rotationCentreY: 0.5,
-            rotationTurns: [180, 270],
-            mirrorHorizontal: true,
+            mode: "circle",
+            rotationCentreX: 0,
+            rotationCentreY: 1,
+            rotationTurns: [90, 270],
         });
 
         expect(gridRecipeError(recipe, () => true)).toMatch(/overlap/i);
-        expect(gridRecipeError(recipe, (x, y) => x >= 0 && x < 2 && y >= 0 && y < 3)).toBeNull();
+        expect(gridRecipeError(recipe, (x, y) => x >= 0 && x < 1 && y >= 0 && y < 3)).toBeNull();
     });
 
     test("uses a sparse active selection as an absolute packed source", () => {
@@ -134,7 +133,7 @@ describe("saved grid recipes", () => {
             x: 2, y: 1, w: 1, h: 2, pixels: new Uint8Array([1, 1]),
         });
         Object.assign(recipe, {
-            mode: "rotation",
+            mode: "circle",
             rotationCentreX: 1,
             rotationCentreY: 1,
             rotationTurns: [90, 270],
@@ -153,11 +152,10 @@ describe("saved grid recipes", () => {
             x: 2, y: 2, w: 2, h: 1, pixels: new Uint8Array([1, 1]),
         });
         Object.assign(recipe, {
-            mode: "rotation",
-            rotationCentreX: 4,
-            rotationCentreY: 3,
-            mirrorHorizontal: true,
-            mirrorVertical: true,
+            mode: "mirror",
+            mirrorCentreX: 4,
+            mirrorCentreY: 3,
+            mirrorTypes: ["V", "H"],
         });
 
         expect(evaluateGridRecipe(recipe).cells.map(({ x, y, sourceIndex }) => ({ x, y, sourceIndex }))).toEqual([
@@ -167,6 +165,8 @@ describe("saved grid recipes", () => {
             { x: 6, y: 2, sourceIndex: 0 },
             { x: 2, y: 4, sourceIndex: 0 },
             { x: 3, y: 4, sourceIndex: 1 },
+            { x: 5, y: 4, sourceIndex: 1 },
+            { x: 6, y: 4, sourceIndex: 0 },
         ]);
     });
 
@@ -190,7 +190,7 @@ describe("saved grid recipes", () => {
         const recipe = gridRecipeFromFloat({
             x: 2, y: 1, w: 1, h: 1, pixels: new Uint8Array([1]),
         });
-        recipe.mode = "rotation";
+        recipe.mode = "circle";
         recipe.left = -1;
         expect(gridRecipeError(recipe)).toMatch(/counts/i);
 
