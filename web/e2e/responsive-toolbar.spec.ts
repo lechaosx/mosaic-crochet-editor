@@ -302,17 +302,19 @@ test("labelled controls grow instead of clipping at doubled text size", async ({
     }), "Yarn A label and check").toBe(true);
 });
 
-test("short landscape keeps canvas and scrollable tools at doubled text size", async ({ page }) => {
+test("short landscape keeps canvas and tools reachable at doubled text size", async ({ page }) => {
     await page.setViewportSize({ width: 568, height: 320 });
     await bootApp(page);
-    expect(await page.locator("#authoring-dock").evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
     await page.evaluate(() => {
         document.documentElement.style.fontSize = "200%";
         window.dispatchEvent(new Event("resize"));
     });
 
     expect(await page.locator(".canvas-area").evaluate(el => el.clientHeight)).toBeGreaterThan(0);
-    expect(await page.locator("#authoring-dock").evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+    for (const control of await page.locator("#authoring-dock").getByRole("button").all()) {
+        await control.scrollIntoViewIfNeeded();
+        await expect(control).toBeInViewport();
+    }
     expect(await page.locator("body").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     const canvas = await page.locator(".canvas-area").boundingBox();
     const viewButtons = page.getByRole("group", { name: "Canvas view" }).getByRole("button");

@@ -318,6 +318,22 @@
       </div>
     </div>
     <div id="sym-list" class="sym-list" aria-label="Mirror centres"></div>
+    <div id="mirror-editor" class="mirror-editor" role="group" aria-label="Selected mirror centre" hidden>
+      <fieldset class="mirror-position">
+        <legend>Position</legend>
+        <div class="mirror-position__fields">
+          <label for="mirror-centre-x">x</label><input id="mirror-centre-x" type="number" step="0.5" aria-label="Mirror centre x">
+          <label for="mirror-centre-y">y</label><input id="mirror-centre-y" type="number" step="0.5" aria-label="Mirror centre y">
+          <button id="mirror-centre-apply" class="btn" type="button" aria-label="Apply centre position" title="Apply both centre coordinates (Enter)">Apply</button>
+        </div>
+      </fieldset>
+      <fieldset class="mirror-reflections">
+        <legend>Reflections</legend>
+        <div id="mirror-reflection-types" class="mirror-type-choices" role="group" aria-label="Reflection types"></div>
+      </fieldset>
+      <div id="mirror-point-type" class="mirror-point-type"></div>
+      <p id="mirror-type-hint" class="mirror-type-hint" title="Implied by the chosen types at this centre; chart edges can limit copies. Choose a type to apply it directly." hidden>Implied at this centre</p>
+    </div>
     <div class="transform-usage">
       <div class="popover-row">
         <button class="btn" id="replicate-selection" title="Stamp global mirror copies from the current selection (T)" disabled>Stamp copies</button>

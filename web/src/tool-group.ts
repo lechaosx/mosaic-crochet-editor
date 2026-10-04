@@ -8,10 +8,6 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
     const acceleratorHint = button.title;
     group.className = "tool-group";
     button.before(group);
-    const label = document.createElement("span");
-    label.className = "tool-variant-label";
-    label.setAttribute("aria-hidden", "true");
-    button.append(label);
     const trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "btn tool-group-menu";
@@ -52,7 +48,6 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
         if (chosen === value) return;
         chosen = value;
         const variant = variants.find(item => item.value === value)!;
-        label.textContent = variant.label;
         button.querySelector("use")!.setAttribute("href", `#icon-${variant.icon}`);
         button.dataset.variant = value;
         button.setAttribute("aria-description", `${family} · ${variant.label}. Hold or press Arrow Down for variants.`);

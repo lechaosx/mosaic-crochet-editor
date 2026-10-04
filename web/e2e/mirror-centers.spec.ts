@@ -24,7 +24,7 @@ test("mirror center has independent types and rejects a parity-incompatible togg
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await addGlobalMirror(page, "Vertical");
-    const row = page.locator(".sym-list-row").first();
+    const row = page.getByRole("group", { name: "Selected mirror centre", exact: true });
     await row.getByRole("spinbutton", { name: "Mirror centre x" }).fill("3.5");
     await row.getByRole("spinbutton", { name: "Mirror centre x" }).press("Enter");
     await row.getByRole("button", { name: "Horizontal", exact: true }).click();

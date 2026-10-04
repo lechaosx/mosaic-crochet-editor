@@ -168,6 +168,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     document.addEventListener("keydown", event => {
         if (event.key !== "Escape" || activeInspector === null) return;
         if (document.querySelector("dialog:modal, :popover-open")) return;
+        if (activeInspector === "transforms" && event.target instanceof HTMLInputElement && event.target.type === "number") return;
         event.preventDefault();
         event.stopImmediatePropagation();
         if (activeInspector === "selection") {

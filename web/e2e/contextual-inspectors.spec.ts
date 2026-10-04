@@ -57,7 +57,7 @@ test("overlay variants share one tool button with distinct icons and accessible 
         const button = page.getByRole("button", { name, exact: true });
         await expect(button).toBeVisible();
         await expect(button).toHaveClass(/btn--icon/);
-        await expect(button).toHaveText(name.split(" ")[0]);
+        await expect(button).toHaveAccessibleDescription(new RegExp(`Overlay · ${name.split(" ")[0]}`));
         await expect(button.locator("use")).toHaveAttribute("href", symbol);
         expect(await button.evaluate(element => getComputedStyle(element, "::before").content)).toBe("none");
     }

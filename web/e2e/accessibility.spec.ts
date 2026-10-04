@@ -144,12 +144,12 @@ test("dynamic symmetry actions name their axis and position", async ({ page }) =
     await page.getByRole("button", { name: /Global Mirror/ }).click();
     await addGlobalMirror(page, "Vertical");
 
-    const disable = page.getByRole("button", { name: "Disable mirror at (4, 4)" });
+    const disable = page.getByRole("button", { name: "Disable Mirror 1 at (4, 4)" });
     await expect(disable).toBeVisible();
-    await expect(page.getByRole("button", { name: "Delete mirror at (4, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete Mirror 1 at (4, 4)" })).toBeVisible();
 
     await disable.click();
-    await expect(page.getByRole("button", { name: "Enable mirror at (4, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Enable Mirror 1 at (4, 4)" })).toBeVisible();
 });
 
 test("dynamic symmetry actions retain keyboard focus after rebuilding the axis list", async ({ page }) => {
@@ -158,15 +158,15 @@ test("dynamic symmetry actions retain keyboard focus after rebuilding the axis l
     await addGlobalMirror(page, "Vertical");
     await addGlobalMirror(page, "Horizontal");
 
-    const disableVertical = page.locator(".sym-list-row").first().getByRole("button", { name: "Disable mirror at (4, 4)" });
+    const disableVertical = page.locator(".sym-list-row").first().getByRole("button", { name: "Disable Mirror 1 at (4, 4)" });
     await disableVertical.focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Enable mirror at (4, 4)" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Enable Mirror 1 at (4, 4)" })).toBeFocused();
 
-    const deleteVertical = page.locator(".sym-list-row").first().getByRole("button", { name: "Delete mirror at (4, 4)" });
+    const deleteVertical = page.locator(".sym-list-row").first().getByRole("button", { name: "Delete Mirror 1 at (4, 4)" });
     await deleteVertical.focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Delete mirror at (4, 4)" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Delete Mirror 1 at (4, 4)" })).toBeFocused();
 
     await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: "Add mirror" })).toBeFocused();

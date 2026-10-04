@@ -243,6 +243,28 @@ test("Mirror precision accepts a paired half-grid diagonal centre and retains Ci
     expect(await recipe(page)).toMatchObject({ mirrorCentreX: 3.5, mirrorCentreY: 3.5, mirrorTypes: ["D1"], rotationCentreX: 3 });
 });
 
+test("local Mirror describes implied types while checkboxes and history retain explicit choices", async ({ page }) => {
+    await selection(page);
+    await category(page, "Mirror");
+    await page.locator("#recipe-mirror-v").check();
+    await page.locator("#recipe-mirror-h").check();
+    const point = page.getByRole("checkbox", { name: "Point symmetry (180°)", exact: true });
+    await expect(point).not.toBeChecked();
+    await expect(point).toHaveAccessibleDescription(/Implied/);
+    expect((await recipe(page)).mirrorTypes).toEqual(["V", "H"]);
+    const count = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
+    await point.check();
+    await expect(point).toBeChecked();
+    expect((await recipe(page)).mirrorTypes).toEqual(["V", "H", "C"]);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length)).toBe(count + 1);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(point).not.toBeChecked();
+    await expect(point).toHaveAccessibleDescription(/Implied/);
+    await page.locator("#recipe-mirror-h").uncheck();
+    await expect(point).not.toHaveAccessibleDescription(/Implied/);
+    expect((await recipe(page)).mirrorTypes).toEqual(["V"]);
+});
+
 for (const ordering of ["independent choices", "recipe and source field keys"] as const) test(
     `identical Open ignores reordered ${ordering} without moving the rotated view`, async ({ page }) => {
     await selection(page);

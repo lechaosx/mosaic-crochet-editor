@@ -1,5 +1,6 @@
 import { PatternState, RowState, RoundState, MirrorCenter, SymKey } from "@mosaic/logic/types";
 import { mirrorAxes } from "@mosaic/logic/symmetry";
+import { mirrorTypePresentation } from "./mirror-presentation";
 import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
@@ -1025,7 +1026,10 @@ function renderSymmetryGuides(
     pattern: PatternState, mirrors: ReadonlyArray<MirrorCenter>,
     color: string, selectedId: string | null, editable: boolean,
 ) {
-    const active = mirrors.filter(mirror => mirror.enabled).flatMap(mirrorAxes);
+    const guides = mirrors.filter(mirror => mirror.enabled).flatMap(mirror =>
+        mirrorTypePresentation(mirror.types).filter(type => type.chosen || type.implied).map(type => ({
+            axis: mirrorAxes({ ...mirror, types: [type.key] })[0], implied: type.implied,
+        })));
     const { canvasWidth: W, canvasHeight: H } = pattern;
 
     const overhang = 1;                       // pattern px past each side
@@ -1060,7 +1064,9 @@ function renderSymmetryGuides(
     ctx.lineWidth = lw;
     ctx.setLineDash([dash, dashGap]);
 
-    for (const a of active) {
+    for (const { axis: a, implied } of guides) {
+        ctx.globalAlpha = implied ? 0.4 : 1;
+        ctx.setLineDash(implied ? [2 / (view.zoom * dpr), dashGap] : [dash, dashGap]);
         switch (a.kind) {
             case "V": {
                 // Vertical mirror line at cell-edge x; +0.5 shifts cell-index to render coords.
@@ -1096,7 +1102,8 @@ function renderSymmetryGuides(
                 ctx.fillStyle = color;
                 ctx.beginPath();
                 ctx.arc(a.x + 0.5, a.y + 0.5, 6 / view.zoom, 0, Math.PI * 2);
-                ctx.fill();
+                if (implied) ctx.stroke();
+                else ctx.fill();
                 ctx.setLineDash([dash, dashGap]);
                 break;
             }

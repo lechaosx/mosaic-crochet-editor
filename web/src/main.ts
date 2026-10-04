@@ -534,7 +534,7 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
-    if (!store.state.mirrors.some(mirror => mirror.id === rs.selectedMirrorId)) rs.selectedMirrorId = null;
+    if (!store.state.mirrors.some(mirror => mirror.id === rs.selectedMirrorId)) rs.selectedMirrorId = store.state.mirrors[0]?.id ?? null;
     ui.setMirrors(store.state.mirrors, rs.selectedMirrorId);
     ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
     ui.setRecipes(store.state.recipes, store.state.activeRecipeId);

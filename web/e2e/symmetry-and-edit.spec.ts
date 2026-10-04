@@ -55,7 +55,7 @@ test("Mirror inspector lets Pencil drag a centre without painting", async ({ pag
     await page.mouse.up();
 
     await expect(page.getByRole("button", { name: "Pencil" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("button", { name: "Disable mirror at (2, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable Mirror 1 at (2, 4)" })).toBeVisible();
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels,
     )).toEqual(before);
@@ -70,9 +70,9 @@ test("exact symmetry position entry is one undoable edit", async ({ page }) => {
 
     await position.fill("2.5");
     await position.press("Enter");
-    await expect(page.getByRole("button", { name: "Disable mirror at (2.5, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable Mirror 1 at (2.5, 4)" })).toBeVisible();
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable Mirror 1 at (4, 4)" })).toBeVisible();
 });
 
 test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
@@ -84,10 +84,10 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await expect(row).toBeVisible();
     await expect(row).not.toHaveClass(/is-inactive/);
     // Toggle it off — visual class flips.
-    await row.getByRole("button", { name: "Disable mirror at (4, 4)" }).click();
+    await row.getByRole("button", { name: "Disable Mirror 1 at (4, 4)" }).click();
     await expect(page.locator(".sym-list-row").first()).toHaveClass(/is-inactive/);
     // Delete — row disappears.
-    await page.getByRole("button", { name: "Delete mirror at (4, 4)" }).click();
+    await page.getByRole("button", { name: "Delete Mirror 1 at (4, 4)" }).click();
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
@@ -150,7 +150,7 @@ test("T reports stamp conflicts inline and recipe changes clear the error", asyn
     await expect(error).toBeVisible();
     expect(dialogSeen).toBe(false);
 
-    await page.getByRole("button", { name: "Disable mirror at (4, 4)" }).click();
+    await page.getByRole("button", { name: "Disable Mirror 1 at (4, 4)" }).click();
     await expect(error).toBeHidden();
 });
 
@@ -681,7 +681,7 @@ test("Pattern resize removes only global mirrors that become unusable", async ({
     await expect(page.locator(".sym-list-row")).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Vertical", exact: true })).toHaveAttribute("aria-pressed", "false");
     await expect(page.getByRole("button", { name: "Horizontal", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable Mirror 1 at (4, 4)" })).toBeVisible();
 });
 
 test("Pattern preview retains global mirrors valid in the final geometry", async ({ page }) => {
@@ -692,7 +692,7 @@ test("Pattern preview retains global mirrors valid in the final geometry", async
     await page.locator("#edit-width").fill("9");
     await page.locator("#edit-width").press("Tab");
     await page.locator("#btn-sym-toggle").click();
-    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable Mirror 1 at (4, 4)" })).toBeVisible();
 });
 
 test("invalid Pattern preview restores the global mirror baseline", async ({ page }) => {
@@ -704,7 +704,7 @@ test("invalid Pattern preview restores the global mirror baseline", async ({ pag
     await expect(page.locator("#edit-error")).toBeVisible();
     await page.keyboard.press("Escape");
     await page.locator("#btn-sym-toggle").click();
-    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable Mirror 1 at (4, 4)" })).toBeVisible();
 });
 
 test("invalid Pattern preview restores the active saved-repeat source", async ({ page }) => {
@@ -813,7 +813,7 @@ test("Open restores a global mirror without resetting Crochet progress", async (
     await page.getByRole("button", { name: /Global Mirror/ }).click();
     await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Global Mirror");
     await expect(page.getByText("Global mirrors", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Disable mirror at (2, 4)" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable Mirror 1 at (2, 4)" })).toBeVisible();
     await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
 
     await page.keyboard.press("p");

@@ -45,18 +45,15 @@ test("a held stroke keeps its starting tool and yarn when shortcuts change chose
     await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
 });
 
-test("chosen variant captions fit their controls with enlarged text", async ({ page }) => {
+test("chosen variants remain described with enlarged text", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 960 });
     await bootApp(page);
     await page.evaluate(() => { document.documentElement.style.fontSize = "32px"; });
-    for (const caption of await page.locator(".tool-variant-label").all()) {
-        await expect(caption).toBeVisible();
-        expect(await caption.evaluate(element => {
-            const text = element.getBoundingClientRect();
-            const control = element.closest("button")!.getBoundingClientRect();
-            return text.left >= control.left && text.right <= control.right
-                && element.scrollWidth <= element.clientWidth;
-        })).toBe(true);
+    for (const [id, family] of [["select", "Rectangle"], ["wand", "Wand"], ["move", "Move"], ["overlay", "Overlay"]]) {
+        await expect(page.locator(`#tool-${id}`)).toHaveAccessibleDescription(new RegExp(family));
+        await page.getByRole("button", { name: `${family} variants`, exact: true }).click();
+        await expect(page.getByRole("menu", { name: `${family} variants`, exact: true })).toBeVisible();
+        await page.keyboard.press("Escape");
     }
 });
 
@@ -103,7 +100,6 @@ test("each family remembers its chosen variant after leaving, an empty selection
     await page.waitForFunction(() => !!window.__test_matrix__);
     for (const [id, variant, label] of [["select", "add", "Add"], ["wand", "remove", "Subtract"], ["move", "duplicate", "Duplicate"], ["overlay", "clear", "Clear"]]) {
         await expect(page.locator(`#tool-${id}`)).toHaveAttribute("data-variant", variant);
-        await expect(page.locator(`#tool-${id}`)).toContainText(label);
         await expect(page.locator(`#tool-${id}`)).toHaveAccessibleDescription(new RegExp(label));
     }
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
@@ -119,7 +115,6 @@ test("Overlay keyboard activation retains its chosen variant", async ({ page }) 
         await page.keyboard.press("p");
         await page.keyboard.press("o");
         await expect(page.locator("#tool-overlay")).toHaveAccessibleDescription(new RegExp(`Overlay · ${variant}`));
-        await expect(page.locator("#tool-overlay")).toContainText(variant);
     }
 });
 

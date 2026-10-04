@@ -1,6 +1,7 @@
 import type { GridRecipe } from "@mosaic/logic/types";
 import { el, radioValue, setRadio, setPressed, setMessage, iconAction, listRow, syncList } from "./dom";
 import type { UICallbacks, InspectorControls } from "./ui-types";
+import { mirrorTypePresentation } from "./mirror-presentation";
 
 export function mountSelection(
     cb: Pick<UICallbacks, "onSelectionCopy" | "onSelectionCut"
@@ -222,7 +223,16 @@ export function mountSelection(
         recipeTurns.forEach(input => { input.checked = active.rotationTurns.includes(Number(input.value) as 90 | 180 | 270); });
         mirrorCentreX.value = String(active.mirrorCentreX);
         mirrorCentreY.value = String(active.mirrorCentreY);
-        mirrorTypes.forEach(input => { input.checked = active.mirrorTypes.includes(input.value as GridRecipe["mirrorTypes"][number]); });
+        for (const [index, type] of mirrorTypePresentation(active.mirrorTypes).entries()) {
+            const input = mirrorTypes[index];
+            input.checked = type.chosen;
+            input.parentElement!.classList.toggle("independent-toggle--implied", type.implied);
+            const description = type.implied
+                ? "Implied by the chosen types at this centre. Check to choose directly."
+                : type.chosen ? "Chosen directly at this centre." : "Check to choose this type at this centre.";
+            input.setAttribute("aria-description", description);
+            input.parentElement!.title = `${type.name}. ${description}`;
+        }
         syncRecipeSections();
     }
     function setRecipeError(message: string | null) { setMessage(recipeError, message); }
