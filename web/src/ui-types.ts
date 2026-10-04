@@ -1,17 +1,12 @@
-import type { Tool, SymKey, PatternState, Axis, GridRecipe } from "@mosaic/logic/types";
-import type { SelectMode } from "@mosaic/logic/selection";
-import type { OverlayAction } from "@mosaic/logic/paint";
+import type { Tool, ToolVariants, SymKey, PatternState, Axis, GridRecipe } from "@mosaic/logic/types";
 import type { CanvasWorkspace, InstructionSeam } from "./render";
 import type { PackedInstructionCoordinates } from "./instruction-coordinates";
 
-export type SelectionMoveMode = "move" | "duplicate" | "mask-only";
-export type SelectionMode = SelectMode;
+export type SelectionMoveMode = ToolVariants["move"];
 
 export interface UICallbacks {
     onTool:            (t: Tool) => void;
-    onOverlayAction:   (action: OverlayAction) => void;
-    onSelectionMoveMode: (mode: SelectionMoveMode) => void;
-    onSelectionMode:     (mode: SelectionMode) => void;
+    onToolVariant: <K extends keyof ToolVariants>(tool: K, variant: ToolVariants[K]) => void;
     onSelectionCopy:     () => void;
     onSelectionCut:      () => void;
     onSelectionPaste:    () => void;
@@ -59,9 +54,9 @@ export interface UICallbacks {
 
 export interface UIHandle {
     setTool:            (t: Tool) => void;
-    setOverlayAction:   (action: OverlayAction) => void;
-    setSelectionState:  (selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) => void;
-    setSelectionMode:   (tool: Tool, mode: SelectionMode, hasSelection: boolean) => void;
+    setToolVariants:    (variants: ToolVariants) => void;
+    setExecutingAction: (message: string | null, tool?: Tool | null, yarn?: 1 | 2 | null) => void;
+    setSelectionState:  (selectedCount: number, clipboardCount: number) => void;
     setCanvasFeedback:  (message: string | null) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
@@ -113,7 +108,7 @@ export interface InstructionsView {
     close:       (restoreFocus?: boolean) => void;
 }
 
-export type InspectorPanel = "selection" | "move" | "settings" | "transforms" | "pattern";
+export type InspectorPanel = "selection" | "settings" | "transforms" | "pattern";
 
 export interface InspectorControls {
     isOpen: (panel: InspectorPanel) => boolean;

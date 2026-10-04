@@ -1,4 +1,15 @@
 export type Tool   = "pencil" | "fill" | "eraser" | "invert" | "overlay" | "select" | "wand" | "move";
+
+export interface ToolVariants {
+    select: "replace" | "add" | "remove";
+    wand: "replace" | "add" | "remove";
+    move: "move" | "duplicate" | "mask-only";
+    overlay: "place" | "clear" | "invert";
+}
+
+export function defaultToolVariants(): ToolVariants {
+    return { select: "replace", wand: "replace", move: "move", overlay: "place" };
+}
 export type SymKey = "V" | "H" | "C" | "D1" | "D2";
 
 // Axes carry kind-specific position fields. Each axis is independently

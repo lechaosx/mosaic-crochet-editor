@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("active tool and yarn expose their selected state", async ({ page }) => {
     await bootApp(page);
@@ -8,7 +8,7 @@ test("active tool and yarn expose their selected state", async ({ page }) => {
     await expect(page.getByRole("group", { name: "Overlay tools" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Arrange tools" })).toBeVisible();
     const pencil = page.getByRole("button", { name: "Pencil" });
-    const fill = page.getByRole("button", { name: "Fill" });
+    const fill = page.getByRole("button", { name: "Spill" });
     const primary = page.getByRole("button", { name: "Yarn A", exact: true });
     const secondary = page.getByRole("button", { name: "Yarn B", exact: true });
 
@@ -51,7 +51,7 @@ test("context strip only shows information not visible in controls", async ({ pa
 
     await expect(status).toBeHidden();
 
-    await page.getByRole("button", { name: "Fill" }).click();
+    await page.getByRole("button", { name: "Spill" }).click();
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await expect(status).toBeHidden();
 
@@ -188,8 +188,7 @@ test("closing an inspector restores focus to the available authoring context", a
     await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
 
     for (const name of ["Clear overlay", "Invert overlay"] as const) {
-        const action = page.getByRole("button", { name });
-        await action.click();
+        await chooseToolVariant(page, "Overlay", name.split(" ")[0]);
         await page.keyboard.press("Control+a");
         await page.getByRole("button", { name: "Select", exact: true }).click();
         await page.getByRole("button", { name: "Deselect" }).click();

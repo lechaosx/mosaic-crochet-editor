@@ -12,6 +12,35 @@ import { contrastingProjectColors } from "../src/contrast-colors";
 beforeEach(() => { localStorage.clear(); });
 
 describe("saveToLocalStorage / loadFromLocalStorage", () => {
+    test("chosen tool variants are recovered independently of authored content", () => {
+        const toolVariants = { select: "add", wand: "remove", move: "duplicate", overlay: "clear" } as const;
+        const session = rowSession(3, 3, { toolVariants });
+        expect(saveToLocalStorage(session)).toBe(true);
+        expect(loadFromLocalStorage()).toMatchObject({ toolVariants });
+        const recovered = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        expect(recovered.version).toBe(7);
+        expect(recovered.workspace.toolVariants).toEqual(toolVariants);
+        expect(recovered.document.toolVariants).toBeUndefined();
+    });
+
+    test.each([4, 5, 6])("recovery v%s defaults remembered variants without changing content", version => {
+        const session = rowSession(3, 3);
+        saveToLocalStorage(session);
+        const current = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+        const preferences = { hlOpacity: 30, labelsVisible: true, lockInvalid: false, canvasRotation: 90 };
+        const older = version === 4 ? {
+            version, state: current.document.state, pixels: current.document.pixels,
+            colorA: session.colorA, colorB: session.colorB, activeTool: "wand", primaryColor: 2,
+            axes: [], float: null, ...preferences,
+        } : { ...current, version, preferences };
+        if (version !== 4) delete older.workspace.toolVariants;
+        localStorage.setItem("mosaic-recovery", JSON.stringify(older));
+        const restored = loadFromLocalStorage()!;
+        expect(restored.toolVariants).toEqual({ select: "replace", wand: "replace", move: "move", overlay: "place" });
+        expect(restored.pixels).toEqual(session.pixels);
+        expect(restored.pattern).toEqual(session.pattern);
+        expect(JSON.parse(localStorage.getItem("mosaic-recovery")!).version).toBe(7);
+    });
     test("reports a failed recovery write without throwing", () => {
         const originalSetItem = Storage.prototype.setItem;
         const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
@@ -278,6 +307,7 @@ describe("saveToFile", () => {
             axes: addAxis([], "V", 3, 3),
             recipes: [gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 2 }]))],
             activeTool: "move",
+            toolVariants: { select: "add", wand: "remove", move: "duplicate", overlay: "invert" },
             rotation: 45,
             float: makeFloat([{ x: 1, y: 1, v: 2 }]),
             dangerColorOverride: "#123456",
@@ -293,6 +323,7 @@ describe("saveToFile", () => {
             accentColorOverride: "#abcdef",
         });
         expect(file).not.toHaveProperty("activeTool");
+        expect(file).not.toHaveProperty("toolVariants");
         expect(file).not.toHaveProperty("rotation");
         expect(file).not.toHaveProperty("float");
     });

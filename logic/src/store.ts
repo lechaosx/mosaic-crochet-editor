@@ -11,7 +11,7 @@ import {
     build_highlight_plan_row,
     build_highlight_plan_round,
 } from "@mosaic/wasm";
-import { Tool, PatternState, Float, Axis, GridRecipe } from "./types";
+import { Tool, ToolVariants, PatternState, Float, Axis, GridRecipe } from "./types";
 import { emptyGridRecipe, normalizeActiveRecipeId } from "./grid-recipes";
 
 export interface SessionState {
@@ -22,6 +22,7 @@ export interface SessionState {
     dangerColorOverride: string | null;
     accentColorOverride: string | null;
     activeTool:    Tool;
+    toolVariants:  ToolVariants;
     primaryColor:  1 | 2;
     axes:          Axis[];               // user-added symmetry axes
     recipes:       GridRecipe[];         // saved selection repeat definitions

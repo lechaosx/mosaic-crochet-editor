@@ -207,7 +207,7 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
 
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
-    await page.getByRole("button", { name: "Fill", exact: true }).click();
+    await page.getByRole("button", { name: "Spill", exact: true }).click();
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
     await page.getByRole("radiogroup", { name: "Pattern geometry" })
         .getByText("Rows", { exact: true }).click();

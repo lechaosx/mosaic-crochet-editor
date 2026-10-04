@@ -76,11 +76,11 @@ test("Navigate button pans without changing the active authoring tool", async ({
     await expect(page.getByRole("button", { name: "Pencil" })).toHaveAttribute("aria-pressed", "true");
     expect(await historyLength(page)).toBe(history);
 
-    await page.getByRole("button", { name: "Fill" }).click();
+    await page.getByRole("button", { name: "Spill" }).click();
     await expect(navigate).toHaveAttribute("aria-pressed", "false");
 });
 
-test("Space-drag is momentary Navigate and middle-drag still pans", async ({ page }) => {
+test("Space-drag is momentary Navigate and middle-drag pans while Navigate is active", async ({ page }) => {
     await bootApp(page);
     const navigate = page.getByRole("button", { name: "Navigate" });
     const history = await historyLength(page);
@@ -95,6 +95,7 @@ test("Space-drag is momentary Navigate and middle-drag still pans", async ({ pag
     expect((await matrix(page)).e).not.toBeCloseTo(beforeSpace.e, 2);
 
     const beforeMiddle = await matrix(page);
+    await navigate.click();
     await dragCanvas(page, "middle");
     expect((await matrix(page)).e).not.toBeCloseTo(beforeMiddle.e, 2);
     expect(await historyLength(page)).toBe(history);

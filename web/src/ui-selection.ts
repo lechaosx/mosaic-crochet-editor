@@ -1,50 +1,20 @@
-import type { Tool, GridRecipe } from "@mosaic/logic/types";
+import type { GridRecipe } from "@mosaic/logic/types";
 import { el, radioValue, setRadio, setPressed, setMessage, iconAction, listRow, syncList } from "./dom";
-import type { UICallbacks, SelectionMode, SelectionMoveMode, InspectorControls } from "./ui-types";
+import type { UICallbacks, InspectorControls } from "./ui-types";
 
 export function mountSelection(
-    cb: Pick<UICallbacks, "onSelectionMoveMode" | "onSelectionMode" | "onSelectionCopy" | "onSelectionCut"
+    cb: Pick<UICallbacks, "onSelectionCopy" | "onSelectionCut"
         | "onSelectionPaste" | "onSelectionDeselect" | "onCreateRecipe" | "onActivateRecipe"
         | "onDeleteRecipe" | "onRecipeChange" | "onApplyRecipe">,
     inspector: Pick<InspectorControls, "isOpen" | "close">, syncCanvasChromeInsets: () => void) {
     /* ── Selection card ──────────────────────────────────────────────── */
     const selectionStatus = el("status-selection");
-    const selectionModeControls = el("selection-mode-controls");
-    const selectionModeButtons: Record<SelectionMode, HTMLButtonElement> = {
-        replace: el("selection-replace"),
-        add: el("selection-add"),
-        remove: el("selection-subtract"),
-    };
     const selectionTitle = el("selection-card-title");
     const selectionClipboard = el("selection-card-clipboard");
-    const selectionModes = el("selection-modes");
     const selectionCopy = el<HTMLButtonElement>("selection-copy");
     const selectionCut = el<HTMLButtonElement>("selection-cut");
     const selectionPaste = el<HTMLButtonElement>("selection-paste");
     const selectionDeselect = el<HTMLButtonElement>("selection-deselect");
-    const modeButtons: Record<SelectionMoveMode, HTMLButtonElement> = {
-        move: el("selection-mode-move"),
-        duplicate: el("selection-mode-duplicate"),
-        "mask-only": el("selection-mode-area"),
-    };
-
-    (Object.keys(selectionModeButtons) as SelectionMode[]).forEach(mode =>
-        selectionModeButtons[mode].addEventListener("click", () => cb.onSelectionMode(mode))
-    );
-    function setSelectionMode(tool: Tool, mode: SelectionMode, hasSelection: boolean) {
-        selectionModeControls.hidden = tool !== "select" && tool !== "wand";
-        for (const key of Object.keys(selectionModeButtons) as SelectionMode[]) {
-            const button = selectionModeButtons[key];
-            const active = key === mode;
-            setPressed(button, active);
-            if (key === "remove") button.setAttribute("aria-disabled", String(!hasSelection));
-        }
-    }
-    (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(mode =>
-        modeButtons[mode].addEventListener("click", () => {
-            cb.onSelectionMoveMode(mode);
-        })
-    );
     selectionCopy.addEventListener("click", cb.onSelectionCopy);
     selectionCut.addEventListener("click", cb.onSelectionCut);
     selectionPaste.addEventListener("click", cb.onSelectionPaste);
@@ -58,7 +28,7 @@ export function mountSelection(
         }
     });
 
-    function setSelectionState(selectedCount: number, clipboardCount: number, mode: SelectionMoveMode) {
+    function setSelectionState(selectedCount: number, clipboardCount: number) {
         const hasSelection = selectedCount > 0;
         const hasClip = clipboardCount > 0;
         const statusVisibilityChanged = selectionStatus.hidden === (hasSelection || hasClip);
@@ -76,9 +46,6 @@ export function mountSelection(
         selectionClipboard.textContent = hasSelection && hasClip
             ? `${clipboardCount} ${clipboardCount === 1 ? "cell" : "cells"} copied`
             : "";
-        (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(key => {
-            modeButtons[key].disabled = !hasSelection;
-        });
         selectionCopy.disabled = !hasSelection;
         selectionCut.disabled = !hasSelection;
         selectionDeselect.disabled = !hasSelection;
@@ -87,10 +54,6 @@ export function mountSelection(
         selectionDeselect.title = hasSelection ? "Place content and remove the selection (Escape)" : "No selection to deselect";
         selectionPaste.disabled = !hasClip;
         selectionPaste.title = hasClip ? "Paste copied cells (Ctrl+V)" : "Nothing copied";
-        (Object.keys(modeButtons) as SelectionMoveMode[]).forEach(key => {
-            const active = key === mode;
-            setPressed(modeButtons[key], active);
-        });
         if (statusVisibilityChanged) syncCanvasChromeInsets();
     }
 
@@ -241,5 +204,5 @@ export function mountSelection(
     }
     function setRecipeError(message: string | null) { setMessage(recipeError, message); }
 
-    return { setSelectionState, setSelectionMode, setRecipes, setRecipeError };
+    return { setSelectionState, setRecipes, setRecipeError };
 }

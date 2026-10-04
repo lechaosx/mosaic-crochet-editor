@@ -1,6 +1,6 @@
 // Symmetry toggles + Pattern inspector resize.
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("vertical symmetry mirrors paint horizontally", async ({ page }) => {
     await bootApp(page);
@@ -316,7 +316,7 @@ test("saved-repeat instances drive Invert and Eraser across the extended selecti
     await clickCell(page, 2, 1);
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
-    await page.getByRole("button", { name: "Invert colours" }).click();
+    await page.getByRole("button", { name: "Invert" }).click();
     await clickCell(page, 3, 1);
 
     for (const x of [2, 3]) {
@@ -336,7 +336,7 @@ test("saved repeat controls reject overlap and claim-limit configurations before
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /^Add/ }).click();
+    await chooseToolVariant(page, "Rectangle", "Add");
     await clickCell(page, 3, 2);
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
@@ -353,7 +353,7 @@ test("rejected saved-repeat values, modes, and turns return controls to stored s
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /^Add/ }).click();
+    await chooseToolVariant(page, "Rectangle", "Add");
     await clickCell(page, 3, 1);
 
     const left = page.locator("#recipe-left");
@@ -390,7 +390,7 @@ test("live paint keeps a packed repeat that lands in a sparse source hole", asyn
     await clickCell(page, 4, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: /^Add/ }).click();
+    await chooseToolVariant(page, "Rectangle", "Add");
     await clickCell(page, 4, 1);
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
@@ -413,7 +413,7 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
         await page.getByRole("button", { name: /Global Mirror/ }).click();
         await page.getByRole("button", { name: "Add vertical" }).click();
         await page.getByRole("button", { name: "Yarn A", exact: true }).click();
-        await page.getByRole("button", { name: "Fill" }).click();
+        await page.getByRole("button", { name: "Spill" }).click();
 
         await clickCell(page, clickX, 1);
 
@@ -540,9 +540,8 @@ test("saved repeat source follows an explicit duplicate move", async ({ page }) 
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
     await page.getByRole("button", { name: "Move", exact: true }).click();
-    const duplicate = page.getByRole("button", { name: /Duplicate/ });
-    await duplicate.click();
-    await expect(duplicate).toHaveAttribute("aria-pressed", "true");
+    await chooseToolVariant(page, "Move", "Duplicate");
+    await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Move · Duplicate/);
 
     await dragCells(page, 1, 1, 3, 1);
     expect(await page.evaluate(() =>
@@ -571,9 +570,8 @@ test("saved repeat source follows an explicit move-area move", async ({ page }) 
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
     await page.getByRole("button", { name: "Move", exact: true }).click();
-    const moveArea = page.getByRole("button", { name: /Move area/ });
-    await moveArea.click();
-    await expect(moveArea).toHaveAttribute("aria-pressed", "true");
+    await chooseToolVariant(page, "Move", "Move area");
+    await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Move · Move area/);
 
     await dragCells(page, 1, 1, 3, 1);
     expect(await page.evaluate(() =>
@@ -633,7 +631,7 @@ test("move-area into a round hole deactivates the saved repeat when nothing can 
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 0, 6);
     await page.getByRole("button", { name: "Move", exact: true }).click();
-    await page.getByRole("button", { name: /Move area/ }).click();
+    await chooseToolVariant(page, "Move", "Move area");
 
     await dragCells(page, 0, 6, 6, 6);
 

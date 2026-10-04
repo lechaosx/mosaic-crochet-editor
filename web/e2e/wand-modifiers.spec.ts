@@ -3,7 +3,7 @@
 // wiring (gesture event → modifier capture in `onPaintStart`).
 
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
 const B: [number, number, number] = [255, 255, 255];
@@ -58,33 +58,29 @@ test("one wand sweep creates one undoable selection edit", async ({ page }) => {
     }
 });
 
-test("visible Select and Wand modes latch within the group and reset after leaving", async ({ page }) => {
+test("Rectangle and Wand retain independent variants after leaving their families", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    const modes = page.getByRole("group", { name: "Selection mode" });
-    await expect(modes).toBeVisible();
-    await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
-    await expect(modes.getByRole("button", { name: "Subtract" })).toHaveAttribute("aria-disabled", "true");
-    await modes.getByRole("button", { name: "Add" }).click();
-    await expect(modes.getByRole("button", { name: "Add" })).toHaveAttribute("aria-pressed", "true");
+    await chooseToolVariant(page, "Rectangle", "Add");
+    await expect(page.locator("#tool-select")).toHaveAccessibleDescription(/Rectangle · Add/);
 
     await page.getByRole("button", { name: "Magic wand" }).click();
-    await expect(modes.getByRole("button", { name: "Add" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-wand")).toHaveAccessibleDescription(/Wand · Replace/);
+    await chooseToolVariant(page, "Wand", "Subtract");
     await page.getByRole("button", { name: "Pencil" }).click();
-    await expect(modes).toBeHidden();
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-select")).toHaveAccessibleDescription(/Rectangle · Add/);
+    await expect(page.locator("#tool-wand")).toHaveAccessibleDescription(/Wand · Subtract/);
 });
 
 test("visible Add and Subtract change the lifted selection without modifiers", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    const modes = page.getByRole("group", { name: "Selection mode" });
     await clickCell(page, 1, 1);
-    await modes.getByRole("button", { name: "Add" }).click();
+    await chooseToolVariant(page, "Rectangle", "Add");
     await clickCell(page, 3, 1);
     await expect(page.locator("#status-selection")).toHaveText("2 selected");
-    await modes.getByRole("button", { name: "Subtract" }).click();
+    await chooseToolVariant(page, "Rectangle", "Subtract");
     await clickCell(page, 1, 1);
     await expect(page.locator("#status-selection")).toHaveText("1 selected");
 });
@@ -92,23 +88,24 @@ test("visible Add and Subtract change the lifted selection without modifiers", a
 test("Shift temporarily overrides visible Subtract and restores its latched state", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    const modes = page.getByRole("group", { name: "Selection mode" });
     await clickCell(page, 1, 1);
-    await modes.getByRole("button", { name: "Subtract" }).click();
+    await chooseToolVariant(page, "Rectangle", "Subtract");
     await clickCell(page, 3, 1, { modifiers: ["Shift"] });
     await expect(page.locator("#status-selection")).toHaveText("2 selected");
-    await expect(modes.getByRole("button", { name: "Subtract" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-select")).toHaveAccessibleDescription(/Rectangle · Subtract/);
 });
 
-test("Subtract resets when its final selected cell is removed", async ({ page }) => {
+test("Subtract remains chosen when its final selected cell is removed", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    const modes = page.getByRole("group", { name: "Selection mode" });
     await clickCell(page, 1, 1);
-    await modes.getByRole("button", { name: "Subtract" }).click();
+    await chooseToolVariant(page, "Rectangle", "Subtract");
     await clickCell(page, 1, 1);
-    await expect(modes.getByRole("button", { name: "Replace" })).toHaveAttribute("aria-pressed", "true");
-    await expect(modes.getByRole("button", { name: "Subtract" })).toHaveAttribute("aria-disabled", "true");
+    await expect(page.locator("#status-selection")).toBeHidden();
+    await expect(page.locator("#tool-select")).toHaveAccessibleDescription(/Rectangle · Subtract/);
+    await page.keyboard.press("p");
+    await page.keyboard.press("s");
+    await expect(page.locator("#tool-select")).toHaveAccessibleDescription(/Rectangle · Subtract/);
 });
 
 // The Ctrl+wand-click "remove" semantic is reliably covered at the

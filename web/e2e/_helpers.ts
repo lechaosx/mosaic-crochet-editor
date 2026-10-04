@@ -4,6 +4,12 @@
 
 import { Page } from "@playwright/test";
 
+export async function chooseToolVariant(page: Page, family: string, variant: string) {
+    await page.getByRole("button", { name: `${family} variants`, exact: true }).click();
+    await page.getByRole("menu", { name: `${family} variants`, exact: true })
+        .getByRole("menuitemradio", { name: variant, exact: true }).click();
+}
+
 declare global {
     interface Window {
         __test_matrix__?: DOMMatrix;

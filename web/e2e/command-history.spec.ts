@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant } from "./_helpers";
 
 async function recovery(page: Page) {
     return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
@@ -18,7 +18,7 @@ async function selectForMove(page: Page, mode = "Move content") {
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Move", exact: true }).click();
-    await page.locator("#move-popover").getByRole("button", { name: new RegExp(`^${mode}`) }).click();
+    await chooseToolVariant(page, "Move", mode);
     await page.getByRole("button", { name: "Close inspector" }).click();
     await page.locator("#canvas").focus();
 }
@@ -269,6 +269,127 @@ for (const event of ["lostpointercapture", "blur", "Escape", "pointercancel"]) {
         expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual([0, 0, 0]);
     });
 }
+
+for (const command of ["Delete", "Control+x", "Control+Shift+a", "Control+a", "Control+v"]) {
+    test(`${command} settles a held pointer edit before authoring a separate command`, async ({ page }) => {
+        await bootApp(page);
+        await clickCell(page, 1, 1);
+        await page.keyboard.press("s");
+        await clickCell(page, 1, 1);
+        await page.getByRole("button", { name: "Close inspector" }).click();
+        if (command === "Control+v") {
+            await page.keyboard.press("Control+c");
+            await page.keyboard.press("m");
+            await page.keyboard.press("ArrowRight");
+        }
+        await page.keyboard.press("p");
+        await page.keyboard.press("2");
+        const cell = await cellCoord(page, command === "Control+v" ? 2 : 1, 1);
+        await page.mouse.move(cell.cx, cell.cy);
+        await page.mouse.down();
+        await page.keyboard.press(command);
+        const after = await recovery(page);
+        await page.locator("#canvas").dispatchEvent("pointercancel", { pointerId: 1, pointerType: "mouse", button: 0 });
+        await page.mouse.up();
+        expect(await recovery(page)).toEqual(after);
+        await page.keyboard.press("Control+z");
+        await page.keyboard.press("Control+y");
+        expect(await recovery(page)).toEqual(after);
+    });
+}
+
+test("failed Paste keeps a held pointer edit cancellable", async ({ page }) => {
+    await bootApp(page);
+    const before = await recovery(page);
+    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    const cell = await cellCoord(page, 1, 1);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down();
+    await page.keyboard.press("Control+v");
+    await page.keyboard.press("Escape");
+    await page.mouse.up();
+    expect(await recovery(page)).toEqual(before);
+    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toBe(history);
+});
+
+for (const key of ["v", "h", "c", "d", "a"]) {
+    test(`${key} mirror command settles a held stroke before its own history entry`, async ({ page }) => {
+        await bootApp(page);
+        const cell = await cellCoord(page, 1, 1);
+        await page.mouse.move(cell.cx, cell.cy);
+        await page.mouse.down();
+        await page.keyboard.press(key);
+        const authored = await recovery(page);
+        await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+        await page.mouse.up();
+        expect(await recovery(page)).toEqual(authored);
+        await page.keyboard.press("Control+z");
+        await page.keyboard.press("Control+y");
+        expect(await recovery(page)).toEqual(authored);
+    });
+}
+
+test("an arrow Move after a chosen tool change settles the held pointer first", async ({ page }) => {
+    await bootApp(page);
+    await selectForMove(page);
+    await page.keyboard.press("p");
+    await page.keyboard.press("2");
+    const cell = await cellCoord(page, 1, 1);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down();
+    await page.keyboard.press("m");
+    await page.keyboard.down("ArrowRight");
+    await page.keyboard.down("ArrowRight");
+    await page.keyboard.up("ArrowRight");
+    const after = await recovery(page);
+    expect(after.workspace.float).toMatchObject({ x: 3, pixels: "Ag==" });
+    await page.locator("#canvas").dispatchEvent("pointercancel", { pointerId: 1, pointerType: "mouse", button: 0 });
+    await page.mouse.up();
+    expect(await recovery(page)).toEqual(after);
+    await page.keyboard.press("Control+z");
+    expect((await recovery(page)).workspace.float).toMatchObject({ x: 1, pixels: "Ag==" });
+});
+
+test("an accepted Stamp settles a held pointer before its own authored result", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 1, 1);
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await page.keyboard.press("v");
+    await page.keyboard.press("p");
+    const cell = await cellCoord(page, 1, 1);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down();
+    await page.keyboard.press("t");
+    const mirrored = await cellCoord(page, 7, 1);
+    expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
+    const after = await recovery(page);
+    await page.locator("#canvas").dispatchEvent("pointercancel", { pointerId: 1, pointerType: "mouse", button: 0 });
+    await page.mouse.up();
+    expect(await recovery(page)).toEqual(after);
+});
+
+test("keyboard Move area uses the Rectangle source committed when pointer input settles", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 1);
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    const first = await cellCoord(page, 1, 1);
+    const second = await cellCoord(page, 2, 1);
+    await page.mouse.move(first.cx, first.cy);
+    await page.mouse.down();
+    await page.mouse.move(second.cx, second.cy);
+    await page.keyboard.press("m");
+    await page.keyboard.down("Alt");
+    await page.keyboard.down("ArrowRight");
+    const right = await cellCoord(page, 3, 1);
+    expect(await pixelRGB(page, right.cx, right.cy)).toEqual([255, 255, 255]);
+    await page.keyboard.up("ArrowRight");
+    await page.keyboard.up("Alt");
+    await page.mouse.up();
+    expect((await recovery(page)).workspace.float).toMatchObject({ x: 2, y: 1, w: 2, h: 1, pixels: "AgI=" });
+});
 
 for (const id of ["color-a", "color-b", "danger-color", "accent-color"]) {
     test(`${id} preview and commit is one undoable project colour edit`, async ({ page }) => {

@@ -16,7 +16,7 @@ export interface PaintCtx {
     x:              number;
     y:              number;
     color:          1 | 2;
-    primary:        1 | 2;
+    oppositeNatural?: boolean;
     overlayAction?: OverlayAction;
     invertVisited:  Set<number> | null;
     transforms:     Float64Array;
@@ -28,7 +28,7 @@ const none = new Float64Array(0);
 const identity: TransformPlacement = { map: cell => cell, unmap: cell => cell };
 
 function paint(tool: PaintTool, c: PaintCtx): Uint8Array {
-    const { visible, pattern: p, x, y, color, primary, transforms, shifted, repeat } = c;
+    const { visible, pattern: p, x, y, color, transforms, shifted, repeat } = c;
     const W = p.canvasWidth, H = p.canvasHeight;
     const inCanvas = (cell: TransformSourceCell) => cell.x >= 0 && cell.x < W && cell.y >= 0 && cell.y < H;
     const index = (cell: TransformSourceCell) => cell.y * W + cell.x;
@@ -82,8 +82,8 @@ function paint(tool: PaintTool, c: PaintCtx): Uint8Array {
     } else {
         sourceCells = [click];
         if (tool === "eraser") result = p.mode === "row"
-            ? paint_natural_row(visible, W, H, x, y, none, color !== primary, null)
-            : paint_natural_round(visible, W, H, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, none, color !== primary, null);
+            ? paint_natural_row(visible, W, H, x, y, none, c.oppositeNatural ?? false, null)
+            : paint_natural_round(visible, W, H, p.virtualWidth, p.virtualHeight, p.offsetX, p.offsetY, p.rounds, x, y, none, c.oppositeNatural ?? false, null);
     }
     if (toggling && sourceCells.some(cell => c.invertVisited?.has(index(cell)))) return visible.slice();
 

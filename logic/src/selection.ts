@@ -283,7 +283,7 @@ export function anchorIntoCanvas(s: SessionState): { pixels: Uint8Array; float: 
 
 export type ReplicateSelectionResult = "unchanged" | "applied" | "conflict" | "orbit-limit";
 
-export function replicateSelection(store: Store): ReplicateSelectionResult {
+export function replicateSelection(store: Store, beforeCommit?: () => void): ReplicateSelectionResult {
     const s = store.state;
     if (!s.float) return "unchanged";
 
@@ -310,6 +310,11 @@ export function replicateSelection(store: Store): ReplicateSelectionResult {
         const status = applied.status();
         switch (status) {
             case TransformApplicationStatus.Applied:
+                if (beforeCommit) {
+                    beforeCommit();
+                    // Settling input can re-lift a selection; apply to its committed source.
+                    return replicateSelection(store);
+                }
                 store.commit(state => { state.pixels = applied.pixels(); }, { history: true });
                 return "applied";
             case TransformApplicationStatus.Unchanged:

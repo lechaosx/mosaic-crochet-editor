@@ -14,6 +14,13 @@ import { encodeMcw } from "@mosaic/logic/mcw";
 beforeEach(() => { localStorage.clear(); });
 
 describe("historySave / historyReset", () => {
+    test("chosen tool variants do not create an authored history action", () => {
+        const session = rowSession(3, 3);
+        historyReset(session);
+        historySave({ ...session, toolVariants: { select: "add", wand: "remove", move: "duplicate", overlay: "invert" } });
+        expect(canUndo()).toBe(false);
+        expect(historyPeek()).not.toHaveProperty("toolVariants");
+    });
     test("reset seeds a single snapshot at index 0", () => {
         const s = rowSession(3, 3);
         historyReset(s);

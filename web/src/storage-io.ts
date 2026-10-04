@@ -1,4 +1,4 @@
-import { PatternState, Tool, Axis, GridRecipe } from "@mosaic/logic/types";
+import { PatternState, Tool, ToolVariants, defaultToolVariants, Axis, GridRecipe } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { decodeMcw, encodeMcw, ProjectDocument } from "@mosaic/logic/mcw";
@@ -14,7 +14,7 @@ import {
 
 const RECOVERY_KEY        = "mosaic-recovery";
 const LEGACY_RECOVERY_KEY = "mosaic-pattern-v4";
-const RECOVERY_VERSION    = 6;
+const RECOVERY_VERSION    = 7;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 function recoveryColorOverride(value: unknown): string | null {
@@ -82,8 +82,14 @@ interface RecoveryV6 {
     workspace: RecoveryV5["workspace"] & { rotation: number };
 }
 
+interface RecoveryV7 {
+    version: 7;
+    document: RecoveryV6["document"];
+    workspace: RecoveryV6["workspace"] & { toolVariants: ToolVariants };
+}
+
 interface MigratedRecovery {
-    recovery: RecoveryV6;
+    recovery: RecoveryV7;
     preferences?: AppPreferences;
 }
 
@@ -126,6 +132,7 @@ function recoveryFromV5(data: RecoveryV5): MigratedRecovery {
                 ...data.workspace,
                 liveTransforms: true,
                 rotation: data.preferences.canvasRotation,
+                toolVariants: defaultToolVariants(),
             },
         },
         preferences: preferencesFromLegacy(data.preferences),
@@ -138,8 +145,15 @@ function migrateRecovery(value: unknown): MigratedRecovery | null {
     if (data.version === RECOVERY_VERSION) {
         if (typeof data.document !== "object" || data.document === null
             || typeof data.workspace !== "object" || data.workspace === null) return null;
-        const recovery = data as unknown as RecoveryV6;
+        const recovery = data as unknown as RecoveryV7;
         return { recovery: { ...recovery, workspace: { ...recovery.workspace, liveTransforms: true } } };
+    }
+    if (data.version === 6) {
+        if (typeof data.document !== "object" || data.document === null
+            || typeof data.workspace !== "object" || data.workspace === null) return null;
+        const recovery = data as unknown as RecoveryV6;
+        return { recovery: { ...recovery, version: RECOVERY_VERSION,
+            workspace: { ...recovery.workspace, liveTransforms: true, toolVariants: defaultToolVariants() } } };
     }
     if (data.version === 5) {
         if (typeof data.document !== "object" || data.document === null
@@ -153,7 +167,7 @@ function migrateRecovery(value: unknown): MigratedRecovery | null {
     return null;
 }
 
-function recoveryFromSession(s: Readonly<SessionState>): RecoveryV6 {
+function recoveryFromSession(s: Readonly<SessionState>): RecoveryV7 {
     return {
         version: RECOVERY_VERSION,
         document: {
@@ -164,6 +178,7 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV6 {
         },
         workspace: {
             activeTool: s.activeTool, primaryColor: s.primaryColor,
+            toolVariants: s.toolVariants,
             axes: s.axes,
             recipes: storedGridRecipes(s.recipes), activeRecipeId: s.activeRecipeId,
             liveTransforms: true,
@@ -208,6 +223,7 @@ export function loadFromLocalStorage(): SessionState | null {
             dangerColorOverride: recoveryColorOverride(document.dangerColorOverride),
             accentColorOverride: recoveryColorOverride(document.accentColorOverride),
             activeTool:       workspace.activeTool as Tool,
+            toolVariants:    recoveryToolVariants(workspace.toolVariants),
             primaryColor:     workspace.primaryColor as 1 | 2,
             axes:             axes.filter(axis => axisIsProjectValid(axis, document.state)),
             recipes,
@@ -232,6 +248,16 @@ export function loadFromLocalStorage(): SessionState | null {
         }
         return restored;
     } catch { localStorage.removeItem(sourceKey); return null; }
+}
+
+function recoveryToolVariants(value: unknown): ToolVariants {
+    if (typeof value !== "object" || value === null) throw new TypeError("Invalid recovery tool variants.");
+    const variants = value as ToolVariants;
+    if (!["replace", "add", "remove"].includes(variants.select)
+        || !["replace", "add", "remove"].includes(variants.wand)
+        || !["move", "duplicate", "mask-only"].includes(variants.move)
+        || !["place", "clear", "invert"].includes(variants.overlay)) throw new TypeError("Invalid recovery tool variants.");
+    return { select: variants.select, wand: variants.wand, move: variants.move, overlay: variants.overlay };
 }
 
 // ── File save / load ──────────────────────────────────────────────────────────

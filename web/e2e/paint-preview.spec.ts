@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("hover reports only coordinates and never previews a paint result", async ({ page }) => {
     await bootApp(page);
@@ -23,8 +23,10 @@ test("Overlay exposes touch actions while right-click performs the opposite plac
     const clear = page.getByRole("button", { name: "Clear overlay" });
     const invert = page.getByRole("button", { name: "Invert overlay" });
     await expect(place).toBeVisible();
-    await expect(clear).toBeVisible();
-    await expect(invert).toBeVisible();
+    await page.getByRole("button", { name: "Overlay variants", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Clear", exact: true })).toBeVisible();
+    await expect(page.getByRole("menuitemradio", { name: "Invert", exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
 
     const target = await cellCoord(page, 2, 1);
     const before = await pixelRGB(page, target.cx, target.cy);
@@ -34,7 +36,7 @@ test("Overlay exposes touch actions while right-click performs the opposite plac
     await page.mouse.click(target.cx, target.cy, { button: "right" });
     expect(await pixelRGB(page, target.cx, target.cy)).toEqual(before);
 
-    await clear.click();
+    await chooseToolVariant(page, "Overlay", "Clear");
     await page.mouse.click(target.cx, target.cy, { button: "right" });
     expect(await pixelRGB(page, target.cx, target.cy)).not.toEqual(before);
     await page.mouse.click(target.cx, target.cy);
@@ -43,9 +45,9 @@ test("Overlay exposes touch actions while right-click performs the opposite plac
     await page.keyboard.press("Shift+O");
     await expect(clear).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("o");
-    await expect(place).toHaveAttribute("aria-pressed", "true");
+    await expect(clear).toHaveAttribute("aria-pressed", "true");
 
-    await invert.click();
+    await chooseToolVariant(page, "Overlay", "Invert");
     await page.mouse.click(target.cx, target.cy, { button: "right" });
     expect(await pixelRGB(page, target.cx, target.cy)).not.toEqual(before);
     await page.mouse.click(target.cx, target.cy);

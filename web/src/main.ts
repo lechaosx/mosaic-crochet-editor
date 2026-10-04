@@ -5,7 +5,8 @@ import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indi
          instruction_start_row, instruction_start_round,
          instruction_wip_row, instruction_wip_round,
          InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
-import { Tool, PatternState, SymKey, Float, Axis, GridRecipe } from "@mosaic/logic/types";
+import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, Axis, GridRecipe } from "@mosaic/logic/types";
+import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction } from "@mosaic/logic/tool-input";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
@@ -18,7 +19,7 @@ import { addAxis, removeAxis, toggleAxisActive,
 import { axesToFlat } from "@mosaic/logic/symmetry";
 import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual } from "@mosaic/logic/grid-recipes";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
-import { mountUI, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit } from "./ui";
+import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
 import { packInstructionCoordinates } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
@@ -29,7 +30,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe,
          syncActiveGridRecipe } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
-import { OverlayAction, PaintTool, paintOps } from "@mosaic/logic/paint";
+import { OverlayAction, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
 import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress,
          clearLiveProgress, hasLiveProgress } from "./live-progress";
@@ -99,6 +100,7 @@ function defaultSession(): SessionState {
         dangerColorOverride: null,
         accentColorOverride: null,
         activeTool:    "pencil",
+        toolVariants:  defaultToolVariants(),
         primaryColor:  1,
         axes:           [],
         recipes:        [recipe],
@@ -120,7 +122,7 @@ function exampleSession(): SessionState {
     for (const x of [2, 4, 6]) {
         pixels = paintOps.overlay({
             visible: pixels, pattern, x, y: 2,
-            color: 1, primary: 1, invertVisited: null,
+            color: 1, invertVisited: null,
             overlayAction: "place",
             transforms: new Float64Array(0), shifted: null,
         });
@@ -175,9 +177,6 @@ let instructionsPreviewStore: Store | null = null;
 let instructionsView: ReturnType<UIHandle["openInstructions"]> | null = null;
 let instructionsOpen = false;
 let instructionCache: InstructionCache | null = null;
-let overlayAction: OverlayAction = "place";
-let selectionMoveMode: SelectionMoveMode = "move";
-let selectionMode: SelectionMode = "replace";
 let navigateLatched = false;
 let navigateMomentary = false;
 
@@ -207,7 +206,7 @@ type MoveMode = SelectionMoveMode;
 type Gesture =
     | { kind: "paint";
         guidePickPending: boolean;
-        color: 1 | 2;
+        action: PaintAction;
         prePixels: Uint8Array;
         preFloat: Float | null;
         invertVisited: Set<number> | null;
@@ -255,6 +254,35 @@ let gesture: Gesture | null = null;
 let gestureFeedbackShown = false;
 let keyboardMove: { key: string; mode: MoveMode; baseline: SessionState; mask: Float | null } | null = null;
 let ctrlArrowStamped = false;
+let executingTimer: ReturnType<typeof setTimeout> | null = null;
+let executingAction: ToolAction | null = null;
+
+function clearExecutingAction() {
+    if (executingTimer !== null) clearTimeout(executingTimer);
+    executingTimer = null;
+    executingAction = null;
+    ui.setExecutingAction(null);
+}
+
+function showExecutingAction(action: ToolAction, yarn: 1 | 2 | null = null) {
+    if (executingTimer !== null) clearTimeout(executingTimer);
+    executingTimer = null;
+    executingAction = action;
+    const label = action.kind === "move" ? action.mode === "mask-only" ? "Move area" : action.mode === "duplicate" ? "Duplicate" : "Move content"
+        : action.kind === "select" || action.kind === "wand"
+            ? `${action.kind === "select" ? "Rectangle" : "Wand"} · ${action.mode === "remove" ? "Subtract" : action.mode === "add" ? "Add" : "Replace"}`
+            : action.tool === "overlay" ? `Overlay · ${action.overlayAction === "place" ? "Place" : action.overlayAction === "clear" ? "Clear" : "Invert"}`
+                : action.tool === "fill" ? "Spill" : action.tool === "pencil" ? "Pencil"
+                    : action.tool === "eraser" ? "Eraser" : "Invert";
+    const slot = yarn ?? (action.kind === "paint" && (action.tool === "pencil" || action.tool === "fill") ? action.color : null);
+    ui.setExecutingAction(`${label}${slot ? ` · Yarn ${slot === 1 ? "A" : "B"}` : ""}`,
+        action.kind === "paint" ? action.tool : action.kind, slot);
+}
+
+function finishExecutingAction() {
+    if (!executingAction) return;
+    executingTimer = setTimeout(clearExecutingAction, 900);
+}
 
 function modeToCode(m: SelectMode): number {
     return m === "replace" ? 0 : m === "add" ? 1 : 2;
@@ -358,12 +386,11 @@ store.addObserver(s => {
     }
 });
 store.addObserver(s => {
-    if (!s.state.float && selectionMode === "remove") selectionMode = "replace";
     ui.setRecipes(s.state.recipes, s.state.activeRecipeId);
     ui.setTransformState(Boolean(s.state.float), hasConfiguredTransforms());
     ui.setTransformError(null);
-    ui.setSelectionMode(s.state.activeTool, selectionMode, Boolean(s.state.float));
-    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
+    ui.setToolVariants(s.state.toolVariants);
+    ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 });
 
 function selectionCellCount(): number {
@@ -393,7 +420,8 @@ function overlayInwardCell(pattern: PatternState, x: number, y: number): Int32Ar
         );
 }
 
-function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, invertVisited: Set<number> | null): PaintOutcome {
+function evaluatePaintAt(action: PaintAction, x: number, y: number, invertVisited: Set<number> | null): PaintOutcome {
+    const { tool, color } = action;
     const s = store.state;
     const { pattern } = s;
     const { canvasWidth: W, canvasHeight: H } = pattern;
@@ -422,11 +450,7 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
     if (!inCanvas && tool !== "overlay") return blocked("Outside pattern");
     if (inCanvas && visible[y * W + x] === 0) return blocked("Outside pattern");
     if (inCanvas && shifted && shifted[y * W + x] === 0 && !recipeCell) return blocked("Outside selection");
-    const effectiveOverlayAction = tool === "overlay" && color !== s.primaryColor
-        ? overlayAction === "place" ? "clear"
-            : overlayAction === "clear" ? "place"
-                : "invert"
-        : overlayAction;
+    const effectiveOverlayAction = action.tool === "overlay" ? action.overlayAction : "place";
     if (tool === "overlay" && effectiveOverlayAction === "place" && !overlayTargetAvailable(pattern, x, y)) {
         return blocked(overlayInwardCell(pattern, x, y).length === 0
             ? "No inward supporting cell"
@@ -439,7 +463,8 @@ function evaluatePaintAt(tool: PaintTool, color: 1 | 2, x: number, y: number, in
     try {
         next = paintOps[tool]({
             visible, pattern, x, y,
-            color, primary: s.primaryColor,
+            color,
+            oppositeNatural: action.tool === "eraser" ? action.oppositeNatural : false,
             overlayAction: effectiveOverlayAction,
             invertVisited,
             transforms, shifted: paintMask, repeat: evaluatedRecipe,
@@ -485,14 +510,16 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
     const { x, y } = screenToPattern(
         viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, pattern, clientX, clientY,
     );
-    const tool = store.state.activeTool;
-    if (tool === "select" || tool === "wand" || tool === "move") return;
-    const outcome = evaluatePaintAt(tool, g.color, x, y, g.invertVisited);
+    const outcome = evaluatePaintAt(g.action, x, y, g.invertVisited);
     if (outcome.reason) {
         if (outcome.reason !== "Outside pattern") showGestureFeedback(outcome.reason);
         return;
     }
     if (outcome.protectedSkipped) showGestureFeedback("Protected · Settings");
+    const support = g.action.tool === "overlay" ? overlayInwardCell(pattern, x, y) : null;
+    const yarnIndex = support?.length ? support[1] * pattern.canvasWidth + support[0] : y * pattern.canvasWidth + x;
+    const yarn = outcome.after[yarnIndex];
+    showExecutingAction(g.action, yarn === 1 || yarn === 2 ? yarn : null);
     if (outcome.floatPixels) {
         const pixels = outcome.floatPixels;
         const base = outcome.canvasPixels;
@@ -528,6 +555,7 @@ function hasConfiguredTransforms() {
 // Shortcuts and popover buttons append an active, canonically positioned
 // axis. Axis ids keep multiple entries of the same kind independent.
 function addAxisOfKind(k: SymKey) {
+    finishAuthoredInput();
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
     store.commit(s => { s.axes = addAxis(s.axes, k, W, H); }, { recompute: false, history: true });
     refreshSymmetryUi();
@@ -570,7 +598,7 @@ function onTransformPopoverToggle(open: boolean) {
 }
 
 function onReplicateSelection() {
-    const result = replicateSelection(store);
+    const result = replicateSelection(store, gesture || keyboardMove ? finishAuthoredInput : undefined);
     if (result === "conflict") {
         ui.setTransformError("Stamp failed: different colours claim the same transformed destination.");
     } else if (result === "orbit-limit") {
@@ -630,9 +658,6 @@ function onApplyRecipe() {
 // Switching tools keeps any active float alive — paint tools clip to its
 // shifted mask, so the selection survives across tool changes.
 function setTool(t: Tool) {
-    const wasSelectionTool = store.state.activeTool === "select" || store.state.activeTool === "wand";
-    const isSelectionTool = t === "select" || t === "wand";
-    if (wasSelectionTool && !isSelectionTool) selectionMode = "replace";
     if (navigateLatched) {
         navigateLatched = false;
         ui.setViewState(store.state.rotation, navigateMomentary);
@@ -640,26 +665,13 @@ function setTool(t: Tool) {
     ui.setCanvasFeedback(null);
     store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
     ui.setTool(t);
-    ui.setSelectionMode(t, selectionMode, Boolean(store.state.float));
 }
-function setSelectionMode(mode: SelectionMode) {
-    if (mode === "remove" && !store.state.float) {
-        ui.setCanvasFeedback("No selection");
-        return;
-    }
-    selectionMode = mode;
-    ui.setCanvasFeedback(null);
-    ui.setSelectionMode(store.state.activeTool, mode, Boolean(store.state.float));
-}
-function setSelectionMoveMode(mode: SelectionMoveMode) {
-    if (store.state.activeTool !== "move") setTool("move");
-    selectionMoveMode = mode;
-    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), mode);
+function setToolVariant<K extends keyof ToolVariants>(tool: K, variant: ToolVariants[K]) {
+    store.commit(s => { s.toolVariants = { ...s.toolVariants, [tool]: variant }; }, { recompute: false, render: false });
+    setTool(tool);
 }
 function setOverlayAction(action: OverlayAction) {
-    overlayAction = action;
-    if (store.state.activeTool !== "overlay") setTool("overlay");
-    ui.setOverlayAction(action);
+    setToolVariant("overlay", action);
 }
 function setPrimary(slot: 1 | 2) {
     store.commit(s => { s.primaryColor = slot; }, { recompute: false, render: false });
@@ -756,7 +768,7 @@ function toggleNavigate() {
 // `pasteClipboard` itself only touches state; the tool switch is a UI side
 // effect that lives here in the orchestrator.
 function onPaste() {
-    if (!pasteClipboard(store, finishKeyboardMove)) {
+    if (!pasteClipboard(store, finishAuthoredInput)) {
         ui.setCanvasFeedback(clipboardCellCount() === 0
             ? "Clipboard is empty · copy a selection first"
             : "Copied selection cannot fit this pattern · no cells land on the chart");
@@ -767,11 +779,20 @@ function onPaste() {
 }
 function onCopy() {
     copyFloat(store);
-    ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
+    ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 }
-function onCut() { finishKeyboardMove(); cutFloat(store); }
-function onDeselect() {
+function finishAuthoredInput() {
     finishKeyboardMove();
+    gestureInputs.finish();
+    clearExecutingAction();
+}
+function onCut() {
+    if (!store.state.float?.pixels.some(pixel => pixel !== 0)) return;
+    finishAuthoredInput();
+    cutFloat(store);
+}
+function onDeselect() {
+    finishAuthoredInput();
     ui.setCanvasFeedback(null);
     deselect(store);
 }
@@ -979,6 +1000,7 @@ function undo() {
     if (document.querySelector("dialog:modal")) return;
     finishKeyboardMove();
     gestureInputs.cancel();
+    clearExecutingAction();
     patternHistorySession = false;
     const r = historyUndo();
     if (r) { instructionsView?.close(false); applyRestored(r); }
@@ -987,6 +1009,7 @@ function redo() {
     if (document.querySelector("dialog:modal")) return;
     finishKeyboardMove();
     gestureInputs.cancel();
+    clearExecutingAction();
     patternHistorySession = false;
     const r = historyRedo();
     if (r) { instructionsView?.close(false); applyRestored(r); }
@@ -1022,6 +1045,8 @@ async function onLoad() {
         closeAbout();
         return;
     }
+    gestureInputs.cancel();
+    clearExecutingAction();
     instructionsView?.close(false);
     if (!sameAuthoredPattern(loaded.pattern, loaded.pixels)) clearCrochetProgress();
     rs.targetRotation = null;
@@ -1049,6 +1074,8 @@ async function onLoad() {
 // ── Instructions ─────────────────────────────────────────────────────────────
 async function onInstructions() {
     if (instructionsOpen) return;
+    gestureInputs.cancel();
+    clearExecutingAction();
     // Instructions reflect the visible pattern without anchoring the live float.
     const exportPixels = store.state.float
         ? anchorIntoCanvas(store.state).pixels
@@ -1266,9 +1293,7 @@ async function onInstructions() {
 // ── Mount UI + gestures ─────────────────────────────────────────────────────
 const ui: UIHandle = mountUI({
     onTool: setTool,
-    onOverlayAction: setOverlayAction,
-    onSelectionMoveMode: setSelectionMoveMode,
-    onSelectionMode: setSelectionMode,
+    onToolVariant: setToolVariant,
     onSelectionCopy: onCopy,
     onSelectionCut: onCut,
     onSelectionPaste: onPaste,
@@ -1331,6 +1356,8 @@ store.addObserver(syncCrochetProgressControl);
 syncCrochetProgressControl();
 
 function beginFreshPattern() {
+    gestureInputs.cancel();
+    clearExecutingAction();
     const fresh = defaultSession();
     instructionsView?.close(false);
     fresh.pixels = initialize_row_pattern(
@@ -1358,6 +1385,8 @@ function beginFreshPattern() {
 }
 
 function useExample() {
+    gestureInputs.cancel();
+    clearExecutingAction();
     const example = exampleSession();
     instructionsView?.close(false);
     rs.targetRotation = null;
@@ -1393,17 +1422,19 @@ const clientToPattern = (cx: number, cy: number) => {
 };
 
 const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPattern, {
-    primaryColor: () => store.state.primaryColor,
-    onPaintStart: (color, mods) => {
+    onPaintStart: (button, mods) => {
+        clearExecutingAction();
         if (instructionsOpen || editBaseline) {
             gesture = null;
             return;
         }
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
-        const tool = store.state.activeTool;
-        if (tool === "move") {
-            const mode: MoveMode = mods.alt ? "mask-only" : mods.ctrl ? "duplicate" : selectionMoveMode;
+        const action = resolveToolInput(store.state.activeTool, store.state.toolVariants, store.state.primaryColor, { button, ...mods });
+        showExecutingAction(action);
+        const tool = action.kind === "paint" ? action.tool : action.kind;
+        if (action.kind === "move") {
+            const mode = action.mode;
             let prePixels: Uint8Array | null = null;
             const preFloat = store.state.float;
             const preRecipes = store.state.recipes;
@@ -1430,8 +1461,8 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             gesture = { kind: "move", guidePickPending: true, mode, mask: null, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
             return;
         }
-        if (tool === "select") {
-            const mode = mods.shift ? "add" : mods.ctrl ? "remove" : selectionMode;
+        if (action.kind === "select") {
+            const mode = action.mode;
             gesture = {
                 kind: "select",
                 guidePickPending: true,
@@ -1441,8 +1472,8 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             ui.setCanvasFeedback(`${mode === "remove" ? "Subtract" : mode === "add" ? "Add" : "Replace"} selection · drag to preview`);
             return;
         }
-        if (tool === "wand") {
-            const mode = mods.shift ? "add" : mods.ctrl ? "remove" : selectionMode;
+        if (action.kind === "wand") {
+            const mode = action.mode;
             gesture = {
                 kind: "wand",
                 guidePickPending: true,
@@ -1459,10 +1490,10 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         gesture = {
             kind: "paint",
             guidePickPending: true,
-            color,
+            action,
             prePixels: store.state.pixels.slice(),
             preFloat:  store.state.float,
-            invertVisited: tool === "invert" || (tool === "overlay" && overlayAction === "invert")
+            invertVisited: tool === "invert" || (action.kind === "paint" && action.tool === "overlay" && action.overlayAction === "invert")
                 ? new Set<number>() : null,
         };
     },
@@ -1478,6 +1509,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 if (gesture.kind !== "move") {
                     const hits = pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance());
                     if (hits.length > 0) {
+                        clearExecutingAction();
                         viewport.canvas.style.cursor = "grabbing";
                         gesture = { kind: "axis-drag",
                             picks: hits.map(a => ({ id: a.id, kind: a.kind })),
@@ -1504,6 +1536,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 );
                 const hits = pickAxesAt(store.state.axes, frac.x, frac.y, AXIS_HIT_TOLERANCE);
                 if (hits.length > 0) {
+                    clearExecutingAction();
                     gesture = { kind: "axis-drag",
                                 picks: hits.map(a => ({ id: a.id, kind: a.kind })),
                                 preAxes: [...store.state.axes] };
@@ -1624,6 +1657,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         paintAt(cx, cy, gesture);
     },
     onPaintEnd:   () => {
+        finishExecutingAction();
         if (!gesture) return;
         if (gesture.kind === "move") {
             if (!gesture.drag) { gesture = null; return; }
@@ -1702,6 +1736,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         gesture = null;
     },
     onPaintCancel: () => {
+        clearExecutingAction();
         if (!gesture) return;
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
@@ -1785,6 +1820,7 @@ function finishKeyboardMove() {
     if (!keyboardMove) return;
     const move = keyboardMove;
     keyboardMove = null;
+    finishExecutingAction();
     if (move.mode === "mask-only" && store.state.float) {
         const lifted = liftCells(store.state.pixels, store.state.pattern, shiftedFloatMask(store.state));
         store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; syncActiveGridRecipe(s); }, { history: true });
@@ -1795,6 +1831,7 @@ function cancelKeyboardMove() {
     if (!keyboardMove) return false;
     const baseline = keyboardMove.baseline;
     keyboardMove = null;
+    clearExecutingAction();
     ctrlArrowStamped = false;
     store.commit(s => {
         s.pixels = baseline.pixels;
@@ -1808,16 +1845,24 @@ function cancelKeyboardMove() {
 function moveWithArrow(e: KeyboardEvent) {
     if (keyboardMove && keyboardMove.key !== e.key) finishKeyboardMove();
     if (!keyboardMove) {
-        const mode: MoveMode = e.altKey ? "mask-only" : e.ctrlKey || e.metaKey ? "duplicate" : selectionMoveMode;
-        const mask = mode === "mask-only"
+        const mode = resolveMoveInput(store.state.toolVariants.move, { button: 0, shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey });
+        let mask = mode === "mask-only"
             ? clipFloatToCanvas(store.state.float!, store.state.pattern.canvasWidth, store.state.pattern.canvasHeight)
             : null;
         if (mode === "mask-only" && !mask) {
             ui.setCanvasFeedback("Selection is outside the pattern · move it onto the chart first");
             return;
         }
+        gestureInputs.finish();
+        clearExecutingAction();
+        if (!store.state.float) return;
+        if (mode === "mask-only") {
+            mask = clipFloatToCanvas(store.state.float, store.state.pattern.canvasWidth, store.state.pattern.canvasHeight);
+            if (!mask) return;
+        }
         ui.setCanvasFeedback(null);
         keyboardMove = { key: e.key, mode, baseline: { ...store.state }, mask };
+        showExecutingAction({ kind: "move", mode });
         const ctrlDuplicate = mode === "duplicate" && (e.ctrlKey || e.metaKey);
         if (mode === "mask-only" || mode === "duplicate" && !(ctrlDuplicate && ctrlArrowStamped)) store.commit(s => {
             s.pixels = visiblePixels(s);
@@ -1888,7 +1933,7 @@ document.addEventListener("keydown", e => {
         return;
     }
     if (e.ctrlKey || e.metaKey) {
-        if (e.key === "a" && !e.shiftKey) { e.preventDefault(); finishKeyboardMove(); selectAll(store); }
+        if (e.key === "a" && !e.shiftKey) { e.preventDefault(); finishAuthoredInput(); selectAll(store); }
         else if (e.key === "A" ||  (e.shiftKey && e.key === "a")) { e.preventDefault(); onDeselect(); }
         else if (e.key === "c" && !e.shiftKey) { e.preventDefault(); onCopy(); }
         else if (e.key === "x" && !e.shiftKey) { e.preventDefault(); onCut(); }
@@ -1902,15 +1947,14 @@ document.addEventListener("keydown", e => {
     }
     if (e.key === "Delete") {
         finishKeyboardMove();
-        if (store.state.float) { e.preventDefault(); deleteFloat(store); }
+        if (store.state.float) { e.preventDefault(); finishAuthoredInput(); deleteFloat(store); }
         return;
     }
     const k = e.key.toLowerCase();
-    if (["v", "h", "c", "d", "a", "t"].includes(k)) finishKeyboardMove();
     if      (k === "p") setTool("pencil");
     else if (k === "f") setTool("fill");
     else if (k === "e") setTool("eraser");
-    else if (k === "o") setOverlayAction(e.shiftKey ? "clear" : "place");
+    else if (k === "o") { if (e.shiftKey) setOverlayAction("clear"); else setTool("overlay"); }
     else if (k === "i") setTool("invert");
     else if (k === "s") setTool("select");
     else if (k === "w") setTool("wand");
@@ -1936,6 +1980,7 @@ document.addEventListener("keyup", e => {
 });
 
 window.addEventListener("blur", () => {
+    clearExecutingAction();
     cancelKeyboardMove();
     ctrlArrowStamped = false;
     navigateMomentary = false;
@@ -1970,13 +2015,12 @@ function syncProjectColorInputs(s: Readonly<SessionState>) {
 syncDomInputs(store.state);
 syncPreferenceInputs();
 syncProjectColorInputs(store.state);
-ui.setOverlayAction(overlayAction);
+ui.setToolVariants(store.state.toolVariants);
 ui.setTool(store.state.activeTool);
 ui.setPrimary(store.state.primaryColor);
 ui.setColors(store.state.colorA, store.state.colorB);
 ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
-ui.setSelectionState(selectionCellCount(), clipboardCellCount(), selectionMoveMode);
-ui.setSelectionMode(store.state.activeTool, selectionMode, Boolean(store.state.float));
+ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(), canRedo());
 ui.setRecoveryStatus(saved ? "recovered" : "saved");

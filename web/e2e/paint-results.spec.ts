@@ -1,11 +1,11 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("Invert copies the clicked result across different mirror values and visits once per stroke", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 8, 1);
     await page.keyboard.press("v");
-    await page.getByRole("button", { name: "Invert colours", exact: true }).click();
+    await page.getByRole("button", { name: "Invert", exact: true }).click();
     const source = await cellCoord(page, 0, 1);
     const copy = await cellCoord(page, 8, 1);
     await page.mouse.move(source.cx, source.cy);
@@ -54,7 +54,7 @@ test("Clear overlay in the gutter clears mirrored boundary supports", async ({ p
     await clickCell(page, 1, 0);
     await clickCell(page, 1, 8);
     await page.keyboard.press("h");
-    await page.getByRole("button", { name: "Clear overlay" }).click();
+    await chooseToolVariant(page, "Overlay", "Clear");
     await clickCell(page, 1, -1);
     for (const y of [0, 8]) {
         const support = await cellCoord(page, 1, y);

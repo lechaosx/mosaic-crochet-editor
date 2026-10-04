@@ -2,7 +2,7 @@ import { ViewState, zoomAt } from "./render";
 
 interface Pointer { x: number; y: number; button: number; type: string; }
 
-type Mode = "idle" | "paint" | "gesture" | "gesture-end" | "middle-pan" | "navigate-pan";
+type Mode = "idle" | "paint" | "gesture" | "gesture-end" | "navigate-pan";
 
 export interface PointerModifiers {
     shift: boolean;
@@ -11,8 +11,7 @@ export interface PointerModifiers {
 }
 
 export interface GestureCallbacks {
-    primaryColor:  () => 1 | 2;
-    onPaintStart:  (color: 1 | 2, modifiers: PointerModifiers) => void;
+    onPaintStart:  (button: 0 | 1 | 2, modifiers: PointerModifiers) => void;
     onPaintAt:     (clientX: number, clientY: number) => void;
     onPaintEnd:    () => void;     // commit stroke (record history if changed)
     onPaintCancel: () => void;     // discard stroke (revert to pre-stroke pixels)
@@ -56,17 +55,10 @@ export function mountGestures(
     }
 
     canvas.addEventListener("pointerdown", e => {
-        if (e.pointerType === "mouse" && e.button === 1) {
-            e.preventDefault();
-            if (mode !== "idle") return;
-            pan = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
-                originX: view.panX, originY: view.panY };
-            mode = "middle-pan";
-            canvas.setPointerCapture(e.pointerId);
-            return;
-        }
-        if (e.pointerType === "mouse" && e.button !== 0 && e.button !== 2) return;
-        if (cb.navigate() && e.button === 0) {
+        if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
+        if (e.button === 1 || e.button === 2) e.preventDefault();
+        if (cb.navigate() && e.button === 2) return;
+        if (cb.navigate() && (e.button === 0 || e.button === 1)) {
             e.preventDefault();
             if (mode !== "idle") return;
             pan = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,
@@ -82,15 +74,14 @@ export function mountGestures(
         if (pointers.size >= 2) {
             startGesture();
         } else if (mode === "idle") {
-            const color: 1 | 2 = e.button === 2 ? (cb.primaryColor() === 1 ? 2 : 1) : cb.primaryColor();
             mode = "paint";
-            cb.onPaintStart(color, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey });
+            cb.onPaintStart(e.button, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey, alt: e.altKey });
             cb.onPaintAt(e.clientX, e.clientY);
         }
     });
 
     canvas.addEventListener("pointermove", e => {
-        if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
+        if (mode === "navigate-pan" && e.pointerId === pan.pointerId) {
             view.panX = pan.originX + (e.clientX - pan.startX);
             view.panY = pan.originY + (e.clientY - pan.startY);
             cb.onView();
@@ -124,7 +115,7 @@ export function mountGestures(
     });
 
     function release(e: PointerEvent) {
-        if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
+        if (mode === "navigate-pan" && e.pointerId === pan.pointerId) {
             mode = "idle";
             if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
             return;
@@ -146,7 +137,7 @@ export function mountGestures(
     }
 
     function cancel(e: PointerEvent) {
-        if ((mode === "middle-pan" || mode === "navigate-pan") && e.pointerId === pan.pointerId) {
+        if (mode === "navigate-pan" && e.pointerId === pan.pointerId) {
             mode = "idle";
             if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
             return;
@@ -190,5 +181,17 @@ export function mountGestures(
         zoomAt(canvas, view, e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
         cb.onView();
     }, { passive: false });
-    return { cancel: cancelAll };
+    function finish(): boolean {
+        if (mode !== "paint") return false;
+        mode = "idle";
+        const captured = [...pointers.keys()];
+        pointers.clear();
+        for (const pointerId of captured) {
+            if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+        }
+        cb.onPaintEnd();
+        cb.onHover(null, null, null, null);
+        return true;
+    }
+    return { cancel: cancelAll, finish };
 }

@@ -1,6 +1,7 @@
 import { initialize_row_pattern } from "@mosaic/wasm";
 import type { PatternState, Float } from "../src/types";
 import type { SessionState } from "../src/store";
+import { defaultToolVariants } from "../src/types";
 import { defaultAxes } from "../src/symmetry";
 
 export function rowPattern(W: number, H: number): PatternState {
@@ -16,6 +17,7 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         dangerColorOverride: null,
         accentColorOverride: null,
         activeTool: "pencil",
+        toolVariants: defaultToolVariants(),
         primaryColor: 1,
         axes: defaultAxes(W, H),
         recipes: [],

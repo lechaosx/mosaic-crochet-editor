@@ -268,9 +268,10 @@ test("Move area mode enables modifier-free mask-only drag and remains selected",
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Move", exact: true }).click();
 
-    const moveArea = page.getByRole("button", { name: /Move area/ });
+    await page.getByRole("button", { name: "Move variants", exact: true }).click();
+    const moveArea = page.getByRole("menuitemradio", { name: "Move area", exact: true });
     await moveArea.click();
-    await expect(moveArea).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Move area/);
     await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveClass(/btn--active/);
     await page.keyboard.press("Escape");
 
@@ -281,7 +282,7 @@ test("Move area mode enables modifier-free mask-only drag and remains selected",
 
     await page.getByRole("button", { name: "Pencil" }).click();
     await page.getByRole("button", { name: "Move", exact: true }).click();
-    await expect(moveArea).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Move area/);
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
     expect(await pixelRGB(page, dst.cx, dst.cy)).not.toEqual([0, 0, 0]);

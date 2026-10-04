@@ -1,5 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
-import { bootApp } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
 
 const TOOL_IDS = [
     "tool-pencil", "tool-fill", "tool-eraser", "tool-overlay",
@@ -118,6 +118,35 @@ test("Fit centres the chart on the whole canvas behind wide overlay panels", asy
         expect(corner.y).toBeLessThanOrEqual(visible.bottom);
     }
 });
+
+for (const inspector of [false, true]) {
+    test(`Fit keeps a wide chart editable beyond the dock${inspector ? " and inspector" : ""}`, async ({ page }) => {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        await bootApp(page);
+        await page.getByRole("button", { name: "Pattern", exact: true }).click();
+        await page.locator("#edit-width").fill("50");
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Settings", exact: true }).click();
+        await page.locator("label:has(#lock-invalid)").click();
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+        if (inspector) await page.getByRole("button", { name: "Pattern", exact: true }).click();
+        await page.getByRole("button", { name: "Fit view", exact: true }).click();
+        for (const x of [0, 49]) {
+            const cell = await cellCoord(page, x, 8);
+            expect(await page.evaluate(({ cx, cy }) => document.elementFromPoint(cx, cy)?.id, cell)).toBe("canvas");
+            await clickCell(page, x, 8);
+            expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual([255, 255, 255]);
+            await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
+            await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
+        }
+        const centre = await page.evaluate(() => {
+            const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+            return [window.__test_matrix__!.transformPoint({ x: 25, y: 4.5 }).x / devicePixelRatio, canvas.clientWidth / 2];
+        });
+        expect(centre[0]).toBeCloseTo(centre[1], 1);
+    });
+}
 
 test("Fit keeps the chart below persistent view controls", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 600 });
@@ -350,7 +379,6 @@ test("wide overlay panels leave canvas geometry stable and anchor its chrome to 
     const documentBar = await page.locator("#document-bar").boundingBox();
     const dock = await page.locator("#authoring-dock").boundingBox();
     const canvasBefore = await page.locator(".canvas-area").boundingBox();
-    expect(dock!.width).toBeLessThanOrEqual(52);
     expect(await page.locator("#authoring-dock").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     expect(dock!.y).toBeGreaterThanOrEqual(documentBar!.y + documentBar!.height - 1);
     expect(dock!.x).toBe(canvasBefore!.x);

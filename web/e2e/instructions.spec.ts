@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("a crocheter gets a focused workspace while the global document bar stays available", async ({ page }) => {
     await page.setViewportSize({ width: 2200, height: 900 });
@@ -65,7 +65,7 @@ test("a crocheter gets a focused workspace while the global document bar stays a
 test("Crochet preserves and controls the shared chart viewport", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Zoom in" }).click();
-    await page.getByRole("button", { name: "Invert colours" }).click();
+    await page.getByRole("button", { name: "Invert" }).click();
     const designZoom = await page.evaluate(() => window.__test_matrix__!.a);
     const designCell = await cellCoord(page, 1, 1);
     const designPixel = await pixelRGB(page, designCell.cx, designCell.cy);
@@ -370,7 +370,7 @@ for (const mode of ["row", "round"] as const) {
         const support = await cellCoord(page, x, 0);
         expect(await pixelRGB(page, support.cx, support.cy)).toEqual([255, 255, 255]);
 
-        await page.getByRole("button", { name: "Clear overlay" }).click();
+        await chooseToolVariant(page, "Overlay", "Clear");
         await clickCell(page, x, -1);
         await expect(page.getByRole("button", { name: "Begin Crocheting", exact: true })).toBeVisible();
         expect(await pixelRGB(page, support.cx, support.cy)).toEqual([0, 0, 0]);

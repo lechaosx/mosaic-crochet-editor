@@ -4,11 +4,39 @@ import { bootApp, cellCoord, pixelRGB, touchDragCells, touchPanZoom } from "./_h
 test("single-finger drag paints", async ({ page }) => {
     await bootApp(page);
     await touchDragCells(page, 1, 1, 3, 1);
+    await expect(page.locator("#status-action")).toBeVisible();
+    await expect(page.locator("#status-action")).toHaveText("Pencil · Yarn A");
 
     for (let x = 1; x <= 3; x++) {
         const p = await cellCoord(page, x, 1);
         expect(await pixelRGB(page, p.cx, p.cy)).toEqual([0, 0, 0]);
     }
+});
+
+test("touch hold opens variants without choosing a tool and scrolling cancels activation", async ({ page }) => {
+    await bootApp(page);
+    const button = page.locator("#tool-wand");
+    const box = (await button.boundingBox())!;
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2, id: 0 };
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    const menu = page.getByRole("menu", { name: "Wand variants", exact: true });
+    await expect(menu).toBeVisible();
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
+
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+    await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ ...point, y: point.y - 40 }] });
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(500);
+    await expect(menu).toBeHidden();
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    await session.detach();
 });
 
 test("system pointer cancellation restores the stroke without adding history", async ({ page }) => {
@@ -68,11 +96,13 @@ test("Move area mode supports a modifier-free touch drag", async ({ page }) => {
     await page.getByRole("button", { name: "Close inspector" }).tap();
     await page.touchscreen.tap(painted.cx, painted.cy);
     await page.getByRole("button", { name: "Move", exact: true }).tap();
-    await page.getByRole("button", { name: /Move area/ }).tap();
-    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Move variants", exact: true }).tap();
+    await page.getByRole("menuitemradio", { name: "Move area", exact: true }).tap();
 
     await touchDragCells(page, 1, 1, 3, 1);
 
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float))
+        .toMatchObject({ x: 3, y: 1, w: 1, h: 1 });
     const src = await cellCoord(page, 1, 1);
     const dst = await cellCoord(page, 3, 1);
     expect(await pixelRGB(page, src.cx, src.cy)).toEqual([0, 0, 0]);
@@ -103,11 +133,12 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await expect(card.getByRole("button", { name: "Paste" })).toBeEnabled();
     await page.getByRole("button", { name: "Close inspector" }).tap();
     await page.getByRole("button", { name: "Move", exact: true }).tap();
-    const moveCard = page.getByRole("dialog", { name: "Move" });
-    await moveCard.getByRole("button", { name: /Duplicate/ }).tap();
+    await page.getByRole("button", { name: "Move variants", exact: true }).tap();
+    const moveMenu = page.getByRole("menu", { name: "Move variants", exact: true });
+    await moveMenu.getByRole("menuitemradio", { name: "Duplicate", exact: true }).tap();
     await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(moveCard).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Duplicate/);
+    await expect(moveMenu).toBeHidden();
 
     await touchDragCells(page, 1, 1, 3, 1);
     const source = await cellCoord(page, 1, 1);
@@ -118,8 +149,7 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await expect(card).toBeVisible();
     await page.getByRole("button", { name: "Close inspector" }).click();
     await page.getByRole("button", { name: "Move", exact: true }).click();
-    await expect(moveCard.getByRole("button", { name: /Duplicate/ })).toHaveAttribute("aria-pressed", "true");
-    await page.getByRole("button", { name: "Close inspector" }).click();
+    await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Duplicate/);
     await summary.click();
 
     await card.getByRole("button", { name: "Cut" }).click();

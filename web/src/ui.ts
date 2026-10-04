@@ -8,21 +8,19 @@ import { mountPattern } from "./ui-pattern";
 import { mountSettings } from "./ui-settings";
 import { mountInstructions } from "./ui-instructions";
 
-export type { UICallbacks, UIHandle, SelectionMoveMode, SelectionMode, InstructionOverviewUnit, InstructionsView } from "./ui-types";
+export type { UICallbacks, UIHandle, SelectionMoveMode, InstructionOverviewUnit, InstructionsView } from "./ui-types";
 
 export function mountUI(cb: UICallbacks): UIHandle {
     const inspectorHost = el("inspector-host");
     const inspectorTitle = el("inspector-title");
     const inspectorPanels: Record<InspectorPanel, HTMLElement> = {
         selection: el("selection-popover"),
-        move: el("move-popover"),
         settings: el("hl-popover"),
         transforms: el("sym-popover"),
         pattern: el("edit-pattern-widget"),
     };
     const inspectorTriggers: Record<InspectorPanel, HTMLElement> = {
         selection: el("tool-select"),
-        move: el("tool-move"),
         settings: el("btn-hl-toggle"),
         transforms: el("btn-sym-toggle"),
         pattern: el("btn-edit"),
@@ -60,10 +58,12 @@ export function mountUI(cb: UICallbacks): UIHandle {
         canvasShell.style.setProperty("--canvas-chrome-left", `${Math.max(0, left)}px`);
         canvasShell.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);
         canvasShell.style.setProperty("--canvas-chrome-bottom", `${Math.max(0, bottom)}px`);
+        // Symmetric clearance keeps Fit centred on the canvas while exposing chart edges.
+        const fitPadding = Math.max(0, left, right);
         const workspace: CanvasWorkspace = {
-            left: 0,
+            left: fitPadding,
             top: 0,
-            right: canvasRect.width,
+            right: canvasRect.width - fitPadding,
             bottom: Math.max(0, canvasRect.height - bottom),
         };
         for (const chrome of [canvasControls, canvasStatus, canvasInstruction]) {
@@ -96,7 +96,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     const panelTriggers: Record<InspectorPanel, HTMLElement[]> = {
         selection: [el("tool-select"), el("tool-wand")],
-        move: [el("tool-move")],
         settings: [el("btn-hl-toggle")],
         transforms: [el("btn-sym-toggle")],
         pattern: [el("btn-edit")],

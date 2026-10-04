@@ -48,7 +48,7 @@ describe("browser persistence migrations", () => {
         expect(restored!.float).toEqual(session.float);
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        expect(migrated.version).toBe(6);
+        expect(migrated.version).toBe(7);
         expect(migrated.document).toMatchObject({ state: session.pattern, colorA: session.colorA, colorB: session.colorB });
         expect(migrated.workspace).toMatchObject({
             axes: session.axes,

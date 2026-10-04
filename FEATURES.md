@@ -29,6 +29,7 @@ The intended end-to-end story is:
 
 - Pattern changes preview in place. Compatible geometry changes preserve authored cells where their meaning remains stable; changing between row and centre-out construction starts the new geometry. — **your decision**
 - Editing is direct and tool-led. The chart remains the visual focus, while document commands, authoring tools, contextual inspectors, and navigation have distinct roles. — **your decision**
+- Rectangle, Wand, Move, and Overlay expose remembered variants through the same visible menu, hold, and keyboard routes. Button and modifier accelerators execute temporary actions without changing the chosen variant or yarn. — **Agent's choice**
 - Selection is a persistent movable layer rather than a temporary outline. It can be edited, duplicated, transformed, copied, cut, pasted, or committed without forcing the user into a separate document mode. — **your decision**
 - Global Mirror transforms drawing across the whole chart, while saved selections reproduce motifs through grids, rotations, and mirrors. Drawing applies the tool once at the clicked source and copies its resulting yarn state through these transforms. Both can also be applied deliberately to existing content. — **your decision**
 - Undo and redo cover authored changes as coherent user actions. Continuous gestures and related previews do not create a history entry for every intermediate frame. — **your decision**

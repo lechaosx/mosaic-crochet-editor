@@ -2,6 +2,11 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 4 October 2026
+
+- Rectangle, Wand, Move, and Overlay remember their chosen actions in accessible tool menus; mouse buttons and modifiers provide temporary actions with visible tool and yarn feedback.
+- Fit keeps large charts centred with editable edge cells clear of overlay panels.
+
 ## 3 October 2026
 
 - Undo and Redo work from Crochet, return to Design, and restore project colours and the final position of keyboard moves using the chosen Move action.

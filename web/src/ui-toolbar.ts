@@ -1,10 +1,10 @@
-import type { Tool } from "@mosaic/logic/types";
-import type { OverlayAction } from "@mosaic/logic/paint";
+import type { Tool, ToolVariants } from "@mosaic/logic/types";
 import { el, setPressed } from "./dom";
 import type { UICallbacks, InspectorControls } from "./ui-types";
+import { mountToolGroup } from "./tool-group";
 
 export function mountToolbar(
-    cb: Pick<UICallbacks, "onTool" | "onOverlayAction" | "onUndo" | "onRedo" | "onRotate"
+    cb: Pick<UICallbacks, "onTool" | "onToolVariant" | "onUndo" | "onRedo" | "onRotate"
         | "onResetRotation" | "onFit" | "onZoom" | "onNavigate" | "onSave" | "onLoad">,
     inspector: Pick<InspectorControls, "open">,
     syncCanvasChromeInsets: () => void) {
@@ -20,35 +20,63 @@ export function mountToolbar(
         move:    el("tool-move"),
     };
     (Object.keys(toolButtons) as Tool[]).forEach(t => {
-        if (t !== "overlay") toolButtons[t].addEventListener("click", () => cb.onTool(t));
+        if (t === "pencil" || t === "fill" || t === "eraser" || t === "invert")
+            toolButtons[t].addEventListener("click", () => cb.onTool(t));
     });
-    const overlayButtons: Record<OverlayAction, HTMLButtonElement> = {
-        place: toolButtons.overlay,
-        clear: el("overlay-clear"),
-        invert: el("overlay-invert"),
+    const selectionVariants = [
+        { value: "replace", label: "Replace", icon: "select" },
+        { value: "add", label: "Add", icon: "select-add" },
+        { value: "remove", label: "Subtract", icon: "select-remove" },
+    ] as const;
+    const groups = {
+        select: mountToolGroup(toolButtons.select, "Rectangle", selectionVariants, value => cb.onToolVariant("select", value)),
+        wand: mountToolGroup(toolButtons.wand, "Wand", [
+            { value: "replace", label: "Replace", icon: "wand" },
+            { value: "add", label: "Add", icon: "wand-add" },
+            { value: "remove", label: "Subtract", icon: "wand-remove" },
+        ] as const, value => cb.onToolVariant("wand", value)),
+        move: mountToolGroup(toolButtons.move, "Move", [
+            { value: "move", label: "Move content", icon: "move" },
+            { value: "duplicate", label: "Duplicate", icon: "copy" },
+            { value: "mask-only", label: "Move area", icon: "move-area" },
+        ] as const, value => cb.onToolVariant("move", value)),
+        overlay: mountToolGroup(toolButtons.overlay, "Overlay", [
+            { value: "place", label: "Place", icon: "overlay-place" },
+            { value: "clear", label: "Clear", icon: "overlay-clear" },
+            { value: "invert", label: "Invert", icon: "overlay-invert" },
+        ] as const, value => cb.onToolVariant("overlay", value)),
     };
-    let overlayAction: OverlayAction = "place";
-    let currentTool: Tool = "pencil";
-    (Object.keys(overlayButtons) as OverlayAction[]).forEach(action =>
-        overlayButtons[action].addEventListener("click", () => cb.onOverlayAction(action))
-    );
+
+    function setToolVariants(variants: ToolVariants) {
+        groups.select.setVariant(variants.select);
+        groups.wand.setVariant(variants.wand);
+        groups.move.setVariant(variants.move);
+        groups.overlay.setVariant(variants.overlay);
+    }
 
     function setTool(t: Tool) {
-        currentTool = t;
         (Object.keys(toolButtons) as Tool[]).forEach(k => {
-            const active = k === t && (k !== "overlay" || overlayAction === "place");
-            setPressed(toolButtons[k], active);
+            setPressed(toolButtons[k], k === t);
         });
-        for (const action of ["clear", "invert"] as const) {
-            const active = t === "overlay" && overlayAction === action;
-            setPressed(overlayButtons[action], active);
-        }
         if (t === "select" || t === "wand") inspector.open("selection", "Selection", toolButtons[t]);
-        else if (t === "move") inspector.open("move", "Move", toolButtons.move);
     }
-    function setOverlayAction(action: OverlayAction) {
-        overlayAction = action;
-        setTool("overlay");
+
+    let projectedAction: string | null = null;
+    let projectedTool: Tool | null = null;
+    let projectedYarn: 1 | 2 | null = null;
+    function setExecutingAction(message: string | null, tool: Tool | null = null, yarn: 1 | 2 | null = null) {
+        if (message === projectedAction && tool === projectedTool && yarn === projectedYarn) return;
+        projectedAction = message;
+        projectedTool = tool;
+        projectedYarn = yarn;
+        const feedback = el("status-action");
+        feedback.textContent = message ?? "";
+        feedback.hidden = message === null;
+        for (const key of Object.keys(toolButtons) as Tool[]) {
+            toolButtons[key].classList.toggle("btn--executing", key === tool);
+        }
+        el("swatch-a").classList.toggle("swatch--executing", yarn === 1);
+        el("swatch-b").classList.toggle("swatch--executing", yarn === 2);
     }
 
     function setCanvasFeedback(message: string | null) {
@@ -121,7 +149,7 @@ export function mountToolbar(
 
     mountToolbarLayout();
 
-    return { setTool, setOverlayAction, setCanvasFeedback, setHistory, setRecoveryStatus, setDocumentError, setViewState };
+    return { setTool, setToolVariants, setExecutingAction, setCanvasFeedback, setHistory, setRecoveryStatus, setDocumentError, setViewState };
 }
 // ─── Toolbar layout ──────────────────────────────────────────────────────────
 function mountToolbarLayout() {

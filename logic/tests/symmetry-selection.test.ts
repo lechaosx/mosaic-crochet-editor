@@ -26,7 +26,7 @@ describe("symmetry-aware paint inside selection", () => {
         const transforms = axesToFlat(addAxis([], "V", W, H));
         const out = paintOps.pencil({
             visible, pattern, x: 0, y: 1,
-            color: 2, primary: 1,
+            color: 2,
             invertVisited: null,
             transforms, shifted,
         });
@@ -75,6 +75,19 @@ describe("replicateSelection", () => {
         expect(history).toHaveBeenCalledOnce();
     });
 
+    test("settles input only for an accepted stamp and reads its committed source", () => {
+        const store = new Store(rowSession(5, 1, {
+            pixels: filledPixels(5, 1, 1),
+            float: makeFloat([{ x: 0, y: 0, v: 2 }]), axes: vertical,
+        }));
+        const settle = vi.fn(() => {
+            store.commit(s => { s.float = makeFloat([{ x: 1, y: 0, v: 2 }]); });
+        });
+        expect(replicateSelection(store, settle)).toBe("applied");
+        expect(settle).toHaveBeenCalledOnce();
+        expect(store.state.pixels).toEqual(new Uint8Array([1, 1, 1, 2, 1]));
+    });
+
     test("rejects a mixed-colour orbit without changing state or history", () => {
         const pixels = filledPixels(5, 1, 1);
         const source = makeFloat([
@@ -85,7 +98,9 @@ describe("replicateSelection", () => {
         const history = vi.fn();
         store.setHistoryFn(history);
 
-        expect(replicateSelection(store)).toBe("conflict");
+        const settle = vi.fn();
+        expect(replicateSelection(store, settle)).toBe("conflict");
+        expect(settle).not.toHaveBeenCalled();
 
         expect(store.state.pixels).toBe(pixels);
         expect(store.state.float).toBe(source);
