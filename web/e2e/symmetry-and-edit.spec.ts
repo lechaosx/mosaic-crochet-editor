@@ -1,6 +1,6 @@
 // Symmetry toggles + Pattern inspector resize.
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
+import { addGlobalMirror, bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("vertical symmetry mirrors paint horizontally", async ({ page }) => {
     await bootApp(page);
@@ -16,13 +16,11 @@ test("vertical symmetry mirrors paint horizontally", async ({ page }) => {
     expect(b).toBeLessThan(50);
 });
 
-test("dragging the V symmetry guide moves the mirror axis", async ({ page }) => {
-    // V axis sits at canonical centre (x=4 on 9-wide). Drag its guide to
-    // x=2; painting (0, 1) should now mirror to (4, 1) instead of (8, 1).
+test("dragging the V mirror centre changes the mirrored drawing position", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("v");        // toggle V on
-    await page.keyboard.press("m");        // Move tool — axis-drag only fires here
-    // Guide line for canonical V is at render x = 4.5. Click at (4.5, 4) cell coords.
+    await page.keyboard.press("m");
+    await page.locator("#btn-sym-toggle").click();
     const start = await cellCoord(page, 4, 4);
     const end   = await cellCoord(page, 2, 4);
     // Offset by half a cell width so we land on the guide (render x=4.5), not the
@@ -41,10 +39,10 @@ test("dragging the V symmetry guide moves the mirror axis", async ({ page }) => 
     expect(b).toBeLessThan(50);
 });
 
-test("Mirror inspector lets Pencil drag a guide without painting", async ({ page }) => {
+test("Mirror inspector lets Pencil drag a centre without painting", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await page.getByRole("button", { name: "Add vertical" }).click();
+    await addGlobalMirror(page, "Vertical");
     const start = await cellCoord(page, 4, 4);
     const end = await cellCoord(page, 2, 4);
     const before = await page.evaluate(() =>
@@ -57,7 +55,7 @@ test("Mirror inspector lets Pencil drag a guide without painting", async ({ page
     await page.mouse.up();
 
     await expect(page.getByRole("button", { name: "Pencil" })).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("button", { name: "Disable vertical axis at x=2" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable mirror at (2, 4)" })).toBeVisible();
     expect(await page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels,
     )).toEqual(before);
@@ -66,40 +64,40 @@ test("Mirror inspector lets Pencil drag a guide without painting", async ({ page
 test("exact symmetry position entry is one undoable edit", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await page.getByRole("button", { name: "Add vertical" }).click();
-    const position = page.getByRole("spinbutton", { name: "Vertical axis x position" });
+    await addGlobalMirror(page, "Vertical");
+    const position = page.getByRole("spinbutton", { name: "Mirror centre x" });
     await expect(position).toHaveValue("4");
 
     await position.fill("2.5");
-    await position.press("Tab");
-    await expect(page.getByRole("button", { name: "Disable vertical axis at x=2.5" })).toBeVisible();
+    await position.press("Enter");
+    await expect(page.getByRole("button", { name: "Disable mirror at (2.5, 4)" })).toBeVisible();
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
 });
 
 test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     // Add a V axis.
-    await page.locator("#add-sym-v").click();
+    await addGlobalMirror(page, "Vertical");
     const row = page.locator(".sym-list-row").first();
     await expect(row).toBeVisible();
     await expect(row).not.toHaveClass(/is-inactive/);
     // Toggle it off — visual class flips.
-    await row.getByRole("button", { name: "Disable vertical axis at x=4" }).click();
+    await row.getByRole("button", { name: "Disable mirror at (4, 4)" }).click();
     await expect(page.locator(".sym-list-row").first()).toHaveClass(/is-inactive/);
     // Delete — row disappears.
-    await page.getByRole("button", { name: "Delete vertical axis at x=4" }).click();
+    await page.getByRole("button", { name: "Delete mirror at (4, 4)" }).click();
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
 });
 
 test("transform toolbar shows whether transforms are configured", async ({ page }) => {
     await bootApp(page);
     const transforms = page.locator("#btn-sym-toggle");
-    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: no axes configured");
+    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: no active types");
 
     await transforms.click();
-    await page.locator("#add-sym-v").click();
+    await addGlobalMirror(page, "Vertical");
     await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: applying while drawing");
     await expect(page.locator("#live-transforms")).toHaveCount(0);
 });
@@ -114,7 +112,7 @@ test("Apply Global Mirror applies symmetry and keeps the source selected", async
     await page.locator("#btn-sym-toggle").click();
     const replicate = page.locator("#replicate-selection");
     await expect(replicate).toBeDisabled();
-    await page.locator("#add-sym-v").click();
+    await addGlobalMirror(page, "Vertical");
     await expect(replicate).toBeEnabled();
     await replicate.click();
 
@@ -152,7 +150,7 @@ test("T reports stamp conflicts inline and recipe changes clear the error", asyn
     await expect(error).toBeVisible();
     expect(dialogSeen).toBe(false);
 
-    await page.getByRole("button", { name: "Disable vertical axis at x=4" }).click();
+    await page.getByRole("button", { name: "Disable mirror at (4, 4)" }).click();
     await expect(error).toBeHidden();
 });
 
@@ -411,7 +409,7 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
         await page.locator("#recipe-right").fill("1");
         await page.locator("#recipe-right").dispatchEvent("change");
         await page.getByRole("button", { name: /Global Mirror/ }).click();
-        await page.getByRole("button", { name: "Add vertical" }).click();
+        await addGlobalMirror(page, "Vertical");
         await page.getByRole("button", { name: "Yarn A", exact: true }).click();
         await page.getByRole("button", { name: "Spill" }).click();
 
@@ -446,7 +444,7 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
         await page.locator("#recipe-right").fill("1");
         await page.locator("#recipe-right").dispatchEvent("change");
         await page.getByRole("button", { name: /Global Mirror/ }).click();
-        await page.getByRole("button", { name: "Add vertical" }).click();
+        await addGlobalMirror(page, "Vertical");
         await page.getByRole("button", { name: "Place overlay" }).click();
 
         const supportCells = await Promise.all([2, 3, 5, 6].map(x => cellCoord(page, x, 2)));
@@ -640,20 +638,19 @@ test("move-area into a round hole deactivates the saved repeat when nothing can 
     expect(recovery.workspace.activeRecipeId).toBe(recovery.workspace.recipes[0].id);
 });
 
-test("dragging an axis far off the canvas deletes it", async ({ page }) => {
+test("dragging a mirror centre off the canvas snaps without deleting it", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("v");        // adds V at canonical centre
     await page.keyboard.press("m");        // Move tool
-    // V guide is at render x=4.5 on a 9-wide canvas; click and drag far left.
+    await page.locator("#btn-sym-toggle").click();
     const start = await cellCoord(page, 4, 4);
     const farOff = await cellCoord(page, -10, 4);
     await page.mouse.move(start.cx, start.cy);
     await page.mouse.down();
     await page.mouse.move(farOff.cx, farOff.cy, { steps: 8 });
     await page.mouse.up();
-    // Open popover — list should be empty.
-    await page.locator("#btn-sym-toggle").click();
-    await expect(page.locator(".sym-list-row")).toHaveCount(0);
+    await expect(page.locator(".sym-list-row")).toHaveCount(1);
+    await expect(page.getByRole("spinbutton", { name: "Mirror centre x" })).toHaveValue("0.5");
 });
 
 test("Pattern inspector changes the canvas dimensions", async ({ page }) => {
@@ -682,8 +679,10 @@ test("Pattern resize removes only global mirrors that become unusable", async ({
     await page.locator("#edit-width").press("Tab");
     await page.locator("#btn-sym-toggle").click();
 
-    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Disable horizontal axis at y=4" })).toBeVisible();
+    await expect(page.locator(".sym-list-row")).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Vertical", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByRole("button", { name: "Horizontal", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
 });
 
 test("Pattern preview retains global mirrors valid in the final geometry", async ({ page }) => {
@@ -694,7 +693,7 @@ test("Pattern preview retains global mirrors valid in the final geometry", async
     await page.locator("#edit-width").fill("9");
     await page.locator("#edit-width").press("Tab");
     await page.locator("#btn-sym-toggle").click();
-    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
 });
 
 test("invalid Pattern preview restores the global mirror baseline", async ({ page }) => {
@@ -706,7 +705,7 @@ test("invalid Pattern preview restores the global mirror baseline", async ({ pag
     await expect(page.locator("#edit-error")).toBeVisible();
     await page.keyboard.press("Escape");
     await page.locator("#btn-sym-toggle").click();
-    await expect(page.getByRole("button", { name: "Disable vertical axis at x=4" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable mirror at (4, 4)" })).toBeVisible();
 });
 
 test("invalid Pattern preview restores the active saved-repeat source", async ({ page }) => {
@@ -774,11 +773,11 @@ test("Load rejects a future file without replacing the active session", async ({
     await chooser.setFiles({
         name: "future.mcw",
         mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify({ version: 5 })),
+        buffer: Buffer.from(JSON.stringify({ version: 6 })),
     });
 
     const alert = page.getByRole("alert");
-    await expect(alert).toContainText("This pattern uses unsupported .mcw version 5.");
+    await expect(alert).toContainText("This pattern uses unsupported .mcw version 6.");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
 
     await page.setViewportSize({ width: 360, height: 740 });
@@ -815,7 +814,7 @@ test("Open restores a global mirror without resetting Crochet progress", async (
     await page.getByRole("button", { name: /Global Mirror/ }).click();
     await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Global Mirror");
     await expect(page.getByText("Global mirrors", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Disable vertical axis at x=2" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Disable mirror at (2, 4)" })).toBeVisible();
     await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
 
     await page.keyboard.press("p");
@@ -843,14 +842,14 @@ test("Open leaves an identical global-mirror project view unchanged", async ({ p
     await bootApp(page);
     await page.keyboard.press("v");
     await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.axes.length,
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors.length,
     )).toBe(1);
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.waitForTimeout(300);
     const project = await page.evaluate(() => {
         const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        return { ...recovery.document, axes: recovery.workspace.axes };
+        return { ...recovery.document, mirrors: recovery.workspace.mirrors };
     });
     const before = await page.evaluate(() => {
         const matrix = window.__test_matrix__!;
@@ -863,7 +862,7 @@ test("Open leaves an identical global-mirror project view unchanged", async ({ p
     await chooser.setFiles({
         name: "same-project.mcw",
         mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify({ version: 3, ...project })),
+        buffer: Buffer.from(JSON.stringify({ version: 5, ...project })),
     });
 
     await expect.poll(() => page.evaluate(() => {

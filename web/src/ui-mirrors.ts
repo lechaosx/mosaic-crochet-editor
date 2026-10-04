@@ -1,24 +1,21 @@
-import type { Axis, SymKey } from "@mosaic/logic/types";
-import { el, setMessage, iconAction, listRow, syncList, setPressed, icon } from "./dom";
+import type { MirrorCenter, SymKey } from "@mosaic/logic/types";
+import { el, setMessage, iconAction, listRow, syncList, setPressed } from "./dom";
 import type { UICallbacks, InspectorControls } from "./ui-types";
 
-// ─── Global Mirror button ids ─────────────────────────────────────────────────
-// One "Add <kind>" button per kind in the inspector's add row.
-const SYM_ADD_BUTTONS: { id: string; key: SymKey; glyph: string }[] = [
-    { id: "add-sym-v",  key: "V",  glyph: "↔" },
-    { id: "add-sym-h",  key: "H",  glyph: "↕" },
-    { id: "add-sym-c",  key: "C",  glyph: "⊕" },
-    { id: "add-sym-d1", key: "D1", glyph: "╲" },
-    { id: "add-sym-d2", key: "D2", glyph: "╱" },
+const TYPES: { key: SymKey; name: string; shortcut: string }[] = [
+    { key: "V", name: "Vertical", shortcut: "V" },
+    { key: "H", name: "Horizontal", shortcut: "H" },
+    { key: "D1", name: "Diagonal", shortcut: "D" },
+    { key: "D2", name: "Anti-diagonal", shortcut: "A" },
+    { key: "C", name: "Point symmetry (180°)", shortcut: "C" },
 ];
 
 export function mountMirrors(
-    cb: Pick<UICallbacks, "onAddAxis" | "onToggleAxis" | "onDeleteAxis" | "onAxisPosition" | "onReplicateSelection">,
+    cb: Pick<UICallbacks, "onAddMirror" | "onToggleMirror" | "onDeleteMirror" | "onSelectMirror" | "onMirrorType" | "onMirrorPosition" | "onReplicateSelection">,
     inspector: Pick<InspectorControls, "isOpen" | "close" | "open" | "focusFirst">) {
-    /* ── Global Mirror inspector ──────────────────────────────────────── */
-    const symList    = el("sym-list");
-    const symToggle  = el("btn-sym-toggle");
-
+    const symList = el("sym-list");
+    const symToggle = el("btn-sym-toggle");
+    const transformError = el("transform-error");
     symToggle.addEventListener("click", e => {
         e.preventDefault();
         if (inspector.isOpen("transforms")) inspector.close();
@@ -27,157 +24,134 @@ export function mountMirrors(
             inspector.focusFirst("transforms");
         }
     });
+    el("add-mirror").addEventListener("click", () => cb.onAddMirror(null));
+    const stamp = el<HTMLButtonElement>("replicate-selection");
+    stamp.addEventListener("click", cb.onReplicateSelection);
 
-    SYM_ADD_BUTTONS.forEach(({ id, key }) =>
-        el(id).addEventListener("click", () => cb.onAddAxis(key))
-    );
-    const replicateSelection = el<HTMLButtonElement>("replicate-selection");
-    const transformError = el("transform-error");
-    replicateSelection.addEventListener("click", cb.onReplicateSelection);
     function setTransformState(hasSelection: boolean, hasTransforms: boolean) {
-        replicateSelection.disabled = !hasSelection || !hasTransforms;
-        replicateSelection.title = !hasTransforms
-            ? "Add a Global Mirror axis first"
+        stamp.disabled = !hasSelection || !hasTransforms;
+        stamp.title = !hasTransforms ? "Choose a Global Mirror type first"
             : !hasSelection ? "Select cells to stamp global mirror copies" : "Stamp global mirror copies from the current selection (T)";
-        const state = !hasTransforms ? "none" : "live";
-        const label = state === "none"
-            ? "Global Mirror: no axes configured"
-            : "Global Mirror: applying while drawing";
-        symToggle.dataset.transformState = state;
+        symToggle.dataset.transformState = hasTransforms ? "live" : "none";
+        const label = hasTransforms ? "Global Mirror: applying while drawing" : "Global Mirror: no active types";
         symToggle.title = label;
         symToggle.setAttribute("aria-label", label);
     }
 
     function setTransformError(message: string | null) {
         setMessage(transformError, message);
-        if (message !== null && !inspector.isOpen("transforms")) {
-            inspector.open("transforms", "Global Mirror");
-        }
+        if (message !== null && !inspector.isOpen("transforms")) inspector.open("transforms", "Global Mirror");
     }
 
-    function formatPosition(a: Axis): string {
-        switch (a.kind) {
-            case "V":  return `x=${a.x}`;
-            case "H":  return `y=${a.y}`;
-            case "C":  return `(${a.x}, ${a.y})`;
-            case "D1":
-            case "D2": return `c=${a.c}`;
+    const position = (mirror: MirrorCenter) => `(${mirror.x}, ${mirror.y})`;
+    let projectedMirrors: ReadonlyArray<MirrorCenter> = [];
+    window.addEventListener("blur", () => {
+        for (const mirror of projectedMirrors) {
+            listRow(symList, "mirrorId", mirror.id)?.querySelectorAll<HTMLInputElement>("input").forEach(input => {
+                input.value = String(mirror[input.dataset.coordinate as "x" | "y"]);
+            });
         }
-    }
-    function axisField(a: Axis, coordinate: "x" | "y" | "c"): number {
-        if (coordinate === "x" && "x" in a) return a.x;
-        if (coordinate === "y" && "y" in a) return a.y;
-        if (coordinate === "c" && "c" in a) return a.c;
-        throw new Error("Axis coordinate does not match its kind.");
-    }
-    const KIND_NAME: Record<SymKey, string> = {
-        V: "vertical",
-        H: "horizontal",
-        C: "central",
-        D1: "diagonal",
-        D2: "anti-diagonal",
-    };
-
-    let projectedAxes: ReadonlyArray<Axis> = [];
-    function setAxes(axes: ReadonlyArray<Axis>) {
-        projectedAxes = axes;
-        syncList(symList, axes, "axisKey", axis => `${axis.id}:${axis.kind}`, a => {
+    });
+    function setMirrors(mirrors: ReadonlyArray<MirrorCenter>, selectedId: string | null) {
+        projectedMirrors = mirrors;
+        syncList(symList, mirrors, "mirrorKey", mirror => mirror.id, mirror => {
             const row = document.createElement("div");
-            row.className = "sym-list-row" + (a.active ? "" : " is-inactive");
-            row.dataset.axisId = a.id;
-
-            const kind = document.createElement("span");
-            kind.className = "sym-list-row__kind";
-            kind.append(icon(`mirror-${a.kind.toLowerCase()}`));
-
+            row.className = "sym-list-row";
+            row.dataset.mirrorId = mirror.id;
+            const select = iconAction("transform", `Select mirror at ${position(mirror)}`);
+            select.dataset.mirrorAction = "select";
+            select.addEventListener("click", () => cb.onSelectMirror(mirror.id));
             const pos = document.createElement("div");
             pos.className = "sym-list-row__pos";
             const summary = document.createElement("span");
-            summary.textContent = formatPosition(a);
-            pos.append(summary);
-
+            summary.textContent = position(mirror);
             const fields = document.createElement("div");
             fields.className = "sym-list-row__fields";
-            const coordinates: ("x" | "y" | "c")[] = a.kind === "C"
-                ? ["x", "y"]
-                : a.kind === "H" ? ["y"] : a.kind === "V" ? ["x"] : ["c"];
-            for (const coordinate of coordinates) {
+            const resetFields = () => {
+                const current = projectedMirrors.find(value => value.id === mirror.id);
+                if (current) fields.querySelectorAll<HTMLInputElement>("input").forEach(input => {
+                    input.value = String(current[input.dataset.coordinate as "x" | "y"]);
+                });
+            };
+            const applyPosition = () => {
+                const x = fields.querySelector<HTMLInputElement>("[data-coordinate='x']")!.valueAsNumber;
+                const y = fields.querySelector<HTMLInputElement>("[data-coordinate='y']")!.valueAsNumber;
+                if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                    setTransformError("Enter a number for each centre coordinate.");
+                    resetFields();
+                    return;
+                }
+                cb.onMirrorPosition(mirror.id, { x, y });
+                resetFields();
+            };
+            for (const coordinate of ["x", "y"] as const) {
                 const label = document.createElement("label");
                 label.textContent = coordinate;
                 const input = document.createElement("input");
                 input.type = "number";
-                input.step = coordinate === "c" ? "1" : "0.5";
+                input.step = "0.5";
                 input.dataset.coordinate = coordinate;
-                input.value = String(axisField(a, coordinate));
-                input.setAttribute("aria-label", `${KIND_NAME[a.kind][0].toUpperCase()}${KIND_NAME[a.kind].slice(1)} axis ${coordinate} position`);
-                input.addEventListener("change", () => {
-                    const value = input.valueAsNumber;
-                    if (!Number.isFinite(value)) {
-                        input.value = String(axisField(projectedAxes.find(axis => axis.id === a.id)!, coordinate));
-                        return;
-                    }
-                    const updated = cb.onAxisPosition(a.id, { [coordinate]: value });
-                    if (!updated) return;
-                    input.value = String(axisField(updated, coordinate));
-                    summary.textContent = formatPosition(updated);
-                    const updatedDescription = `${KIND_NAME[updated.kind]} axis at ${formatPosition(updated)}`;
-                    const toggle = row.querySelector<HTMLButtonElement>("[data-axis-action='toggle']")!;
-                    const del = row.querySelector<HTMLButtonElement>("[data-axis-action='delete']")!;
-                    toggle.title = `${updated.active ? "Disable" : "Enable"} ${updatedDescription}`;
-                    toggle.setAttribute("aria-label", toggle.title);
-                    del.title = `Delete ${updatedDescription}`;
-                    del.setAttribute("aria-label", del.title);
+                input.setAttribute("aria-label", `Mirror centre ${coordinate}`);
+                input.addEventListener("keydown", event => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    applyPosition();
                 });
                 label.append(input);
                 fields.append(label);
             }
-            pos.append(fields);
-
-            const description = `${KIND_NAME[a.kind]} axis at ${formatPosition(a)}`;
-
-            const toggle = iconAction("check", `${a.active ? "Disable" : "Enable"} ${description}`);
-            toggle.type = "button";
-            toggle.dataset.axisAction = "toggle";
-            toggle.addEventListener("click", () => {
-                cb.onToggleAxis(a.id);
-                const replacement = listRow(symList, "axisId", a.id);
-                replacement?.querySelector<HTMLButtonElement>("[data-axis-action='toggle']")?.focus();
-            });
-
-            const del = iconAction("delete", `Delete ${description}`);
-            del.type = "button";
-            del.dataset.axisAction = "delete";
+            const apply = iconAction("check", "Apply centre position");
+            apply.title = "Apply centre position (Enter)";
+            apply.addEventListener("click", applyPosition);
+            fields.append(apply);
+            pos.append(summary, fields);
+            const toggle = iconAction("check", "Enable mirror");
+            toggle.dataset.mirrorAction = "toggle";
+            toggle.addEventListener("click", () => cb.onToggleMirror(mirror.id));
+            const del = iconAction("delete", "Delete mirror");
+            del.dataset.mirrorAction = "delete";
             del.addEventListener("click", () => {
-                const index = projectedAxes.findIndex(axis => axis.id === a.id);
-                const fallback = projectedAxes[index + 1] ?? projectedAxes[index - 1];
-                cb.onDeleteAxis(a.id);
-                if (fallback) {
-                    const replacement = listRow(symList, "axisId", fallback.id);
-                    replacement?.querySelector<HTMLButtonElement>("[data-axis-action='delete']")?.focus();
-                } else {
-                    const addButton = SYM_ADD_BUTTONS.find(button => button.key === a.kind)!;
-                    el<HTMLButtonElement>(addButton.id).focus();
-                }
+                const index = projectedMirrors.findIndex(value => value.id === mirror.id);
+                const fallback = projectedMirrors[index + 1] ?? projectedMirrors[index - 1];
+                cb.onDeleteMirror(mirror.id);
+                if (fallback) listRow(symList, "mirrorId", fallback.id)?.querySelector<HTMLButtonElement>("[data-mirror-action='delete']")?.focus();
+                else el<HTMLButtonElement>("add-mirror").focus();
             });
-
-            row.append(kind, pos, toggle, del);
+            const types = document.createElement("div");
+            types.className = "sym-list-row__types toggle-group";
+            types.setAttribute("role", "group");
+            types.setAttribute("aria-label", "Mirror types");
+            for (const type of TYPES) {
+                const button = iconAction(`mirror-${type.key.toLowerCase()}`, type.name);
+                button.title = `${type.name}; ${type.shortcut} adds a new mirror with this type`;
+                button.dataset.mirrorType = type.key;
+                button.addEventListener("click", () => cb.onMirrorType(mirror.id, type.key));
+                types.append(button);
+            }
+            row.append(select, pos, toggle, del, types);
             return row;
-        }, (row, a) => {
-            row.classList.toggle("is-inactive", !a.active);
-            row.querySelector(".sym-list-row__pos > span")!.textContent = formatPosition(a);
+        }, (row, mirror) => {
+            row.classList.toggle("is-inactive", !mirror.enabled);
+            row.classList.toggle("is-selected", mirror.id === selectedId);
+            row.querySelector(".sym-list-row__pos > span")!.textContent = position(mirror);
             row.querySelectorAll<HTMLInputElement>("input").forEach(input => {
-                input.value = String(axisField(a, input.dataset.coordinate as "x" | "y" | "c"));
+                input.value = String(mirror[input.dataset.coordinate as "x" | "y"]);
             });
-            const description = `${KIND_NAME[a.kind]} axis at ${formatPosition(a)}`;
-            const toggle = row.querySelector<HTMLButtonElement>("[data-axis-action='toggle']")!;
-            setPressed(toggle, a.active);
-            toggle.title = `${a.active ? "Disable" : "Enable"} ${description}`;
+            const select = row.querySelector<HTMLButtonElement>("[data-mirror-action='select']")!;
+            select.title = `Select mirror at ${position(mirror)}`;
+            select.setAttribute("aria-label", select.title);
+            setPressed(select, mirror.id === selectedId);
+            const toggle = row.querySelector<HTMLButtonElement>("[data-mirror-action='toggle']")!;
+            setPressed(toggle, mirror.enabled);
+            toggle.title = `${mirror.enabled ? "Disable" : "Enable"} mirror at ${position(mirror)}`;
             toggle.setAttribute("aria-label", toggle.title);
-            const del = row.querySelector<HTMLButtonElement>("[data-axis-action='delete']")!;
-            del.title = `Delete ${description}`;
+            const del = row.querySelector<HTMLButtonElement>("[data-mirror-action='delete']")!;
+            del.title = `Delete mirror at ${position(mirror)}`;
             del.setAttribute("aria-label", del.title);
+            row.querySelectorAll<HTMLButtonElement>("[data-mirror-type]").forEach(button =>
+                setPressed(button, mirror.types.includes(button.dataset.mirrorType as SymKey)));
         });
     }
 
-    return { setAxes, setTransformState, setTransformError };
+    return { setMirrors, setTransformState, setTransformError };
 }

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { bootApp, clickCell } from "./_helpers";
+import { addGlobalMirror, bootApp, clickCell } from "./_helpers";
 
 async function recovery(page: Page) {
     return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
@@ -69,8 +69,8 @@ test("Clear design removes drawing and transform context in one recoverable edit
     await page.locator("#recipe-down").press("Tab");
     await page.getByRole("button", { name: "Copy", exact: true }).click();
     await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await page.getByRole("button", { name: "Add vertical" }).click();
-    await page.getByRole("button", { name: "Add horizontal" }).click();
+    await addGlobalMirror(page, "Vertical");
+    await addGlobalMirror(page, "Horizontal");
     await page.getByRole("button", { name: "Move", exact: true }).click();
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByRole("button", { name: "Zoom in" }).click();
@@ -83,14 +83,14 @@ test("Clear design removes drawing and transform context in one recoverable edit
     const preferencesBefore = await page.evaluate(() => localStorage.getItem("mosaic-preferences"));
     expect(before.workspace.float).not.toBeNull();
     expect(before.workspace.recipes).toHaveLength(2);
-    expect(before.workspace.axes).toHaveLength(2);
+    expect(before.workspace.mirrors).toHaveLength(2);
 
     await page.locator("#edit-reset").click();
 
     const cleared = await recovery(page);
     expect(cleared.document).toEqual({ ...before.document, pixels: natural.document.pixels });
     expect(cleared.workspace.float).toBeNull();
-    expect(cleared.workspace.axes).toEqual([]);
+    expect(cleared.workspace.mirrors).toEqual([]);
     expect(cleared.workspace.recipes).toHaveLength(1);
     expect(cleared.workspace.recipes[0]).toMatchObject({
         source: { x: 0, y: 0, w: 0, h: 0, mask: [] },

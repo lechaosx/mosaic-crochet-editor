@@ -6,7 +6,7 @@ import { wand_select,
          apply_transforms_to_selection, TransformApplicationStatus } from "@mosaic/wasm";
 import { PatternState, Float, GridRecipe } from "./types";
 import { Store, SessionState, visiblePixels, outOfBounds } from "./store";
-import { axesToFlat } from "./symmetry";
+import { mirrorsToFlat } from "./symmetry";
 import { devAssert, assertNever } from "./dev";
 import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, recipeHasSource, recipeSourceCells, withRecipeSource } from "./grid-recipes";
 
@@ -287,7 +287,7 @@ export function replicateSelection(store: Store, beforeCommit?: () => void): Rep
     const s = store.state;
     if (!s.float) return "unchanged";
 
-    const transforms = axesToFlat(s.axes);
+    const transforms = mirrorsToFlat(s.mirrors);
     if (transforms.length === 0) return "unchanged";
 
     const { canvasWidth: W, canvasHeight: H } = s.pattern;

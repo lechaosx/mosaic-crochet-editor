@@ -4,7 +4,7 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
-import { addAxis } from "@mosaic/logic/symmetry";
+import { addMirror } from "@mosaic/logic/symmetry";
 import { encodeMcw } from "@mosaic/logic/mcw";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { contrastingProjectColors } from "../src/contrast-colors";
@@ -18,7 +18,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(saveToLocalStorage(session)).toBe(true);
         expect(loadFromLocalStorage()).toMatchObject({ toolVariants });
         const recovered = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        expect(recovered.version).toBe(7);
+        expect(recovered.version).toBe(8);
         expect(recovered.workspace.toolVariants).toEqual(toolVariants);
         expect(recovered.document.toolVariants).toBeUndefined();
     });
@@ -39,7 +39,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(restored.toolVariants).toEqual({ select: "replace", wand: "replace", move: "move", overlay: "place" });
         expect(restored.pixels).toEqual(session.pixels);
         expect(restored.pattern).toEqual(session.pattern);
-        expect(JSON.parse(localStorage.getItem("mosaic-recovery")!).version).toBe(7);
+        expect(JSON.parse(localStorage.getItem("mosaic-recovery")!).version).toBe(8);
     });
     test("reports a failed recovery write without throwing", () => {
         const originalSetItem = Storage.prototype.setItem;
@@ -61,7 +61,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
             colorB: "#abcdef",
             activeTool: "fill",
             primaryColor: 2,
-            axes: addAxis(addAxis([], "V", 3, 3), "H", 3, 3),
+            mirrors: addMirror(addMirror([], "V", { mode: "row", canvasWidth: 3, canvasHeight: 3 }), "H", { mode: "row", canvasWidth: 3, canvasHeight: 3 }),
             recipes: [gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }]))],
             rotation: 90,
             pixels: filledPixels(3, 3, 2),
@@ -75,9 +75,9 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(loaded!.colorA).toBe("#11ff22");
         expect(loaded!.activeTool).toBe("fill");
         expect(loaded!.primaryColor).toBe(2);
-        expect(loaded!.axes).toHaveLength(2);
-        expect(loaded!.axes.find(a => a.kind === "V")!.active).toBe(true);
-        expect(loaded!.axes.find(a => a.kind === "H")!.active).toBe(true);
+        expect(loaded!.mirrors).toHaveLength(2);
+        expect(loaded!.mirrors.find(a => a.types.includes("V"))!.enabled).toBe(true);
+        expect(loaded!.mirrors.find(a => a.types.includes("H"))!.enabled).toBe(true);
         expect(loaded!.recipes).toEqual(s.recipes);
         expect(loaded!.rotation).toBe(90);
         expect(loaded!.pixels[0]).toBe(2);
@@ -227,13 +227,13 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(migrated!.liveMirrors).toBe(true);
     });
 
-    test("current recovery drops stale axes before the restored project can save", () => {
-        const valid = { id: "valid", kind: "V" as const, active: false, x: 1 };
-        const stale = { id: "stale", kind: "H" as const, active: true, y: 0 };
-        saveToLocalStorage(rowSession(3, 3, { axes: [valid, stale] }));
+    test("current recovery drops stale mirrors before the restored project can save", () => {
+        const valid = { id: "valid", types: ["V" as const], enabled: false, x: 1, y: 1 };
+        const stale = { id: "stale", types: ["H" as const], enabled: true, x: 1, y: 0 };
+        saveToLocalStorage(rowSession(3, 3, { mirrors: [valid, stale] }));
 
         const restored = loadFromLocalStorage()!;
-        expect(restored.axes).toEqual([valid]);
+        expect(restored.mirrors).toEqual([valid]);
         expect(() => encodeMcw(restored)).not.toThrow();
     });
 
@@ -293,7 +293,7 @@ describe("saveToFile", () => {
         await expect(saveToFile(rowSession(3, 3))).rejects.toThrow("Disk full.");
     });
 
-    test("writes only project fields, including global mirror axes", async () => {
+    test("writes only project fields, including global mirror centres", async () => {
         let written = "";
         Object.assign(window, {
             showSaveFilePicker: async () => ({
@@ -304,7 +304,7 @@ describe("saveToFile", () => {
             }),
         });
         const session = rowSession(3, 3, {
-            axes: addAxis([], "V", 3, 3),
+            mirrors: addMirror([], "V", { mode: "row", canvasWidth: 3, canvasHeight: 3 }),
             recipes: [gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 2 }]))],
             activeTool: "move",
             toolVariants: { select: "add", wand: "remove", move: "duplicate", overlay: "invert" },
@@ -316,7 +316,7 @@ describe("saveToFile", () => {
 
         await expect(saveToFile(session)).resolves.toBe(true);
         const file = JSON.parse(written);
-        expect(file).toMatchObject({ version: 4, axes: session.axes });
+        expect(file).toMatchObject({ version: 5, mirrors: session.mirrors });
         expect(file.recipes).toHaveLength(1);
         expect(file).toMatchObject({
             dangerColorOverride: "#123456",

@@ -2,7 +2,6 @@ import { initialize_row_pattern } from "@mosaic/wasm";
 import type { PatternState, Float } from "@mosaic/logic/types";
 import type { SessionState } from "@mosaic/logic/store";
 import { defaultToolVariants } from "@mosaic/logic/types";
-import { defaultAxes } from "@mosaic/logic/symmetry";
 
 export function rowPattern(W: number, H: number): PatternState {
     return { mode: "row", canvasWidth: W, canvasHeight: H };
@@ -19,7 +18,7 @@ export function rowSession(W: number, H: number, opts: Partial<SessionState> = {
         activeTool: "pencil",
         toolVariants: defaultToolVariants(),
         primaryColor: 1,
-        axes: defaultAxes(W, H),
+        mirrors: [],
         recipes: [],
         activeRecipeId: null,
         liveMirrors: true,

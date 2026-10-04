@@ -4,7 +4,8 @@ import {
     packPixels, unpackPixels, packFloat, unpackFloat,
 } from "../src/storage";
 import { decodeMcw, encodeMcw } from "../src/mcw";
-import type { Axis } from "../src/types";
+import type { Axis, MirrorCenter } from "../src/types";
+import { migrateAxes } from "../src/symmetry";
 import { evaluateGridRecipe, gridRecipeFromFloat } from "../src/grid-recipes";
 import { filledPixels } from "./_helpers";
 
@@ -23,7 +24,7 @@ describe(".mcw codec", () => {
         expect(Array.from(legacy.pixels)).toEqual([1, 2, 2, 1]);
         expect(legacy.colorA).toBe("#112233");
         expect(legacy.colorB).toBe("#ddeeff");
-        expect(legacy.axes).toEqual([]);
+        expect(legacy.mirrors).toEqual([]);
         expect(legacy.dangerColorOverride).toBeNull();
         expect(legacy.accentColorOverride).toBeNull();
 
@@ -34,7 +35,7 @@ describe(".mcw codec", () => {
     test("migrates v2 files to the empty global mirror project boundary", () => {
         const current = decodeMcw(mcwFixture("pattern-v2.mcw"));
         expect(Array.from(current.pixels)).toEqual([1, 2, 1, 2]);
-        expect(current.axes).toEqual([]);
+        expect(current.mirrors).toEqual([]);
         expect(current.dangerColorOverride).toBeNull();
         expect(current.accentColorOverride).toBeNull();
 
@@ -54,16 +55,16 @@ describe(".mcw codec", () => {
     });
 
     test("round-trips global mirrors without serializing workspace state", () => {
-        const axes: Axis[] = [
-            { id: "saved-v", kind: "V", active: true, x: 0.5 },
-            { id: "saved-d", kind: "D1", active: false, c: 0 },
+        const mirrors: MirrorCenter[] = [
+            { id: "saved-v", types: ["V"], enabled: true, x: 0.5, y: 0.5 },
+            { id: "saved-d", types: ["D1"], enabled: false, x: 0.5, y: 0.5 },
         ];
         const document = {
             pattern: { mode: "row" as const, canvasWidth: 2, canvasHeight: 2 },
             pixels: new Uint8Array([1, 2, 1, 2]),
             colorA: "#010203",
             colorB: "#fafbfc",
-            axes,
+            mirrors,
             recipes: [],
             dangerColorOverride: "#123456",
             accentColorOverride: "#abcdef",
@@ -71,12 +72,12 @@ describe(".mcw codec", () => {
 
         const encoded = JSON.parse(encodeMcw(document));
         expect(encoded).toMatchObject({
-            version: 4,
+            version: 5,
             state: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
             pixels: "Cg==",
             colorA: "#010203",
             colorB: "#fafbfc",
-            axes,
+            mirrors,
             dangerColorOverride: "#123456",
             accentColorOverride: "#abcdef",
         });
@@ -95,7 +96,7 @@ describe(".mcw codec", () => {
             const encoded = JSON.parse(encodeMcw({
                 pattern: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
                 pixels: new Uint8Array([1, 2, 1, 2]),
-                colorA: "#010203", colorB: "#fafbfc", axes: [], recipes: [],
+                colorA: "#010203", colorB: "#fafbfc", mirrors: [], recipes: [],
                 dangerColorOverride: null, accentColorOverride: null,
             }));
             encoded[field] = "red";
@@ -109,7 +110,7 @@ describe(".mcw codec", () => {
             const document = {
                 pattern: { mode: "row" as const, canvasWidth: 2, canvasHeight: 2 },
                 pixels: new Uint8Array([1, 2, 1, 2]),
-                colorA: "#010203", colorB: "#fafbfc", axes: [], recipes: [],
+                colorA: "#010203", colorB: "#fafbfc", mirrors: [], recipes: [],
             };
             expect(() => encodeMcw({ ...document, [field]: "red" }))
                 .toThrow("Invalid pattern file.");
@@ -125,7 +126,7 @@ describe(".mcw codec", () => {
         const document = {
             pattern: { mode: "row" as const, canvasWidth: 4, canvasHeight: 2 },
             pixels: new Uint8Array([1, 2, 1, 2, 2, 1, 2, 1]),
-            colorA: "#000000", colorB: "#ffffff", axes: [],
+            colorA: "#000000", colorB: "#ffffff", mirrors: [],
             recipes: [{
                 id: "sparse", enabled: true,
                 source: { x: 0, y: 0, w: 3, h: 1, mask: new Uint8Array([1, 0, 1]) },
@@ -148,7 +149,7 @@ describe(".mcw codec", () => {
         const encoded = JSON.parse(encodeMcw({
             pattern: { mode: "row", canvasWidth: 2, canvasHeight: 2 },
             pixels: new Uint8Array([1, 2, 2, 1]),
-            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+            colorA: "#000000", colorB: "#ffffff", mirrors: [], recipes: [recipe],
         }));
         encoded.recipes[0].enabled = false;
 
@@ -162,7 +163,7 @@ describe(".mcw codec", () => {
         const document = {
             pattern: { mode: "row" as const, canvasWidth: mask.length, canvasHeight: 2 },
             pixels: new Uint8Array(mask.length * 2).fill(1),
-            colorA: "#000000", colorB: "#ffffff", axes: [],
+            colorA: "#000000", colorB: "#ffffff", mirrors: [],
             recipes: [{
                 id: "large-mask", enabled: true,
                 source: { x: 0, y: 0, w: mask.length, h: 1, mask },
@@ -188,9 +189,10 @@ describe(".mcw codec", () => {
         const encoded = JSON.parse(encodeMcw({
             pattern: { mode: "row", canvasWidth: 3, canvasHeight: 2 },
             pixels: new Uint8Array(6).fill(1),
-            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+            colorA: "#000000", colorB: "#ffffff", mirrors: [], recipes: [recipe],
         }));
         encoded.version = 3;
+        encoded.axes = [];
         encoded.recipes[0].columnOrientation = "same";
         encoded.recipes[0].rowOrientation = "same";
         for (const field of ["columnMirrorHorizontal", "columnMirrorVertical", "rowMirrorHorizontal", "rowMirrorVertical"]) delete encoded.recipes[0][field];
@@ -226,7 +228,7 @@ describe(".mcw codec", () => {
         const document = {
             pattern: { mode: "row" as const, canvasWidth: 4, canvasHeight: 4 },
             pixels: new Uint8Array(16).fill(1),
-            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+            colorA: "#000000", colorB: "#ffffff", mirrors: [], recipes: [recipe],
         };
 
         expect(decodeMcw(encodeMcw(document)).recipes).toEqual([recipe]);
@@ -243,7 +245,7 @@ describe(".mcw codec", () => {
         const document = {
             pattern: { mode: "row" as const, canvasWidth: 6, canvasHeight: 1 },
             pixels: new Uint8Array(6).fill(1),
-            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+            colorA: "#000000", colorB: "#ffffff", mirrors: [], recipes: [recipe],
         };
 
         const restored = decodeMcw(encodeMcw(document)).recipes[0];
@@ -264,7 +266,7 @@ describe(".mcw codec", () => {
         const encoded = JSON.parse(encodeMcw({
             pattern: { mode: "row", canvasWidth: 3, canvasHeight: 3 },
             pixels: new Uint8Array(9).fill(1),
-            colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe],
+            colorA: "#000000", colorB: "#ffffff", mirrors: [], recipes: [recipe],
         }));
         Object.assign(encoded.recipes[0], malformed);
 
@@ -291,7 +293,7 @@ describe(".mcw codec", () => {
         const document = {
             pattern: { mode: "row" as const, canvasWidth: 2, canvasHeight: 2 },
             pixels: new Uint8Array([1, 2, 1, 2]),
-            colorA: "#000000", colorB: "#ffffff", axes: [axis],
+            colorA: "#000000", colorB: "#ffffff", mirrors: migrateAxes([axis], { mode: "row", canvasWidth: 2, canvasHeight: 2 }),
         };
         expect(() => encodeMcw(document)).toThrow("Invalid pattern file.");
         expect(() => decodeMcw(JSON.stringify({
@@ -300,7 +302,7 @@ describe(".mcw codec", () => {
             pixels: "Cg==",
             colorA: document.colorA,
             colorB: document.colorB,
-            axes: document.axes,
+            axes: [axis],
         }))).toThrow("Invalid pattern file.");
     });
 
@@ -345,8 +347,8 @@ describe(".mcw codec", () => {
     });
 
     test("identifies a future file version", () => {
-        expect(() => decodeMcw(JSON.stringify({ version: 5 })))
-            .toThrow("This pattern uses unsupported .mcw version 5.");
+        expect(() => decodeMcw(JSON.stringify({ version: 6 })))
+            .toThrow("This pattern uses unsupported .mcw version 6.");
     });
 });
 
@@ -423,8 +425,8 @@ test("v4 preserves all four grid mirror flags and v3 migrates its orientations",
     const recipe = { ...gridRecipeFromFloat({ x: 0, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 2]) }),
         columnMirrorHorizontal: true, columnMirrorVertical: true, rowMirrorHorizontal: true, rowMirrorVertical: true };
     const encoded = JSON.parse(encodeMcw({ pattern: { mode: "row", canvasWidth: 4, canvasHeight: 4 },
-        pixels: new Uint8Array(16).fill(1), colorA: "#000000", colorB: "#ffffff", axes: [], recipes: [recipe] }));
-    expect(encoded.version).toBe(4);
+        pixels: new Uint8Array(16).fill(1), colorA: "#000000", colorB: "#ffffff", mirrors: [], recipes: [recipe] }));
+    expect(encoded.version).toBe(5);
     expect(decodeMcw(JSON.stringify(encoded)).recipes[0]).toMatchObject(recipe);
     for (const field of ["columnMirrorHorizontal", "columnMirrorVertical", "rowMirrorHorizontal", "rowMirrorVertical"]) {
         const invalid = structuredClone(encoded);
@@ -435,6 +437,7 @@ test("v4 preserves all four grid mirror flags and v3 migrates its orientations",
     }
     for (const field of ["columnMirrorHorizontal", "columnMirrorVertical", "rowMirrorHorizontal", "rowMirrorVertical"]) delete encoded.recipes[0][field];
     encoded.version = 3;
+    encoded.axes = [];
     encoded.recipes[0].columnOrientation = "alternate-mirrored";
     encoded.recipes[0].rowOrientation = "alternate-mirrored";
     expect(decodeMcw(JSON.stringify(encoded)).recipes[0]).toMatchObject({ columnMirrorHorizontal: true,

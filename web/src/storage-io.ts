@@ -1,8 +1,8 @@
-import { PatternState, Tool, ToolVariants, defaultToolVariants, Axis, GridRecipe } from "@mosaic/logic/types";
+import { PatternState, Tool, ToolVariants, defaultToolVariants, Axis, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { decodeMcw, encodeMcw, ProjectDocument } from "@mosaic/logic/mcw";
-import { axisIsProjectValid, defaultAxes } from "@mosaic/logic/symmetry";
+import { axisIsProjectValid, migrateAxes, mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
 import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 import {
@@ -14,7 +14,7 @@ import {
 
 const RECOVERY_KEY        = "mosaic-recovery";
 const LEGACY_RECOVERY_KEY = "mosaic-pattern-v4";
-const RECOVERY_VERSION    = 7;
+const RECOVERY_VERSION    = 8;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 function recoveryColorOverride(value: unknown): string | null {
@@ -88,8 +88,14 @@ interface RecoveryV7 {
     workspace: RecoveryV6["workspace"] & { toolVariants: ToolVariants };
 }
 
+interface RecoveryV8 {
+    version: 8;
+    document: RecoveryV7["document"];
+    workspace: Omit<RecoveryV7["workspace"], "axes"> & { mirrors: MirrorCenter[] };
+}
+
 interface MigratedRecovery {
-    recovery: RecoveryV7;
+    recovery: RecoveryV8;
     preferences?: AppPreferences;
 }
 
@@ -125,8 +131,8 @@ function recoveryFromV4(data: LocalSaveV4): RecoveryV5 {
 
 function recoveryFromV5(data: RecoveryV5): MigratedRecovery {
     return {
-        recovery: {
-            version: RECOVERY_VERSION,
+        recovery: migrateRecoveryAxes({
+            version: 7,
             document: data.document,
             workspace: {
                 ...data.workspace,
@@ -134,8 +140,15 @@ function recoveryFromV5(data: RecoveryV5): MigratedRecovery {
                 rotation: data.preferences.canvasRotation,
                 toolVariants: defaultToolVariants(),
             },
-        },
+        }),
         preferences: preferencesFromLegacy(data.preferences),
+    };
+}
+
+function migrateRecoveryAxes(recovery: RecoveryV7): RecoveryV8 {
+    const { axes = [], ...workspace } = recovery.workspace;
+    return { version: RECOVERY_VERSION, document: recovery.document,
+        workspace: { ...workspace, mirrors: migrateAxes(axes.filter(axis => axisIsProjectValid(axis, recovery.document.state)), recovery.document.state) },
     };
 }
 
@@ -145,15 +158,16 @@ function migrateRecovery(value: unknown): MigratedRecovery | null {
     if (data.version === RECOVERY_VERSION) {
         if (typeof data.document !== "object" || data.document === null
             || typeof data.workspace !== "object" || data.workspace === null) return null;
-        const recovery = data as unknown as RecoveryV7;
+        const recovery = data as unknown as RecoveryV8;
         return { recovery: { ...recovery, workspace: { ...recovery.workspace, liveTransforms: true } } };
     }
-    if (data.version === 6) {
+    if (data.version === 7 || data.version === 6) {
         if (typeof data.document !== "object" || data.document === null
             || typeof data.workspace !== "object" || data.workspace === null) return null;
-        const recovery = data as unknown as RecoveryV6;
-        return { recovery: { ...recovery, version: RECOVERY_VERSION,
-            workspace: { ...recovery.workspace, liveTransforms: true, toolVariants: defaultToolVariants() } } };
+        const recovery = data as unknown as RecoveryV7;
+        return { recovery: migrateRecoveryAxes({ ...recovery, version: 7,
+            workspace: { ...recovery.workspace, liveTransforms: true,
+                toolVariants: data.version === 7 ? recovery.workspace.toolVariants : defaultToolVariants() } }) };
     }
     if (data.version === 5) {
         if (typeof data.document !== "object" || data.document === null
@@ -167,7 +181,7 @@ function migrateRecovery(value: unknown): MigratedRecovery | null {
     return null;
 }
 
-function recoveryFromSession(s: Readonly<SessionState>): RecoveryV7 {
+function recoveryFromSession(s: Readonly<SessionState>): RecoveryV8 {
     return {
         version: RECOVERY_VERSION,
         document: {
@@ -179,7 +193,7 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV7 {
         workspace: {
             activeTool: s.activeTool, primaryColor: s.primaryColor,
             toolVariants: s.toolVariants,
-            axes: s.axes,
+            mirrors: s.mirrors,
             recipes: storedGridRecipes(s.recipes), activeRecipeId: s.activeRecipeId,
             liveTransforms: true,
             float: s.float ? packFloat(s.float) : null,
@@ -210,9 +224,8 @@ export function loadFromLocalStorage(): SessionState | null {
         const { recovery, preferences } = migrated;
         const { document, workspace } = recovery;
         assertPatternDimensions(document.state);
-        const axes = workspace.axes ?? defaultAxes(
-            document.state.canvasWidth, document.state.canvasHeight,
-        );
+        const mirrors = readMirrorRecords(workspace.mirrors);
+        if (!mirrors) return null;
         const recipes = restoreGridRecipes(workspace.recipes);
         const float = workspace.float ? unpackFloat(workspace.float) : null;
         const restored: SessionState = {
@@ -225,7 +238,7 @@ export function loadFromLocalStorage(): SessionState | null {
             activeTool:       workspace.activeTool as Tool,
             toolVariants:    recoveryToolVariants(workspace.toolVariants),
             primaryColor:     workspace.primaryColor as 1 | 2,
-            axes:             axes.filter(axis => axisIsProjectValid(axis, document.state)),
+            mirrors:          mirrorsForPattern(mirrors, document.state),
             recipes,
             activeRecipeId:   normalizeActiveRecipeId(
                 recipes,
@@ -270,7 +283,7 @@ function projectDocumentFrom(s: Readonly<SessionState>): ProjectDocument {
         pixels: s.pixels,
         colorA: s.colorA,
         colorB: s.colorB,
-        axes: s.axes,
+        mirrors: s.mirrors,
         recipes: s.recipes,
         dangerColorOverride: s.dangerColorOverride,
         accentColorOverride: s.accentColorOverride,

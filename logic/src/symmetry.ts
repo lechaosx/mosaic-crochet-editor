@@ -1,9 +1,7 @@
-// Symmetry axes are first-class entries in `SessionState.axes`. The Rust
-// orbit walker takes a flat `Float64Array` (3 doubles per active axis:
-// `kind`, `a`, `b`); `axesToFlat` compiles the active set down. Composition
-// of multiple reflections emerges from the BFS without implied axis records.
+// Mirror centres compile to the existing Rust transform triplets; reflection
+// composition remains in the authoritative orbit walker.
 
-import { Axis, PatternState, SymKey } from "./types";
+import { Axis, MirrorCenter, PatternState, SymKey } from "./types";
 
 export type { Axis, SymKey };
 
@@ -40,10 +38,6 @@ function newAxisId(): string {
     return `axis-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Build a fresh axis of the given kind at its canonical centre. Caller
-// usually flips `active: true` on the result via the spread in `addAxis`.
-// D1 / D2 round to the nearest integer because non-integer `c` would
-// produce off-grid mirror partners.
 function canonicalAxis(kind: SymKey, W: number, H: number): Axis {
     switch (kind) {
         case "V":  return { kind: "V",  id: newAxisId(), active: false, x: (W - 1) / 2 };
@@ -54,51 +48,7 @@ function canonicalAxis(kind: SymKey, W: number, H: number): Axis {
     }
 }
 
-// Fresh sessions have no symmetry; migration callers also use this when an
-// older saved value has no axis list.
-export function defaultAxes(_canvasWidth: number, _canvasHeight: number): Axis[] {
-    return [];
-}
-
-// Add a new axis of the given kind at its canonical centre, active.
-// Pushes a fresh-id record; multiple axes of the same kind coexist.
-export function addAxis(
-    axes: ReadonlyArray<Axis>, kind: SymKey, canvasWidth: number, canvasHeight: number,
-): Axis[] {
-    return [...axes, { ...canonicalAxis(kind, canvasWidth, canvasHeight), active: true }];
-}
-
-// Remove an axis by id. No-op when the id is absent.
-export function removeAxis(axes: ReadonlyArray<Axis>, id: string): Axis[] {
-    return axes.filter(a => a.id !== id);
-}
-
-// Flip one axis's `active` by id. No-op when the id is absent.
-export function toggleAxisActive(axes: ReadonlyArray<Axis>, id: string): Axis[] {
-    return axes.map(a => a.id === id ? { ...a, active: !a.active } : a);
-}
-
-// Distance (in cell-units) from a fractional pattern-space point to an axis.
-// V/H lines: perpendicular distance. D1/D2: perpendicular distance scaled by √2.
-// C: Euclidean distance to the rotation point.
-export function distanceToAxis(a: Axis, px: number, py: number): number {
-    switch (a.kind) {
-        case "V":  return Math.abs(px - (a.x + 0.5));
-        case "H":  return Math.abs(py - (a.y + 0.5));
-        case "D1": return Math.abs(px - py - a.c)         / Math.SQRT2;
-        case "D2": return Math.abs(px + py - (a.c + 1))   / Math.SQRT2;
-        case "C":  return Math.hypot(px - (a.x + 0.5), py - (a.y + 0.5));
-    }
-}
-
-// True when the axis can't mirror two distinct in-canvas cells — i.e. the
-// drag-to-delete trigger. "Touching the boundary" is dead because at the
-// edge only a single cell can ever self-mirror (no useful pair). Per kind:
-//   V  — useful iff a.x ∈ (0, W − 1). At a.x = 0 only cell 0 self-mirrors.
-//   H  — symmetric on Y.
-//   C  — rotation point; useful iff (a.x, a.y) ∈ (0, W − 1) × (0, H − 1).
-//   D1 — line x − y = c; useful iff c ∈ (−(H − 1), W − 1).
-//   D2 — line x + y = c; useful iff c ∈ (0, W + H − 2).
+// Legacy project bounds are preserved when deriving generators from centres.
 export function axisOffCanvas(a: Axis, W: number, H: number): boolean {
     switch (a.kind) {
         case "V":  return a.x <= 0 || a.x >= W - 1;
@@ -121,52 +71,119 @@ export function axisIsProjectValid(axis: Axis, pattern: PatternState): boolean {
         && !axisOffCanvas(axis, pattern.canvasWidth, pattern.canvasHeight);
 }
 
-// Pick at most ONE active axis per kind whose guide is within `tolerance`
-// of the click. Multi-axis drag: clicking at an intersection grabs one of
-// each kind. Two parallel V axes at the same x → only the closer one is
-// returned so the user can drag it away to separate them.
-export function pickAxesAt(
-    axes: ReadonlyArray<Axis>, px: number, py: number, tolerance: number,
-): Axis[] {
-    const byKind = new Map<SymKey, { axis: Axis; dist: number }>();
-    for (const a of axes) {
-        if (!a.active) continue;
-        const d = distanceToAxis(a, px, py);
-        if (d >= tolerance) continue;
-        const cur = byKind.get(a.kind);
-        if (!cur || d < cur.dist) byKind.set(a.kind, { axis: a, dist: d });
-    }
-    return [...byKind.values()].map(v => v.axis);
-}
-
-// Snap a scalar to the nearest half-integer (0, 0.5, 1, 1.5, …). Used for
-// V/H/C axis dragging.
 export function snapHalf(v: number): number {
     return Math.round(v * 2) / 2;
 }
 
-// Snap to nearest integer. Used for D1/D2 — diagonal axes only support
-// integer `c` because non-integer `c` produces non-cell mirror partners.
-export function snapInt(v: number): number {
-    return Math.round(v);
+export function mirrorAxes(mirror: MirrorCenter): Axis[] {
+    return mirror.types.map(kind => kind === "V" ? { id: mirror.id, active: mirror.enabled, kind, x: mirror.x }
+        : kind === "H" ? { id: mirror.id, active: mirror.enabled, kind, y: mirror.y }
+            : kind === "C" ? { id: mirror.id, active: mirror.enabled, kind, x: mirror.x, y: mirror.y }
+                : { id: mirror.id, active: mirror.enabled, kind, c: kind === "D1" ? mirror.x - mirror.y : mirror.x + mirror.y });
 }
 
-// Update a single axis's position (immutable). Caller's responsibility to
-// pass kind-appropriate fields (the discriminated union enforces it at the
-// call site).
-export function setAxisPosition(
-    axes: ReadonlyArray<Axis>, id: string, pos: { x?: number; y?: number; c?: number },
-): Axis[] {
-    return axes.map(a => {
-        if (a.id !== id) return a;
-        switch (a.kind) {
-            case "V":  return pos.x !== undefined ? { ...a, x: pos.x } : a;
-            case "H":  return pos.y !== undefined ? { ...a, y: pos.y } : a;
-            case "C":  return { ...a,
-                                x: pos.x !== undefined ? pos.x : a.x,
-                                y: pos.y !== undefined ? pos.y : a.y };
+export function mirrorsToFlat(mirrors: ReadonlyArray<MirrorCenter>): Float64Array {
+    return axesToFlat(mirrors.flatMap(mirrorAxes));
+}
+
+export function migrateAxes(axes: ReadonlyArray<Axis>, pattern: PatternState): MirrorCenter[] {
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
+    return axes.map(axis => {
+        let x = (W - 1) / 2, y = (H - 1) / 2;
+        switch (axis.kind) {
+            case "V": x = axis.x; break;
+            case "H": y = axis.y; break;
+            case "C": x = axis.x; y = axis.y; break;
             case "D1":
-            case "D2": return pos.c !== undefined ? { ...a, c: pos.c } : a;
+                x = (Math.max(0, axis.c) + Math.min(W - 1, H - 1 + axis.c)) / 2;
+                y = x - axis.c;
+                break;
+            case "D2":
+                x = (Math.max(0, axis.c - (H - 1)) + Math.min(W - 1, axis.c)) / 2;
+                y = axis.c - x;
+                break;
         }
+        return { id: axis.id, enabled: axis.active, x, y, types: [axis.kind] };
     });
+}
+
+export function mirrorIsProjectValid(mirror: MirrorCenter, pattern: PatternState): boolean {
+    return Number.isSafeInteger(mirror.x * 2) && Number.isSafeInteger(mirror.y * 2)
+        && mirrorAxes(mirror).every(axis => axisIsProjectValid(axis, pattern));
+}
+
+export function mirrorsForPattern(mirrors: ReadonlyArray<MirrorCenter>, pattern: PatternState): MirrorCenter[] {
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
+    return mirrors.flatMap(mirror => {
+        const types = mirrorAxes(mirror).filter(axis => axisIsProjectValid(axis, pattern)).map(axis => axis.kind);
+        if (mirror.types.length > 0 && types.length === 0) return [];
+        let x = mirror.x, y = mirror.y;
+        const clampX = () => Math.max(0, Math.min(W - 1, x));
+        const clampY = () => Math.max(0, Math.min(H - 1, y));
+        if (types.length === 0) { x = clampX(); y = clampY(); }
+        else if (types.length === 1 && types[0] === "V") y = clampY();
+        else if (types.length === 1 && types[0] === "H") x = clampX();
+        else if (types.length === 1 && (types[0] === "D1" || types[0] === "D2")
+            && (x < 0 || x > W - 1 || y < 0 || y > H - 1)) {
+            const axis = mirrorAxes({ ...mirror, types })[0];
+            const midpoint = migrateAxes([axis], pattern)[0];
+            x = midpoint.x; y = midpoint.y;
+        }
+        return [{ ...mirror, x, y, types }];
+    });
+}
+
+export function snapMirrorCenter(mirror: MirrorCenter, position: { x: number; y: number }, pattern: PatternState): MirrorCenter | null {
+    const insetX = mirror.types.includes("V") || mirror.types.includes("C") ? 0.5 : 0;
+    const insetY = mirror.types.includes("H") || mirror.types.includes("C") ? 0.5 : 0;
+    const maxX = pattern.canvasWidth - 1 - insetX, maxY = pattern.canvasHeight - 1 - insetY;
+    if (maxX < insetX || maxY < insetY) return null;
+    const x = snapHalf(Math.max(insetX, Math.min(maxX, position.x)));
+    const y = snapHalf(Math.max(insetY, Math.min(maxY, position.y)));
+    let closest: MirrorCenter | null = null, distance = Infinity;
+    // A one-cell-wide chart needs a full-cell step to leave a diagonal boundary
+    // while preserving parity; the fixed neighbourhood avoids chart-sized work.
+    for (const dx of [0, -0.5, 0.5, -1, 1]) for (const dy of [0, -0.5, 0.5, -1, 1]) {
+        const candidate = { ...mirror, x: x + dx, y: y + dy };
+        if (candidate.x < insetX || candidate.x > maxX || candidate.y < insetY || candidate.y > maxY
+            || !mirrorIsProjectValid(candidate, pattern)) continue;
+        const d = (candidate.x - position.x) ** 2 + (candidate.y - position.y) ** 2;
+        if (d < distance) { closest = candidate; distance = d; }
+    }
+    return closest;
+}
+
+export function addMirror(mirrors: ReadonlyArray<MirrorCenter>, kind: SymKey | null, pattern: PatternState): MirrorCenter[] {
+    if (kind === null) return [...mirrors, { id: newAxisId(), enabled: true,
+        x: (pattern.canvasWidth - 1) / 2, y: (pattern.canvasHeight - 1) / 2, types: [] }];
+    const axis = { ...canonicalAxis(kind, pattern.canvasWidth, pattern.canvasHeight), active: true };
+    if (!axisIsProjectValid(axis, pattern)) return [...mirrors];
+    return [...mirrors, ...migrateAxes([axis], pattern)];
+}
+
+export function pickMirrorCenter(mirrors: ReadonlyArray<MirrorCenter>, px: number, py: number, tolerance: number, selectedId: string | null): MirrorCenter | null {
+    let picked: MirrorCenter | null = null, distance = tolerance;
+    for (const mirror of mirrors) {
+        const d = Math.hypot(px - (mirror.x + 0.5), py - (mirror.y + 0.5));
+        if (d < distance || (d === distance && mirror.id === selectedId)) { picked = mirror; distance = d; }
+    }
+    return picked;
+}
+
+export function readMirrorRecords(value: unknown): MirrorCenter[] | null {
+    if (!Array.isArray(value)) return null;
+    const ids = new Set<string>();
+    const kinds: SymKey[] = ["V", "H", "C", "D1", "D2"];
+    const mirrors: MirrorCenter[] = [];
+    for (const item of value) {
+        if (typeof item !== "object" || item === null || typeof item.id !== "string" || item.id.length === 0
+            || ids.has(item.id) || typeof item.enabled !== "boolean"
+            || !Number.isSafeInteger(item.x * 2) || !Number.isSafeInteger(item.y * 2)
+            || typeof item.x !== "number" || typeof item.y !== "number"
+            || !Array.isArray(item.types) || item.types.some((type: unknown) => !kinds.includes(type as SymKey))
+            || new Set(item.types).size !== item.types.length) return null;
+        ids.add(item.id);
+        mirrors.push({ id: item.id, enabled: item.enabled, x: item.x, y: item.y, types: [...item.types] });
+    }
+    return mirrors;
 }

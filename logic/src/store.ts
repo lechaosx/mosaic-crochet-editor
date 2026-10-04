@@ -11,7 +11,7 @@ import {
     build_highlight_plan_row,
     build_highlight_plan_round,
 } from "@mosaic/wasm";
-import { Tool, ToolVariants, PatternState, Float, Axis, GridRecipe } from "./types";
+import { Tool, ToolVariants, PatternState, Float, MirrorCenter, GridRecipe } from "./types";
 import { emptyGridRecipe, normalizeActiveRecipeId } from "./grid-recipes";
 
 export interface SessionState {
@@ -24,7 +24,7 @@ export interface SessionState {
     activeTool:    Tool;
     toolVariants:  ToolVariants;
     primaryColor:  1 | 2;
-    axes:          Axis[];               // user-added symmetry axes
+    mirrors:       MirrorCenter[];
     recipes:       GridRecipe[];         // saved selection repeat definitions
     activeRecipeId: string | null;       // source selection currently extended by a recipe
     liveMirrors:   boolean;

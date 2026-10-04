@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell } from "./_helpers";
+import { addGlobalMirror, bootApp, clickCell } from "./_helpers";
 
 test("workspace transitions preserve canvas geometry near the compact toolbar threshold", async ({ page }) => {
     await page.setViewportSize({ width: 860, height: 900 });
@@ -111,16 +111,16 @@ test("deleting an earlier saved selection preserves focus on a surviving row", a
     expect(await row!.evaluate(element => element.isConnected)).toBe(true);
 });
 
-test("Open replaces mirror coordinate controls when an existing axis id changes kind", async ({ page }) => {
+test("Open updates a mirror's types and coordinates when its identity is retained", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
-    await page.getByRole("button", { name: "Add vertical", exact: true }).click();
+    await addGlobalMirror(page, "Vertical");
     const project = await page.evaluate(() => {
         const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         return {
             version: 3,
             ...recovery.document,
-            axes: [{ id: recovery.workspace.axes[0].id, kind: "H", active: true, y: 2 }],
+            axes: [{ id: recovery.workspace.mirrors[0].id, kind: "H", active: true, y: 2 }],
         };
     });
     const chooserPromise = page.waitForEvent("filechooser");
@@ -130,33 +130,35 @@ test("Open replaces mirror coordinate controls when an existing axis id changes 
         mimeType: "application/json",
         buffer: Buffer.from(JSON.stringify(project)),
     });
-    const position = page.getByRole("spinbutton", { name: "Horizontal axis y position" });
+    const position = page.getByRole("spinbutton", { name: "Mirror centre y" });
     await expect(position).toBeVisible();
     await expect(position).toHaveValue("2");
-    await expect(page.getByRole("spinbutton", { name: "Vertical axis x position" })).toHaveCount(0);
+    await expect(page.getByRole("spinbutton", { name: "Mirror centre x" })).toHaveValue("4");
+    await expect(page.getByRole("button", { name: "Vertical", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByRole("button", { name: "Horizontal", exact: true })).toHaveAttribute("aria-pressed", "true");
     await position.fill("3.5");
-    await position.dispatchEvent("change");
+    await position.press("Enter");
     await expect(position).toHaveValue("3.5");
     await expect(position).toBeFocused();
     await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.axes,
-    )).toEqual([{ ...project.axes[0], y: 3.5 }]);
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors,
+    )).toEqual([{ id: project.axes[0].id, enabled: true, x: 4, y: 3.5, types: ["H"] }]);
 });
 
 test("mirror updates preserve position fields, row identity, and focused actions", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
-    await page.getByRole("button", { name: "Add vertical", exact: true }).click();
+    await addGlobalMirror(page, "Vertical");
     const row = await page.locator("#sym-list > div").first().elementHandle();
-    const position = page.getByRole("spinbutton", { name: "Vertical axis x position" });
+    const position = page.getByRole("spinbutton", { name: "Mirror centre x" });
     await position.fill("3.5");
-    await position.dispatchEvent("change");
+    await position.press("Enter");
     await expect(position).toBeFocused();
     await expect(position).toHaveValue("3.5");
-    const toggle = page.getByRole("button", { name: "Disable vertical axis at x=3.5" });
+    const toggle = page.getByRole("button", { name: "Disable mirror at (3.5, 4)" });
     await toggle.focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Enable vertical axis at x=3.5" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Enable mirror at (3.5, 4)" })).toBeFocused();
     expect(await row!.evaluate(element => element.isConnected)).toBe(true);
 });
 

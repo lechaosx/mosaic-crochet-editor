@@ -1,4 +1,5 @@
-import { PatternState, RowState, RoundState, Axis, SymKey } from "@mosaic/logic/types";
+import { PatternState, RowState, RoundState, MirrorCenter, SymKey } from "@mosaic/logic/types";
+import { mirrorAxes } from "@mosaic/logic/symmetry";
 import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
@@ -111,10 +112,7 @@ export interface RendererState {
     // Marching-ants phase. Animated in `frame` while any float (committed
     // or drag preview) is on-screen; used as `lineDashOffset` for the outline.
     selectionDashOffset: number;
-    // Axes currently dragged into the off-canvas delete zone (multi-axis
-    // intersection drag picks up to one per kind). Renderer draws those
-    // guides at reduced alpha so the user can see "release = gone."
-    axesInDeleteZone: Set<string>;
+    selectedMirrorId: string | null;
     previewRepeatGuides: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
@@ -140,7 +138,7 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         selectPreviewMask:      null,
         dragRect:               null,
         selectionDashOffset:    0,
-        axesInDeleteZone:       new Set<string>(),
+        selectedMirrorId:       null,
         previewRepeatGuides:    false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
@@ -195,9 +193,7 @@ export function screenToPattern(
     return { x: Math.floor(p.x), y: Math.floor(p.y) };
 }
 
-// Same as `screenToPattern` but keeps the fractional cell coordinates —
-// callers that need to hit-test against sub-cell features (axis lines,
-// rotation points) want continuous coords, not floored cell indices.
+// Handle hit-testing needs continuous coordinates rather than cell indices.
 export function screenToPatternFrac(
     canvas: HTMLCanvasElement, view: ViewState, dpr: number, visualRotation: number,
     pattern: PatternState, clientX: number, clientY: number,
@@ -428,7 +424,7 @@ export function renderPatternColourPreview(
     renderHighlightSymbols(ctx, view, dpr,
         [null, colorA, colorB], dangerColor, pattern, pixels, plan, matrix, opacity, null, false);
     renderSymmetryGuides(ctx, view, dpr, pattern,
-        [{ kind: "D1", id: "preview", active: true, c: 0 }], accentColor, new Set(), true);
+        [{ id: "preview", enabled: true, x: 2, y: 2, types: ["D1"] }], accentColor, null, true);
     const selection = new Uint8Array(W * H);
     for (let y = Math.max(0, H - 3); y < H; y++) {
         for (let x = 0; x < Math.min(3, W); x++) {
@@ -457,7 +453,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
 }
 
 function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState, store: Store) {
-    const { pattern, pixels, float, axes, recipes, activeRecipeId } = store.state;
+    const { pattern, pixels, float, mirrors, recipes, activeRecipeId } = store.state;
     const { guidanceOpacity, labelsVisible } = rs.preferences;
     const { dangerColor, accentColor } = rs.projectColors;
     const { canvasWidth: W, canvasHeight: H } = pattern;
@@ -512,7 +508,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
         renderRecipeInstances(ctx, view, dpr, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
     }
-    renderSymmetryGuides(ctx, view, dpr, pattern, axes, accentColor, rs.axesInDeleteZone, rs.previewRepeatGuides);
+    renderSymmetryGuides(ctx, view, dpr, pattern, mirrors, accentColor, rs.selectedMirrorId, rs.previewRepeatGuides);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
@@ -968,11 +964,10 @@ function renderRoundLabels(
 
 function renderSymmetryGuides(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    pattern: PatternState, axes: ReadonlyArray<Axis>,
-    color: string, deleteZoneIds: ReadonlySet<string>, editable: boolean,
+    pattern: PatternState, mirrors: ReadonlyArray<MirrorCenter>,
+    color: string, selectedId: string | null, editable: boolean,
 ) {
-    const active = axes.filter(a => a.active);
-    if (active.length === 0) return;
+    const active = mirrors.filter(mirror => mirror.enabled).flatMap(mirrorAxes);
     const { canvasWidth: W, canvasHeight: H } = pattern;
 
     const overhang = 1;                       // pattern px past each side
@@ -990,7 +985,7 @@ function renderSymmetryGuides(
     };
     const handle = (x: number, y: number) => {
         if (!editable) return;
-        const r = 6 / (view.zoom * dpr);
+        const r = 6 / view.zoom;
         ctx.setLineDash([]);
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -1008,21 +1003,16 @@ function renderSymmetryGuides(
     ctx.setLineDash([dash, dashGap]);
 
     for (const a of active) {
-        // Dragging into the off-canvas delete zone fades the guide so the
-        // user sees the "release here = delete" intent visually.
-        ctx.globalAlpha = deleteZoneIds.has(a.id) ? 0.25 : 1;
         switch (a.kind) {
             case "V": {
                 // Vertical mirror line at cell-edge x; +0.5 shifts cell-index to render coords.
                 const x = a.x + 0.5;
                 draw(x, -overhang, x, H + overhang);
-                handle(x, H / 2);
                 break;
             }
             case "H": {
                 const y = a.y + 0.5;
                 draw(-overhang, y, W + overhang, y);
-                handle(W / 2, y);
                 break;
             }
             case "D1": {
@@ -1032,7 +1022,6 @@ function renderSymmetryGuides(
                 const yMax = Math.min(H, W - c);
                 draw(yMin + c - ovhDiag, yMin - ovhDiag,
                      yMax + c + ovhDiag, yMax + ovhDiag);
-                handle((yMin + yMax) / 2 + c, (yMin + yMax) / 2);
                 break;
             }
             case "D2": {
@@ -1042,18 +1031,29 @@ function renderSymmetryGuides(
                 const yMax = Math.min(H, s);
                 draw(s - yMin + ovhDiag, yMin - ovhDiag,
                      s - yMax - ovhDiag, yMax + ovhDiag);
-                handle(s - (yMin + yMax) / 2, (yMin + yMax) / 2);
                 break;
             }
             case "C": {
                 ctx.setLineDash([]);
                 ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(a.x + 0.5, a.y + 0.5, 0.35, 0, Math.PI * 2);
+                ctx.arc(a.x + 0.5, a.y + 0.5, 6 / view.zoom, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.setLineDash([dash, dashGap]);
                 break;
             }
+        }
+    }
+    if (editable) for (const mirror of mirrors) {
+        ctx.globalAlpha = mirror.enabled ? 1 : 0.55;
+        handle(mirror.x + 0.5, mirror.y + 0.5);
+        if (mirror.id === selectedId) {
+            ctx.setLineDash([]);
+            const r = 10 / view.zoom;
+            ctx.beginPath();
+            ctx.arc(mirror.x + 0.5, mirror.y + 0.5, r, 0, Math.PI * 2);
+            ctx.strokeStyle = color;
+            ctx.stroke();
         }
     }
     ctx.restore();

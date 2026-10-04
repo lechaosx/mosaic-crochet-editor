@@ -121,7 +121,7 @@
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-select"/></svg></button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the selection area" aria-label="Move"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
-        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Global Mirror: no axes configured" aria-controls="inspector-host" aria-expanded="false" aria-label="Global Mirror: no axes configured"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
+        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Global Mirror: no active types" aria-controls="inspector-host" aria-expanded="false" aria-label="Global Mirror: no active types"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
       </div>
 
       <div class="dock-group g-colors" role="group" aria-label="Yarns">
@@ -301,14 +301,10 @@
     <div class="popover-row">
       <span class="popover-label">Global mirrors</span>
       <div class="sym-add-row">
-        <button class="btn btn--icon" id="add-sym-v"  title="Add vertical mirror (V)"     aria-label="Add vertical"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-v"/></svg></button>
-        <button class="btn btn--icon" id="add-sym-h"  title="Add horizontal mirror (H)"   aria-label="Add horizontal"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-h"/></svg></button>
-        <button class="btn btn--icon" id="add-sym-c"  title="Add point symmetry (180°) (C)" aria-label="Add central"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-c"/></svg></button>
-        <button class="btn btn--icon" id="add-sym-d1" title="Add diagonal ╲ (D)"          aria-label="Add diagonal"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-d1"/></svg></button>
-        <button class="btn btn--icon" id="add-sym-d2" title="Add anti-diagonal ╱ (A)"     aria-label="Add anti-diagonal"><svg class="tool-icon" aria-hidden="true"><use href="#icon-mirror-d2"/></svg></button>
+        <button class="btn" id="add-mirror" title="Add a mirror centre, then choose its types">Add mirror</button>
       </div>
     </div>
-    <div id="sym-list" class="sym-list" aria-label="Axes"></div>
+    <div id="sym-list" class="sym-list" aria-label="Mirror centres"></div>
     <div class="transform-usage">
       <div class="popover-row">
         <button class="btn" id="replicate-selection" title="Stamp global mirror copies from the current selection (T)" disabled>Stamp copies</button>

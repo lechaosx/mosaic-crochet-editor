@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant } from "./_helpers";
+import { addGlobalMirror, bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("active tool and yarn expose their selected state", async ({ page }) => {
     await bootApp(page);
@@ -68,7 +68,7 @@ test("context strip only shows information not visible in controls", async ({ pa
     await expect(page.locator("#status-selection")).toBeHidden();
 
     await page.locator("#btn-sym-toggle").click();
-    await page.locator("#add-sym-v").click();
+    await addGlobalMirror(page, "Vertical");
     await expect(status).not.toContainText("Transforms live");
 });
 
@@ -142,34 +142,34 @@ test("double-click and long-press invoke the chosen yarn picker from the dock", 
 test("dynamic symmetry actions name their axis and position", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await page.getByRole("button", { name: "Add vertical" }).click();
+    await addGlobalMirror(page, "Vertical");
 
-    const disable = page.getByRole("button", { name: "Disable vertical axis at x=4" });
+    const disable = page.getByRole("button", { name: "Disable mirror at (4, 4)" });
     await expect(disable).toBeVisible();
-    await expect(page.getByRole("button", { name: "Delete vertical axis at x=4" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Delete mirror at (4, 4)" })).toBeVisible();
 
     await disable.click();
-    await expect(page.getByRole("button", { name: "Enable vertical axis at x=4" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Enable mirror at (4, 4)" })).toBeVisible();
 });
 
 test("dynamic symmetry actions retain keyboard focus after rebuilding the axis list", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await page.getByRole("button", { name: "Add vertical" }).click();
-    await page.getByRole("button", { name: "Add horizontal" }).click();
+    await addGlobalMirror(page, "Vertical");
+    await addGlobalMirror(page, "Horizontal");
 
-    const disableVertical = page.getByRole("button", { name: "Disable vertical axis at x=4" });
+    const disableVertical = page.locator(".sym-list-row").first().getByRole("button", { name: "Disable mirror at (4, 4)" });
     await disableVertical.focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Enable vertical axis at x=4" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Enable mirror at (4, 4)" })).toBeFocused();
 
-    const deleteVertical = page.getByRole("button", { name: "Delete vertical axis at x=4" });
+    const deleteVertical = page.locator(".sym-list-row").first().getByRole("button", { name: "Delete mirror at (4, 4)" });
     await deleteVertical.focus();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Delete horizontal axis at y=4" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Delete mirror at (4, 4)" })).toBeFocused();
 
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Add horizontal" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Add mirror" })).toBeFocused();
 });
 
 test("closing an inspector restores focus to the available authoring context", async ({ page }) => {
@@ -311,7 +311,7 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await page.getByRole("button", { name: "Close inspector" }).click();
 
     await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await page.getByRole("button", { name: "Add vertical" }).click();
+    await addGlobalMirror(page, "Vertical");
     await expectHoverLabels("Transform inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
@@ -332,7 +332,7 @@ test("explicit inspector opening moves focus to its first available control", as
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await expect(page.getByRole("button", { name: "Add vertical" })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Add mirror" })).toBeFocused();
     await page.keyboard.press("Escape");
 
     await page.getByRole("button", { name: "Pattern" }).click();

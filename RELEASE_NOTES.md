@@ -6,6 +6,8 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Rectangle, Wand, Move, and Overlay remember their chosen actions in accessible tool menus; mouse buttons and modifiers provide temporary actions with visible tool and yarn feedback.
 - Fit keeps large charts centred with editable edge cells clear of overlay panels.
+- Global mirrors combine independent types around editable centres, with precise coordinates, centre handles, and compatible recovery of older mirror definitions.
+- Rejected project files explain the error without moving the current chart view.
 
 ## 3 October 2026
 

@@ -7,7 +7,7 @@ import {
     historyUndo, historyRedo, canUndo, canRedo, historyPeek,
 } from "../src/history";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
-import { addAxis } from "@mosaic/logic/symmetry";
+import { addMirror } from "@mosaic/logic/symmetry";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { encodeMcw } from "@mosaic/logic/mcw";
 
@@ -75,7 +75,7 @@ describe("historySave / historyReset", () => {
     test("axis changes are part of the dedupe key — adding an axis pushes a snapshot", () => {
         const s = rowSession(3, 3);
         historyReset(s);
-        historySave({ ...s, axes: addAxis([], "V", 3, 3) });
+        historySave({ ...s, mirrors: addMirror([], "V", { mode: "row", canvasWidth: 3, canvasHeight: 3 }) });
         expect(canUndo()).toBe(true);
     });
 
@@ -102,7 +102,7 @@ describe("historySave / historyReset", () => {
         expect(historyPeek()!.dangerColorOverride).toBeUndefined();
         expect(historyPeek()!.accentColorOverride).toBeUndefined();
         expect(historyRedo()).toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: null });
-        expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(6);
+        expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(7);
     });
 
     test("saved recipes are part of history and survive undo", () => {
@@ -185,27 +185,27 @@ describe("historySave / historyReset", () => {
         const s = rowSession(3, 3);
         historyReset(s);
         // Snapshot 1: V added at canonical x=1.
-        const v1 = addAxis([], "V", 3, 3);
-        historySave({ ...s, axes: v1 });
+        const v1 = addMirror([], "V", { mode: "row", canvasWidth: 3, canvasHeight: 3 });
+        historySave({ ...s, mirrors: v1 });
         // Snapshot 2: V moved to x=0 (same id, new position).
-        const v2 = v1.map(a => a.kind === "V" ? { ...a, x: 0 } : a);
-        historySave({ ...s, axes: v2 });
+        const v2 = v1.map(a => a.types.includes("V") ? { ...a, x: 0 } : a);
+        historySave({ ...s, mirrors: v2 });
         // Undo back to V@x=1.
         const r = historyUndo();
         expect(r).not.toBeNull();
-        const v = r!.axes.find(a => a.kind === "V")!;
-        expect(v.kind === "V" && v.x === 1).toBe(true);
+        const v = r!.mirrors.find(a => a.types.includes("V"))!;
+        expect(v.types.includes("V") && v.x === 1).toBe(true);
     });
 
-    test("undo drops stale axes but retains valid disabled axes", () => {
-        const valid = { id: "valid", kind: "V" as const, active: false, x: 1 };
-        const stale = { id: "stale", kind: "H" as const, active: true, y: 0 };
-        const baseline = rowSession(3, 3, { axes: [valid, stale] });
+    test("undo drops stale mirrors but retains valid disabled mirrors", () => {
+        const valid = { id: "valid", types: ["V" as const], enabled: false, x: 1, y: 1 };
+        const stale = { id: "stale", types: ["H" as const], enabled: true, x: 1, y: 0 };
+        const baseline = rowSession(3, 3, { mirrors: [valid, stale] });
         historyReset(baseline);
         historySave({ ...baseline, colorA: "#abcdef" });
 
         const restored = historyUndo()!;
-        expect(restored.axes).toEqual([valid]);
+        expect(restored.mirrors).toEqual([valid]);
         expect(() => encodeMcw(restored)).not.toThrow();
     });
 });

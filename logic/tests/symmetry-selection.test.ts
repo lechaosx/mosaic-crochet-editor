@@ -6,7 +6,7 @@
 import { describe, test, expect, vi } from "vitest";
 import { initialize_round_pattern } from "@mosaic/wasm";
 import { paintOps } from "../src/paint";
-import { axesToFlat, addAxis } from "../src/symmetry";
+import { mirrorsToFlat, addMirror } from "../src/symmetry";
 import { Store } from "../src/store";
 import { applyGridRecipe, replicateSelection, activateGridRecipe, createGridRecipe, deleteGridRecipe, commitSelectRect } from "../src/selection";
 import { filledPixels, makeFloat, rowPattern, rowSession } from "./_helpers";
@@ -23,7 +23,7 @@ describe("symmetry-aware paint inside selection", () => {
         // canvas, (0, 1) mirrors to (4, 1).
         const shifted = new Uint8Array(W * H);
         shifted[1 * W + 0] = 1;
-        const transforms = axesToFlat(addAxis([], "V", W, H));
+        const transforms = mirrorsToFlat(addMirror([], "V", pattern));
         const out = paintOps.pencil({
             visible, pattern, x: 0, y: 1,
             color: 2,
@@ -47,8 +47,8 @@ describe("symmetry-aware paint inside selection", () => {
         // No function in `symmetry.ts` or `selection.ts` should expand
         // `mask` based on active axes. The visible marquee is exactly
         // these cells.
-        const transforms = axesToFlat(addAxis(addAxis([], "V", W, H), "H", W, H));
-        // We just assert that axesToFlat returns a Float64Array;
+        const transforms = mirrorsToFlat(addMirror(addMirror([], "V", rowPattern(W, H)), "H", rowPattern(W, H)));
+        // We just assert that mirrorsToFlat returns a Float64Array;
         // the selection bitmask is unaffected.
         expect(transforms).toBeInstanceOf(Float64Array);
         expect(mask[1 * W + 4]).toBe(0);
@@ -56,14 +56,14 @@ describe("symmetry-aware paint inside selection", () => {
 });
 
 describe("replicateSelection", () => {
-    const vertical = [{ kind: "V" as const, id: "v", active: true, x: 2 }];
+    const vertical = [{ id: "v", enabled: true, types: ["V" as const], x: 2, y: 0 }];
 
     test("stamps mirrored pixels into the canvas and keeps the source float", () => {
         const source = makeFloat([{ x: 0, y: 0, v: 2 }]);
         const store = new Store(rowSession(5, 1, {
             pixels: filledPixels(5, 1, 1),
             float: source,
-            axes: vertical,
+            mirrors: vertical,
         }));
         const history = vi.fn();
         store.setHistoryFn(history);
@@ -78,7 +78,7 @@ describe("replicateSelection", () => {
     test("settles input only for an accepted stamp and reads its committed source", () => {
         const store = new Store(rowSession(5, 1, {
             pixels: filledPixels(5, 1, 1),
-            float: makeFloat([{ x: 0, y: 0, v: 2 }]), axes: vertical,
+            float: makeFloat([{ x: 0, y: 0, v: 2 }]), mirrors: vertical,
         }));
         const settle = vi.fn(() => {
             store.commit(s => { s.float = makeFloat([{ x: 1, y: 0, v: 2 }]); });
@@ -94,7 +94,7 @@ describe("replicateSelection", () => {
             { x: 0, y: 0, v: 1 },
             { x: 4, y: 0, v: 2 },
         ]);
-        const store = new Store(rowSession(5, 1, { pixels, float: source, axes: vertical }));
+        const store = new Store(rowSession(5, 1, { pixels, float: source, mirrors: vertical }));
         const history = vi.fn();
         store.setHistoryFn(history);
 
@@ -113,7 +113,7 @@ describe("replicateSelection", () => {
         const store = new Store(rowSession(4, 1, {
             pixels,
             float: source,
-            axes: [{ kind: "V", id: "v", active: true, x: 1 }],
+            mirrors: [{ id: "v", enabled: true, types: ["V"], x: 1, y: 0 }],
         }));
         const history = vi.fn();
         store.setHistoryFn(history);

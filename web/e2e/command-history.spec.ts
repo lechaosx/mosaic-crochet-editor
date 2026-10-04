@@ -542,7 +542,8 @@ for (const outcome of ["invalid", "cancelled", "identical"]) {
         await page.emulateMedia({ reducedMotion: "reduce" });
         await bootApp(page);
         await clickCell(page, 1, 1);
-        const project = (await recovery(page)).document;
+        const session = await recovery(page);
+        const project = { ...session.document, mirrors: session.workspace.mirrors };
         await page.locator("#btn-export").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await page.getByRole("button", { name: "Forward one row" }).click();
@@ -564,7 +565,7 @@ for (const outcome of ["invalid", "cancelled", "identical"]) {
             const chooser = page.waitForEvent("filechooser");
             await page.getByRole("button", { name: "Open", exact: true }).click();
             await (await chooser).setFiles({ name: "pattern.mcw", mimeType: "application/json",
-                buffer: Buffer.from(outcome === "invalid" ? "invalid" : JSON.stringify({ version: 3, ...project })) });
+                buffer: Buffer.from(outcome === "invalid" ? "invalid" : JSON.stringify({ version: 5, ...project })) });
             if (outcome === "invalid") await expect(page.locator("#document-error")).toBeVisible();
         }
         await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");

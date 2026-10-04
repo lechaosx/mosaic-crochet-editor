@@ -1,5 +1,28 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, pixelRGB, touchDragCells, touchPanZoom } from "./_helpers";
+import { addGlobalMirror, bootApp, cellCoord, pixelRGB, touchDragCells, touchPanZoom } from "./_helpers";
+
+test("a rotated mirror centre supports touch drag and system cancellation without changing canvas pixels", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").tap();
+    await addGlobalMirror(page, "Point symmetry (180°)");
+    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
+    await page.getByRole("button", { name: "Rotate view right", exact: true }).tap();
+    await page.waitForTimeout(350);
+    await touchDragCells(page, 4, 4, 3, 2);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+        .toMatchObject({ x: 3, y: 2 });
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(before);
+    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    const start = await cellCoord(page, 3, 2), end = await cellCoord(page, 2, 3);
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: start.cx, y: start.cy, id: 0 }] });
+    await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: end.cx, y: end.cy, id: 0 }] });
+    await session.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
+    await session.detach();
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+        .toMatchObject({ x: 3, y: 2 });
+    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+});
 
 test("single-finger drag paints", async ({ page }) => {
     await bootApp(page);

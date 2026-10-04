@@ -2,7 +2,7 @@
 
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { packFloat, packPixels } from "@mosaic/logic/storage";
-import { addAxis } from "@mosaic/logic/symmetry";
+import { migrateAxes } from "@mosaic/logic/symmetry";
 import { loadFromLocalStorage } from "../src/storage-io";
 import { loadAppPreferences } from "../src/preferences";
 import { historyPeek } from "../src/history";
@@ -15,7 +15,6 @@ describe("browser persistence migrations", () => {
         const valid = { id: "valid", kind: "V" as const, active: false, x: 1 };
         const stale = { id: "stale", kind: "H" as const, active: true, y: 0 };
         const session = rowSession(3, 3, {
-            axes: [valid, stale],
             liveMirrors: false,
             float: makeFloat([{ x: 1, y: 1, v: 2 }]),
         });
@@ -27,7 +26,7 @@ describe("browser persistence migrations", () => {
             colorB: session.colorB,
             activeTool: session.activeTool,
             primaryColor: session.primaryColor,
-            axes: session.axes,
+            axes: [valid, stale],
             liveTransforms: session.liveMirrors,
             hlOpacity: 42,
             invalidIntensity: 17,
@@ -40,7 +39,7 @@ describe("browser persistence migrations", () => {
         const restored = loadFromLocalStorage();
         expect(restored).toMatchObject({
             pattern: session.pattern,
-            axes: [valid],
+            mirrors: migrateAxes([valid], session.pattern),
             liveMirrors: true,
         });
         expect(restored!.recipes).toHaveLength(1);
@@ -48,10 +47,10 @@ describe("browser persistence migrations", () => {
         expect(restored!.float).toEqual(session.float);
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        expect(migrated.version).toBe(7);
+        expect(migrated.version).toBe(8);
         expect(migrated.document).toMatchObject({ state: session.pattern, colorA: session.colorA, colorB: session.colorB });
         expect(migrated.workspace).toMatchObject({
-            axes: session.axes,
+            mirrors: migrateAxes([valid], session.pattern),
             liveTransforms: true,
             rotation: session.rotation,
         });
@@ -65,13 +64,14 @@ describe("browser persistence migrations", () => {
     });
 
     test("migrates the unversioned history v4 blob without inventing historical project colours", () => {
-        const session = rowSession(3, 3, { axes: addAxis([], "H", 3, 3) });
+        const session = rowSession(3, 3);
+        const axes = [{ id: "h", kind: "H" as const, active: true, y: 1 }];
         localStorage.setItem("mosaic-history-v4", JSON.stringify({
             snapshots: [{
                 state: session.pattern,
                 pixels: packPixels(session.pixels),
                 float: null,
-                axes: session.axes,
+                axes,
                 colorA: session.colorA,
                 colorB: session.colorB,
             }],
@@ -80,11 +80,11 @@ describe("browser persistence migrations", () => {
 
         expect(historyPeek()).toMatchObject({
             pattern: session.pattern,
-            axes: session.axes,
+            mirrors: migrateAxes(axes, session.pattern),
         });
 
         const migrated = JSON.parse(localStorage.getItem("mosaic-history")!);
-        expect(migrated.version).toBe(6);
+        expect(migrated.version).toBe(7);
         expect(migrated.snapshots[0]).toEqual({
             document: {
                 state: session.pattern,
@@ -93,7 +93,7 @@ describe("browser persistence migrations", () => {
                 colorB: session.colorB,
             },
             selection: null,
-            transforms: { axes: session.axes },
+            transforms: { mirrors: migrateAxes(axes, session.pattern) },
         });
         expect(localStorage.getItem("mosaic-history-v4")).toBeNull();
     });
@@ -116,7 +116,7 @@ describe("browser persistence migrations", () => {
             colorB: session.colorB,
             activeTool: session.activeTool,
             primaryColor: session.primaryColor,
-            axes: session.axes,
+            axes: [],
             liveTransforms: session.liveMirrors,
             hlOpacity: 100,
             invalidIntensity: 65,

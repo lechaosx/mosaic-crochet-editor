@@ -12,8 +12,7 @@ export function defaultToolVariants(): ToolVariants {
 }
 export type SymKey = "V" | "H" | "C" | "D1" | "D2";
 
-// Axes carry kind-specific position fields. Each axis is independently
-// togglable (`active`) and identifiable (`id`) for the symmetry list.
+// Legacy records and derived Rust generators use kind-specific coordinates.
 //
 //   V  — vertical mirror line at x = (axis.x)
 //   H  — horizontal mirror line at y = (axis.y)
@@ -26,6 +25,14 @@ export interface AxisD1 { kind: "D1"; id: string; active: boolean; c: number }
 export interface AxisD2 { kind: "D2"; id: string; active: boolean; c: number }
 export interface AxisC  { kind: "C";  id: string; active: boolean; x: number; y: number }
 export type Axis = AxisV | AxisH | AxisD1 | AxisD2 | AxisC;
+
+export interface MirrorCenter {
+    id: string;
+    enabled: boolean;
+    x: number;
+    y: number;
+    types: SymKey[];
+}
 
 export interface GridRecipeSource {
     x:    number;

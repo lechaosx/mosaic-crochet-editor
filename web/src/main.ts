@@ -5,7 +5,7 @@ import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indi
          instruction_start_row, instruction_start_round,
          instruction_wip_row, instruction_wip_round,
          InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
-import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, Axis, GridRecipe } from "@mosaic/logic/types";
+import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction } from "@mosaic/logic/tool-input";
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, updateCoordinates } from "./render";
@@ -13,10 +13,9 @@ import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
          historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
-import { addAxis, removeAxis, toggleAxisActive,
-         pickAxesAt, setAxisPosition, snapHalf, snapInt,
-         axisOffCanvas, axisIsProjectValid } from "@mosaic/logic/symmetry";
-import { axesToFlat } from "@mosaic/logic/symmetry";
+import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
+         mirrorIsProjectValid, mirrorsForPattern } from "@mosaic/logic/symmetry";
+import { mirrorsToFlat } from "@mosaic/logic/symmetry";
 import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual } from "@mosaic/logic/grid-recipes";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
@@ -66,16 +65,11 @@ function sameAuthoredPattern(pattern: PatternState, pixels: Uint8Array): boolean
     return arraysEqual(visiblePixels(store.state), pixels);
 }
 
-function axesEqual(a: ReadonlyArray<Axis>, b: ReadonlyArray<Axis>): boolean {
+function mirrorsEqual(a: ReadonlyArray<MirrorCenter>, b: ReadonlyArray<MirrorCenter>): boolean {
     return a.length === b.length && a.every((axis, index) => {
         const other = b[index];
-        if (axis.id !== other.id || axis.kind !== other.kind || axis.active !== other.active) return false;
-        if (axis.kind === "V" && other.kind === "V") return axis.x === other.x;
-        if (axis.kind === "H" && other.kind === "H") return axis.y === other.y;
-        if (axis.kind === "C" && other.kind === "C") return axis.x === other.x && axis.y === other.y;
-        if (axis.kind === "D1" && other.kind === "D1") return axis.c === other.c;
-        if (axis.kind === "D2" && other.kind === "D2") return axis.c === other.c;
-        return false;
+        return axis.id === other.id && axis.enabled === other.enabled && axis.x === other.x && axis.y === other.y
+            && axis.types.length === other.types.length && axis.types.every(type => other.types.includes(type));
     });
 }
 
@@ -85,7 +79,7 @@ function sameProject(loaded: LoadedFile): boolean {
         && loaded.colorB === store.state.colorB
         && (loaded.dangerColorOverride ?? null) === store.state.dangerColorOverride
         && (loaded.accentColorOverride ?? null) === store.state.accentColorOverride
-        && axesEqual(loaded.axes, store.state.axes)
+        && mirrorsEqual(loaded.mirrors, store.state.mirrors)
         && gridRecipesEqual(loaded.recipes, store.state.recipes);
 }
 
@@ -102,7 +96,7 @@ function defaultSession(): SessionState {
         activeTool:    "pencil",
         toolVariants:  defaultToolVariants(),
         primaryColor:  1,
-        axes:           [],
+        mirrors:           [],
         recipes:        [recipe],
         activeRecipeId: recipe.id,
         liveMirrors:    true,
@@ -113,7 +107,7 @@ function defaultSession(): SessionState {
 
 function exampleSession(): SessionState {
     const pattern: PatternState = { mode: "row", canvasWidth: 9, canvasHeight: 9 };
-    const axes = addAxis([], "V", pattern.canvasWidth, pattern.canvasHeight);
+    const mirrors = addMirror([], "V", pattern);
     let pixels: Uint8Array = initialize_row_pattern(pattern.canvasWidth, pattern.canvasHeight).slice();
     for (const x of [1, 4, 7]) {
         const index = pattern.canvasWidth + x;
@@ -135,14 +129,14 @@ function exampleSession(): SessionState {
         colorB: "#f4a261",
         dangerColorOverride: null,
         accentColorOverride: null,
-        axes,
+        mirrors,
     };
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 const viewport = makeViewport(document.getElementById("canvas") as HTMLCanvasElement);
-function editableAxisTolerance(): number {
-    return Math.max(AXIS_HIT_TOLERANCE, Math.min(1.2, 22 / viewport.view.zoom));
+function editableMirrorTolerance(): number {
+    return 22 / viewport.view.zoom;
 }
 const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
 const saved    = loadFromLocalStorage();
@@ -205,19 +199,16 @@ type MoveMode = SelectionMoveMode;
 //            mask-only's stamp) so cancel can revert.
 type Gesture =
     | { kind: "paint";
-        guidePickPending: boolean;
         action: PaintAction;
         prePixels: Uint8Array;
         preFloat: Float | null;
         invertVisited: Set<number> | null;
       }
     | { kind: "select";
-        guidePickPending: boolean;
         mode: SelectMode;
         rect: { startX: number; startY: number; endX: number; endY: number } | null;
       }
     | { kind: "wand";
-        guidePickPending: boolean;
         mode: SelectMode;
         lastCell: { x: number; y: number } | null;
         prePixels: Uint8Array;
@@ -226,7 +217,6 @@ type Gesture =
         preActiveRecipeId: string | null;
       }
     | { kind: "move";
-        guidePickPending: boolean;
         mode: MoveMode;
         mask: Float | null;
         drag: { anchorX: number; anchorY: number; startDx: number; startDy: number } | null;
@@ -235,20 +225,11 @@ type Gesture =
         preRecipes: GridRecipe[];
         preActiveRecipeId: string | null;
       }
-    | { kind: "axis-drag";
-        // One pick per kind: clicking an intersection grabs one of each
-        // kind so dragging moves them together. Parallel overlapping axes
-        // of the same kind are disambiguated by closeness (only the
-        // nearest is picked), so the user can drag it away to separate.
-        picks: { id: string; kind: SymKey }[];
-        // Snapshot the axes list so cancel can revert without recomputing.
-        preAxes: Axis[];
+    | { kind: "mirror-drag";
+        id: string;
+        preMirrors: MirrorCenter[];
       }
     ;
-// Click within this many cell-units of an active axis guide starts an
-// axis-drag instead of float-move. ~0.4 keeps the affordance close to the
-// 1-cell-wide visual line without being so wide that float-move suffers.
-const AXIS_HIT_TOLERANCE = 0.4;
 
 let gesture: Gesture | null = null;
 let gestureFeedbackShown = false;
@@ -457,7 +438,7 @@ function evaluatePaintAt(action: PaintAction, x: number, y: number, invertVisite
             : "Overlay unavailable at this cell");
     }
 
-    const transforms = axesToFlat(s.axes);
+    const transforms = mirrorsToFlat(s.mirrors);
     const targets = transformed_target_indices(W, H, x, y, transforms);
     let next: Uint8Array;
     try {
@@ -544,54 +525,91 @@ function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Arra
 
 // ── Symmetry ─────────────────────────────────────────────────────────────────
 function refreshSymmetryUi() {
-    ui.setAxes(store.state.axes);
+    if (!store.state.mirrors.some(mirror => mirror.id === rs.selectedMirrorId)) rs.selectedMirrorId = null;
+    ui.setMirrors(store.state.mirrors, rs.selectedMirrorId);
     ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
     ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
 }
 
 function hasConfiguredTransforms() {
-    return store.state.axes.some(a => a.active);
+    return store.state.mirrors.some(mirror => mirror.enabled && mirror.types.length > 0);
 }
-// Shortcuts and popover buttons append an active, canonically positioned
-// axis. Axis ids keep multiple entries of the same kind independent.
-function addAxisOfKind(k: SymKey) {
+function addMirrorOfKind(k: SymKey | null) {
+    const mirrors = addMirror(store.state.mirrors, k, store.state.pattern);
+    if (mirrors.length === store.state.mirrors.length) {
+        ui.setTransformError("This mirror type needs more cells in this chart. Add an empty mirror or enlarge the Pattern.");
+        return;
+    }
     finishAuthoredInput();
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    store.commit(s => { s.axes = addAxis(s.axes, k, W, H); }, { recompute: false, history: true });
+    rs.selectedMirrorId = mirrors[mirrors.length - 1].id;
+    store.commit(s => { s.mirrors = mirrors; }, { recompute: false, history: true });
     refreshSymmetryUi();
 }
 
-function deleteAxisById(id: string) {
-    store.commit(s => { s.axes = removeAxis(s.axes, id); }, { history: true });
+function deleteMirrorById(id: string) {
+    finishAuthoredInput();
+    const index = store.state.mirrors.findIndex(mirror => mirror.id === id);
+    if (rs.selectedMirrorId === id) rs.selectedMirrorId = (store.state.mirrors[index + 1] ?? store.state.mirrors[index - 1])?.id ?? null;
+    store.commit(s => { s.mirrors = s.mirrors.filter(mirror => mirror.id !== id); }, { history: true });
     refreshSymmetryUi();
 }
 
-function toggleAxisById(id: string) {
-    store.commit(s => { s.axes = toggleAxisActive(s.axes, id); }, { history: true });
+function toggleMirrorById(id: string) {
+    finishAuthoredInput();
+    store.commit(s => { s.mirrors = s.mirrors.map(mirror => mirror.id === id ? { ...mirror, enabled: !mirror.enabled } : mirror); }, { history: true });
     refreshSymmetryUi();
 }
 
-function onAxisPosition(id: string, position: { x?: number; y?: number; c?: number }): Axis | null {
-    const axis = store.state.axes.find(a => a.id === id);
-    if (!axis) return null;
-    const snapped = {
-        x: position.x === undefined ? undefined : snapHalf(position.x),
-        y: position.y === undefined ? undefined : snapHalf(position.y),
-        c: position.c === undefined ? undefined : snapInt(position.c),
-    };
-    const updated = setAxisPosition(store.state.axes, id, snapped).find(a => a.id === id)!;
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    if (axisOffCanvas(updated, W, H)) {
-        ui.setCanvasFeedback("Keep the axis where it can transform at least two cells");
-        return axis;
+function onMirrorPosition(id: string, position: { x: number; y: number }): MirrorCenter | null {
+    const mirror = store.state.mirrors.find(a => a.id === id);
+    if (!mirror) return null;
+    let updated = { ...mirror, x: snapHalf(position.x), y: snapHalf(position.y) };
+    if (mirrorIsProjectValid(updated, store.state.pattern)) {
+        updated = mirrorsForPattern([updated], store.state.pattern)[0];
+        if (updated.x < 0 || updated.y < 0 || updated.x > store.state.pattern.canvasWidth - 1
+            || updated.y > store.state.pattern.canvasHeight - 1) {
+            ui.setTransformError("Keep the centre inside the chart. Change the coordinates or choose fewer types.");
+            return mirror;
+        }
     }
-    if (JSON.stringify(updated) !== JSON.stringify(axis)) {
-        store.commit(s => { s.axes = setAxisPosition(s.axes, id, snapped); }, { history: true });
+    return commitMirrorChange(mirror, updated);
+}
+
+function commitMirrorChange(mirror: MirrorCenter, updated: MirrorCenter): MirrorCenter {
+    if (!mirrorIsProjectValid(updated, store.state.pattern)) {
+        ui.setTransformError(updated.types.some(type => type === "D1" || type === "D2")
+            && Number.isInteger(updated.x) !== Number.isInteger(updated.y)
+            ? "Diagonals need both centre coordinates to be whole or half numbers. Change the coordinates before choosing this type."
+            : "Keep each chosen mirror type where it can transform chart cells. Change the centre or choose fewer types.");
+        return mirror;
     }
+    ui.setTransformError(null);
+    if (!mirrorsEqual([updated], [mirror])) {
+        finishAuthoredInput();
+        store.commit(s => {
+            s.mirrors = s.mirrors.map(value => value.id === mirror.id ? updated : value);
+        }, { history: true });
+    }
+    refreshSymmetryUi();
     return updated;
 }
 
+function onMirrorType(id: string, type: SymKey) {
+    const mirror = store.state.mirrors.find(value => value.id === id);
+    if (!mirror) return;
+    const types = mirror.types.includes(type) ? mirror.types.filter(value => value !== type) : [...mirror.types, type];
+    commitMirrorChange(mirror, { ...mirror, types });
+}
+
+function onSelectMirror(id: string) {
+    rs.selectedMirrorId = id;
+    refreshSymmetryUi();
+    renderCanvas();
+}
+
 function onTransformPopoverToggle(open: boolean) {
+    if (!open && gesture?.kind === "mirror-drag") gestureInputs.cancel();
+    refreshSymmetryUi();
     rs.previewRepeatGuides = open;
     if (!open) viewport.canvas.style.cursor = "";
     renderCanvas();
@@ -802,7 +820,7 @@ interface PatternEditSnapshot {
     pattern: PatternState;
     pixels: Uint8Array;
     float: Float | null;
-    axes: Axis[];
+    mirrors: MirrorCenter[];
     recipes: GridRecipe[];
     activeRecipeId: string | null;
 }
@@ -816,7 +834,7 @@ function patternEditSnapshot(state: Readonly<SessionState>): PatternEditSnapshot
         pattern: state.pattern,
         pixels: state.pixels.slice(),
         float: state.float ? { ...state.float, pixels: state.float.pixels.slice() } : null,
-        axes: [...state.axes],
+        mirrors: [...state.mirrors],
         recipes: state.recipes,
         activeRecipeId: state.activeRecipeId,
     };
@@ -843,7 +861,7 @@ function samePatternEditSnapshot(a: PatternEditSnapshot, b: PatternEditSnapshot)
         && a.float?.h === b.float?.h
         && (a.float === null) === (b.float === null)
         && (a.float === null || b.float === null || arraysEqual(a.float.pixels, b.float.pixels))
-        && axesEqual(a.axes, b.axes)
+        && mirrorsEqual(a.mirrors, b.mirrors)
         && gridRecipesEqual(a.recipes, b.recipes)
         && a.activeRecipeId === b.activeRecipeId;
 }
@@ -892,7 +910,7 @@ function onEditChange(clearDesign = false): boolean {
             if (restoreSessionSource) {
                 s.pattern = sessionSource.pattern;
                 s.pixels = sessionSource.pixels.slice();
-                s.axes = [...sessionSource.axes];
+                s.mirrors = [...sessionSource.mirrors];
                 s.recipes = sessionSource.recipes;
                 s.float = sessionSource.float
                     ? { ...sessionSource.float, pixels: sessionSource.float.pixels.slice() }
@@ -902,7 +920,7 @@ function onEditChange(clearDesign = false): boolean {
             }
             s.pattern = pattern;
             s.pixels = pixels;
-            s.axes = clearDesign ? [] : sessionSource.axes.filter(axis => axisIsProjectValid(axis, pattern));
+            s.mirrors = clearDesign ? [] : mirrorsForPattern(sessionSource.mirrors, pattern);
             s.recipes = clearDesign
                 ? [{ ...emptyGridRecipe(), id: sessionSource.recipes[0].id }]
                 : sessionSource.recipes;
@@ -960,7 +978,7 @@ function onEditRevert() {
             pattern: baseline.pattern,
             pixels: baseline.pixels,
             float: baseline.float,
-            axes: baseline.axes,
+            mirrors: baseline.mirrors,
             recipes: baseline.recipes,
             activeRecipeId: baseline.activeRecipeId,
         }, { persist: false });
@@ -984,7 +1002,7 @@ function applyRestored(r: Restored) {
     }
     store.replace(
         { ...store.state, pattern: r.pattern, pixels: r.pixels, float: r.float,
-          axes: r.axes, recipes: r.recipes, activeRecipeId: r.activeRecipeId,
+          mirrors: r.mirrors, recipes: r.recipes, activeRecipeId: r.activeRecipeId,
           colorA: r.colorA, colorB: r.colorB,
           dangerColorOverride: r.dangerColorOverride === undefined ? store.state.dangerColorOverride : r.dangerColorOverride,
           accentColorOverride: r.accentColorOverride === undefined ? store.state.accentColorOverride : r.accentColorOverride },
@@ -1057,7 +1075,7 @@ async function onLoad() {
     );
     store.replace(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
-          colorA: loaded.colorA, colorB: loaded.colorB, axes: loaded.axes,
+          colorA: loaded.colorA, colorB: loaded.colorB, mirrors: loaded.mirrors,
           dangerColorOverride: loaded.dangerColorOverride ?? null,
           accentColorOverride: loaded.accentColorOverride ?? null,
           recipes: loaded.recipes, activeRecipeId: null, float: null, rotation: 0 },
@@ -1106,7 +1124,7 @@ async function onInstructions() {
     instructionsPreviewStore = new Store({
         ...store.state,
         pixels: exportPixels,
-        axes: [],
+        mirrors: [],
         liveMirrors: false,
         float: null,
     });
@@ -1303,10 +1321,12 @@ const ui: UIHandle = mountUI({
     onResetYarnColor: resetYarnColor,
     onColorChange:  onColorInput,
     onColorCommit,
-    onAddAxis:    addAxisOfKind,
-    onToggleAxis: toggleAxisById,
-    onDeleteAxis: deleteAxisById,
-    onAxisPosition,
+    onAddMirror:    addMirrorOfKind,
+    onToggleMirror: toggleMirrorById,
+    onDeleteMirror: deleteMirrorById,
+    onSelectMirror,
+    onMirrorType,
+    onMirrorPosition,
     onCreateRecipe,
     onActivateRecipe,
     onDeleteRecipe,
@@ -1422,7 +1442,7 @@ const clientToPattern = (cx: number, cy: number) => {
 };
 
 const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPattern, {
-    onPaintStart: (button, mods) => {
+    onPaintStart: (button, mods, cx, cy) => {
         clearExecutingAction();
         if (instructionsOpen || editBaseline) {
             gesture = null;
@@ -1430,6 +1450,18 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         }
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
+        if (rs.previewRepeatGuides) {
+            const frac = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
+            const hit = pickMirrorCenter(store.state.mirrors, frac.x, frac.y, editableMirrorTolerance(), rs.selectedMirrorId);
+            if (hit) {
+                viewport.canvas.style.cursor = "grabbing";
+                rs.selectedMirrorId = hit.id;
+                gesture = { kind: "mirror-drag", id: hit.id, preMirrors: [...store.state.mirrors] };
+                refreshSymmetryUi();
+                renderCanvas();
+                return;
+            }
+        }
         const action = resolveToolInput(store.state.activeTool, store.state.toolVariants, store.state.primaryColor, { button, ...mods });
         showExecutingAction(action);
         const tool = action.kind === "paint" ? action.tool : action.kind;
@@ -1449,7 +1481,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 prePixels = store.state.pixels.slice();
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; s.float = clipped; }, { persist: false });
-                gesture = { kind: "move", guidePickPending: true, mode, mask: clipped, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
+                gesture = { kind: "move", mode, mask: clipped, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
                 return;
             } else if (mode === "duplicate" && preFloat) {
                 // Pre-stamp the float into canvas so the duplicate is
@@ -1458,14 +1490,13 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 const stamped = visiblePixels(store.state);
                 store.commit(s => { s.pixels = stamped; }, { persist: false });
             }
-            gesture = { kind: "move", guidePickPending: true, mode, mask: null, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
+            gesture = { kind: "move", mode, mask: null, drag: null, prePixels, preFloat, preRecipes, preActiveRecipeId };
             return;
         }
         if (action.kind === "select") {
             const mode = action.mode;
             gesture = {
                 kind: "select",
-                guidePickPending: true,
                 mode,
                 rect: null,
             };
@@ -1476,7 +1507,6 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             const mode = action.mode;
             gesture = {
                 kind: "wand",
-                guidePickPending: true,
                 mode,
                 lastCell: null,
                 prePixels: store.state.pixels.slice(),
@@ -1489,7 +1519,6 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         }
         gesture = {
             kind: "paint",
-            guidePickPending: true,
             action,
             prePixels: store.state.pixels.slice(),
             preFloat:  store.state.float,
@@ -1499,26 +1528,6 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
     },
     onPaintAt:    (cx, cy) => {
         if (!gesture) return;
-        if ("guidePickPending" in gesture && gesture.guidePickPending) {
-            gesture.guidePickPending = false;
-            if (rs.previewRepeatGuides) {
-                const frac = screenToPatternFrac(
-                    viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
-                    store.state.pattern, cx, cy,
-                );
-                if (gesture.kind !== "move") {
-                    const hits = pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance());
-                    if (hits.length > 0) {
-                        clearExecutingAction();
-                        viewport.canvas.style.cursor = "grabbing";
-                        gesture = { kind: "axis-drag",
-                            picks: hits.map(a => ({ id: a.id, kind: a.kind })),
-                            preAxes: [...store.state.axes] };
-                        return;
-                    }
-                }
-            }
-        }
         if (gesture.kind === "move") {
             const p = screenToPattern(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
@@ -1526,23 +1535,6 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             );
             const f = store.state.float;
             if (!gesture.drag) {
-                // First paintAt: choose between axis-drag and float-move.
-                // Axis-drag wins when the click lands on an active guide
-                // line — the float, if any, isn't disturbed. The click must
-                // also be in the cell under the cursor, not the float's mask.
-                const frac = screenToPatternFrac(
-                    viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
-                    store.state.pattern, cx, cy,
-                );
-                const hits = pickAxesAt(store.state.axes, frac.x, frac.y, AXIS_HIT_TOLERANCE);
-                if (hits.length > 0) {
-                    clearExecutingAction();
-                    gesture = { kind: "axis-drag",
-                                picks: hits.map(a => ({ id: a.id, kind: a.kind })),
-                                preAxes: [...store.state.axes] };
-                    return;
-                }
-                // Otherwise the existing float-move path.
                 if (!f) {
                     showGestureFeedback("No selection");
                     return;
@@ -1584,40 +1576,17 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             }
             return;
         }
-        if (gesture.kind === "axis-drag") {
+        if (gesture.kind === "mirror-drag") {
             const frac = screenToPatternFrac(
                 viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
                 store.state.pattern, cx, cy,
             );
-            const picks = gesture.picks;
-            // Each picked axis tracks the cursor along its own kind's
-            // projection — V follows x, H follows y, C follows both, D1/D2
-            // follow the line constant. Multi-axis just iterates this.
-            store.commit(s => {
-                for (const p of picks) {
-                    let pos: { x?: number; y?: number; c?: number };
-                    switch (p.kind) {
-                        case "V":  pos = { x: snapHalf(frac.x - 0.5) }; break;
-                        case "H":  pos = { y: snapHalf(frac.y - 0.5) }; break;
-                        case "C":  pos = { x: snapHalf(frac.x - 0.5), y: snapHalf(frac.y - 0.5) }; break;
-                        case "D1": pos = { c: snapInt(frac.x - frac.y) }; break;
-                        case "D2": pos = { c: snapInt(frac.x + frac.y - 1) }; break;
-                    }
-                    s.axes = setAxisPosition(s.axes, p.id, pos);
-                }
-            }, { persist: false });
-            // Recompute delete-zone membership across all picked axes.
-            const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-            const next = new Set<string>();
-            for (const p of picks) {
-                const a = store.state.axes.find(x => x.id === p.id);
-                if (a && axisOffCanvas(a, W, H)) next.add(p.id);
-            }
-            const changed = next.size !== rs.axesInDeleteZone.size
-                || [...next].some(id => !rs.axesInDeleteZone.has(id));
-            if (changed) {
-                rs.axesInDeleteZone = next;
-                renderCanvas();
+            const id = gesture.id;
+            const mirror = store.state.mirrors.find(value => value.id === id)!;
+            const updated = snapMirrorCenter(mirror, { x: frac.x - 0.5, y: frac.y - 0.5 }, store.state.pattern);
+            if (updated && !mirrorsEqual([mirror], [updated])) {
+                store.commit(s => { s.mirrors = s.mirrors.map(value => value.id === id ? updated : value); }, { persist: false });
+                refreshSymmetryUi();
             }
             return;
         }
@@ -1700,31 +1669,13 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             ui.setCanvasFeedback(null);
             return;
         }
-        if (gesture.kind === "axis-drag") {
-            // Each picked axis is independently checked: those in the
-            // delete zone get removed, the rest just have their new
-            // position committed. One snapshot covers the whole release.
+        if (gesture.kind === "mirror-drag") {
             const g = gesture;
-            const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-            const toRemove: string[] = [];
-            for (const p of g.picks) {
-                const a = store.state.axes.find(x => x.id === p.id);
-                if (a && axisOffCanvas(a, W, H)) toRemove.push(p.id);
-            }
-            const dropped = toRemove.length > 0;
-            const moved = !dropped && JSON.stringify(g.preAxes) !== JSON.stringify(store.state.axes);
-            if (dropped) {
-                store.commit(s => {
-                    for (const id of toRemove) s.axes = removeAxis(s.axes, id);
-                }, { history: true });
-            } else if (moved) {
+            const moved = !mirrorsEqual(g.preMirrors, store.state.mirrors);
+            if (moved) {
                 store.commit(() => {}, { recompute: false, render: false, history: true });
             }
-            // Always refresh — the popover's per-row position display picks
-            // up the new x/y/c from `s.axes`, otherwise it'd show stale values
-            // after a position-only drag.
-            if (dropped || moved) refreshSymmetryUi();
-            rs.axesInDeleteZone = new Set();
+            if (moved) refreshSymmetryUi();
             viewport.canvas.style.cursor = "";
             gesture = null;
             return;
@@ -1773,12 +1724,12 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             });
             return;
         }
-        if (gesture.kind === "axis-drag") {
-            const { preAxes } = gesture;
+        if (gesture.kind === "mirror-drag") {
+            const { preMirrors } = gesture;
             gesture = null;
-            rs.axesInDeleteZone = new Set();
             viewport.canvas.style.cursor = "";
-            store.commit(s => { s.axes = preAxes; });
+            store.commit(s => { s.mirrors = preMirrors; });
+            refreshSymmetryUi();
             return;
         }
         // gesture.kind === "paint"
@@ -1805,8 +1756,8 @@ viewport.canvas.addEventListener("pointermove", event => {
         viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
         store.state.pattern, event.clientX, event.clientY,
     );
-    const hits = pickAxesAt(store.state.axes, frac.x, frac.y, editableAxisTolerance());
-    viewport.canvas.style.cursor = hits.length > 0 ? "grab" : "";
+    const hit = pickMirrorCenter(store.state.mirrors, frac.x, frac.y, editableMirrorTolerance(), rs.selectedMirrorId);
+    viewport.canvas.style.cursor = hit ? "grab" : "";
 });
 viewport.canvas.addEventListener("pointerleave", () => {
     viewport.canvas.style.cursor = "";
@@ -1959,11 +1910,11 @@ document.addEventListener("keydown", e => {
     else if (k === "s") setTool("select");
     else if (k === "w") setTool("wand");
     else if (k === "m") setTool("move");
-    else if (k === "v") addAxisOfKind("V");
-    else if (k === "h") addAxisOfKind("H");
-    else if (k === "c") addAxisOfKind("C");
-    else if (k === "d") addAxisOfKind("D1");
-    else if (k === "a") addAxisOfKind("D2");
+    else if (k === "v") addMirrorOfKind("V");
+    else if (k === "h") addMirrorOfKind("H");
+    else if (k === "c") addMirrorOfKind("C");
+    else if (k === "d") addMirrorOfKind("D1");
+    else if (k === "a") addMirrorOfKind("D2");
     else if (k === "t") { e.preventDefault(); onReplicateSelection(); }
     else if (k === "r") rotate(e.shiftKey ? -45 : 45);
     else if (k === "1") setPrimary(1);

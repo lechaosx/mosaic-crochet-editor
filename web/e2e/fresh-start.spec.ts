@@ -34,7 +34,7 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
     expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.axes,
+        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors,
     )).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem("mosaic-about-release-notes")))
         .toBe(currentReleaseHash);
@@ -141,7 +141,7 @@ test("example is editable and demonstrates overlay, global mirror, and Crochet",
     await page.getByRole("button", { name: "Example" }).click();
 
     const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
-    expect(recovery.workspace.axes.length).toBeGreaterThan(0);
+    expect(recovery.workspace.mirrors.length).toBeGreaterThan(0);
     expect(recovery.workspace.recipes).toHaveLength(1);
     expect(recovery.workspace.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: [] });
 

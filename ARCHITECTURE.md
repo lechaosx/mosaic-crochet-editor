@@ -36,7 +36,7 @@ State is classified by meaning, not by whichever storage mechanism currently hol
 
 | Scope | Durable boundary | Attribution |
 |---|---|---|
-| Project document | Pattern geometry and cells, yarn definitions, global mirror axes, saved repeat definitions, and project-specific display overrides travel in `.mcw`. | **your decision** |
+| Project document | Pattern geometry and cells, yarn definitions, global mirror centres and their selected types, saved repeat definitions, and project-specific display overrides travel in `.mcw`. | **your decision** |
 | Editor workspace | Active tools, live selection, current repeat source, and other resume-editing context may be recovered locally but are not part of the portable project. | **your decision** |
 | Undo and redo | Reversible authored edits and relevant editing context have their own browser-local history, including yarns and project Danger/Accent overrides; camera navigation, browser preferences, and crochet progress are excluded. | **your decision**; project-palette distinction: **Agent's choice** |
 | Preferences | App-wide display defaults are browser-local and remain separate from both project documents and recovery snapshots. | **your decision** |

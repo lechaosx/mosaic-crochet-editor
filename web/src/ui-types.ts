@@ -1,4 +1,4 @@
-import type { Tool, ToolVariants, SymKey, PatternState, Axis, GridRecipe } from "@mosaic/logic/types";
+import type { Tool, ToolVariants, SymKey, PatternState, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import type { CanvasWorkspace, InstructionSeam } from "./render";
 import type { PackedInstructionCoordinates } from "./instruction-coordinates";
 
@@ -16,10 +16,12 @@ export interface UICallbacks {
     onResetYarnColor:  (slot: 1 | 2) => void;
     onColorChange:     () => void;
     onColorCommit:     () => void;
-    onAddAxis:         (k: SymKey) => void;
-    onToggleAxis:      (id: string) => void;
-    onDeleteAxis:      (id: string) => void;
-    onAxisPosition:    (id: string, position: { x?: number; y?: number; c?: number }) => Axis | null;
+    onAddMirror:       (k: SymKey | null) => void;
+    onToggleMirror:    (id: string) => void;
+    onDeleteMirror:    (id: string) => void;
+    onSelectMirror:    (id: string) => void;
+    onMirrorType:      (id: string, type: SymKey) => void;
+    onMirrorPosition:  (id: string, position: { x: number; y: number }) => MirrorCenter | null;
     onCreateRecipe:    () => void;
     onActivateRecipe:  (id: string) => void;
     onDeleteRecipe:    (id: string) => void;
@@ -61,7 +63,7 @@ export interface UIHandle {
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
     setProjectColors:   (danger: string, accent: string) => void;
-    setAxes:            (axes: ReadonlyArray<Axis>) => void;
+    setMirrors:         (mirrors: ReadonlyArray<MirrorCenter>, selectedId: string | null) => void;
     setRecipes:         (recipes: ReadonlyArray<GridRecipe>, activeId: string | null) => void;
     setRecipeError:     (message: string | null) => void;
     setTransformState:  (hasSelection: boolean, hasTransforms: boolean) => void;

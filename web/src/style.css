@@ -92,6 +92,7 @@ input  { font: inherit; color: inherit; }
    Adaptive workspace shell
    ────────────────────────────────────────────────────────────────────────── */
 .document-bar {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
@@ -135,11 +136,14 @@ input  { font: inherit; color: inherit; }
 }
 
 .document-error {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  inset-inline: var(--space-3);
+  z-index: 30;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  grid-column: 1 / -1;
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
   color: var(--fg-0);
   background: var(--danger-soft);
@@ -812,8 +816,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   height: 100%;
 }
 
-/* "Add axis" row pushes the 5 +V/+H/+C/+D1/+D2 buttons to the right edge
-   so they form a tidy cluster opposite the label. */
 .sym-add-row {
   display: flex;
   gap: var(--space-1);
@@ -821,7 +823,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   flex-wrap: wrap;
 }
 
-/* Separator between the add row and the axis list. */
 .sym-list {
   display: flex;
   flex-direction: column;
@@ -831,11 +832,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
   border-block: var(--border);
 }
 
-/* Grid alignment so kind icon / position / toggle / delete columns line up
-   across every row, regardless of position-string length. */
 .sym-list-row {
   display: grid;
-  grid-template-columns: 1.75em minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) 0;
@@ -843,14 +842,10 @@ input[type="checkbox"] { accent-color: var(--accent); }
   background: var(--bg-2);
 }
 .sym-list-row:last-child { border-bottom: 0; }
-.sym-list-row.is-inactive .sym-list-row__kind { color: var(--fg-2); }
-.sym-list-row [data-axis-action="toggle"]:not([aria-pressed="true"]) svg { visibility: hidden; }
+.sym-list-row.is-selected { border-inline-start: 3px solid var(--accent); }
+.sym-list-row [data-mirror-action="toggle"]:not([aria-pressed="true"]) svg { visibility: hidden; }
+.sym-list-row__types { grid-column: 2 / -1; flex-wrap: wrap; }
 
-.sym-list-row__kind {
-  font-size: 1.2em;
-  text-align: center;
-  line-height: 1;
-}
 .sym-list-row__pos {
   min-width: 0;
   color: var(--fg-2);

@@ -1,10 +1,10 @@
 import { assertPatternDimensions } from "./pattern";
 import { b64ToU8, packPixels, u8ToB64, unpackPixels } from "./storage";
-import { axisIsProjectValid } from "./symmetry";
+import { axisIsProjectValid, migrateAxes, mirrorIsProjectValid, readMirrorRecords } from "./symmetry";
 import { emptyGridRecipe, gridRecipeError } from "./grid-recipes";
-import type { Axis, GridRecipe, PatternState } from "./types";
+import type { Axis, MirrorCenter, GridRecipe, PatternState } from "./types";
 
-export const MCW_VERSION = 4;
+export const MCW_VERSION = 5;
 
 // This is the complete editable project boundary. Workspace controls,
 // selection state, app preferences, and history deliberately stay outside it.
@@ -13,7 +13,7 @@ export interface ProjectDocument {
     pixels:  Uint8Array;
     colorA:  string;
     colorB:  string;
-    axes:    Axis[];
+    mirrors: MirrorCenter[];
     recipes: GridRecipe[];
     dangerColorOverride?: string | null;
     accentColorOverride?: string | null;
@@ -27,9 +27,9 @@ interface McwV2 {
     colorB:  string;
 }
 
-interface McwV4 extends Omit<McwV2, "version"> {
-    version: 4;
-    axes: Axis[];
+interface McwV5 extends Omit<McwV2, "version"> {
+    version: 5;
+    mirrors: MirrorCenter[];
     recipes?: unknown[];
     dangerColorOverride?: string;
     accentColorOverride?: string;
@@ -117,7 +117,7 @@ function readRecipes(value: unknown, legacy = false): GridRecipe[] {
     return recipes.length > 0 ? recipes : [emptyGridRecipe()];
 }
 
-function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV4["recipes"] {
+function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV5["recipes"] {
     const checked = readRecipes(recipes.map(recipe => ({ ...recipe, source: {
         ...recipe.source,
         mask: packMask(recipe.source.mask),
@@ -185,13 +185,15 @@ export function encodeMcw(document: Readonly<ProjectDocument>): string {
     if (document.pixels.length !== document.pattern.canvasWidth * document.pattern.canvasHeight) {
         throw invalidFile();
     }
-    const file: McwV4 = {
+    const mirrors = readMirrorRecords(document.mirrors);
+    if (!mirrors || !mirrors.every(mirror => mirrorIsProjectValid(mirror, document.pattern))) throw invalidFile();
+    const file: McwV5 = {
         version: MCW_VERSION,
         state: document.pattern,
         pixels: packPixels(document.pixels),
         colorA: readYarnColor(document.colorA),
         colorB: readYarnColor(document.colorB),
-        axes: readAxes(document.axes, document.pattern),
+        mirrors,
         recipes: writeRecipes(document.recipes),
     };
     const dangerColorOverride = readColorOverride(document.dangerColorOverride);
@@ -212,7 +214,7 @@ export function decodeMcw(source: string): ProjectDocument {
     if (typeof parsed.version === "number" && Number.isInteger(parsed.version) && parsed.version > MCW_VERSION) {
         throw new Error(`This pattern uses unsupported .mcw version ${parsed.version}.`);
     }
-    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== MCW_VERSION) throw invalidFile();
+    if (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3 && parsed.version !== 4 && parsed.version !== MCW_VERSION) throw invalidFile();
 
     const common = readCommon(parsed);
     const expectedLength = common.pattern.canvasWidth * common.pattern.canvasHeight;
@@ -222,17 +224,20 @@ export function decodeMcw(source: string): ProjectDocument {
             throw invalidFile();
         }
         return {
-            ...common, pixels: new Uint8Array(parsed.pixels), axes: [], recipes: [emptyGridRecipe()],
+            ...common, pixels: new Uint8Array(parsed.pixels), mirrors: [], recipes: [emptyGridRecipe()],
             dangerColorOverride: null, accentColorOverride: null,
         };
     }
     if (typeof parsed.pixels !== "string") throw invalidFile();
     try {
         const recipes = parsed.version >= 3 ? readRecipes(parsed.recipes, parsed.version === 3) : [emptyGridRecipe()];
+        const mirrors = parsed.version === MCW_VERSION ? readMirrorRecords(parsed.mirrors)
+            : parsed.version >= 3 ? migrateAxes(readAxes(parsed.axes, common.pattern), common.pattern) : [];
+        if (!mirrors || !mirrors.every(mirror => mirrorIsProjectValid(mirror, common.pattern))) throw invalidFile();
         return {
             ...common,
             pixels: unpackPixels(parsed.pixels, common.pattern),
-            axes: parsed.version >= 3 ? readAxes(parsed.axes, common.pattern) : [],
+            mirrors,
             recipes,
             dangerColorOverride: parsed.version >= 3 ? readColorOverride(parsed.dangerColorOverride) : null,
             accentColorOverride: parsed.version >= 3 ? readColorOverride(parsed.accentColorOverride) : null,

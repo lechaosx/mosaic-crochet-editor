@@ -197,7 +197,7 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
         const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         return {
             document: recovery.document,
-            axes: recovery.workspace.axes,
+            mirrors: recovery.workspace.mirrors,
             recipes: recovery.workspace.recipes,
             activeRecipeId: recovery.workspace.activeRecipeId,
             liveTransforms: recovery.workspace.liveTransforms,
@@ -217,7 +217,7 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
         return {
             authored: {
                 document: recovery.document,
-                axes: recovery.workspace.axes,
+                mirrors: recovery.workspace.mirrors,
                 recipes: recovery.workspace.recipes,
                 activeRecipeId: recovery.workspace.activeRecipeId,
                 liveTransforms: recovery.workspace.liveTransforms,
@@ -262,7 +262,7 @@ test("Pattern construction round-trip restores associated selection and mirror s
         const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         return {
             document: recovery.document,
-            axes: recovery.workspace.axes,
+            mirrors: recovery.workspace.mirrors,
             float: recovery.workspace.float,
             activeRecipeId: recovery.workspace.activeRecipeId,
         };
@@ -277,7 +277,7 @@ test("Pattern construction round-trip restores associated selection and mirror s
         const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
         return {
             document: recovery.document,
-            axes: recovery.workspace.axes,
+            mirrors: recovery.workspace.mirrors,
             float: recovery.workspace.float,
             activeRecipeId: recovery.workspace.activeRecipeId,
         };

@@ -107,7 +107,7 @@ test("each family remembers its chosen variant after leaving, an empty selection
         await expect(page.locator(`#tool-${id}`)).toHaveAccessibleDescription(new RegExp(label));
     }
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).version)).toBe(7);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).version)).toBe(8);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots
         .some((snapshot: object) => JSON.stringify(snapshot).includes("toolVariants")))).toBe(false);
 });

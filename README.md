@@ -16,7 +16,7 @@ A browser-based editor for designing alternating-yarn mosaic crochet charts and 
 - Rectangular row patterns and full, half, or quarter centre-out patterns
 - Two-yarn drawing with customizable colours, overlay-stitch guidance, and impossible-placement warnings
 - Selection, movement, copying, repetition, rotation, and mirroring of motifs
-- Multiple global symmetry axes that apply while drawing
+- Global mirror centres with independent reflection and point-symmetry types that apply while drawing
 - Generated crochet instructions that can be copied, with progress shown on the chart
 - Editable `.mcw` project files, with separate browser-local recovery for in-progress work
 - Accessible desktop and mobile layouts with mouse, touch, pen, and keyboard support
