@@ -374,8 +374,6 @@ input  { font: inherit; color: inherit; }
 .tool-variant-menu:popover-open { display: grid; gap: var(--space-1); }
 .tool-variant-item { justify-content: flex-start; gap: var(--space-2); }
 .tool-variant-item[aria-checked="true"]::after { content: "✓"; margin-inline-start: auto; }
-.btn--executing { outline: 2px dashed var(--fg-0); outline-offset: 2px; }
-.swatch--executing { outline: 2px dashed var(--fg-0); outline-offset: 3px; }
 .status-action { color: var(--fg-0); }
 
 .btn--danger,
@@ -1066,7 +1064,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   width: 100%;
   min-height: var(--unit-size);
   display: grid;
-  grid-template-columns: 1.25rem var(--unit-size) minmax(0, 1fr);
+  grid-template-columns: var(--unit-size) minmax(0, 1fr);
   align-items: stretch;
   color: inherit;
   background: var(--bg-1);
@@ -1081,6 +1079,8 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .instructions-unit[aria-current="step"] {
   background: var(--accent-soft);
 }
+.instructions-unit[aria-current="step"] code::after,
+.instructions-unit--whole[aria-current="step"]::after { content: " •"; color: var(--fg-0); }
 .instructions-unit--complete code { color: var(--fg-1); }
 .instructions-unit.instructions-unit--invalid {
   background: color-mix(in srgb, var(--danger) 8%, var(--bg-1));
@@ -1088,11 +1088,17 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .instructions-unit.instructions-unit--current-invalid {
   background: color-mix(in srgb, var(--danger) 18%, var(--bg-1));
 }
-.instructions-unit-marker { display: grid; place-items: center; color: var(--fg-0); }
-.instructions-unit-marker::before { content: ""; }
-.instructions-unit[aria-current="step"] .instructions-unit-marker::before { content: "›"; font-weight: 700; }
-.instructions-unit--invalid .instructions-unit-marker::before { content: "!"; font-weight: 700; }
-.instructions-unit--current-invalid .instructions-unit-marker::before { content: "!›"; }
+.instructions-unit--invalid code::before,
+.instructions-unit--whole.instructions-unit--invalid::before {
+  content: "! ";
+  color: var(--fg-0);
+  font-weight: 700;
+}
+.instructions-unit--whole {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  font-weight: 700;
+}
 
 .instructions-unit-number {
   width: var(--unit-size);

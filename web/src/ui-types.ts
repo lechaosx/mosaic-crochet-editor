@@ -1,4 +1,5 @@
 import type { Tool, ToolVariants, SymKey, PatternState, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
+import type { ToolAction } from "@mosaic/logic/tool-input";
 import type { CanvasWorkspace, InstructionSeam } from "./render";
 import type { PackedInstructionCoordinates } from "./instruction-coordinates";
 
@@ -59,7 +60,7 @@ export interface UICallbacks {
 export interface UIHandle {
     setTool:            (t: Tool) => void;
     setToolVariants:    (variants: ToolVariants) => void;
-    setExecutingAction: (message: string | null, tool?: Tool | null, yarn?: 1 | 2 | null) => void;
+    setExecutingAction: (action: ToolAction | null, yarn?: 1 | 2 | null) => void;
     setSelectionState:  (selectedCount: number, clipboardCount: number) => void;
     setCanvasFeedback:  (message: string | null) => void;
     setPrimary:         (slot: 1 | 2) => void;
@@ -102,7 +103,7 @@ export interface InstructionsView {
     clearText:   () => void;
     clearUnits:  () => void;
     setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
-                  onProgress: (completedUnits: number) => boolean) => void;
+                  onProgress: (completedUnits: number) => boolean, wholeInvalid?: boolean) => void;
     setErrors:   (count: number) => void;
     setYarnColors: (a: string, b: string) => void;
     alternate:   () => boolean;

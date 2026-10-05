@@ -58,6 +58,13 @@ export function mountInstructions(
         const unitRows = new Map<string, HTMLElement>();
         let liveUnits: readonly InstructionOverviewUnit[] = [];
         let liveCompleted = 0;
+        let showWhole = false;
+        const wholeRow = document.createElement("li");
+        const wholeButton = document.createElement("button");
+        wholeButton.type = "button";
+        wholeButton.className = "instructions-unit instructions-unit--whole";
+        wholeButton.textContent = "Whole pattern";
+        wholeRow.append(wholeButton);
         let liveProgressChanged = (_completedUnits: number) => true;
         let isBusy = true;
         beforeOpen();
@@ -77,11 +84,11 @@ export function mountInstructions(
         const renderCrochet = () => {
             const total = liveUnits.length;
             const current = total === 0 ? 0 : Math.min(liveCompleted + 1, total);
-            liveProgress.textContent = `${current} / ${total}`;
-            liveBack.disabled = isBusy || liveCompleted === 0;
+            liveProgress.textContent = showWhole && total > 0 ? "Whole pattern" : `${current} / ${total}`;
+            liveBack.disabled = isBusy || total === 0;
             liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
             liveBack.title = `Back one ${workKind()}`;
-            liveForward.disabled = isBusy || total === 0 || liveCompleted >= total - 1;
+            liveForward.disabled = isBusy || total === 0;
             liveForward.setAttribute("aria-label", `Forward one ${workKind()}`);
             liveForward.title = `Forward one ${workKind()}`;
             unitElements.forEach((item, index) => {
@@ -89,22 +96,28 @@ export function mountInstructions(
                 item.classList.toggle("instructions-unit--complete", index < liveCompleted);
                 item.classList.toggle(
                     "instructions-unit--current-invalid",
-                    index === liveCompleted && Boolean(liveUnits[index]?.invalid),
+                    !showWhole && index === liveCompleted && Boolean(liveUnits[index]?.invalid),
                 );
-                if (index === liveCompleted) {
+                if (!showWhole && index === liveCompleted) {
                     item.setAttribute("aria-current", "step");
                 } else {
                     item.removeAttribute("aria-current");
                 }
             });
+            wholeButton.disabled = isBusy;
+            wholeButton.classList.toggle("instructions-unit--current-invalid",
+                showWhole && wholeButton.classList.contains("instructions-unit--invalid"));
+            if (showWhole) wholeButton.setAttribute("aria-current", "step");
+            else wholeButton.removeAttribute("aria-current");
             const currentUnit = liveUnits[liveCompleted] ?? null;
-            currentInstruction.hidden = currentUnit === null;
+            currentInstruction.hidden = showWhole || currentUnit === null || isBusy;
             if (currentUnit) {
                 currentInstructionText.textContent =
                     currentUnit.text.slice(currentUnit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0");
             }
-            livePreviewListeners.forEach(f => f(current));
-            unitElements[Math.min(liveCompleted, total - 1)]?.scrollIntoView({ block: "nearest" });
+            if (!isBusy && total > 0) livePreviewListeners.forEach(f => f(showWhole ? null : current));
+            (showWhole ? wholeButton : unitElements[Math.min(liveCompleted, total - 1)])
+                ?.scrollIntoView({ block: "nearest" });
         };
         const refreshCrochetAvailability = () => {
             if (!isBusy && liveUnits.length === 0) {
@@ -113,21 +126,22 @@ export function mountInstructions(
             } else {
                 liveUnavailable.hidden = true;
             }
-            liveBack.disabled = isBusy || liveCompleted === 0;
-            liveForward.disabled = isBusy || liveUnits.length === 0
-                || liveCompleted >= liveUnits.length - 1;
+            liveBack.disabled = isBusy || liveUnits.length === 0;
+            liveForward.disabled = isBusy || liveUnits.length === 0;
         };
-        liveBack.onclick = () => {
-            if (liveCompleted === 0) return;
-            liveCompleted--;
-            liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
+        const select = (index: number | null) => {
+            if (isBusy || liveUnits.length === 0) return;
+            showWhole = index === null;
+            if (index !== null) {
+                liveCompleted = index;
+                liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
+            }
             renderCrochet();
         };
+        wholeButton.onclick = () => select(null);
+        liveBack.onclick = () => select(showWhole ? liveUnits.length - 1 : liveCompleted === 0 ? null : liveCompleted - 1);
         liveForward.onclick = () => {
-            if (liveCompleted >= liveUnits.length - 1) return;
-            liveCompleted++;
-            liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
-            renderCrochet();
+            select(showWhole ? 0 : liveCompleted >= liveUnits.length - 1 ? null : liveCompleted + 1);
         };
 
         const close = (restoreFocus = true) => {
@@ -166,17 +180,12 @@ export function mountInstructions(
                 item.className = "instructions-unit";
                 item.classList.toggle("instructions-unit--invalid", unit.invalid);
                 item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}${unit.invalid ? ", contains invalid placements" : ""}`);
-                item.title = `Go to ${unit.label}, Yarn ${unit.yarn}${unit.invalid ? " · contains invalid placements" : ""}`;
+                item.title = `${unit.label}, Yarn ${unit.yarn}${unit.invalid ? " · contains invalid placements" : ""}`;
                 const index = unitElements.length;
                 item.onclick = () => {
                     if (isBusy || index >= liveUnits.length) return;
-                    liveCompleted = index;
-                    liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
-                    renderCrochet();
+                    select(index);
                 };
-                const marker = item.querySelector<HTMLElement>(".instructions-unit-marker") ?? document.createElement("span");
-                marker.className = "instructions-unit-marker";
-                marker.setAttribute("aria-hidden", "true");
                 const meta = item.querySelector<HTMLElement>(".instructions-unit-number") ?? document.createElement("span");
                 meta.className = "instructions-unit-number";
                 meta.style.backgroundColor = unit.color;
@@ -185,9 +194,9 @@ export function mountInstructions(
                 const text = item.querySelector("code") ?? document.createElement("code");
                 text.textContent = unit.text.slice(unit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0");
                 if (!item.parentElement) {
-                    item.append(marker, meta, text);
+                    item.append(meta, text);
                     row.append(item);
-                    unitsList.append(row);
+                    unitsList.insertBefore(row, wholeRow.parentElement ? wholeRow : null);
                 }
                 unitElements.push(item);
             },
@@ -202,9 +211,10 @@ export function mountInstructions(
                 currentInstruction.hidden = true;
                 refreshCrochetAvailability();
             },
-            setLivePlan: (units, completedUnits, onProgress) => {
+            setLivePlan: (units, completedUnits, onProgress, wholeInvalid = false) => {
                 const labels = new Set(units.map(unit => unit.label));
                 Array.from(unitsList.children).forEach(row => {
+                    if (row === wholeRow) return;
                     const label = (row as HTMLElement).dataset.instructionLabel!;
                     if (!labels.has(label)) {
                         row.remove();
@@ -216,6 +226,15 @@ export function mountInstructions(
                     ? 0
                     : Math.min(Math.max(0, completedUnits), units.length - 1);
                 liveProgressChanged = onProgress;
+                if (units.length > 0) {
+                    if (!wholeRow.parentElement) unitsList.append(wholeRow);
+                } else {
+                    wholeRow.remove();
+                    showWhole = false;
+                }
+                wholeButton.classList.toggle("instructions-unit--invalid", wholeInvalid);
+                wholeButton.setAttribute("aria-label", `Whole pattern${wholeInvalid ? ", contains invalid placements" : ""}`);
+                wholeButton.title = `Whole pattern${wholeInvalid ? " · contains invalid placements outside the instructions" : ""}`;
                 liveSaveWarning.hidden = true;
                 refreshCrochetAvailability();
                 renderCrochet();

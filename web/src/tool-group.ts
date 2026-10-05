@@ -26,6 +26,7 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
     group.append(button, trigger);
     document.body.append(menu);
     let chosen: T | null = null;
+    let displayed: T | null = null;
     let returnFocus: HTMLElement = trigger;
     const items = variants.map(variant => {
         const item = document.createElement("button");
@@ -44,20 +45,28 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
         return item;
     });
 
+    function renderVariant(value: T) {
+        const variant = variants.find(item => item.value === value)!;
+        button.querySelector("use")!.setAttribute("href", `#icon-${variant.icon}`);
+        button.setAttribute("aria-description", `${family} · ${variant.label}. Hold or press Arrow Down for variants.`);
+        button.title = `${family} · ${variant.label} · hold or open variants. ${acceleratorHint}`;
+        if (family === "Overlay") button.setAttribute("aria-label", `${variant.label === "Place" ? "Place" : variant.label === "Clear" ? "Clear" : "Invert"} overlay`);
+    }
     function setVariant(value: T) {
         if (chosen === value) return;
         chosen = value;
-        const variant = variants.find(item => item.value === value)!;
-        button.querySelector("use")!.setAttribute("href", `#icon-${variant.icon}`);
         button.dataset.variant = value;
-        button.setAttribute("aria-description", `${family} · ${variant.label}. Hold or press Arrow Down for variants.`);
-        button.title = `${family} · ${variant.label} · hold or open variants. ${acceleratorHint}`;
+        renderVariant(displayed ?? value);
         items.forEach((item, index) => {
             item.setAttribute("aria-checked", String(variants[index].value === value));
             setPressed(item, variants[index].value === value);
             item.removeAttribute("aria-pressed");
         });
-        if (family === "Overlay") button.setAttribute("aria-label", `${variant.label === "Place" ? "Place" : variant.label === "Clear" ? "Clear" : "Invert"} overlay`);
+    }
+    function setDisplayedVariant(value: T | null) {
+        if (displayed === value) return;
+        displayed = value;
+        renderVariant(value ?? chosen!);
     }
     function open(from: HTMLElement) {
         returnFocus = from;
@@ -178,5 +187,5 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
         if (menu.matches(":popover-open")) menu.hidePopover();
     });
     setVariant(variants[0].value);
-    return { setVariant };
+    return { setVariant, setDisplayedVariant };
 }

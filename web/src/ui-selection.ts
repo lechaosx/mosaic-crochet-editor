@@ -230,8 +230,9 @@ export function mountSelection(
             const description = type.implied
                 ? "Implied by the chosen types at this centre. Check to choose directly."
                 : type.chosen ? "Chosen directly at this centre." : "Check to choose this type at this centre.";
-            input.setAttribute("aria-description", description);
-            input.parentElement!.title = `${type.name}. ${description}`;
+            if (input.getAttribute("aria-description") !== description) input.setAttribute("aria-description", description);
+            const title = `${type.name}. ${description}`;
+            if (input.parentElement!.title !== title) input.parentElement!.title = title;
         }
         syncRecipeSections();
     }

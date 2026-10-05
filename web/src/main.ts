@@ -20,7 +20,7 @@ import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual,
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
-import { packInstructionCoordinates } from "./instruction-coordinates";
+import { packInstructionCoordinates, planOutwardCoordinate } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          previewSelectRectMask,
@@ -238,34 +238,12 @@ let gesture: Gesture | null = null;
 let gestureFeedbackShown = false;
 let keyboardMove: { key: string; mode: MoveMode; baseline: SessionState; mask: Float | null } | null = null;
 let ctrlArrowStamped = false;
-let executingTimer: ReturnType<typeof setTimeout> | null = null;
-let executingAction: ToolAction | null = null;
-
 function clearExecutingAction() {
-    if (executingTimer !== null) clearTimeout(executingTimer);
-    executingTimer = null;
-    executingAction = null;
     ui.setExecutingAction(null);
 }
 
 function showExecutingAction(action: ToolAction, yarn: 1 | 2 | null = null) {
-    if (executingTimer !== null) clearTimeout(executingTimer);
-    executingTimer = null;
-    executingAction = action;
-    const label = action.kind === "move" ? action.mode === "mask-only" ? "Move area" : action.mode === "duplicate" ? "Duplicate" : "Move content"
-        : action.kind === "select" || action.kind === "wand"
-            ? `${action.kind === "select" ? "Rectangle" : "Wand"} · ${action.mode === "remove" ? "Subtract" : action.mode === "add" ? "Add" : "Replace"}`
-            : action.tool === "overlay" ? `Overlay · ${action.overlayAction === "place" ? "Place" : action.overlayAction === "clear" ? "Clear" : "Invert"}`
-                : action.tool === "fill" ? "Spill" : action.tool === "pencil" ? "Pencil"
-                    : action.tool === "eraser" ? "Eraser" : "Invert";
-    const slot = yarn ?? (action.kind === "paint" && (action.tool === "pencil" || action.tool === "fill") ? action.color : null);
-    ui.setExecutingAction(`${label}${slot ? ` · Yarn ${slot === 1 ? "A" : "B"}` : ""}`,
-        action.kind === "paint" ? action.tool : action.kind, slot);
-}
-
-function finishExecutingAction() {
-    if (!executingAction) return;
-    executingTimer = setTimeout(clearExecutingAction, 900);
+    ui.setExecutingAction(action, yarn);
 }
 
 function modeToCode(m: SelectMode): number {
@@ -1178,9 +1156,12 @@ async function onInstructions() {
     });
     const plan = store.plan;
     const instructionErrors = new Set<string>();
+    const warningCoordinates = new Set<string>();
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] === PlanType.Invalid) {
             instructionErrors.add(`${plan[i + 2]},${plan[i + 3]}`);
+            const [x, y] = planOutwardCoordinate(plan, i);
+            warningCoordinates.add(`${x},${y}`);
         }
     }
 
@@ -1215,7 +1196,7 @@ async function onInstructions() {
             ? null
             : previewUnits[completedUnits - 1] ?? null;
         rs.instructionSeam = selectedUnit?.seam ? { ...selectedUnit.seam, invalid: selectedUnit.invalid } : null;
-        rs.instructionGuidanceCoords = completedUnits !== null && completedUnits < previewUnits.length
+        rs.instructionGuidanceCoords = completedUnits !== null
             ? selectedUnit?.guidanceCoords ?? null : null;
         renderCanvas();
     });
@@ -1279,12 +1260,18 @@ async function onInstructions() {
             dlg.appendLine(copiedInstruction(directional));
         });
         if (live) {
+            const unrepresentedWarnings = new Set(warningCoordinates);
+            for (const unit of units) {
+                for (let i = 0; i < unit.invalidWorkedCoords.length; i += 2) {
+                    unrepresentedWarnings.delete(`${unit.invalidWorkedCoords[i]},${unit.invalidWorkedCoords[i + 1]}`);
+                }
+            }
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
                 completedUnits = nextCompleted;
                 const saved = saveLiveProgress(progressFingerprint, completedUnits);
                 if (saved) ui.setCrochetProgress(hasLiveProgress(progressFingerprint, totalUnits));
                 return saved;
-            });
+            }, unrepresentedWarnings.size > 0);
         }
     };
     const cached = instructionCache?.fingerprint === patternFingerprint
@@ -1726,7 +1713,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         paintAt(cx, cy, gesture);
     },
     onPaintEnd:   () => {
-        finishExecutingAction();
+        clearExecutingAction();
         if (!gesture) return;
         if (gesture.kind === "move") {
             if (!gesture.drag) { gesture = null; return; }
@@ -1884,7 +1871,7 @@ function finishKeyboardMove() {
     if (!keyboardMove) return;
     const move = keyboardMove;
     keyboardMove = null;
-    finishExecutingAction();
+    clearExecutingAction();
     if (move.mode === "mask-only" && store.state.float) {
         const lifted = liftCells(store.state.pixels, store.state.pattern, shiftedFloatMask(store.state));
         store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; syncActiveGridRecipe(s); }, { history: true });

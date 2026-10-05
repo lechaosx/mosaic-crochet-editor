@@ -28,16 +28,20 @@ export function mountMirrors(
 
     function setTransformState(hasSelection: boolean, hasTransforms: boolean) {
         stamp.disabled = !hasSelection || !hasTransforms;
-        stamp.title = !hasTransforms ? "Choose a Global Mirror type first"
+        const stampTitle = !hasTransforms ? "Choose a Global Mirror type first"
             : !hasSelection ? "Select cells to stamp global mirror copies" : "Stamp the current selection through all enabled global mirrors (T)";
-        symToggle.dataset.transformState = hasTransforms ? "live" : "none";
+        if (stamp.title !== stampTitle) stamp.title = stampTitle;
+        const state = hasTransforms ? "live" : "none";
+        if (symToggle.dataset.transformState !== state) symToggle.dataset.transformState = state;
         const label = hasTransforms ? "Global Mirror: applying while drawing" : "Global Mirror: no active types";
-        symToggle.title = label;
-        symToggle.setAttribute("aria-label", label);
+        if (symToggle.title !== label) symToggle.title = label;
+        if (symToggle.getAttribute("aria-label") !== label) symToggle.setAttribute("aria-label", label);
     }
 
     function setTransformError(message: string | null) {
-        setMessage(transformError, message);
+        if (transformError.textContent !== (message ?? "") || transformError.hidden !== (message === null)) {
+            setMessage(transformError, message);
+        }
         if (message !== null && !inspector.isOpen("transforms")) inspector.open("transforms", "Global Mirror");
     }
 
@@ -107,32 +111,40 @@ export function mountMirrors(
             row.classList.toggle("is-inactive", !mirror.enabled);
             row.classList.toggle("is-selected", mirror.id === selectedId);
             const name = `Mirror ${index + 1}`;
-            row.querySelector("strong")!.textContent = `${name} · ${position(mirror)}`;
+            const heading = row.querySelector("strong")!;
+            const headingText = `${name} · ${position(mirror)}`;
+            if (heading.textContent !== headingText) heading.textContent = headingText;
             const summary = mirror.types.map(key =>
                 key === "C" ? "180°" : MIRROR_TYPES.find(type => type.key === key)!.name).join(" · ") || "No types chosen";
-            row.querySelector("small")!.textContent = summary;
+            const detail = row.querySelector("small")!;
+            if (detail.textContent !== summary) detail.textContent = summary;
             const select = row.querySelector<HTMLButtonElement>("[data-mirror-action='select']")!;
-            select.title = `Select ${name} at ${position(mirror)}`;
-            select.setAttribute("aria-label", select.title);
-            select.setAttribute("aria-description", summary);
+            const selectTitle = `Select ${name} at ${position(mirror)}`;
+            if (select.title !== selectTitle) select.title = selectTitle;
+            if (select.getAttribute("aria-label") !== selectTitle) select.setAttribute("aria-label", selectTitle);
+            if (select.getAttribute("aria-description") !== summary) select.setAttribute("aria-description", summary);
             setPressed(select, mirror.id === selectedId);
             const toggle = row.querySelector<HTMLButtonElement>("[data-mirror-action='toggle']")!;
             setPressed(toggle, mirror.enabled);
-            toggle.title = `${mirror.enabled ? "Disable" : "Enable"} ${name} at ${position(mirror)}`;
-            toggle.setAttribute("aria-label", toggle.title);
-            toggle.setAttribute("aria-description", summary);
+            const toggleTitle = `${mirror.enabled ? "Disable" : "Enable"} ${name} at ${position(mirror)}`;
+            if (toggle.title !== toggleTitle) toggle.title = toggleTitle;
+            if (toggle.getAttribute("aria-label") !== toggleTitle) toggle.setAttribute("aria-label", toggleTitle);
+            if (toggle.getAttribute("aria-description") !== summary) toggle.setAttribute("aria-description", summary);
             const del = row.querySelector<HTMLButtonElement>("[data-mirror-action='delete']")!;
-            del.title = `Delete ${name} at ${position(mirror)}`;
-            del.setAttribute("aria-label", del.title);
-            del.setAttribute("aria-description", summary);
+            const deleteTitle = `Delete ${name} at ${position(mirror)}`;
+            if (del.title !== deleteTitle) del.title = deleteTitle;
+            if (del.getAttribute("aria-label") !== deleteTitle) del.setAttribute("aria-label", deleteTitle);
+            if (del.getAttribute("aria-description") !== summary) del.setAttribute("aria-description", summary);
         });
         const selected = mirrors.find(mirror => mirror.id === selectedId);
-        editor.hidden = !selected;
-        editor.dataset.mirrorId = selectedId ?? "";
+        if (editor.hidden !== !selected) editor.hidden = !selected;
+        if (editor.dataset.mirrorId !== (selectedId ?? "")) editor.dataset.mirrorId = selectedId ?? "";
         if (!selected) return;
         resetFields();
         const presentation = mirrorTypePresentation(selected.types);
-        el("mirror-type-hint").hidden = !presentation.some(type => type.implied);
+        const hint = el("mirror-type-hint");
+        const hideHint = !presentation.some(type => type.implied);
+        if (hint.hidden !== hideHint) hint.hidden = hideHint;
         for (const [index, type] of presentation.entries()) {
             const button = types[index];
             setPressed(button, type.chosen);
@@ -140,8 +152,9 @@ export function mountMirrors(
             const description = type.implied
                 ? "Implied by the chosen types at this centre; chart edges can limit copies. Click to choose directly."
                 : type.chosen ? "Chosen directly at this centre. Click to remove this type." : "Click to choose this type at this centre.";
-            button.setAttribute("aria-description", description);
-            button.title = `${type.name}. ${description} ${type.shortcut} adds a new mirror.`;
+            if (button.getAttribute("aria-description") !== description) button.setAttribute("aria-description", description);
+            const title = `${type.name}. ${description} ${type.shortcut} adds a new mirror.`;
+            if (button.title !== title) button.title = title;
         }
     }
 

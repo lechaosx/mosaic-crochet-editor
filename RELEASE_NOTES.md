@@ -4,10 +4,10 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 4 October 2026
 
-- Saved selections choose None, Grid, Circle, or Mirror while retaining their settings, with precise previews, canvas handles, clearer source/copy outlines, and disclosed conversion of older transform behavior.
-- Compact Rectangle, Wand, Move, and Overlay tools remember their actions in accessible variant menus; mouse buttons and modifiers provide temporary actions with visible tool and yarn feedback.
+- Saved selections choose None, Grid, Circle, or Mirror with retained settings, canvas handles, and disclosed conversion of older selections; global mirrors use a compact centre editor, and both distinguish chosen and implied types.
+- Compact Rectangle, Wand, Move, and Overlay tools remember their actions in accessible variant menus; mouse buttons and modifiers show the temporary selected action only while held.
 - Fit keeps large charts centred and editable around overlay panels; rejected files explain the error without moving the view.
-- Global mirrors have a compact list and focused centre editor; global and selection mirrors distinguish chosen and implied types, with precise coordinates, centre handles, and compatible recovery of older mirror definitions.
+- Crochet wraps through a Whole pattern overview that shows all overlay warnings while retaining instruction progress; the final row or round keeps its focused guidance.
 
 ## 3 October 2026
 

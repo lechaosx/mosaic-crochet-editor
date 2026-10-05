@@ -71,7 +71,6 @@ These are independent candidates. Their presence does not establish ordering or 
 
 - Optional Focus mode and screen-wake support, active only while the page is eligible and never restored unexpectedly.
 - Better reconciliation when edits affect already completed work: identify the first changed instruction and offer rewind, keep-place, or reset outcomes.
-- A finished-reference view distinct from the chart-derived current-work surface.
 - Selectable or downloadable formatted instruction text if Copy alone proves insufficient.
 - Print layouts derived from the same structured plan, with chart tiling, repeated page context, yarn differentiation, and the same validation as Crochet.
 

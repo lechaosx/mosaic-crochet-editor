@@ -6,13 +6,18 @@ test("middle Pencil inverts without panning or changing the chosen tool or yarn"
     const cell = await cellCoord(page, 2, 2);
     const before = await pixelRGB(page, cell.cx, cell.cy);
     const matrix = await page.evaluate(() => window.__test_matrix__!.toString());
-    await clickCell(page, 2, 2, { button: "middle" });
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down({ button: "middle" });
+    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#status-action")).toContainText("Invert");
+    await expect(page.locator("#status-action")).toBeVisible();
+    await page.mouse.up({ button: "middle" });
     expect(await pixelRGB(page, cell.cx, cell.cy)).not.toEqual(before);
     expect(await page.evaluate(() => window.__test_matrix__!.toString())).toBe(matrix);
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("#swatch-a")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#status-action")).toContainText("Invert");
-    await expect(page.locator("#status-action")).toBeVisible();
+    await expect(page.locator("#status-action")).toBeHidden();
 });
 
 test("right Rectangle adds and middle subtracts, with Shift ahead of either button", async ({ page }) => {
@@ -34,15 +39,106 @@ test("a held stroke keeps its starting tool and yarn when shortcuts change chose
     await page.mouse.move(start.cx, start.cy);
     await page.mouse.down();
     await page.keyboard.press("e");
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-eraser")).toHaveAttribute("aria-pressed", "false");
     await page.mouse.move(end.cx, end.cy);
     expect(await pixelRGB(page, end.cx, end.cy)).toEqual([0, 0, 0]);
     await page.keyboard.press("2");
     await expect(page.locator("#status-action")).toContainText("Pencil · Yarn A");
     await expect(page.locator("#status-action")).toBeVisible();
     await page.mouse.up();
+    await expect(page.locator("#status-action")).toBeHidden();
     expect(await pixelRGB(page, end.cx, end.cy)).toEqual([0, 0, 0]);
     await expect(page.locator("#tool-eraser")).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
+});
+
+test("held Rectangle shows its temporary icon and restores the remembered variant on release", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("s");
+    const cell = await cellCoord(page, 2, 2);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down({ button: "right" });
+    await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select-add");
+    await expect(page.locator("#tool-select")).toHaveAccessibleDescription(/Rectangle · Add/);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.toolVariants.select)).toBe("replace");
+    await page.mouse.up({ button: "right" });
+    await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select");
+    await expect(page.locator("#status-action")).toBeHidden();
+    await page.getByRole("button", { name: "Rectangle variants", exact: true }).click();
+    await expect(page.getByRole("menuitemradio", { name: "Replace", exact: true })).toHaveAttribute("aria-checked", "true");
+});
+
+test("keyboard Move shows the temporary variant only until key release", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 2);
+    await page.keyboard.press("m");
+    await page.keyboard.down("Control");
+    await page.keyboard.down("ArrowRight");
+    await expect(page.locator("#tool-move use")).toHaveAttribute("href", "#icon-copy");
+    await expect(page.locator("#status-action")).toContainText("Duplicate");
+    await page.keyboard.up("ArrowRight");
+    await page.keyboard.up("Control");
+    await expect(page.locator("#tool-move use")).toHaveAttribute("href", "#icon-move");
+    await expect(page.locator("#status-action")).toBeHidden();
+});
+
+test("a held action keeps its starting variant while a new choice is remembered for release", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("s");
+    const cell = await cellCoord(page, 2, 2);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down({ button: "right" });
+    await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select-add");
+    await page.getByRole("button", { name: "Rectangle variants", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+    await page.getByRole("menuitemradio", { name: "Subtract", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select-add");
+    await expect(page.locator("#tool-select")).toHaveAttribute("data-variant", "remove");
+    await page.mouse.up({ button: "right" });
+    await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select-remove");
+    await expect(page.locator("#status-action")).toBeHidden();
+});
+
+for (const [family, tool, chosen, button, modifiers, icon, restored] of [
+    ["Wand", "wand", "Replace", "right", [], "wand-add", "wand"],
+    ["Wand", "wand", "Replace", "middle", [], "wand-remove", "wand"],
+    ["Rectangle", "select", "Replace", "middle", ["Shift", "Control"], "select-add", "select"],
+    ["Move", "move", "Move content", "right", ["Alt", "Control"], "move-area", "move"],
+    ["Overlay", "overlay", "Place", "right", [], "overlay-clear", "overlay-place"],
+    ["Overlay", "overlay", "Clear", "middle", [], "overlay-invert", "overlay-clear"],
+] as const) test(`${family} ${button} held action shows ${icon} and restores its chosen icon`, async ({ page }) => {
+    await bootApp(page);
+    await choose(page, family, chosen);
+    const cell = await cellCoord(page, 2, 2);
+    for (const modifier of modifiers) await page.keyboard.down(modifier);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down({ button });
+    await expect(page.locator(`#tool-${tool} use`)).toHaveAttribute("href", `#icon-${icon}`);
+    await expect(page.locator(`#tool-${tool}`)).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.up({ button });
+    for (const modifier of [...modifiers].reverse()) await page.keyboard.up(modifier);
+    await expect(page.locator(`#tool-${tool} use`)).toHaveAttribute("href", `#icon-${restored}`);
+    await expect(page.locator("#status-action")).toBeHidden();
+});
+
+for (const cancellation of ["pointercancel", "lostpointercapture", "blur"] as const) test(
+    `${cancellation} clears held feedback and restores the latest chosen tool`, async ({ page }) => {
+    await bootApp(page);
+    const cell = await cellCoord(page, 2, 2);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down({ button: "middle" });
+    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("e");
+    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "true");
+    await page.evaluate(event => {
+        if (event === "blur") window.dispatchEvent(new Event(event));
+        else document.getElementById("canvas")!.dispatchEvent(new PointerEvent(event, { pointerId: 1, bubbles: true }));
+    }, cancellation);
+    await expect(page.locator("#tool-eraser")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#status-action")).toBeHidden();
+    await page.mouse.up({ button: "middle" });
 });
 
 test("chosen variants remain described with enlarged text", async ({ page }) => {

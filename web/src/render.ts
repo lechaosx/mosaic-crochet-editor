@@ -4,11 +4,11 @@ import { mirrorTypePresentation } from "./mirror-presentation";
 import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
-import { PlanType, PlanDir, transformed_target_indices,
+import { PlanType, transformed_target_indices,
     build_highlight_plan_row, build_highlight_plan_round } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
 import { AppPreferences } from "./preferences";
-import type { PackedInstructionCoordinates } from "./instruction-coordinates";
+import { planOutwardCoordinate, type PackedInstructionCoordinates } from "./instruction-coordinates";
 
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;
@@ -25,16 +25,6 @@ const ANTS_SCREEN_PX_PER_SEC = 24;
 // applied, so dashes jump rather than glide — the classic marching-ants
 // look. With 24 px/s + 3 px/step the visual ticks ~8 times per second.
 const ANTS_STEP_PX = 3;
-
-// `PlanDir` → outward offset in pattern coords. Single source of truth for
-// the direction enum decoding; the actual direction *selection* per cell
-// happens in Rust (`build_highlight_plan_*`).
-const DIR_VECTORS: Record<number, [number, number]> = {
-    [PlanDir.Up]:    [ 0, -1],
-    [PlanDir.Down]:  [ 0,  1],
-    [PlanDir.Left]:  [-1,  0],
-    [PlanDir.Right]: [ 1,  0],
-};
 
 // Coordinate-transform inputs: the three things that, together, define how
 // pattern-space and screen-space map to each other. `dpr` is mutated by the
@@ -437,7 +427,7 @@ export function renderPatternColourPreview(
     const dashOffset = Math.floor(antsElapsedMs / 1000 * ANTS_SCREEN_PX_PER_SEC / ANTS_STEP_PX)
         * ANTS_STEP_PX / cell;
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
-    renderSelection(ctx, view, pattern, selection, accentColor, dashOffset);
+    renderSelection(ctx, view, dpr, pattern, selection, accentColor, dashOffset);
     ctx.restore();
 }
 
@@ -511,7 +501,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     if (activeRecipe && float
         && float.x === activeRecipe.source.x && float.y === activeRecipe.source.y
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
-        renderRecipeInstances(ctx, view, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
+        renderRecipeInstances(ctx, view, dpr, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
         if (rs.selectionHandlesVisible) renderRecipeHandles(ctx, view, activeRecipe, accentColor, rs.visualRotation);
     }
     renderSymmetryGuides(ctx, view, dpr, pattern, mirrors, accentColor, rs.selectedMirrorId, rs.previewRepeatGuides);
@@ -530,15 +520,15 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
                 shifted[cy * W + cx] = 1;
             }
         }
-        renderSelection(ctx, view, pattern, shifted, accentColor, dashOffsetSnapped);
+        renderSelection(ctx, view, dpr, pattern, shifted, accentColor, dashOffsetSnapped);
     }
     if (rs.selectPreviewMask) {
-        renderSelection(ctx, view, pattern, rs.selectPreviewMask, accentColor, dashOffsetSnapped);
+        renderSelection(ctx, view, dpr, pattern, rs.selectPreviewMask, accentColor, dashOffsetSnapped);
     }
     if (rs.dragRect) {
         ctx.save();
         ctx.globalAlpha = rs.selectPreviewMask ? 0.45 : 1;
-        renderDragRect(ctx, view, rs.dragRect, accentColor, dashOffsetSnapped);
+        renderDragRect(ctx, view, dpr, rs.dragRect, accentColor, dashOffsetSnapped);
         ctx.restore();
     }
     if (labelsVisible) {
@@ -548,24 +538,12 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 }
 
 function renderRecipeInstances(
-    ctx: CanvasRenderingContext2D, view: ViewState, pattern: PatternState,
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number, pattern: PatternState,
     pixels: Uint8Array, recipe: GridRecipe, color: string, dashOffset: number,
 ) {
     const paths = recipeInstancePaths(pattern, pixels, recipe);
     ctx.save();
-    for (const instance of paths) {
-        ctx.beginPath();
-        for (const path of instance) {
-            ctx.moveTo(path[0], path[1]);
-            for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
-        }
-        ctx.setLineDash([8 / view.zoom, 4 / view.zoom]);
-        ctx.lineDashOffset = dashOffset;
-        ctx.lineWidth = 5 / view.zoom; ctx.strokeStyle = "#111"; ctx.stroke();
-        ctx.lineWidth = 3 / view.zoom; ctx.strokeStyle = "#fff"; ctx.stroke();
-        ctx.lineWidth = 2 / view.zoom; ctx.strokeStyle = color;
-        ctx.stroke();
-    }
+    for (const instance of paths) renderSelectionPaths(ctx, view, dpr, instance, color, dashOffset);
     ctx.restore();
     (window as unknown as { __test_repeat_outlines__?: { paths: number[][][]; dashOffset: number } })
         .__test_repeat_outlines__ = { paths, dashOffset };
@@ -792,46 +770,45 @@ function tracedBoundary(selection: Uint8Array, W: number, H: number): number[][]
 }
 
 function renderSelection(
-    ctx: CanvasRenderingContext2D, view: ViewState,
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     pattern: PatternState, selection: Uint8Array | null,
     color: string, dashOffset: number,
 ) {
     if (!selection) return;
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
-    renderSelectionPaths(ctx, view, tracedBoundary(selection, W, H), color, dashOffset);
+    renderSelectionPaths(ctx, view, dpr, tracedBoundary(selection, W, H), color, dashOffset);
 }
 
 function renderSelectionPaths(
-    ctx: CanvasRenderingContext2D, view: ViewState,
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     paths: ReadonlyArray<ReadonlyArray<number>>, color: string, dashOffset: number,
 ) {
-    const px = 1 / view.zoom;
+    const px = 1 / (view.zoom * dpr);
     const dash = 6 * px;
 
     ctx.save();
-    ctx.setLineDash([]);
+    ctx.lineWidth = 3 * px;
+    ctx.setLineDash([dash, dash]);
+    ctx.lineDashOffset = dashOffset;
+    ctx.strokeStyle = color;
     ctx.beginPath();
     for (const path of paths) {
         ctx.moveTo(path[0], path[1]);
         for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
     }
-    ctx.lineWidth = 7 * px; ctx.strokeStyle = "#111"; ctx.stroke();
-    ctx.lineWidth = 5 * px; ctx.strokeStyle = "#fff"; ctx.stroke();
-    ctx.lineWidth = 3 * px; ctx.strokeStyle = color; ctx.stroke();
-    ctx.lineWidth = px; ctx.strokeStyle = "#111";
-    ctx.setLineDash([dash, dash]); ctx.lineDashOffset = dashOffset; ctx.stroke();
+    ctx.stroke();
     ctx.restore();
 }
 
 // The sweep includes off-canvas cells; the committed source clips them out.
 function renderDragRect(
-    ctx: CanvasRenderingContext2D, view: ViewState,
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     r: { x1: number; y1: number; x2: number; y2: number },
     color: string, dashOffset: number,
 ) {
     const x1 = Math.min(r.x1, r.x2), y1 = Math.min(r.y1, r.y2);
     const x2 = Math.max(r.x1, r.x2) + 1, y2 = Math.max(r.y1, r.y2) + 1;
-    renderSelectionPaths(ctx, view, [[x1, y1, x2, y1, x2, y2, x1, y2, x1, y1]], color, dashOffset);
+    renderSelectionPaths(ctx, view, dpr, [[x1, y1, x2, y1, x2, y2, x1, y2, x1, y1]], color, dashOffset);
 }
 
 // ── Drawing helpers ────────────────────────────────────────────────────────
@@ -880,8 +857,7 @@ function renderHighlightSymbols(
         for (let i = 0; i < plan.length; i += 4) {
             if (plan[i] !== PlanType.Valid) continue;
             const wx = plan[i+2], wy = plan[i+3];
-            const [dx, dy] = DIR_VECTORS[plan[i+1]];
-            const ox = wx + dx, oy = wy + dy;
+            const [ox, oy] = planOutwardCoordinate(plan, i);
             if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
             if (outwardPixel(ox, oy, wx, wy) !== display) continue;
             validGlyphCoords.push({ x: ox, y: oy });
@@ -904,9 +880,7 @@ function renderHighlightSymbols(
     const invalidGlyphs: { x: number; y: number; point: DOMPoint }[] = [];
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] !== PlanType.Invalid) continue;
-        const wx = plan[i+2], wy = plan[i+3];
-        const [dx, dy] = DIR_VECTORS[plan[i+1]];
-        const ox = wx + dx, oy = wy + dy;
+        const [ox, oy] = planOutwardCoordinate(plan, i);
         if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
         invalidGlyphs.push({ x: ox, y: oy, point: m.transformPoint({ x: ox + 0.5, y: oy + 0.5 }) });
     }

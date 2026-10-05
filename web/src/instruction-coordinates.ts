@@ -1,3 +1,17 @@
+import { PlanDir } from "@mosaic/wasm";
+
+const DIR_VECTORS: Record<number, readonly [number, number]> = {
+    [PlanDir.Up]: [0, -1],
+    [PlanDir.Down]: [0, 1],
+    [PlanDir.Left]: [-1, 0],
+    [PlanDir.Right]: [1, 0],
+};
+
+export function planOutwardCoordinate(plan: Int16Array, recordOffset: number): readonly [number, number] {
+    const [dx, dy] = DIR_VECTORS[plan[recordOffset + 1]];
+    return [plan[recordOffset + 2] + dx, plan[recordOffset + 3] + dy];
+}
+
 export interface PackedInstructionCoordinates {
     readonly values: Uint32Array;
     has(x: number, y: number): boolean;

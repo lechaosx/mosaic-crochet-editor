@@ -1,4 +1,5 @@
 import type { Tool, ToolVariants } from "@mosaic/logic/types";
+import type { ToolAction } from "@mosaic/logic/tool-input";
 import { el, setPressed } from "./dom";
 import type { UICallbacks, InspectorControls } from "./ui-types";
 import { mountToolGroup } from "./tool-group";
@@ -54,29 +55,41 @@ export function mountToolbar(
         groups.overlay.setVariant(variants.overlay);
     }
 
-    function setTool(t: Tool) {
+    let chosenTool: Tool = "pencil";
+    let projectedAction: ToolAction | null = null;
+    let projectedYarn: 1 | 2 | null = null;
+    function projectTool() {
+        const action = projectedAction;
+        const tool = action === null ? chosenTool : action.kind === "paint" ? action.tool : action.kind;
         (Object.keys(toolButtons) as Tool[]).forEach(k => {
-            setPressed(toolButtons[k], k === t);
+            if (toolButtons[k].getAttribute("aria-pressed") !== String(k === tool)) setPressed(toolButtons[k], k === tool);
         });
+        groups.select.setDisplayedVariant(action?.kind === "select" ? action.mode : null);
+        groups.wand.setDisplayedVariant(action?.kind === "wand" ? action.mode : null);
+        groups.move.setDisplayedVariant(action?.kind === "move" ? action.mode : null);
+        groups.overlay.setDisplayedVariant(action?.kind === "paint" && action.tool === "overlay" ? action.overlayAction : null);
+    }
+    function setTool(t: Tool) {
+        chosenTool = t;
+        projectTool();
         if (t === "select" || t === "wand") inspector.open("selection", "Selection", toolButtons[t]);
     }
 
-    let projectedAction: string | null = null;
-    let projectedTool: Tool | null = null;
-    let projectedYarn: 1 | 2 | null = null;
-    function setExecutingAction(message: string | null, tool: Tool | null = null, yarn: 1 | 2 | null = null) {
-        if (message === projectedAction && tool === projectedTool && yarn === projectedYarn) return;
-        projectedAction = message;
-        projectedTool = tool;
+    function setExecutingAction(action: ToolAction | null, yarn: 1 | 2 | null = null) {
+        if (action === projectedAction && yarn === projectedYarn) return;
+        projectedAction = action;
         projectedYarn = yarn;
+        const label = action === null ? null
+            : action.kind === "move" ? action.mode === "mask-only" ? "Move area" : action.mode === "duplicate" ? "Duplicate" : "Move content"
+                : action.kind === "select" || action.kind === "wand"
+                    ? `${action.kind === "select" ? "Rectangle" : "Wand"} · ${action.mode === "remove" ? "Subtract" : action.mode === "add" ? "Add" : "Replace"}`
+                    : action.tool === "overlay" ? `Overlay · ${action.overlayAction === "place" ? "Place" : action.overlayAction === "clear" ? "Clear" : "Invert"}`
+                        : action.tool === "fill" ? "Spill" : action.tool === "pencil" ? "Pencil" : action.tool === "eraser" ? "Eraser" : "Invert";
+        const slot = yarn ?? (action?.kind === "paint" && (action.tool === "pencil" || action.tool === "fill") ? action.color : null);
         const feedback = el("status-action");
-        feedback.textContent = message ?? "";
-        feedback.hidden = message === null;
-        for (const key of Object.keys(toolButtons) as Tool[]) {
-            toolButtons[key].classList.toggle("btn--executing", key === tool);
-        }
-        el("swatch-a").classList.toggle("swatch--executing", yarn === 1);
-        el("swatch-b").classList.toggle("swatch--executing", yarn === 2);
+        feedback.textContent = label === null ? "" : `${label}${slot ? ` · Yarn ${slot === 1 ? "A" : "B"}` : ""}`;
+        feedback.hidden = action === null;
+        projectTool();
     }
 
     function setCanvasFeedback(message: string | null) {

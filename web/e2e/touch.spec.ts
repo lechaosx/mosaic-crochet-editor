@@ -26,9 +26,17 @@ test("a rotated mirror centre supports touch drag and system cancellation withou
 
 test("single-finger drag paints", async ({ page }) => {
     await bootApp(page);
-    await touchDragCells(page, 1, 1, 3, 1);
+    const start = await cellCoord(page, 1, 1), end = await cellCoord(page, 3, 1);
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: start.cx, y: start.cy, id: 0 }] });
+    for (let step = 1; step <= 10; step++) await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove", touchPoints: [{ x: start.cx + (end.cx - start.cx) * step / 10, y: start.cy, id: 0 }],
+    });
     await expect(page.locator("#status-action")).toBeVisible();
     await expect(page.locator("#status-action")).toHaveText("Pencil · Yarn A");
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await session.detach();
+    await expect(page.locator("#status-action")).toBeHidden();
 
     for (let x = 1; x <= 3; x++) {
         const p = await cellCoord(page, x, 1);

@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { packInstructionCoordinates } from "../src/instruction-coordinates";
+import { PlanDir, PlanType } from "@mosaic/wasm";
+import { packInstructionCoordinates, planOutwardCoordinate } from "../src/instruction-coordinates";
 
 describe("instruction coordinates", () => {
+    it("projects native plan records from supporting to outward worked positions", () => {
+        const plan = new Int16Array([
+            PlanType.Invalid, PlanDir.Up, 4, 5,
+            PlanType.Valid, PlanDir.Down, 4, 5,
+            PlanType.Invalid, PlanDir.Left, 4, 5,
+            PlanType.Invalid, PlanDir.Right, 4, 5,
+        ]);
+        expect([0, 4, 8, 12].map(offset => planOutwardCoordinate(plan, offset)))
+            .toEqual([[4, 4], [4, 6], [3, 5], [5, 5]]);
+    });
     it("indexes outward coordinates compactly, including the chart gutter", () => {
         const coords = new Int32Array([-1, 0, 0, 0, 1, 0, 1, 0, 1_048_576, 0]);
         const packed = packInstructionCoordinates(coords, 1_048_576);
