@@ -2,6 +2,11 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 7 October 2026
+
+- Selection and Mirrors use compact lists with inline actions, a trailing creation row, clearer repeat handles, and fully visible implied mirror guides.
+- Pattern shape changes keep selections attached to preserved stitches, prune vanished selections and mirror types, and switch unsafe copies off; Undo restores them.
+
 ## 4 October 2026
 
 - Saved selections choose None, Grid, Circle, or Mirror with retained settings, canvas handles, and disclosed conversion of older selections; global mirrors use a compact centre editor, and both distinguish chosen and implied types.

@@ -18,43 +18,43 @@ export function activeGridRecipe(s: Readonly<SessionState>): GridRecipe | null {
 }
 
 function currentGridRecipe(s: Readonly<SessionState>): GridRecipe | null {
-    return s.recipes.find(recipe => recipe.id === s.activeRecipeId) ?? s.recipes[0] ?? null;
+    return s.recipes.find(recipe => recipe.id === s.activeRecipeId) ?? s.recipes.find(recipe => !recipeHasSource(recipe)) ?? null;
 }
 
 export function syncActiveGridRecipe(
     s: SessionState, translation?: { x: number; y: number },
 ): void {
-    const active = currentGridRecipe(s);
-    if (!active || !s.float) return;
+    if (!s.float) return;
+    const active = currentGridRecipe(s) ?? emptyGridRecipe();
     const updated = withRecipeSource(active, s.float, translation);
     const visible = visiblePixels(s);
     const { canvasWidth: W, canvasHeight: H } = s.pattern;
     if (gridRecipeError(updated, (x, y) =>
         !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0
     ) !== null) return;
-    s.recipes = s.recipes.map(recipe => recipe.id === active.id ? updated : recipe);
+    s.recipes = s.recipes.some(recipe => recipe.id === active.id)
+        ? s.recipes.map(recipe => recipe.id === active.id ? updated : recipe) : [...s.recipes, updated];
     s.activeRecipeId = active.id;
 }
 
 export function createGridRecipe(store: Store): "created" | "no-selection" | "invalid" {
-    const recipe = emptyGridRecipe();
     const anchored = store.state.float ? anchorIntoCanvas(store.state) : null;
     store.commit(s => {
         if (anchored) { s.pixels = anchored.pixels; s.float = null; }
-        s.recipes = [...s.recipes, recipe];
-        s.activeRecipeId = recipe.id;
+        s.activeRecipeId = null;
     }, { history: true });
     return "created";
 }
 
 export function deleteGridRecipe(store: Store, id: string): void {
-    if (store.state.recipes.length <= 1) return;
+    if (!store.state.recipes.some(recipe => recipe.id === id && recipeHasSource(recipe))) return;
     const active = store.state.activeRecipeId === id;
     const anchored = active ? anchorIntoCanvas(store.state) : null;
     store.commit(s => {
         if (anchored) { s.pixels = anchored.pixels; s.float = null; }
         s.recipes = s.recipes.filter(recipe => recipe.id !== id);
-        if (active) s.activeRecipeId = s.recipes[0]?.id ?? null;
+        if (s.recipes.length === 0) s.recipes = [emptyGridRecipe()];
+        if (active) s.activeRecipeId = null;
     }, { history: true });
 }
 

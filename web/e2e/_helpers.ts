@@ -6,7 +6,7 @@ import { Page } from "@playwright/test";
 
 export async function addGlobalMirror(page: Page, type: string) {
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
-    await page.getByRole("button", { name: type, exact: true }).click();
+    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: type, exact: true }).click();
 }
 
 export async function chooseToolVariant(page: Page, family: string, variant: string) {

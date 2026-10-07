@@ -65,32 +65,20 @@ export function mountMirrors(
     });
     el("mirror-centre-apply").addEventListener("click", applyPosition);
     window.addEventListener("blur", resetFields);
-    const types = MIRROR_TYPES.map(type => {
-        const button = iconAction(`mirror-${type.key.toLowerCase()}`, type.name);
-        button.classList.remove("btn--icon");
-        button.append(document.createTextNode(type.name));
-        button.dataset.mirrorType = type.key;
-        button.addEventListener("click", () => {
-            const mirror = selectedMirror();
-            if (mirror) cb.onMirrorType(mirror.id, type.key);
-        });
-        el(type.key === "C" ? "mirror-point-type" : "mirror-reflection-types").append(button);
-        return button;
-    });
-
     const position = (mirror: MirrorCenter) => `(${mirror.x}, ${mirror.y})`;
+    const add = el<HTMLButtonElement>("add-mirror");
     function setMirrors(mirrors: ReadonlyArray<MirrorCenter>, selectedId: string | null) {
         projectedMirrors = mirrors;
-        syncList(symList, mirrors, "mirrorKey", mirror => mirror.id, mirror => {
+        syncList<MirrorCenter | null>(symList, [...mirrors, null], "mirrorKey", mirror => mirror ? `saved:${mirror.id}` : "placeholder", mirror => {
             const row = document.createElement("div");
+            if (!mirror) { row.className = "sym-list-placeholder"; row.append(add); return row; }
             row.className = "sym-list-row";
             row.dataset.mirrorId = mirror.id;
-            const select = iconAction("transform", `Select mirror at ${position(mirror)}`);
+            const select = iconAction("transform", "Select mirror");
             select.dataset.mirrorAction = "select";
             select.className = "btn btn--ghost sym-list-row__select";
             const summary = document.createElement("span");
             summary.className = "sym-list-row__summary";
-            summary.append(document.createElement("strong"), document.createElement("small"));
             select.append(summary);
             select.addEventListener("click", () => cb.onSelectMirror(mirror.id));
             const toggle = iconAction("check", "Enable mirror");
@@ -103,59 +91,55 @@ export function mountMirrors(
                 const fallback = projectedMirrors[index + 1] ?? projectedMirrors[index - 1];
                 cb.onDeleteMirror(mirror.id);
                 if (fallback) listRow(symList, "mirrorId", fallback.id)?.querySelector<HTMLButtonElement>("[data-mirror-action='delete']")?.focus();
-                else el<HTMLButtonElement>("add-mirror").focus();
+                else add.focus();
             });
-            row.append(select, toggle, del);
-            return row;
+            const types = document.createElement("div"); types.className = "mirror-type-choices";
+            types.setAttribute("role", "group"); types.setAttribute("aria-label", "Mirror types");
+            for (const type of MIRROR_TYPES) {
+                const button = iconAction(`mirror-${type.key.toLowerCase()}`, type.name);
+                button.dataset.mirrorType = type.key;
+                button.addEventListener("click", () => { cb.onSelectMirror(mirror.id); cb.onMirrorType(mirror.id, type.key); });
+                types.append(button);
+            }
+            row.append(select, toggle, del, types); return row;
         }, (row, mirror, index) => {
+            if (!mirror) return;
             row.classList.toggle("is-inactive", !mirror.enabled);
             row.classList.toggle("is-selected", mirror.id === selectedId);
             const name = `Mirror ${index + 1}`;
-            const heading = row.querySelector("strong")!;
-            const headingText = `${name} · ${position(mirror)}`;
-            if (heading.textContent !== headingText) heading.textContent = headingText;
-            const summary = mirror.types.map(key =>
-                key === "C" ? "180°" : MIRROR_TYPES.find(type => type.key === key)!.name).join(" · ") || "No types chosen";
-            const detail = row.querySelector("small")!;
-            if (detail.textContent !== summary) detail.textContent = summary;
+            const coordinates = row.querySelector(".sym-list-row__summary")!;
+            if (coordinates.textContent !== position(mirror)) coordinates.textContent = position(mirror);
+            const summary = mirror.types.map(key => key === "C" ? "180°" : MIRROR_TYPES.find(type => type.key === key)!.name).join(" · ") || "No types chosen";
             const select = row.querySelector<HTMLButtonElement>("[data-mirror-action='select']")!;
             const selectTitle = `Select ${name} at ${position(mirror)}`;
             if (select.title !== selectTitle) select.title = selectTitle;
             if (select.getAttribute("aria-label") !== selectTitle) select.setAttribute("aria-label", selectTitle);
             if (select.getAttribute("aria-description") !== summary) select.setAttribute("aria-description", summary);
             setPressed(select, mirror.id === selectedId);
-            const toggle = row.querySelector<HTMLButtonElement>("[data-mirror-action='toggle']")!;
-            setPressed(toggle, mirror.enabled);
-            const toggleTitle = `${mirror.enabled ? "Disable" : "Enable"} ${name} at ${position(mirror)}`;
-            if (toggle.title !== toggleTitle) toggle.title = toggleTitle;
-            if (toggle.getAttribute("aria-label") !== toggleTitle) toggle.setAttribute("aria-label", toggleTitle);
-            if (toggle.getAttribute("aria-description") !== summary) toggle.setAttribute("aria-description", summary);
-            const del = row.querySelector<HTMLButtonElement>("[data-mirror-action='delete']")!;
-            const deleteTitle = `Delete ${name} at ${position(mirror)}`;
-            if (del.title !== deleteTitle) del.title = deleteTitle;
-            if (del.getAttribute("aria-label") !== deleteTitle) del.setAttribute("aria-label", deleteTitle);
-            if (del.getAttribute("aria-description") !== summary) del.setAttribute("aria-description", summary);
+            for (const action of ["toggle", "delete"]) {
+                const button = row.querySelector<HTMLButtonElement>(`[data-mirror-action='${action}']`)!;
+                const title = `${action === "delete" ? "Delete" : mirror.enabled ? "Disable" : "Enable"} ${name} at ${position(mirror)}`;
+                if (button.title !== title) button.title = title;
+                if (button.getAttribute("aria-label") !== title) button.setAttribute("aria-label", title);
+                if (button.getAttribute("aria-description") !== summary) button.setAttribute("aria-description", summary);
+                if (action === "toggle") setPressed(button, mirror.enabled);
+            }
+            for (const type of mirrorTypePresentation(mirror.types)) {
+                const button = row.querySelector<HTMLButtonElement>(`[data-mirror-type='${type.key}']`)!;
+                setPressed(button, type.chosen);
+                const effective = String(type.chosen || type.implied);
+                if (button.dataset.effective !== effective) button.dataset.effective = effective;
+                const description = type.implied ? "Implied by the chosen types. Click to choose directly."
+                    : type.chosen ? "Chosen directly. Click to remove this type." : "Click to choose this type.";
+                if (button.getAttribute("aria-description") !== description) button.setAttribute("aria-description", description);
+                const title = `${type.name}. ${description}`;
+                if (button.title !== title) button.title = title;
+            }
         });
         const selected = mirrors.find(mirror => mirror.id === selectedId);
         if (editor.hidden !== !selected) editor.hidden = !selected;
         if (editor.dataset.mirrorId !== (selectedId ?? "")) editor.dataset.mirrorId = selectedId ?? "";
-        if (!selected) return;
-        resetFields();
-        const presentation = mirrorTypePresentation(selected.types);
-        const hint = el("mirror-type-hint");
-        const hideHint = !presentation.some(type => type.implied);
-        if (hint.hidden !== hideHint) hint.hidden = hideHint;
-        for (const [index, type] of presentation.entries()) {
-            const button = types[index];
-            setPressed(button, type.chosen);
-            button.classList.toggle("btn--implied", type.implied);
-            const description = type.implied
-                ? "Implied by the chosen types at this centre; chart edges can limit copies. Click to choose directly."
-                : type.chosen ? "Chosen directly at this centre. Click to remove this type." : "Click to choose this type at this centre.";
-            if (button.getAttribute("aria-description") !== description) button.setAttribute("aria-description", description);
-            const title = `${type.name}. ${description} ${type.shortcut} adds a new mirror.`;
-            if (button.title !== title) button.title = title;
-        }
+        if (selected) resetFields();
     }
 
     return { setMirrors, setTransformState, setTransformError };

@@ -16,7 +16,7 @@ import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitiali
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
          mirrorIsProjectValid, mirrorsForPattern } from "@mosaic/logic/symmetry";
 import { mirrorsToFlat } from "@mosaic/logic/symmetry";
-import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withGridStep, withRecipeSource } from "@mosaic/logic/grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withGridStep, withRecipeSource, recipesForPattern } from "@mosaic/logic/grid-recipes";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
@@ -98,7 +98,7 @@ function defaultSession(): SessionState {
         primaryColor:  1,
         mirrors:           [],
         recipes:        [recipe],
-        activeRecipeId: recipe.id,
+        activeRecipeId: null,
         liveMirrors:    true,
         float:           null,
         rotation:        0,
@@ -691,7 +691,8 @@ function onApplyRecipe() {
         const rect = gesture.rect;
         const projected = { ...store.state, ...liftCells(visiblePixels(store.state), store.state.pattern,
             previewSelectRectMask(store.state, rect.startX, rect.startY, rect.endX, rect.endY, gesture.mode)) };
-        const recipe = projected.recipes.find(recipe => recipe.id === projected.activeRecipeId) ?? projected.recipes[0];
+        const recipe = projected.recipes.find(recipe => recipe.id === projected.activeRecipeId)
+            ?? projected.recipes.find(recipe => recipe.source.mask.length === 0) ?? emptyGridRecipe();
         if (projected.float) {
             const { canvasWidth: W, canvasHeight: H } = projected.pattern;
             const error = gridRecipeError(withRecipeSource(recipe, projected.float),
@@ -959,10 +960,10 @@ function onEditChange(clearDesign = false): boolean {
             }
             s.pattern = pattern;
             s.pixels = pixels;
-            s.mirrors = clearDesign ? [] : mirrorsForPattern(sessionSource.mirrors, pattern);
-            s.recipes = clearDesign
+            s.mirrors = clearDesign || settings.wipe ? [] : mirrorsForPattern(sessionSource.mirrors, pattern);
+            s.recipes = clearDesign || settings.wipe
                 ? [{ ...emptyGridRecipe(), id: sessionSource.recipes[0].id }]
-                : sessionSource.recipes;
+                : recipesForPattern(sessionSource.recipes, pattern, pixels, sessionSource.pattern);
             if (clearDesign) s.activeRecipeId = null;
             s.float = null;
         }, { persist: false });

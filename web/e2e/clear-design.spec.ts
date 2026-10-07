@@ -97,7 +97,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
         mode: "grid", left: 0, right: 0, up: 0, down: 0,
         rotationTurns: [], mirrorTypes: [],
     });
-    expect(cleared.workspace.activeRecipeId).toBe(cleared.workspace.recipes[0].id);
+    expect(cleared.workspace.activeRecipeId).toBeNull();
     expect(cleared.workspace.activeTool).toBe(before.workspace.activeTool);
     expect(cleared.workspace.primaryColor).toBe(before.workspace.primaryColor);
     expect(cleared.workspace.rotation).toBe(before.workspace.rotation);
@@ -116,7 +116,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
     expect(await recovery(page)).toEqual(cleared);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await expect(page.getByRole("button", { name: "Paste", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Selection 1 Empty" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New selection", exact: true })).toBeVisible();
 
     await page.reload();
     await page.waitForFunction(() => !!window.__test_matrix__);
@@ -191,6 +191,6 @@ test("Pattern previews after Clear design preserve the cleared source and revert
     await expect(page.locator("#edit-error")).toBeVisible();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Selection 1 Empty" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New selection", exact: true })).toBeVisible();
     expect(await recovery(page)).toEqual(cleared);
 });

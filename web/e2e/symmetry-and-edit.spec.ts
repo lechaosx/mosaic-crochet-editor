@@ -180,18 +180,19 @@ test("saved repeat extends the active selection and applies its instances", asyn
     await expect(page.locator("#recipe-list")).toContainText("Selection 11\u00a0×\u00a01");
 });
 
-test("Selection starts with one editable slot and New selection preserves earlier entries", async ({ page }) => {
+test("Selection starts with a placeholder and New selection preserves earlier entries", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Selection 1 Empty" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Delete selection 1" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "New selection", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#recipe-controls")).toBeHidden();
 
     await clickCell(page, 2, 1);
     await expect(page.getByRole("button", { name: "Selection 1 1 × 1" })).toBeVisible();
     await page.getByRole("button", { name: "New selection" }).click();
 
     await expect(page.getByRole("button", { name: "Selection 1 1 × 1" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Selection 2 Empty" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "New selection", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await clickCell(page, 3, 1);
     await page.getByRole("button", { name: "Delete selection 2" }).click();
     await expect(page.locator("#recipe-list").getByRole("button", { name: /^Selection/ })).toHaveCount(1);
 });
@@ -616,7 +617,7 @@ for (const action of ["Cut", "Deselect"] as const) {
             await expect(page.getByRole("dialog", { name: "Selection" })).toBeHidden();
             await page.getByRole("button", { name: "Select", exact: true }).click();
         }
-        await expect(recipe).toHaveAttribute("aria-pressed", "true");
+        await expect(recipe).toHaveAttribute("aria-pressed", action === "Deselect" ? "false" : "true");
     });
 }
 
@@ -634,7 +635,7 @@ test("move-area into a round hole deactivates the saved repeat when nothing can 
 
     const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
     expect(recovery.workspace.float).toBeNull();
-    expect(recovery.workspace.activeRecipeId).toBe(recovery.workspace.recipes[0].id);
+    expect(recovery.workspace.activeRecipeId).toBeNull();
 });
 
 test("dragging a mirror centre off the canvas snaps without deleting it", async ({ page }) => {
@@ -812,7 +813,7 @@ test("Open restores a global mirror without resetting Crochet progress", async (
     await expect(page.getByRole("button", { name: /Global Mirror/ })).toBeVisible();
     await page.getByRole("button", { name: /Global Mirror/ }).click();
     await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Global Mirror");
-    await expect(page.getByText("Global mirrors", { exact: true })).toBeVisible();
+    await expect(page.locator("#sym-list")).toBeVisible();
     await expect(page.getByRole("button", { name: "Disable Mirror 1 at (2, 4)" })).toBeVisible();
     await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
 

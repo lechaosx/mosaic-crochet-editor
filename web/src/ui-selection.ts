@@ -34,13 +34,13 @@ export function mountSelection(
         const hasClip = clipboardCount > 0;
         const statusVisibilityChanged = selectionStatus.hidden === (hasSelection || hasClip);
         if (hasSelection) {
-            selectionTitle.textContent = `Selection · ${selectedCount} ${selectedCount === 1 ? "cell" : "cells"}`;
+            selectionTitle.textContent = `${selectedCount} ${selectedCount === 1 ? "cell" : "cells"}`;
             selectionStatus.textContent = `${selectedCount} selected`;
         } else if (hasClip) {
             selectionTitle.textContent = "Clipboard";
             selectionStatus.textContent = `${clipboardCount} copied`;
         } else {
-            selectionTitle.textContent = "Selection";
+            selectionTitle.textContent = "Select cells on the chart";
             selectionStatus.textContent = "";
         }
         selectionStatus.hidden = !hasSelection && !hasClip;
@@ -59,6 +59,7 @@ export function mountSelection(
     }
 
     const recipeList = el("recipe-list");
+    const createButton = el<HTMLButtonElement>("recipe-create");
     const recipeControls = el("recipe-controls");
     const recipeGridControls = el("recipe-grid-controls");
     const recipeRotationControls = el("recipe-rotation-controls");
@@ -149,30 +150,25 @@ export function mountSelection(
     }, true);
     window.addEventListener("blur", cb.onRecipeRevert);
     function setRecipes(recipes: ReadonlyArray<GridRecipe>, activeId: string | null) {
-        const currentId = activeId ?? recipes[0]?.id ?? null;
+        const currentId = activeId ?? recipes.find(recipe => recipe.source.mask.length === 0)?.id ?? null;
+        selectedRecipeId = currentId;
         if (recipes !== projectedRecipes || activeId !== projectedActiveRecipeId) {
-            const focused = document.activeElement instanceof HTMLButtonElement
-                && recipeList.contains(document.activeElement) ? document.activeElement : null;
+            const focused = document.activeElement instanceof HTMLButtonElement && recipeList.contains(document.activeElement) ? document.activeElement : null;
             const focusedId = focused?.dataset.recipeId;
-            const focusedIndex = projectedRecipes?.findIndex(recipe => recipe.id === focusedId) ?? -1;
+            const savedRecipes = recipes.filter(recipe => recipe.source.mask.length > 0);
+            const focusedIndex = projectedRecipes?.filter(recipe => recipe.source.mask.length > 0).findIndex(recipe => recipe.id === focusedId) ?? -1;
             projectedRecipes = recipes;
             projectedActiveRecipeId = activeId;
-            selectedRecipeId = currentId;
-            syncList(recipeList, recipes, "recipeId", recipe => recipe.id, recipe => {
+            syncList<GridRecipe | null>(recipeList, [...savedRecipes, null], "recipeKey", recipe => recipe ? `saved:${recipe.id}` : "placeholder", recipe => {
                 const row = document.createElement("li");
                 row.className = "recipe-list-row";
+                if (!recipe) { row.append(createButton); return row; }
                 row.dataset.recipeId = recipe.id;
                 const activate = document.createElement("button");
                 activate.className = "btn btn--ghost recipe-list-activate";
-                const name = document.createElement("span");
-                name.className = "recipe-list-name";
-                const marker = document.createElement("span");
-                marker.className = "recipe-list-marker";
-                marker.textContent = "✓";
-                marker.setAttribute("aria-hidden", "true");
-                const detail = document.createElement("span");
-                detail.className = "recipe-list-detail";
-                activate.append(marker, name, detail);
+                const name = document.createElement("span"); name.className = "recipe-list-name";
+                const detail = document.createElement("span"); detail.className = "recipe-list-detail";
+                activate.append(name, detail);
                 activate.title = "Select this saved selection";
                 activate.dataset.recipeId = recipe.id;
                 activate.dataset.recipeAction = "activate";
@@ -181,29 +177,25 @@ export function mountSelection(
                 remove.dataset.recipeId = recipe.id;
                 remove.dataset.recipeAction = "delete";
                 remove.addEventListener("click", () => cb.onDeleteRecipe(recipe.id));
-                row.append(activate, remove);
-                return row;
+                row.append(activate, remove); return row;
             }, (row, recipe, index) => {
+                if (!recipe) { setPressed(createButton, activeId === null || !recipes.find(recipe => recipe.id === activeId)?.source.mask.length); return; }
                 const activate = row.querySelector<HTMLButtonElement>("[data-recipe-action='activate']")!;
                 activate.querySelector(".recipe-list-name")!.textContent = `Selection ${index + 1}`;
-                activate.lastElementChild!.textContent = recipe.source.mask.length === 0
-                    ? "Empty" : `${recipe.source.w}\u00a0×\u00a0${recipe.source.h}`;
-                setPressed(activate, recipe.id === currentId);
+                activate.lastElementChild!.textContent = `${recipe.source.w} × ${recipe.source.h}`;
+                setPressed(activate, recipe.id === activeId);
                 const remove = row.querySelector<HTMLButtonElement>("[data-recipe-action='delete']")!;
                 remove.setAttribute("aria-label", `Delete selection ${index + 1}`);
-                remove.title = recipes.length === 1 ? "At least one selection is required" : `Delete selection ${index + 1}`;
-                remove.disabled = recipes.length === 1;
+                remove.title = `Delete selection ${index + 1}`;
             });
-            if (focused && (!focused.isConnected || focused.disabled)) {
-                const fallback = recipes.find(recipe => recipe.id === focusedId)
-                    ?? recipes[Math.min(focusedIndex, recipes.length - 1)];
+            if (focused && !focused.isConnected) {
+                const fallback = savedRecipes[Math.max(0, Math.min(focusedIndex, savedRecipes.length - 1))];
                 const row = listRow(recipeList, "recipeId", fallback?.id);
-                const target = row?.querySelector<HTMLButtonElement>(`[data-recipe-action='${focused.dataset.recipeAction}']`);
-                (target?.disabled ? row?.querySelector<HTMLButtonElement>("[data-recipe-action='activate']") : target)?.focus();
+                (row?.querySelector<HTMLButtonElement>(`[data-recipe-action='${focused.dataset.recipeAction}']`) ?? createButton).focus();
             }
         }
         const active = currentId === null ? null : recipes.find(recipe => recipe.id === currentId) ?? null;
-        recipeControls.hidden = active === null;
+        recipeControls.hidden = active === null || active.source.mask.length === 0;
         if (!active) return;
         setRadio("recipe-mode", active.mode);
         recipeLeft.value = String(active.left);

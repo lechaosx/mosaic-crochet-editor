@@ -27,17 +27,17 @@ test("mirror center has independent types and rejects a parity-incompatible togg
     const row = page.getByRole("group", { name: "Selected mirror centre", exact: true });
     await row.getByRole("spinbutton", { name: "Mirror centre x" }).fill("3.5");
     await row.getByRole("spinbutton", { name: "Mirror centre x" }).press("Enter");
-    await row.getByRole("button", { name: "Horizontal", exact: true }).click();
-    await row.getByRole("button", { name: "Point symmetry (180°)", exact: true }).click();
-    await row.getByRole("button", { name: "Diagonal", exact: true }).click();
-    await expect(row.getByRole("button", { name: "Diagonal", exact: true })).toHaveAttribute("aria-pressed", "false");
+    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
+    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Point symmetry (180°)", exact: true }).click();
+    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Diagonal", exact: true }).click();
+    await expect(page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Diagonal", exact: true })).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator("#transform-error")).toContainText("whole or half");
     await expect(row.getByRole("spinbutton", { name: "Mirror centre x" })).toHaveValue("3.5");
     await expect(row.getByRole("spinbutton", { name: "Mirror centre y" })).toHaveValue("4");
     await row.getByRole("spinbutton", { name: "Mirror centre y" }).fill("3.5");
     await row.getByRole("spinbutton", { name: "Mirror centre y" }).press("Enter");
-    await row.getByRole("button", { name: "Diagonal", exact: true }).click();
-    await expect(row.getByRole("button", { name: "Diagonal", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Diagonal", exact: true }).click();
+    await expect(page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Diagonal", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("only the center handle drags while the mirror inspector is open, with one undo and cancellation", async ({ page }) => {

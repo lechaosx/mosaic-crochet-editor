@@ -1,4 +1,5 @@
-import { Float, GridRecipe, SymKey } from "./types";
+import { transfer_preserved_row, transfer_preserved_round } from "@mosaic/wasm";
+import { Float, GridRecipe, SymKey, PatternState } from "./types";
 import { evaluateCenteredMirrors, evaluatePackedGrid, PackedGridEvaluation, TransformSourceCell } from "./transform-evaluator";
 
 const noGrid = {
@@ -134,9 +135,87 @@ export function withRecipeSource(
     };
 }
 
+export function recipesForPattern(
+    recipes: ReadonlyArray<GridRecipe>, pattern: PatternState, pixels: Uint8Array,
+    previousPattern: PatternState = pattern,
+): GridRecipe[] {
+    const W = pattern.canvasWidth, H = pattern.canvasHeight;
+    const oldW = previousPattern.canvasWidth, oldH = previousPattern.canvasHeight;
+    const destination = Uint8Array.from(pixels, value => value === 0 ? 0 : 1);
+    const transfer = (marked: Uint8Array) => previousPattern.mode === "row" && pattern.mode === "row"
+        ? transfer_preserved_row(marked, oldW, oldH, destination, W, H)
+        : previousPattern.mode === "round" && pattern.mode === "round"
+            ? transfer_preserved_round(marked, oldW, oldH, previousPattern.virtualWidth, previousPattern.virtualHeight,
+                previousPattern.offsetX, previousPattern.offsetY, previousPattern.rounds,
+                destination, W, H, pattern.virtualWidth, pattern.virtualHeight, pattern.offsetX, pattern.offsetY, pattern.rounds)
+            : destination;
+    const result = recipes.flatMap(recipe => {
+        if (!recipeHasSource(recipe)) return [];
+        const marked = new Uint8Array(oldW * oldH);
+        const source = recipe.source;
+        for (let y = 0; y < source.h; y++) for (let x = 0; x < source.w; x++) {
+            const cx = source.x + x, cy = source.y + y;
+            if (source.mask[y * source.w + x] !== 0 && cx >= 0 && cx < oldW && cy >= 0 && cy < oldH) marked[cy * oldW + cx] = 2;
+        }
+        // Repeat sources must follow crochet corner/strip anchoring rather than a rectangular crop.
+        const transferred = transfer(marked);
+        let minX = W, minY = H, maxX = -1, maxY = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+            if (transferred[y * W + x] !== 2) continue;
+            minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+        }
+        if (maxX < 0) return [];
+        const w = maxX - minX + 1, h = maxY - minY + 1;
+        const mask = new Uint8Array(w * h);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) mask[y * w + x] = transferred[(minY + y) * W + minX + x] === 2 ? 1 : 0;
+        let dx = 0, dy = previousPattern.mode === "row" && pattern.mode === "row" ? H - oldH : 0;
+        let uniform = true;
+        if (previousPattern.mode === "round" && pattern.mode === "round") {
+            const origins = new Uint32Array(w * h);
+            // Encode original indices in nonzero byte planes; transparent zero markers do not transfer.
+            for (let shift = 0; oldW * oldH - 1 >= 2 ** shift; shift += 7) {
+                for (let y = 0; y < source.h; y++) for (let x = 0; x < source.w; x++) {
+                    const cx = source.x + x, cy = source.y + y;
+                    if (source.mask[y * source.w + x] !== 0 && cx >= 0 && cx < oldW && cy >= 0 && cy < oldH) {
+                        const index = cy * oldW + cx;
+                        marked[index] = ((index >>> shift) & 127) + 1;
+                    }
+                }
+                const mapped = transfer(marked);
+                for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+                    if (mask[y * w + x] !== 0) origins[y * w + x] |= (mapped[(minY + y) * W + minX + x] - 1) << shift;
+                }
+            }
+            let first = true;
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+                if (mask[y * w + x] === 0) continue;
+                const origin = origins[y * w + x];
+                const tx = minX + x - origin % oldW, ty = minY + y - Math.floor(origin / oldW);
+                if (first) { dx = tx; dy = ty; first = false; }
+                else if (dx !== tx || dy !== ty) uniform = false;
+            }
+        }
+        const newSource = { x: minX, y: minY, w, h, mask };
+        const updated = { ...recipe, source: newSource,
+            rotationCentreX: recipe.rotationCentreX + dx, rotationCentreY: recipe.rotationCentreY + dy,
+            mirrorCentreX: recipe.mirrorCentreX + dx, mirrorCentreY: recipe.mirrorCentreY + dy };
+        const hasCopies = recipe.mode === "grid" ? recipe.left + recipe.right + recipe.up + recipe.down > 0
+            : recipe.mode === "circle" ? recipe.rotationTurns.length > 0
+                : recipe.mode === "mirror" && recipe.mirrorTypes.length > 0;
+        const centreCoordinatesSafe = [updated.rotationCentreX, updated.rotationCentreY, updated.mirrorCentreX, updated.mirrorCentreY]
+            .every(value => Number.isSafeInteger(value * 2));
+        if (!uniform || !centreCoordinatesSafe || (hasCopies && gridRecipeError(updated, (x, y) => x >= 0 && x < W && y >= 0 && y < H && pixels[y * W + x] !== 0))) {
+            return [{ ...(uniform && centreCoordinatesSafe ? updated : { ...recipe, source: newSource }), mode: "none" as const }];
+        }
+        return [updated];
+    });
+    return result.length > 0 ? result : [emptyGridRecipe()];
+}
+
 export function normalizeActiveRecipeId(
     recipes: ReadonlyArray<GridRecipe>, activeRecipeId: string | null, float: Float | null,
 ): string | null {
+    if (activeRecipeId === null && float === null) return null;
     const recipe = recipes.find(candidate => candidate.id === activeRecipeId) ?? recipes[0];
     if (!recipe) return null;
     if (float === null) return recipe.id;

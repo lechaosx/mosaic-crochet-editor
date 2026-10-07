@@ -57,7 +57,7 @@ export function pasteClipboard(store: Store, beforeCommit?: () => void): boolean
     if (!any) return false;
     const newFloat: Float = { x: clipboard.x, y: clipboard.y, w: clipboard.w, h: clipboard.h, pixels: fp };
     beforeCommit?.();
-    const currentRecipeId = store.state.activeRecipeId ?? store.state.recipes[0]?.id ?? null;
+    const currentRecipeId = store.state.activeRecipeId;
     store.commit(s => {
         s.pixels = visiblePixels(s);
         s.float = newFloat;

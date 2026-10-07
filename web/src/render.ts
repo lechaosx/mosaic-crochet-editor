@@ -580,9 +580,9 @@ export function selectionTransformHandles(recipe: GridRecipe, zoom: number, rota
 function renderRecipeHandles(ctx: CanvasRenderingContext2D, view: ViewState, recipe: GridRecipe, color: string, rotation: number) {
     const px = 1 / view.zoom;
     const handles = selectionTransformHandles(recipe, view.zoom, rotation);
+    const evaluated = recipe.mode === "grid" ? evaluateGridRecipe(recipe) : null;
     ctx.save(); ctx.setLineDash([]); ctx.lineWidth = 2 * px;
-    if (recipe.mode === "grid") {
-        const evaluated = evaluateGridRecipe(recipe);
+    if (evaluated) {
         ctx.strokeStyle = color;
         for (const step of [evaluated.columnStep, evaluated.rowStep, evaluated.columnStepAlternate, evaluated.rowStepAlternate]) {
             ctx.beginPath(); ctx.moveTo(recipe.source.x, recipe.source.y);
@@ -594,11 +594,19 @@ function renderRecipeHandles(ctx: CanvasRenderingContext2D, view: ViewState, rec
         ctx.strokeStyle = color; ctx.stroke();
         ctx.save(); ctx.translate(handle.x, handle.y); ctx.rotate(-rotation * Math.PI / 180);
         ctx.beginPath();
-        if (handle.kind === "centre") ctx.arc(0, 0, 7 * px, 0, Math.PI * 2);
-        else ctx.rect(-8 * px, -8 * px, 16 * px, 16 * px);
-        ctx.fillStyle = "#161618"; ctx.fill(); ctx.strokeStyle = "#fff"; ctx.stroke();
-        ctx.fillStyle = color; ctx.font = `bold ${11 * px}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(handle.kind === "column" ? "C" : handle.kind === "row" ? "R" : "+", 0, 0);
+        ctx.arc(0, 0, 11 * px, 0, Math.PI * 2);
+        ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = color; ctx.stroke();
+        ctx.beginPath();
+        if (handle.kind === "centre") {
+            ctx.moveTo(-5 * px, 0); ctx.lineTo(5 * px, 0); ctx.moveTo(0, -5 * px); ctx.lineTo(0, 5 * px);
+        } else {
+            const step = handle.kind === "column" ? evaluated!.columnStep : evaluated!.rowStep;
+            ctx.rotate(Math.atan2(step.y, step.x) + rotation * Math.PI / 180);
+            ctx.moveTo(-6 * px, 0); ctx.lineTo(6 * px, 0);
+            ctx.moveTo(-3 * px, -3 * px); ctx.lineTo(-6 * px, 0); ctx.lineTo(-3 * px, 3 * px);
+            ctx.moveTo(3 * px, -3 * px); ctx.lineTo(6 * px, 0); ctx.lineTo(3 * px, 3 * px);
+        }
+        ctx.stroke();
         ctx.restore();
     }
     ctx.restore();
@@ -1021,16 +1029,12 @@ function renderSymmetryGuides(
     };
     const handle = (x: number, y: number) => {
         if (!editable) return;
-        const r = 6 / view.zoom;
+        const r = 8 / view.zoom;
         ctx.setLineDash([]);
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(x, y - r);
-        ctx.lineTo(x + r, y);
-        ctx.lineTo(x, y + r);
-        ctx.lineTo(x - r, y);
-        ctx.closePath();
-        ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.strokeStyle = color;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - r / 2, y); ctx.lineTo(x + r / 2, y);
+        ctx.moveTo(x, y - r / 2); ctx.lineTo(x, y + r / 2); ctx.stroke();
         ctx.setLineDash([dash, dashGap]);
     };
 
@@ -1038,9 +1042,9 @@ function renderSymmetryGuides(
     ctx.lineWidth = lw;
     ctx.setLineDash([dash, dashGap]);
 
-    for (const { axis: a, implied } of guides) {
-        ctx.globalAlpha = implied ? 0.4 : 1;
-        ctx.setLineDash(implied ? [2 / (view.zoom * dpr), dashGap] : [dash, dashGap]);
+    for (const { axis: a } of guides) {
+        ctx.globalAlpha = 1;
+        ctx.setLineDash([dash, dashGap]);
         switch (a.kind) {
             case "V": {
                 // Vertical mirror line at cell-edge x; +0.5 shifts cell-index to render coords.
@@ -1076,8 +1080,7 @@ function renderSymmetryGuides(
                 ctx.fillStyle = color;
                 ctx.beginPath();
                 ctx.arc(a.x + 0.5, a.y + 0.5, 6 / view.zoom, 0, Math.PI * 2);
-                if (implied) ctx.stroke();
-                else ctx.fill();
+                ctx.fill();
                 ctx.setLineDash([dash, dashGap]);
                 break;
             }

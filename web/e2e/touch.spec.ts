@@ -188,7 +188,8 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await expect(clipboardSummary).toBeVisible();
     const hovered = await cellCoord(page, 2, 1);
     await page.mouse.move(hovered.cx, hovered.cy);
-    await expect(clipboardSummary).toBeVisible();
+    await expect(card.locator("#selection-card-title")).toHaveText("Clipboard");
+    await expect(clipboardSummary).toHaveText("1 copied");
     await card.getByRole("button", { name: "Paste" }).click();
     await expect(page.locator("#status-selection")).toHaveText("1 selected");
     await page.getByRole("button", { name: "Close inspector" }).click();

@@ -27,7 +27,7 @@ The intended end-to-end story is:
 
 ## Editing model
 
-- Pattern changes preview in place. Compatible geometry changes preserve authored cells where their meaning remains stable; changing between row and centre-out construction starts the new geometry. — **your decision**
+- Pattern changes preview in place. Compatible geometry changes preserve authored cells and selection sources where their meaning remains stable and prune unusable selections and mirror types; changing between row and centre-out construction starts the new geometry. — **your decision**
 - Editing is direct and tool-led. The chart remains the visual focus, while document commands, authoring tools, contextual inspectors, and navigation have distinct roles. — **your decision**
 - Rectangle, Wand, Move, and Overlay expose remembered variants through the same visible menu, hold, and keyboard routes. Button and modifier accelerators execute temporary actions without changing the chosen variant or yarn. — **Agent's choice**
 - While a pointer or movement key is held, the executing action uses the ordinary selected-tool state and its matching variant icon; releasing or cancelling restores the current chosen tool immediately. — **your decision**

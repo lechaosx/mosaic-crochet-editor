@@ -248,7 +248,7 @@ describe("saved recipe lifecycle", () => {
         expect(store.state.recipes[0].source).toMatchObject({ x: 1, y: 0, w: 1, h: 1 });
     });
 
-    test("new selection creates and selects an empty slot while preserving earlier selections", () => {
+    test("new selection selects a placeholder and creates a saved source only after drawing", () => {
         const first = gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }]));
         const store = new Store(rowSession(3, 1, {
             pixels: filledPixels(3, 1, 1),
@@ -259,11 +259,16 @@ describe("saved recipe lifecycle", () => {
 
         expect(createGridRecipe(store)).toBe("created");
 
+        expect(store.state.recipes).toEqual([first]);
+        expect(store.state.activeRecipeId).toBeNull();
+        expect(store.state.float).toBeNull();
+        createGridRecipe(store);
+        expect(store.state.recipes).toEqual([first]);
+        commitSelectRect(store, 2, 0, 2, 0, "replace");
         expect(store.state.recipes).toHaveLength(2);
         expect(store.state.recipes[0]).toEqual(first);
-        expect(store.state.recipes[1].source.mask).toHaveLength(0);
+        expect(store.state.recipes[1].source).toMatchObject({ x: 2, y: 0, w: 1, h: 1 });
         expect(store.state.activeRecipeId).toBe(store.state.recipes[1].id);
-        expect(store.state.float).toBeNull();
     });
 
     test("the only saved selection cannot be deleted", () => {
@@ -290,11 +295,11 @@ describe("saved recipe lifecycle", () => {
 
     test("activates, switches, reactivates, and deletes saved source selections", () => {
         const first = makeFloat([{ x: 0, y: 0, v: 1 }]);
-        const store = new Store(rowSession(5, 1, { pixels: filledPixels(5, 1, 1), float: first }));
-        expect(createGridRecipe(store)).toBe("created");
+        const store = new Store(rowSession(5, 1, { pixels: filledPixels(5, 1, 1) }));
+        commitSelectRect(store, 0, 0, 0, 0, "replace");
         const firstId = store.state.activeRecipeId!;
-        store.commit(s => { s.float = makeFloat([{ x: 2, y: 0, v: 2 }]); });
         expect(createGridRecipe(store)).toBe("created");
+        commitSelectRect(store, 2, 0, 2, 0, "replace");
         const secondId = store.state.activeRecipeId!;
         expect(activateGridRecipe(store, firstId)).toBe(true);
         expect(store.state.activeRecipeId).toBe(firstId);
@@ -303,6 +308,6 @@ describe("saved recipe lifecycle", () => {
         expect(store.state.recipes.map(recipe => recipe.id)).toContain(secondId);
         deleteGridRecipe(store, secondId);
         expect(store.state.recipes).toHaveLength(1);
-        expect(store.state.activeRecipeId).toBe(store.state.recipes[0].id);
+        expect(store.state.activeRecipeId).toBeNull();
     });
 });

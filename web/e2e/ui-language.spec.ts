@@ -86,9 +86,9 @@ test("selection commands stay visible and unavailable commands cannot execute", 
 test("saved selection activation preserves the existing row and focused action", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.locator("#recipe-create").click();
+    await clickCell(page, 1, 1);
     const row = await page.locator("#recipe-list > li").first().elementHandle();
-    const action = page.getByRole("button", { name: "Selection 1 Empty" });
+    const action = page.getByRole("button", { name: "Selection 1 1 × 1" });
     await action.focus();
     await page.keyboard.press("Enter");
     await expect(action).toBeFocused();
@@ -98,16 +98,19 @@ test("saved selection activation preserves the existing row and focused action",
 test("deleting an earlier saved selection preserves focus on a surviving row", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 1, 1);
     await page.locator("#recipe-create").click();
+    await clickCell(page, 2, 1);
     await page.locator("#recipe-create").click();
-    const survivor = page.locator("#recipe-list > li").last();
+    await clickCell(page, 3, 1);
+    const survivor = page.locator("#recipe-list > li").nth(2);
     const row = await survivor.elementHandle();
-    const activate = survivor.getByRole("button", { name: "Selection 3 Empty" });
+    const activate = survivor.getByRole("button", { name: "Selection 3 1 × 1" });
     await activate.focus();
     await page.getByRole("button", { name: "Delete selection 1", exact: true })
         .evaluate((button: HTMLButtonElement) => button.click());
-    await expect(page.locator("#recipe-list > li")).toHaveCount(2);
-    await expect(page.getByRole("button", { name: "Selection 2 Empty" })).toBeFocused();
+    await expect(page.locator("#recipe-list > li")).toHaveCount(3);
+    await expect(page.getByRole("button", { name: "Selection 2 1 × 1" })).toBeFocused();
     expect(await row!.evaluate(element => element.isConnected)).toBe(true);
 });
 

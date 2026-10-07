@@ -341,3 +341,13 @@ describe("pasteClipboard", () => {
         expect(inFloat(dest.state.float!, 0, 0)).toBe(true);
     });
 });
+
+test("Paste into a new selection placeholder keeps earlier saved sources", () => {
+    copyFloat(storeOf({ pixels: filledPixels(3, 3, 1), float: makeFloat([{ x: 2, y: 1, v: 2 }]) }));
+    const recipe = gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }]));
+    const destination = storeOf({ pixels: filledPixels(3, 3, 1), recipes: [recipe], activeRecipeId: null });
+    expect(pasteClipboard(destination)).toBe(true);
+    expect(destination.state.recipes).toHaveLength(2);
+    expect(destination.state.recipes[0]).toEqual(recipe);
+    expect(destination.state.recipes[1].source).toMatchObject({ x: 2, y: 1, w: 1, h: 1 });
+});
