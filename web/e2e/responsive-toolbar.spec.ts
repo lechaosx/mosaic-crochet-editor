@@ -16,6 +16,49 @@ async function expectTargetsAtLeast(page: Page, minimum: number) {
     }
 }
 
+for (const { width, height, textSize } of [
+    { width: 1280, height: 800, textSize: "100%" },
+    { width: 700, height: 800, textSize: "100%" },
+    { width: 360, height: 740, textSize: "100%" },
+    { width: 1920, height: 1080, textSize: "200%" },
+    { width: 320, height: 568, textSize: "200%" },
+]) {
+    test(`Crochet action stays centred without moving the canvas at ${width}px and ${textSize} text`, async ({ page }) => {
+        await page.setViewportSize({ width, height });
+        await bootApp(page);
+        await page.evaluate(size => {
+            document.documentElement.style.fontSize = size;
+            window.dispatchEvent(new Event("resize"));
+        }, textSize);
+
+        const canvas = await page.locator(".canvas-area").boundingBox();
+        const action = page.locator("#btn-export");
+        for (const label of ["Begin Crocheting", "Back to Design", "Continue Crocheting"]) {
+            await expect(action).toHaveText(label);
+            await expect.poll(async () => {
+                const box = await action.boundingBox();
+                return Math.abs(box!.x + box!.width / 2 - width / 2);
+            }).toBeLessThanOrEqual(1);
+            const box = (await action.boundingBox())!;
+            for (const button of await page.locator("#document-bar button").all()) {
+                if (!await button.isVisible() || await button.getAttribute("id") === "btn-export") continue;
+                const other = (await button.boundingBox())!;
+                expect(other.x + other.width <= box.x || other.x >= box.x + box.width
+                    || other.y + other.height <= box.y || other.y >= box.y + box.height).toBe(true);
+            }
+            expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+            expect(await page.locator(".canvas-area").boundingBox()).toEqual(canvas);
+            if (label === "Begin Crocheting") {
+                await action.click();
+                await expect(page.locator("#instructions-live-forward")).toBeEnabled();
+                await page.locator("#instructions-live-forward").press("Enter");
+            } else if (label === "Back to Design") {
+                await action.click();
+            }
+        }
+    });
+}
+
 async function renderedBounds(page: Page) {
     return page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
         const { width, height } = canvas;

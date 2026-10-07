@@ -60,6 +60,32 @@ test("double press opens the main tool menu and a single press only chooses the 
     await expect(menu).toBeVisible();
 });
 
+test("variant indicators stay inside their tools and share the ordinary hit target at enlarged text", async ({ page }) => {
+    await bootApp(page);
+    for (const [width, height, textSize] of [[1280, 800, "100%"], [360, 740, "100%"], [320, 568, "200%"]] as const) {
+        await page.setViewportSize({ width, height });
+        await page.evaluate(size => {
+            document.documentElement.style.fontSize = size;
+            window.dispatchEvent(new Event("resize"));
+        }, textSize);
+        for (const indicator of await page.locator(".tool-group-indicator").all()) {
+            await indicator.scrollIntoViewIfNeeded();
+            const bounds = await indicator.evaluate(el => {
+                const svg = el.querySelector("svg")!.getBoundingClientRect();
+                const tool = el.parentElement!.querySelector("button")!;
+                const box = tool.getBoundingClientRect();
+                return {
+                    contained: svg.left >= box.left && svg.right <= box.right && svg.top >= box.top && svg.bottom <= box.bottom,
+                    target: document.elementFromPoint(svg.left + svg.width / 2, svg.top + svg.height / 2)?.closest("button")?.id,
+                    tool: tool.id,
+                };
+            });
+            expect(bounds.contained, `${bounds.tool} at ${width}px and ${textSize} text`).toBe(true);
+            expect(bounds.target).toBe(bounds.tool);
+        }
+    }
+});
+
 test("Rectangle menu expansion remains independent of the Selection inspector", async ({ page }) => {
     await bootApp(page);
     const tool = page.locator("#tool-select");

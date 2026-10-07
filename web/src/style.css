@@ -94,7 +94,7 @@ input  { font: inherit; color: inherit; }
 .document-bar {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   row-gap: var(--space-2);
   column-gap: var(--space-2);
@@ -183,17 +183,19 @@ input  { font: inherit; color: inherit; }
 
 .dock-group-label { display: none; }
 
-.document-bar--compact { display: flex; flex-wrap: wrap; }
 .document-bar--compact .g-file {
-  flex: 1 1 auto;
+  grid-column: 1 / -1;
+  grid-row: 2;
   flex-wrap: wrap;
 }
 .document-bar--compact .btn { padding-inline: var(--space-2); }
 .document-bar--compact .document-status { padding-inline: 0; }
-.document-bar--compact .g-hlrot:empty { display: none; }
+.document-bar--compact .g-hlrot { display: none; }
 
 .document-bar--compact .g-mode {
-  margin-inline-start: auto;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: center;
 }
 
 .inspector-host {
@@ -358,7 +360,7 @@ input  { font: inherit; color: inherit; }
   color: var(--fg-2);
   pointer-events: none;
 }
-.tool-group-indicator .tool-icon { width: 8px; height: 8px; }
+.tool-group-indicator .tool-icon { display: block; width: 8px; height: 8px; }
 .tool-variant-menu {
   position: fixed;
   inset: auto;

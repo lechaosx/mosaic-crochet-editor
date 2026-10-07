@@ -254,7 +254,7 @@ function mountToolbarLayout() {
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
         const gap     = parseFloat(cs.columnGap) || 0;
         compactBelow = padding + gap * 2 + modeGroup.offsetWidth
-            + fileGroup.offsetWidth + viewGroup.offsetWidth;
+            + 2 * Math.max(fileGroup.offsetWidth, viewGroup.offsetWidth);
     }
 
     function applyLayout() {
