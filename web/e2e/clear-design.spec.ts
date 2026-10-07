@@ -11,8 +11,7 @@ test("Clear design on an empty default design leaves history unchanged", async (
     const historyBefore = await page.evaluate(() => localStorage.getItem("mosaic-history"));
     await page.getByRole("button", { name: "Pattern" }).click();
 
-    await page.getByRole("button", { name: "Clear design" }).click();
-    await page.getByRole("button", { name: "Clear design" }).click();
+    await expect(page.getByRole("button", { name: "Clear design" })).toBeDisabled();
 
     expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toBe(historyBefore);
     expect(await recovery(page)).toEqual(before);
@@ -130,9 +129,10 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     await page.getByText("Half", { exact: true }).click();
     await page.keyboard.press("Escape");
     const natural = await recovery(page);
-    await clickCell(page, 0, 1);
+    await page.getByRole("button", { name: "Invert", exact: true }).click();
+    await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await clickCell(page, 0, 1);
+    await clickCell(page, 1, 1);
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").press("Tab");
     await page.getByRole("button", { name: "Begin Crocheting" }).click();
@@ -153,7 +153,7 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     await expect(page.locator(".instructions-unit").nth(2)).toHaveAttribute("aria-current", "step");
 });
 
-test("Clear design records saved-repeat changes even with a natural chart and no live selection", async ({ page }) => {
+test("Clear design stays disabled with saved repeats and a natural chart", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
@@ -164,10 +164,7 @@ test("Clear design records saved-repeat changes even with a natural chart and no
     expect(before.workspace.float).toBeNull();
     await page.getByRole("button", { name: "Pattern" }).click();
 
-    await page.locator("#edit-reset").click();
-
-    expect((await recovery(page)).workspace.recipes[0].source.mask).toEqual([]);
-    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page.locator("#edit-reset")).toBeDisabled();
     expect(await recovery(page)).toEqual(before);
 });
 

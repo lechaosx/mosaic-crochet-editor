@@ -38,6 +38,8 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const canvasInstruction = el("instructions-current");
     const authoringPanel = el("authoring-dock");
     const crochetPanel = el("instructions-workspace");
+    const crochetBody = crochetPanel.querySelector<HTMLElement>(".instructions-body")!;
+    const viewControlsHome = canvasControls.parentElement!;
     let canvasWorkspace: CanvasWorkspace = {
         left: 0, top: 0, right: canvas.clientWidth, bottom: canvas.clientHeight,
     };
@@ -45,26 +47,42 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const workspaceRect = workspaceShell.getBoundingClientRect();
         const canvasRect = canvas.getBoundingClientRect();
         const wide = matchMedia("(min-width: 64rem)").matches;
+        const compactCrochetSidePanel = !wide && !crochetPanel.hidden && matchMedia("(orientation: landscape)").matches;
+        const controlsParent = compactCrochetSidePanel ? crochetBody : viewControlsHome;
+        if (canvasControls.parentElement !== controlsParent) {
+            const focused = canvasControls.contains(document.activeElement) ? document.activeElement as HTMLElement : null;
+            controlsParent.insertBefore(canvasControls, compactCrochetSidePanel ? crochetBody.querySelector(".instructions-crochet") : null);
+            focused?.focus({ preventScroll: true });
+        }
         const authoringRect = authoringPanel.hidden ? null : authoringPanel.getBoundingClientRect();
         inspectorHost.style.setProperty("--authoring-dock-height", `${authoringRect?.height ?? 0}px`);
         const crochetRect = crochetPanel.hidden ? null : crochetPanel.getBoundingClientRect();
         const inspectorRect = inspectorHost.hidden ? null : inspectorHost.getBoundingClientRect();
         const modeRect = crochetRect ?? authoringRect;
-        const left = wide && modeRect ? modeRect.right - workspaceRect.left : 0;
+        const modeIsSidePanel = modeRect !== null && modeRect.width < workspaceRect.width;
+        const left = modeIsSidePanel ? modeRect.right - workspaceRect.left : 0;
         const right = wide && inspectorRect ? workspaceRect.right - inspectorRect.left : 0;
         const bottom = wide ? 0 : Math.max(
-            modeRect ? workspaceRect.bottom - modeRect.top : 0,
+            modeRect && !modeIsSidePanel ? workspaceRect.bottom - modeRect.top : 0,
             inspectorRect ? workspaceRect.bottom - inspectorRect.top : 0,
         );
         canvasShell.style.setProperty("--canvas-chrome-left", `${Math.max(0, left)}px`);
         canvasShell.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);
         canvasShell.style.setProperty("--canvas-chrome-bottom", `${Math.max(0, bottom)}px`);
-        // Symmetric clearance keeps Fit centred on the canvas while exposing chart edges.
+        canvasInstruction.style.setProperty("--canvas-chrome-left", `${Math.max(0, left)}px`);
+        canvasInstruction.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);
+        if (wide && canvasInstruction.getClientRects().length > 0) {
+            const halfWidth = canvasInstruction.getBoundingClientRect().width / 2;
+            const centre = Math.max(left + halfWidth, Math.min(canvasRect.width / 2, canvasRect.width - right - halfWidth));
+            canvasInstruction.style.left = `${canvasRect.left + centre}px`;
+        } else canvasInstruction.style.removeProperty("left");
+        // A side panel covering the canvas centre needs Fit to use the exposed chart region.
         const fitPadding = Math.max(0, left, right);
+        const centreCovered = left >= canvasRect.width / 2;
         const workspace: CanvasWorkspace = {
-            left: fitPadding,
+            left: centreCovered ? left : fitPadding,
             top: 0,
-            right: canvasRect.width - fitPadding,
+            right: canvasRect.width - (centreCovered ? right : fitPadding),
             bottom: Math.max(0, canvasRect.height - bottom),
         };
         for (const chrome of [canvasControls, canvasStatus, canvasInstruction]) {
@@ -85,7 +103,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     };
     const queueCanvasChromeSync = () => requestAnimationFrame(syncCanvasChromeInsets);
     const canvasChromeObserver = new ResizeObserver(queueCanvasChromeSync);
-    for (const panel of [workspaceShell, authoringPanel, crochetPanel, inspectorHost]) {
+    for (const panel of [workspaceShell, authoringPanel, crochetPanel, inspectorHost, canvasInstruction]) {
         canvasChromeObserver.observe(panel);
     }
     window.addEventListener("resize", queueCanvasChromeSync);

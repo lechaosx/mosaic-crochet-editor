@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { contrastingProjectColors } from "../src/contrast-colors";
 import { beforeEach, describe, expect, test } from "vitest";
 import {
     DEFAULT_APP_PREFERENCES,
@@ -26,7 +27,8 @@ describe("app preferences", () => {
         expect(saveAppPreferences(preferences)).toBe(true);
         expect(loadAppPreferences()).toEqual({
             ...preferences,
-            accentColor: "#d653a3",
+            dangerColor: contrastingProjectColors("#000000", "#ffffff").danger,
+            accentColor: contrastingProjectColors("#000000", "#ffffff").accent,
         });
         expect(localStorage.getItem("mosaic-recovery")).toBeNull();
     });
@@ -43,8 +45,8 @@ describe("app preferences", () => {
 
         expect(loadAppPreferences()).toEqual({
             guidanceOpacity: 37,
-            dangerColor: "#ff0000",
-            accentColor: "#d653a3",
+            dangerColor: contrastingProjectColors("#000000", "#ffffff").danger,
+            accentColor: contrastingProjectColors("#000000", "#ffffff").accent,
             labelsVisible: false,
             lockInvalid: false,
         });
@@ -63,4 +65,10 @@ describe("app preferences", () => {
         expect(loadAppPreferences()).toEqual(DEFAULT_APP_PREFERENCES);
         expect(localStorage.getItem("mosaic-preferences")).toBeNull();
     });
+});
+
+test("default guidance colours contrast automatically with the default yarns", () => {
+    const colors = contrastingProjectColors("#000000", "#ffffff");
+    expect(DEFAULT_APP_PREFERENCES.dangerColor).toBe(colors.danger);
+    expect(DEFAULT_APP_PREFERENCES.accentColor).toBe(colors.accent);
 });

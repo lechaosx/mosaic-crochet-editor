@@ -1,3 +1,4 @@
+import { contrastingProjectColors } from "../src/contrast-colors";
 import { test, expect } from "@playwright/test";
 import { bootApp, cellCoord, clickCell } from "./_helpers";
 
@@ -20,7 +21,7 @@ for (const mode of ["row", "round"] as const) {
                         left = Math.min(left, x); top = Math.min(top, y);
                         right = Math.max(right, x); bottom = Math.max(bottom, y);
                     }
-                    if (r === 255 && g === 0 && b === 0) danger.push({ x, y });
+                    if (r === 211 && g === 47 && b === 47) danger.push({ x, y });
                 }
             }
             return {
@@ -52,7 +53,7 @@ test("Centre-out colour preview follows Full, Half, and Quarter extents", async 
             let warning = false;
             let left = canvas.width, right = 0;
             for (let i = 0; i < pixels.length; i += 4) {
-                if (pixels[i] === 255 && pixels[i + 1] === 0 && pixels[i + 2] === 0) warning = true;
+                if (pixels[i] === 211 && pixels[i + 1] === 47 && pixels[i + 2] === 47) warning = true;
                 if ((pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 0)
                     || (pixels[i] === 255 && pixels[i + 1] === 255 && pixels[i + 2] === 255)) {
                     const x = (i / 4) % canvas.width;
@@ -100,7 +101,7 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
     await expect(page.getByRole("button", { name: "Swap yarn colours" })).toBeVisible();
     for (const name of [
         "Reset Yarn A to default", "Reset Yarn B to default",
-        "Reset danger colour", "Reset accent colour",
+        "Use automatic Danger colour", "Use automatic Accent colour",
     ]) {
         const reset = page.getByRole("button", { name });
         await expect(reset).toBeVisible();
@@ -259,7 +260,7 @@ test("swatch selection marches while visible and pauses for reduced motion and c
     await expect.poll(bitmap).not.toBe(hidden);
 });
 
-test("Pattern colour resets use fixed app defaults and contrast suggestions are undoable", async ({ page }) => {
+test("Pattern colour resets restore automatic guidance and preserve browser defaults", async ({ page }) => {
     await page.addInitScript(() => localStorage.setItem("mosaic-preferences", JSON.stringify({
         version: 1,
         guidanceOpacity: 100,
@@ -273,15 +274,15 @@ test("Pattern colour resets use fixed app defaults and contrast suggestions are 
 
     const danger = page.getByLabel("Danger", { exact: true });
     const accent = page.getByLabel("Accent", { exact: true });
-    await expect(danger).toHaveValue("#ff0000");
-    await expect(accent).toHaveValue("#d653a3");
+    await expect(danger).toHaveValue(contrastingProjectColors("#000000", "#ffffff").danger);
+    await expect(accent).toHaveValue(contrastingProjectColors("#000000", "#ffffff").accent);
 
     await danger.fill("#123456");
     await expect.poll(() => page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
     )).toBe("#123456");
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-preferences")!).dangerColor))
-        .toBe("#ff0000");
+        .toBe(contrastingProjectColors("#000000", "#ffffff").danger);
 
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Undo" }).click();
@@ -290,24 +291,16 @@ test("Pattern colour resets use fixed app defaults and contrast suggestions are 
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
     )).toBe("#123456");
 
-    await page.getByRole("button", { name: "Reset danger colour" }).click();
-    await expect(danger).toHaveValue("#ff0000");
+    await page.getByRole("button", { name: "Use automatic Danger colour" }).click();
+    await expect(danger).toHaveValue(contrastingProjectColors("#000000", "#ffffff").danger);
     await expect.poll(() => page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
     )).toBeNull();
 
-    const historyBefore = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    );
-    await page.getByRole("button", { name: "Find contrast" }).click();
-    await expect(danger).toHaveValue("#d32f2f");
-    await expect(accent).toHaveValue("#00838f");
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    )).toBe(historyBefore + 1);
-
-    await page.getByRole("button", { name: "Reset accent colour" }).click();
-    await expect(accent).toHaveValue("#d653a3");
+    await accent.fill("#abcdef");
+    await accent.dispatchEvent("change");
+    await page.getByRole("button", { name: "Use automatic Accent colour" }).click();
+    await expect(accent).toHaveValue(contrastingProjectColors("#000000", "#ffffff").accent);
     await expect.poll(() => page.evaluate(() =>
         JSON.parse(localStorage.getItem("mosaic-recovery")!).document.accentColorOverride,
     )).toBeNull();
@@ -369,8 +362,8 @@ test("app preferences survive reload and are not part of undo or recovery snapsh
         stored: JSON.stringify({
             version: 1,
             guidanceOpacity: 37,
-            dangerColor: "#ff0000",
-            accentColor: "#d653a3",
+            dangerColor: contrastingProjectColors("#000000", "#ffffff").danger,
+            accentColor: contrastingProjectColors("#000000", "#ffffff").accent,
             labelsVisible: true,
             lockInvalid: true,
         }),
@@ -425,7 +418,7 @@ test("Crochet omits redundant panel and list headings", async ({ page }) => {
     await expect(page.getByText("Chart-derived work in crochet order.", { exact: false })).toHaveCount(0);
 });
 
-test("Crochet summarizes errors without prose or navigation", async ({ page }) => {
+test("Crochet shows invalid work without a placement summary or blocking navigation", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("label:has(#lock-invalid)").click();
@@ -435,7 +428,7 @@ test("Crochet summarizes errors without prose or navigation", async ({ page }) =
     await clickCell(page, 1, 0);
 
     await page.locator("#btn-export").click();
-    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("2 invalid placements");
+    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveCount(0);
     await expect(page.getByLabel("Instruction blockers")).toHaveCount(0);
     await expect(page.getByText(/unresolved|draft|resolve chart/i)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();

@@ -1,3 +1,4 @@
+import { contrastingProjectColors } from "../src/contrast-colors";
 import { test, expect } from "@playwright/test";
 import { addGlobalMirror, bootApp, clickCell } from "./_helpers";
 
@@ -193,7 +194,7 @@ test("project semantic colours propagate to UI and undo restores the same palett
     });
     expect(await palette()).toEqual(["#101010", "#ffffff"]);
     await page.locator("#btn-undo").click();
-    expect(await palette()).toEqual(["#101010", "#d653a3"]);
+    expect(await palette()).toEqual(["#101010", contrastingProjectColors("#000000", "#ffffff").accent]);
 });
 
 test("Pattern icon actions expose concise names and project colours reach UI feedback", async ({ page }) => {
@@ -202,9 +203,9 @@ test("Pattern icon actions expose concise names and project colours reach UI fee
     for (const name of ["Yarn A", "Yarn B", "Danger", "Accent"]) {
         await expect(page.getByLabel(name, { exact: true }).and(page.locator('input[type="color"]'))).toBeVisible();
     }
-    const find = page.getByRole("button", { name: "Find contrast", exact: true });
+    const automatic = page.getByRole("button", { name: "Use automatic Danger colour", exact: true });
     const clear = page.getByRole("button", { name: "Clear design", exact: true });
-    await expect(find).toHaveText("");
+    await expect(automatic).toHaveText("");
     await expect(clear).toHaveText("");
     await expect(clear).toHaveAttribute("title", /drawing, selections, repeats, and mirrors/);
     await page.getByLabel("Danger", { exact: true }).fill("#101010");
@@ -213,6 +214,6 @@ test("Pattern icon actions expose concise names and project colours reach UI fee
         const style = getComputedStyle(document.documentElement);
         return [style.getPropertyValue("--danger").trim(), style.getPropertyValue("--accent").trim()];
     })).toEqual(["#101010", "#ffffff"]);
-    await find.click();
+    await automatic.click();
     await expect(page.getByLabel("Danger", { exact: true })).not.toHaveValue("#101010");
 });

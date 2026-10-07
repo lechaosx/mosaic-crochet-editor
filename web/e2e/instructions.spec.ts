@@ -279,7 +279,7 @@ test("reselecting Crochet preserves its current line", async ({ page }) => {
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 });
 
-test("Crochet summarizes errors without blocking progress", async ({ page }) => {
+test("Crochet uses danger accents without warning prefixes or blocking progress", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("label:has(#lock-invalid)").click();
@@ -291,9 +291,9 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
 
     const crochet = page.getByRole("button", { name: "Begin Crocheting — 1 invalid placement" });
     await expect(crochet).toHaveText("Begin Crocheting");
-    await expect(crochet).not.toHaveClass(/btn--danger/);
+    await expect(crochet).toHaveClass(/btn--danger/);
     await page.locator("#btn-export").click();
-    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("1 invalid placement");
+    await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveCount(0);
     await expect(page.locator('.instructions-unit[aria-label="Row 8, Yarn B"]')).toContainText("oc");
     const invalidUnit = page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]');
     await expect(invalidUnit).toContainText("oc");
@@ -305,7 +305,7 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
     await invalidUnit.click();
     await expect(invalidUnit).toHaveClass(/instructions-unit--current-invalid/);
-    expect(await invalidUnit.locator("code").evaluate(el => getComputedStyle(el, "::before").content)).toContain("!");
+    expect(await invalidUnit.locator("code").evaluate(el => getComputedStyle(el, "::before").content)).not.toContain("!");
     const invalidGlyphs = await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: {
             invalidGlyphCoords: Array<{ x: number; y: number }>;
@@ -313,7 +313,7 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
     expect(invalidGlyphs.length).toBeGreaterThan(0);
     expect(invalidGlyphs.every(({ x, y }) => x >= 0 && x < 9 && y >= 0 && y < 9)).toBe(true);
     const warning = await cellCoord(page, 0, 0);
-    expect(await pixelRGB(page, warning.cx, warning.cy)).toEqual([255, 0, 0]);
+    expect(await pixelRGB(page, warning.cx, warning.cy)).toEqual([211, 47, 47]);
     const plainCell = await page.evaluate(() => {
         const point = window.__test_matrix__!.transformPoint({ x: 0.2, y: 0.2 });
         const canvas = document.getElementById("canvas") as HTMLCanvasElement;
@@ -358,7 +358,7 @@ for (const mode of ["row", "round"] as const) {
             await expect.poll(() => page.evaluate(() => Math.abs(window.__test_matrix__!.a))).toBeLessThan(0.001);
         }
         const outward = await cellCoord(page, x, -1);
-        expect(await pixelRGB(page, outward.cx, outward.cy)).toEqual([255, 0, 0]);
+        expect(await pixelRGB(page, outward.cx, outward.cy)).toEqual([211, 47, 47]);
         const cellSize = await page.evaluate(() => {
             const matrix = window.__test_matrix__!;
             return Math.hypot(matrix.a, matrix.b) / window.devicePixelRatio;
@@ -366,7 +366,7 @@ for (const mode of ["row", "round"] as const) {
         const canvas = await page.locator("#canvas").boundingBox();
         expect(outward.cy - cellSize * 0.37).toBeGreaterThanOrEqual(canvas!.y);
         expect(outward.cy + cellSize * 0.37).toBeLessThanOrEqual(canvas!.y + canvas!.height);
-        expect(await pixelRGB(page, outward.cx, outward.cy + cellSize * 0.28)).toEqual([255, 0, 0]);
+        expect(await pixelRGB(page, outward.cx, outward.cy + cellSize * 0.28)).toEqual([211, 47, 47]);
         const support = await cellCoord(page, x, 0);
         expect(await pixelRGB(page, support.cx, support.cy)).toEqual([255, 255, 255]);
 
@@ -374,7 +374,7 @@ for (const mode of ["row", "round"] as const) {
         await clickCell(page, x, -1);
         await expect(page.getByRole("button", { name: "Begin Crocheting", exact: true })).toBeVisible();
         expect(await pixelRGB(page, support.cx, support.cy)).toEqual([0, 0, 0]);
-        expect(await pixelRGB(page, outward.cx, outward.cy)).not.toEqual([255, 0, 0]);
+        expect(await pixelRGB(page, outward.cx, outward.cy)).not.toEqual([211, 47, 47]);
     });
 }
 
@@ -411,7 +411,7 @@ test("Crochet advances by whole rows and resumes the exact instruction plan", as
     await page.locator("#btn-export").click();
     await page.locator("#edit-width").fill("9");
     await page.locator("#btn-export").click();
-    await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
+    await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 });
 
 test("Crochet lines are compact progress controls", async ({ page }) => {
@@ -769,7 +769,7 @@ test("the seam triangle rotates with its cell and is painted in the accent colou
             mappedBase: window.__test_matrix__!.transformPoint({ x: 0, y: 8.5 }).toJSON() };
     });
     const before = await geometry();
-    expect(before.colour.slice(0, 3)).toEqual([214, 83, 163]);
+    expect(before.colour.slice(0, 3)).toEqual([0, 131, 143]);
     expect(before.dx).toBeGreaterThan(0);
     expect(before.dy).toBeCloseTo(0);
     await page.getByRole("button", { name: "Rotate view right" }).click();
@@ -811,7 +811,7 @@ test("the triangle and seam have a continuous filled junction", async ({ page })
         if (x < 2 || x >= canvas.width || y < 0 || y >= canvas.height) throw new Error("junction is outside the chart viewport");
         return Array.from(canvas.getContext("2d")!.getImageData(Math.floor(x) - 1, Math.round(y), 1, 1).data).slice(0, 3);
     });
-    expect(junction).toEqual([214, 83, 163]);
+    expect(junction).toEqual([0, 131, 143]);
 });
 
 test("the joined seam triangle keeps its cell proportions through zoom", async ({ page }) => {
@@ -831,7 +831,7 @@ test("the joined seam triangle keeps its cell proportions through zoom", async (
     const before = await shape();
     expect(before.depth).toBeCloseTo(0.32);
     expect(before.base).toBeCloseTo(0.44);
-    expect(before.colour).toEqual([214, 83, 163]);
+    expect(before.colour).toEqual([0, 131, 143]);
     const anchor = await page.evaluate(() => {
         const points = window.__test_instruction_seam_geometry__!.screenTriangle;
         const rect = document.getElementById("canvas")!.getBoundingClientRect();

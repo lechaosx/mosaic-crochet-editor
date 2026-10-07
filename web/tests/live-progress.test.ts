@@ -37,7 +37,8 @@ describe("Live instruction progress", () => {
             fingerprintPatternShape({ mode: "row", canvasWidth: 4, canvasHeight: 2 }),
             units.length,
         )).toBe(0);
-        expect(localStorage.getItem("mosaic-live-progress")).toBeNull();
+        expect(localStorage.getItem("mosaic-live-progress")).not.toBeNull();
+        expect(loadLiveProgress(fingerprint, units.length)).toBe(1);
     });
 
     test("clears resumable progress explicitly", () => {
@@ -62,4 +63,18 @@ describe("Live instruction progress", () => {
         expect(loadLiveProgress(fingerprint, units.length)).toBe(0);
         expect(localStorage.getItem("mosaic-live-progress")).toBeNull();
     });
+});
+
+test("smaller incompatible previews cannot discard valid progress", () => {
+    const original = fingerprintPatternShape({ mode: "row", canvasWidth: 16, canvasHeight: 16 });
+    saveLiveProgress(original, 12);
+    const raw = localStorage.getItem("mosaic-live-progress");
+    const preview = fingerprintPatternShape({ mode: "row", canvasWidth: 16, canvasHeight: 2 });
+    expect(loadLiveProgress(preview, 2)).toBe(0);
+    expect(hasLiveProgress(preview, 2)).toBe(false);
+    expect(localStorage.getItem("mosaic-live-progress")).toBe(raw);
+    expect(loadLiveProgress(original, 16)).toBe(12);
+    saveLiveProgress(preview, 1);
+    expect(loadLiveProgress(original, 16)).toBe(0);
+    expect(loadLiveProgress(preview, 2)).toBe(1);
 });

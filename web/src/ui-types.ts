@@ -38,7 +38,6 @@ export interface UICallbacks {
     onAccentColorChange:      () => void;
     onDangerColorReset:       () => void;
     onAccentColorReset:       () => void;
-    onFindContrastColors:     () => void;
     onLabelsVisibleChange:    () => void;
     onLockInvalidChange: () => void;
     onUndo:            () => void;
@@ -66,7 +65,7 @@ export interface UIHandle {
     setCanvasFeedback:  (message: string | null) => void;
     setPrimary:         (slot: 1 | 2) => void;
     setColors:          (a: string, b: string) => void;
-    setProjectColors:   (danger: string, accent: string) => void;
+    setProjectColors:   (danger: string, accent: string, automaticDanger: boolean, automaticAccent: boolean) => void;
     setMirrors:         (mirrors: ReadonlyArray<MirrorCenter>, selectedId: string | null) => void;
     setRecipes:         (recipes: ReadonlyArray<GridRecipe>, activeId: string | null) => void;
     setRecipeError:     (message: string | null) => void;
@@ -105,7 +104,6 @@ export interface InstructionsView {
     clearUnits:  () => void;
     setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
                   onProgress: (completedUnits: number) => boolean, wholeInvalid?: boolean) => void;
-    setErrors:   (count: number) => void;
     setYarnColors: (a: string, b: string) => void;
     alternate:   () => boolean;
     setBusy:     (busy: boolean) => void;

@@ -1,7 +1,8 @@
 // Pure pattern helper tests — no DOM needed (parameters passed directly).
+import { paintOps } from "../src/paint";
 import { describe, test, expect } from "vitest";
 import {
-    applyEditSettings, EditSettings, patternChangeSummary, patternDimensionError,
+    hasDrawing, applyEditSettings, EditSettings, patternChangeSummary, patternDimensionError,
 } from "../src/pattern";
 
 const rowBase: EditSettings = { mode: "row", width: 4, height: 3, wipe: false };
@@ -226,5 +227,26 @@ describe("applyEditSettings (mode preservation)", () => {
 
         const resized = applyEditSettings(settings, { pattern: source.pattern, pixels: edited });
         expect(resized.pixels[index]).toBe(edited[index]);
+    });
+});
+
+describe("hasDrawing", () => {
+    test.each([
+        { mode: "row", width: 4, height: 5, wipe: true },
+        ...["full", "half", "quarter"].map(subMode => ({
+            mode: "round", innerWidth: 2, innerHeight: 3, rounds: 4, subMode, wipe: true,
+        })),
+    ] as EditSettings[])("detects changed yarn and overlay content in $mode $subMode", settings => {
+        const { pattern, pixels } = applyEditSettings(settings);
+        expect(hasDrawing(pattern, pixels)).toBe(false);
+        const index = pixels.findIndex(pixel => pixel !== 0);
+        const changed = pixels.slice();
+        changed[index] = changed[index] === 1 ? 2 : 1;
+        expect(hasDrawing(pattern, changed)).toBe(true);
+        const overlay = paintOps.overlay({
+            visible: pixels.slice(), pattern, x: 1, y: 2, color: 1, overlayAction: "place",
+            invertVisited: null, transforms: new Float64Array(0), shifted: null,
+        });
+        expect(hasDrawing(pattern, overlay)).toBe(true);
     });
 });

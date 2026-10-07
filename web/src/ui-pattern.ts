@@ -1,7 +1,6 @@
 import type { PatternState } from "@mosaic/logic/types";
 import { el, setRadio, clampInputDisplay, setPressed, setMessage } from "./dom";
 import { renderPatternColourPreview } from "./render";
-import { DEFAULT_APP_PREFERENCES } from "./preferences";
 import type { UICallbacks, InspectorControls } from "./ui-types";
 
 function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => void) {
@@ -29,7 +28,7 @@ function bindLongPress(target: HTMLElement, onClick: () => void, onLong: () => v
 export function mountPattern(
     cb: Pick<UICallbacks, "onPrimaryColor" | "onSwapYarns" | "onResetYarnColor" | "onColorChange" | "onColorCommit"
         | "onEditOpen" | "onEditChange" | "onEditCommit" | "onEditRevert" | "onDangerColorChange"
-        | "onAccentColorChange" | "onDangerColorReset" | "onAccentColorReset" | "onFindContrastColors">,
+        | "onAccentColorChange" | "onDangerColorReset" | "onAccentColorReset">,
     inspector: Pick<InspectorControls, "isOpen" | "open" | "close" | "focusFirst">, enterDesignForCommand: () => void) {
     /* ── Colour swatches ──────────────────────────────────────────────── */
     const swatchA = el("swatch-a");
@@ -122,9 +121,13 @@ export function mountPattern(
         swatchB.style.background = b;
         drawPatternPreview();
     }
-    function setProjectColors(danger: string, accent: string) {
-        el<HTMLButtonElement>("danger-color-reset").disabled = danger.toLowerCase() === DEFAULT_APP_PREFERENCES.dangerColor;
-        el<HTMLButtonElement>("accent-color-reset").disabled = accent.toLowerCase() === DEFAULT_APP_PREFERENCES.accentColor;
+    function setProjectColors(danger: string, accent: string, automaticDanger: boolean, automaticAccent: boolean) {
+        el<HTMLInputElement>("danger-color").value = danger;
+        el<HTMLInputElement>("accent-color").value = accent;
+        for (const [kind, automatic] of [["danger", automaticDanger], ["accent", automaticAccent]] as const) {
+            el<HTMLButtonElement>(`${kind}-color-reset`).disabled = automatic;
+            el(`${kind}-color-mode`).textContent = automatic ? "Automatic" : "Custom";
+        }
         drawPatternPreview();
     }
 
@@ -282,7 +285,6 @@ export function mountPattern(
     el<HTMLInputElement>("accent-color")      .addEventListener("change", cb.onColorCommit);
     el("danger-color-reset").addEventListener("click", cb.onDangerColorReset);
     el("accent-color-reset").addEventListener("click", cb.onAccentColorReset);
-    el("find-contrast-colors").addEventListener("click", cb.onFindContrastColors);
 
     return { setPrimary, setExecutingYarn, setColors, setProjectColors, setEditError, setEditSummary, syncEditInputs, finishPatternEdit, drawPatternPreview };
 }

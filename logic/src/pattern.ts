@@ -20,6 +20,19 @@ export interface PatternChangeSummary {
 export const MAX_CANVAS_DIMENSION = 1_048_576;
 export const MAX_CANVAS_CELLS = 16_777_216;
 
+export function hasDrawing(pattern: PatternState, pixels: Uint8Array): boolean {
+    const natural = pattern.mode === "row"
+        ? initialize_row_pattern(pattern.canvasWidth, pattern.canvasHeight)
+        : initialize_round_pattern(
+            pattern.canvasWidth, pattern.canvasHeight, pattern.virtualWidth, pattern.virtualHeight,
+            pattern.offsetX, pattern.offsetY, pattern.rounds,
+        );
+    for (let i = 0; i < pixels.length; i++) {
+        if (pixels[i] !== natural[i]) return true;
+    }
+    return false;
+}
+
 export function patternDimensionError(pattern: PatternState): string | null {
     const p = pattern as unknown as Record<string, unknown>;
     const width = p.canvasWidth;

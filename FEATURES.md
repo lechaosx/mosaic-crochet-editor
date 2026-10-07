@@ -55,6 +55,7 @@ The intended end-to-end story is:
 
 - `.mcw` is the editable project format. It carries authored crochet content and reusable project transforms, but not transient tool state, a live selection, app-wide preferences, undo history, or Crochet progress. — **your decision**
 - Browser recovery is automatic and separate from Save. It restores the local editing session but never implies that an external project file was updated. — **your decision**
+- Danger and Accent defaults follow the yarn colours; explicit project colour choices remain fixed when the yarns change. — **your decision**
 - App-wide display preferences belong to the browser; project-specific visual choices travel with the project. Opening a project must not silently replace the user's global defaults. — **your decision**
 - Invalid or unsupported files leave the active session unchanged and explain the failure without blocking the workspace. — **Agent's choice**
 
@@ -63,4 +64,4 @@ The intended end-to-end story is:
 - Desktop, tablet, and phone present one recognizable workflow. Layout and density adapt to available space and input capabilities without changing the meaning or order of core tools. — **your decision**
 - Mouse, touch, pen, and keyboard routes produce the same document outcomes. Gestures and shortcuts accelerate visible actions rather than becoming the only way to perform essential work. — **Agent's choice**
 - The canvas remains visually stable across responsive recomposition, open inspectors, and the Design/Crochet transition. Navigation and contextual chrome adapt around it rather than changing the document view unexpectedly. — **your decision**
-- Controls expose clear focus, selection, unavailable, warning, and error states with non-colour cues. Increased text size, browser zoom, reduced motion, high contrast, and touch-sized targets are supported as part of the main interface. — **Agent's choice**
+- Controls expose clear focus, selection, unavailable, and error states with non-colour cues; Crochet warning emphasis uses danger accents with accessible descriptions. Increased text size, browser zoom, reduced motion, high contrast, and touch-sized targets are supported as part of the main interface. — **Agent's choice**; Crochet warning emphasis: **your decision**

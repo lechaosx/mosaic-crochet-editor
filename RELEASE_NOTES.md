@@ -5,9 +5,9 @@ New updates appear first. Each section summarizes the lasting changes available 
 ## 7 October 2026
 
 - Tool menus open on hold or double press, temporary Pencil and Spill actions highlight their executing yarn, and selection variants use clearer icons.
-- Pattern swatches show mirrored motifs in a smaller, clear preview; the menu, centred Crochet action, Settings switches, and Crochet list use calmer, consistent controls.
+- Pattern and Crochet controls use consistent fields and calmer danger accents; automatic guidance colours follow the yarns, and Clear design is available only when drawing content differs from the natural pattern.
 - Selection and Mirrors group editable sources, centres, and copy axes consistently, with a No selection row, live paired coordinates, unavailable quarter turns, and overlapping placements prevented.
-- Pattern shape changes keep selections attached to preserved stitches, prune vanished selections and mirror types, and switch unsafe copies off; Undo restores them.
+- Pattern shape changes keep selections attached to preserved stitches, prune vanished selections and mirror types, and switch unsafe copies off; returning to the original geometry preserves Undo and Crochet progress.
 
 ## 4 October 2026
 

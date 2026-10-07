@@ -19,7 +19,7 @@ beforeEach(() => {
         <button id="instructions-live-forward"></button>`
         + ["export-progress", "instructions-live-unavailable", "instructions-live-progress",
             "instructions-live-save-warning", "instructions-current", "instructions-current-text",
-            "export-action-status", "instructions-errors"].map(id => `<div id="${id}"></div>`).join("");
+            "export-action-status"].map(id => `<div id="${id}"></div>`).join("");
     HTMLElement.prototype.scrollIntoView = vi.fn();
 });
 

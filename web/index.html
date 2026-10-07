@@ -63,7 +63,6 @@
     <symbol id="icon-delete" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5"/></symbol>
     <symbol id="icon-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.34-5.66L4 8.68M4 4v4.68h4.68"/></symbol>
     <symbol id="icon-swap" viewBox="0 0 24 24"><path d="M4 7h16m-4-3 4 3-4 3M20 17H4m4-3-4 3 4 3"/></symbol>
-    <symbol id="icon-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v16M12 4a8 8 0 0 1 0 16" fill="currentColor" stroke="none"/></symbol>
     <symbol id="icon-settings" viewBox="0 0 24 24"><path d="m10 3-.6 3-2.6 1-2.5-1-2 3 2 2v2l-2 2 2 3 2.5-1 2.6 1 .6 3h4l.6-3 2.6-1 2.5 1 2-3-2-2v-2l2-2-2-3-2.5 1-2.6-1-.6-3Z"/><circle cx="12" cy="12" r="3"/></symbol>
     <symbol id="icon-back" viewBox="0 0 24 24"><path d="M20 12H4m6-6-6 6 6 6"/></symbol>
     <symbol id="icon-forward" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
@@ -194,32 +193,33 @@
     </dialog>
 
     <aside id="instructions-workspace" class="instructions-workspace" aria-label="Crochet" tabindex="-1" hidden>
-      <div class="instructions-options" role="group" aria-label="Crochet options">
-        <label class="toggle">
-          <input type="checkbox" id="alternate">
-          <span class="toggle-track"></span>
-          Alternate direction
-        </label>
-        <span id="instructions-errors" class="instructions-errors warning" role="status" aria-label="Crochet errors" aria-live="polite" hidden></span>
-        <span id="export-progress" class="instructions-progress" hidden></span>
-        <span id="export-action-status" class="instructions-action-status" role="status" aria-label="Copy instructions status" aria-live="polite"></span>
-        <button class="btn btn--icon" id="export-copy" type="button" aria-label="Copy instructions" title="Copy compressed instructions"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-copy"/></svg></button>
-      </div>
-      <section class="instructions-crochet">
-        <div class="instructions-sequence">
-          <p class="warning instructions-live-save-warning" id="instructions-live-save-warning" role="alert" title="Keep this tab open to retain your place" hidden>Progress not saved</p>
-          <p id="instructions-live-unavailable" class="instructions-live-unavailable" hidden></p>
-          <ol id="instructions-units" aria-label="Instructions"></ol>
-          <div id="instructions-current" class="instructions-current" role="status" aria-label="Current instruction" aria-live="polite" hidden>
-            <code id="instructions-current-text"></code>
-          </div>
-          <div class="instructions-live-actions">
-            <button class="btn btn--icon" id="instructions-live-back" type="button" title="Back one work unit"><svg class="tool-icon" aria-hidden="true"><use href="#icon-back"/></svg></button>
-            <span id="instructions-live-progress" role="status" aria-live="polite"></span>
-            <button class="btn btn--icon" id="instructions-live-forward" type="button" title="Forward one work unit"><svg class="tool-icon" aria-hidden="true"><use href="#icon-forward"/></svg></button>
-          </div>
+      <div class="instructions-body">
+        <div class="instructions-options" role="group" aria-label="Crochet options">
+          <label class="toggle">
+            <input type="checkbox" id="alternate">
+            <span class="toggle-track"></span>
+            Alternate direction
+          </label>
+          <button class="btn btn--icon" id="export-copy" type="button" aria-label="Copy instructions" title="Copy compressed instructions"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-copy"/></svg></button>
+          <span id="export-progress" class="instructions-progress" hidden></span>
+          <span id="export-action-status" class="instructions-action-status" role="status" aria-label="Copy instructions status" aria-live="polite"></span>
         </div>
-      </section>
+        <section class="instructions-crochet">
+          <div class="instructions-sequence">
+            <p class="warning instructions-live-save-warning" id="instructions-live-save-warning" role="alert" title="Keep this tab open to retain your place" hidden>Progress not saved</p>
+            <p id="instructions-live-unavailable" class="instructions-live-unavailable" hidden></p>
+            <ol id="instructions-units" aria-label="Instructions"></ol>
+            <div id="instructions-current" class="instructions-current" role="status" aria-label="Current instruction" aria-live="polite" hidden>
+              <code id="instructions-current-text"></code>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="instructions-live-actions">
+        <button class="btn btn--icon" id="instructions-live-back" type="button" title="Back one work unit"><svg class="tool-icon" aria-hidden="true"><use href="#icon-back"/></svg></button>
+        <span id="instructions-live-progress" role="status" aria-live="polite"></span>
+        <button class="btn btn--icon" id="instructions-live-forward" type="button" title="Forward one work unit"><svg class="tool-icon" aria-hidden="true"><use href="#icon-forward"/></svg></button>
+      </div>
     </aside>
 
     <aside id="inspector-host" class="inspector-host" aria-labelledby="inspector-title" hidden>
@@ -370,14 +370,12 @@
         <label><input type="radio" name="edit-submode" value="half"> Half</label>
         <label><input type="radio" name="edit-submode" value="quarter"> Quarter</label>
       </div>
-      <div class="field-row">
-        <label for="edit-inner-width">Centre opening width</label>
-        <input type="number" id="edit-inner-width" value="3" min="0" max="1048576">
-      </div>
-      <div class="field-row">
-        <label for="edit-inner-height">Centre opening height</label>
-        <input type="number" id="edit-inner-height" value="3" min="0" max="1048576">
-      </div>
+      <fieldset class="coordinate-position"><legend>Centre opening</legend>
+        <div class="coordinate-fields">
+          <label for="edit-inner-width" title="Width">W</label><input type="number" id="edit-inner-width" value="3" min="0" max="1048576" aria-label="Centre opening width">
+          <label for="edit-inner-height" title="Height">H</label><input type="number" id="edit-inner-height" value="3" min="0" max="1048576" aria-label="Centre opening height">
+        </div>
+      </fieldset>
       <div class="field-row">
         <label for="edit-rounds">Rounds</label>
         <input type="number" id="edit-rounds" value="5" min="1" max="1048576">
@@ -393,7 +391,6 @@
         <span class="popover-label">Pattern colours</span>
         <div class="setting-color">
           <button class="btn btn--icon" id="swap-yarns" type="button" aria-label="Swap yarn colours" title="Swap Yarn A and Yarn B colours"><svg class="tool-icon" aria-hidden="true"><use href="#icon-swap"/></svg></button>
-          <button class="btn btn--icon" id="find-contrast-colors" type="button" aria-label="Find contrast" title="Choose Danger and Accent colours that contrast with both yarns"><svg class="tool-icon" aria-hidden="true"><use href="#icon-contrast"/></svg></button>
         </div>
       </div>
       <div class="popover-row">
@@ -415,19 +412,19 @@
         </div>
       </div>
       <div class="popover-row" title="Colour used for invalid ! markers.">
-        <label class="popover-label" for="danger-color">Danger</label>
+        <label class="popover-label" for="danger-color">Danger <span class="colour-mode" id="danger-color-mode">Automatic</span></label>
         <div class="setting-color">
-          <input type="color" id="danger-color" value="#ff0000" aria-label="Danger">
-          <button class="btn btn--icon pattern-colour-reset" id="danger-color-reset" type="button" aria-label="Reset danger colour" title="Reset danger to the app default">
+          <input type="color" id="danger-color" value="#d32f2f" aria-label="Danger" aria-describedby="danger-color-mode">
+          <button class="btn btn--icon pattern-colour-reset" id="danger-color-reset" type="button" aria-label="Use automatic Danger colour" title="Use automatic Danger colour, which follows the yarn colours">
             <svg class="tool-icon" aria-hidden="true"><use href="#icon-reset"/></svg>
           </button>
         </div>
       </div>
       <div class="popover-row" title="Colour used for selections and transform guides.">
-        <label class="popover-label" for="accent-color">Accent</label>
+        <label class="popover-label" for="accent-color">Accent <span class="colour-mode" id="accent-color-mode">Automatic</span></label>
         <div class="setting-color">
-          <input type="color" id="accent-color" value="#d653a3" aria-label="Accent">
-          <button class="btn btn--icon pattern-colour-reset" id="accent-color-reset" type="button" aria-label="Reset accent colour" title="Reset accent to the app default">
+          <input type="color" id="accent-color" value="#00838f" aria-label="Accent" aria-describedby="accent-color-mode">
+          <button class="btn btn--icon pattern-colour-reset" id="accent-color-reset" type="button" aria-label="Use automatic Accent colour" title="Use automatic Accent colour, which follows the yarn colours">
             <svg class="tool-icon" aria-hidden="true"><use href="#icon-reset"/></svg>
           </button>
         </div>

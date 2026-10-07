@@ -33,7 +33,7 @@ for (const extent of ["Rows", "Full", "Half", "Quarter"] as const) {
             __test_instruction_guidance__?: { invalidGlyphCoords: { x: number; y: number }[] };
         }).__test_instruction_guidance__!.invalidGlyphCoords)).toContainEqual(warning);
         const point = await cellCoord(page, warning.x, warning.y);
-        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([255, 0, 0]);
+        expect(await pixelRGB(page, point.cx, point.cy)).toEqual([211, 47, 47]);
         await page.getByRole("button", { name: "Pattern", exact: true }).click();
         await page.locator("#danger-color").evaluate((input: HTMLInputElement) => {
             input.value = "#ff00ff"; input.dispatchEvent(new Event("input", { bubbles: true }));

@@ -18,7 +18,6 @@ export function mountInstructions(
     const liveBack       = el<HTMLButtonElement>("instructions-live-back");
     const liveForward    = el<HTMLButtonElement>("instructions-live-forward");
     const exportActionStatus = el("export-action-status");
-    const instructionErrors = el("instructions-errors");
     const crochetMode    = el<HTMLButtonElement>("btn-export");
     let hasCrochetProgress = false;
     let crochetErrors = 0;
@@ -34,6 +33,7 @@ export function mountInstructions(
             + (!open && crochetErrors ? ` — ${errors}` : "");
         crochetMode.setAttribute("aria-label", `${label}${!open && crochetErrors ? ` — ${errors}` : ""}`);
         crochetMode.setAttribute("aria-pressed", String(open));
+        crochetMode.classList.toggle("btn--danger", !open && crochetErrors > 0);
     };
     crochetMode.addEventListener("click", () => {
         if (closeInstructionsWorkspace) closeInstructionsWorkspace(true);
@@ -115,6 +115,7 @@ export function mountInstructions(
                     currentUnit.text.slice(currentUnit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0");
             }
             if (!isBusy && total > 0) livePreviewListeners.forEach(f => f(showWhole ? null : current));
+            syncCanvasChromeInsets();
             (showWhole ? wholeButton : unitElements[Math.min(liveCompleted, total - 1)])
                 ?.scrollIntoView({ block: "nearest" });
         };
@@ -237,10 +238,6 @@ export function mountInstructions(
                 liveSaveWarning.hidden = true;
                 refreshCrochetAvailability();
                 renderCrochet();
-            },
-            setErrors: (count) => {
-                instructionErrors.textContent = count === 1 ? "1 invalid placement" : `${count} invalid placements`;
-                instructionErrors.hidden = count === 0;
             },
             setYarnColors: (a, b) => {
                 unitElements.forEach(item => {

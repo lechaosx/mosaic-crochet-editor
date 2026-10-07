@@ -30,14 +30,13 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          syncActiveGridRecipe, selectionSourceIsValid } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, paintOps } from "@mosaic/logic/paint";
-import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
+import { MAX_CANVAS_DIMENSION, patternChangeSummary, hasDrawing } from "@mosaic/logic/pattern";
 import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress,
          clearLiveProgress, hasLiveProgress } from "./live-progress";
 import { copyrightNotice, markAboutSeen, shouldShowAbout } from "./about";
 import { contrastingProjectColors } from "./contrast-colors";
 import {
     AppPreferences,
-    DEFAULT_APP_PREFERENCES,
     loadAppPreferences,
     saveAppPreferences,
 } from "./preferences";
@@ -143,7 +142,7 @@ let selectionMigrationNotice = false;
 const saved    = loadFromLocalStorage(() => { selectionMigrationNotice = true; });
 let preferences: AppPreferences = loadAppPreferences();
 const rs       = makeRendererState(preferences);
-let projectColorsSynced = false;
+let projectColorsSynced: string | null = null;
 const store    = new Store(saved ?? defaultSession());
 if (saved) historyEnsureInitialized(store.state, () => { selectionMigrationNotice = true; });
 const aboutDialog = document.getElementById("about-dialog") as HTMLDialogElement;
@@ -345,6 +344,9 @@ store.addObserver(s => ui.setViewState(
 store.addObserver(() => updateCoordinates(null, null));
 store.addObserver(() => ui.setCrochetErrors(crochetErrorCount()));
 store.addObserver(s => syncProjectColorInputs(s.state));
+store.addObserver(() => {
+    if (!document.getElementById("edit-pattern-widget")!.hidden) syncClearDrawingControl();
+});
 store.addObserver(s => {
     if (editSessionSource && !applyingPatternPreview) {
         const current = patternEditSnapshot(s.state);
@@ -785,13 +787,6 @@ function resetProjectColor(kind: "danger" | "accent") {
         else s.accentColorOverride = null;
     }, { recompute: false, history: true });
 }
-function findContrastColors() {
-    const colors = contrastingProjectColors(store.state.colorA, store.state.colorB);
-    store.commit(s => {
-        s.dangerColorOverride = colors.danger;
-        s.accentColorOverride = colors.accent;
-    }, { recompute: false, history: true });
-}
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
     preferences.labelsVisible = v;
@@ -917,7 +912,13 @@ function samePatternEditSnapshot(a: PatternEditSnapshot, b: PatternEditSnapshot)
         && a.activeRecipeId === b.activeRecipeId;
 }
 
+function syncClearDrawingControl() {
+    (document.getElementById("edit-reset") as HTMLButtonElement).disabled =
+        !hasDrawing(store.state.pattern, visiblePixels(store.state));
+}
+
 function onEditOpen() {
+    syncClearDrawingControl();
     editBaseline = null;
     editSessionSource = null;
     editSessionPreview = null;
@@ -1167,11 +1168,9 @@ async function onInstructions() {
         renderCanvas();
     });
     const plan = store.plan;
-    const instructionErrors = new Set<string>();
     const warningCoordinates = new Set<string>();
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] === PlanType.Invalid) {
-            instructionErrors.add(`${plan[i + 2]},${plan[i + 3]}`);
             const [x, y] = planOutwardCoordinate(plan, i);
             warningCoordinates.add(`${x},${y}`);
         }
@@ -1294,7 +1293,6 @@ async function onInstructions() {
         dlg.setBusy(true);
         dlg.clearText();
         dlg.clearUnits();
-        dlg.setErrors(instructionErrors.size);
         const session = startSession();
         const total = session.total();
         const units: CachedInstructionUnit[] = [];
@@ -1359,7 +1357,6 @@ async function onInstructions() {
             : generatedUnits;
         renderUnits(units, instructionCache?.fingerprint === patternFingerprint);
     });
-    dlg.setErrors(instructionErrors.size);
     if (cached) {
         generatedUnits = cached;
         renderUnits(cached, true);
@@ -1404,7 +1401,6 @@ const ui: UIHandle = mountUI({
     onAccentColorChange:       onAccentColorInput,
     onDangerColorReset:        () => resetProjectColor("danger"),
     onAccentColorReset:        () => resetProjectColor("accent"),
-    onFindContrastColors:      findContrastColors,
     onLabelsVisibleChange:     onLabelsToggle,
     onLockInvalidChange:   onLockInvalidToggle,
     onUndo: undo,
@@ -2067,16 +2063,16 @@ function syncPreferenceInputs() {
 }
 
 function syncProjectColorInputs(s: Readonly<SessionState>) {
-    const danger = s.dangerColorOverride ?? DEFAULT_APP_PREFERENCES.dangerColor;
-    const accent = s.accentColorOverride ?? DEFAULT_APP_PREFERENCES.accentColor;
-    if (projectColorsSynced && rs.projectColors.dangerColor === danger && rs.projectColors.accentColor === accent) return;
-    projectColorsSynced = true;
+    const key = JSON.stringify([s.colorA, s.colorB, s.dangerColorOverride, s.accentColorOverride]);
+    if (projectColorsSynced === key) return;
+    projectColorsSynced = key;
+    const automatic = contrastingProjectColors(s.colorA, s.colorB);
+    const danger = s.dangerColorOverride ?? automatic.danger;
+    const accent = s.accentColorOverride ?? automatic.accent;
     rs.projectColors = { dangerColor: danger, accentColor: accent };
     document.documentElement.style.setProperty("--danger", danger);
     document.documentElement.style.setProperty("--accent", accent);
-    (document.getElementById("danger-color") as HTMLInputElement).value = danger;
-    (document.getElementById("accent-color") as HTMLInputElement).value = accent;
-    ui.setProjectColors(danger, accent);
+    ui.setProjectColors(danger, accent, s.dangerColorOverride === null, s.accentColorOverride === null);
 }
 
 syncDomInputs(store.state);

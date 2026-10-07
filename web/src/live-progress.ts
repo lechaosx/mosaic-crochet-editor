@@ -19,9 +19,12 @@ function readLiveProgress(fingerprint: string, totalUnits: number): number | nul
         if (value.version !== LIVE_PROGRESS_VERSION
             || typeof value.fingerprint !== "string"
             || !Number.isInteger(value.completedUnits)
-            || value.completedUnits! < 0
-            || value.completedUnits! > totalUnits
-            || value.fingerprint !== fingerprint) {
+            || value.completedUnits! < 0) {
+            localStorage.removeItem(LIVE_PROGRESS_KEY);
+            return null;
+        }
+        if (value.fingerprint !== fingerprint) return null;
+        if (value.completedUnits! > totalUnits) {
             localStorage.removeItem(LIVE_PROGRESS_KEY);
             return null;
         }

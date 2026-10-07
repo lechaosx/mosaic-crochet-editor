@@ -1,3 +1,5 @@
+import { contrastingProjectColors } from "./contrast-colors";
+
 export interface AppPreferences {
     guidanceOpacity: number;
     dangerColor:     string;
@@ -6,10 +8,11 @@ export interface AppPreferences {
     lockInvalid:     boolean;
 }
 
+const defaultColors = contrastingProjectColors("#000000", "#ffffff");
 export const DEFAULT_APP_PREFERENCES: Readonly<AppPreferences> = {
     guidanceOpacity: 100,
-    dangerColor:     "#ff0000",
-    accentColor:     "#d653a3",
+    dangerColor:     defaultColors.danger,
+    accentColor:     defaultColors.accent,
     labelsVisible:   true,
     lockInvalid:     true,
 };
