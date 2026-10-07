@@ -46,6 +46,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const canvasRect = canvas.getBoundingClientRect();
         const wide = matchMedia("(min-width: 64rem)").matches;
         const authoringRect = authoringPanel.hidden ? null : authoringPanel.getBoundingClientRect();
+        inspectorHost.style.setProperty("--authoring-dock-height", `${authoringRect?.height ?? 0}px`);
         const crochetRect = crochetPanel.hidden ? null : crochetPanel.getBoundingClientRect();
         const inspectorRect = inspectorHost.hidden ? null : inspectorHost.getBoundingClientRect();
         const modeRect = crochetRect ?? authoringRect;
@@ -95,7 +96,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     }
 
     const panelTriggers: Record<InspectorPanel, HTMLElement[]> = {
-        selection: [el("tool-select"), el("tool-wand")],
+        selection: [],
         settings: [el("btn-hl-toggle")],
         transforms: [el("btn-sym-toggle")],
         pattern: [el("btn-edit")],
@@ -194,6 +195,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     return {
         ...toolbar, ...selection, ...mirrors,
+        setExecutingAction: (action, yarn = null) => {
+            toolbar.setExecutingAction(action, yarn);
+            pattern.setExecutingYarn(yarn ?? (action?.kind === "paint"
+                && (action.tool === "pencil" || action.tool === "fill") ? action.color : null));
+        },
         setPrimary: pattern.setPrimary, setColors: pattern.setColors, setProjectColors: pattern.setProjectColors,
         setEditError: pattern.setEditError, setEditSummary: pattern.setEditSummary, syncEditInputs: pattern.syncEditInputs,
         openInstructions: instructions.openInstructions,

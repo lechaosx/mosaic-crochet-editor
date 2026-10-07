@@ -268,7 +268,7 @@ test("Move area mode enables modifier-free mask-only drag and remains selected",
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Move", exact: true }).click();
 
-    await page.getByRole("button", { name: "Move variants", exact: true }).click();
+    await page.locator("#tool-move").press("ArrowDown");
     const moveArea = page.getByRole("menuitemradio", { name: "Move area", exact: true });
     await moveArea.click();
     await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Move area/);

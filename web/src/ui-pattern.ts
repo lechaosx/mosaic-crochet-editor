@@ -99,9 +99,20 @@ export function mountPattern(
     colorA.addEventListener("change", cb.onColorCommit);
     colorB.addEventListener("change", cb.onColorCommit);
 
-    function setPrimary(slot: 1 | 2) {
+    let chosenPrimary: 1 | 2 = 1;
+    let executingYarn: 1 | 2 | null = null;
+    function projectPrimary() {
+        const slot = executingYarn ?? chosenPrimary;
         setPressed(swatchA, slot === 1, "swatch--active");
         setPressed(swatchB, slot === 2, "swatch--active");
+    }
+    function setPrimary(slot: 1 | 2) {
+        chosenPrimary = slot;
+        projectPrimary();
+    }
+    function setExecutingYarn(slot: 1 | 2 | null) {
+        executingYarn = slot;
+        projectPrimary();
     }
     function setColors(a: string, b: string) {
         colorA.value = a; colorB.value = b;
@@ -273,5 +284,5 @@ export function mountPattern(
     el("accent-color-reset").addEventListener("click", cb.onAccentColorReset);
     el("find-contrast-colors").addEventListener("click", cb.onFindContrastColors);
 
-    return { setPrimary, setColors, setProjectColors, setEditError, setEditSummary, syncEditInputs, finishPatternEdit, drawPatternPreview };
+    return { setPrimary, setExecutingYarn, setColors, setProjectColors, setEditError, setEditSummary, syncEditInputs, finishPatternEdit, drawPatternPreview };
 }

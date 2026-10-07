@@ -37,9 +37,9 @@ function open(plan = units, completed = 0) {
 }
 
 const button = (id: string) => document.getElementById(id) as HTMLButtonElement;
-const whole = () => document.querySelector<HTMLButtonElement>('[aria-label="Whole pattern"]')!;
+const whole = () => document.querySelector<HTMLButtonElement>('[aria-label="Pattern overview"]')!;
 
-test("Whole pattern wraps in both directions without saving synthetic progress", () => {
+test("Pattern overview wraps in both directions without saving synthetic progress", () => {
     const { save, preview } = open();
     expect(whole()).not.toBeNull();
     button("instructions-live-back").click();
@@ -99,7 +99,7 @@ test("Whole stays after newly generated real units without losing focus", () => 
     view.setLivePlan(units, 0, save);
     const displayed = Array.from(document.querySelectorAll(".instructions-unit"));
     expect(displayed.map(item => item.getAttribute("aria-label"))).toEqual([
-        "Row 1, Yarn A", "Row 2, Yarn B", "Whole pattern",
+        "Row 1, Yarn A", "Row 2, Yarn B", "Pattern overview",
     ]);
     expect(document.activeElement).toBe(original);
 });

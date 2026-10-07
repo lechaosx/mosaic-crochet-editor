@@ -173,11 +173,11 @@ test("the pattern swatch uses the chart's row and concentric-round yarn geometry
             const padding = 8 * window.devicePixelRatio;
             const p = ctx.getImageData(padding + (x + 0.25) * (canvas.width - 2 * padding) / n,
                 padding + (y + 0.6) * (canvas.height - 2 * padding) / n, 1, 1).data;
-            return Array.from(p).slice(0, 3);
+            return Array.from(p);
         };
         return { rowTop: [at(0, 0), at(6, 0)], rowNext: [at(0, 1), at(6, 1)],
             outer: [at(0, 0), at(6, 0), at(0, 6), at(6, 6)],
-            inner: [at(1, 2), at(5, 2), at(2, 1), at(2, 5)], center: at(3, 3) };
+            inner: [at(1, 1), at(5, 1), at(1, 5), at(5, 5)], center: at(3, 3) };
     });
     const rows = await sample();
     expect(rows.rowTop[0]).toEqual(rows.rowTop[1]);
@@ -195,7 +195,7 @@ test("the pattern swatch uses the chart's row and concentric-round yarn geometry
 test.describe("responsive pattern swatch", () => {
     test.use({ deviceScaleFactor: 2 });
 
-    test("fills the panel with padding and sizes its bitmap for the display", async ({ page }) => {
+    test("fits inside the panel and sizes its bitmap for the display", async ({ page }) => {
         await bootApp(page);
         await page.getByRole("button", { name: "Pattern" }).click();
         const preview = page.locator("#pattern-preview-canvas");
@@ -214,20 +214,22 @@ test.describe("responsive pattern swatch", () => {
             }).toBe(true);
             const size = await measure();
             expect(size.available - size.width).toBeGreaterThan(0);
-            expect(size.available - size.width).toBeLessThanOrEqual(24);
+            expect(size.width).toBeGreaterThan(0);
         }
     });
 });
 
-test("swatch shows its diagonal mirror in the project accent colour", async ({ page }) => {
+test("corner swatch shows its central slash mirror in the project accent colour", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByText("Centre-out", { exact: true }).click();
+    await page.getByText("Quarter", { exact: true }).click();
     await page.getByLabel("Accent", { exact: true }).fill("#123456");
     expect(await page.locator("#pattern-preview-canvas").evaluate((canvas: HTMLCanvasElement) => {
         const ctx = canvas.getContext("2d")!;
         let accentPixels = 0;
-        for (let x = canvas.width * 0.1; x < canvas.width * 0.4; x++) {
-            const p = ctx.getImageData(x, x, 1, 1).data;
+        for (let x = canvas.width * 0.3; x < canvas.width * 0.7; x++) {
+            const p = ctx.getImageData(x, canvas.height - x, 1, 1).data;
             if (p[0] === 18 && p[1] === 52 && p[2] === 86) accentPixels++;
         }
         return accentPixels;

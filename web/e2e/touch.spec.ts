@@ -1,6 +1,53 @@
 import { test, expect } from "@playwright/test";
 import { addGlobalMirror, bootApp, cellCoord, pixelRGB, touchDragCells, touchPanZoom } from "./_helpers";
 
+for (const [tool, family] of [["select", "Rectangle"], ["wand", "Wand"], ["move", "Move"], ["overlay", "Overlay"]]) {
+    test(`two taps at the same ${family} button open its menu`, async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await bootApp(page);
+        const button = page.locator(`#tool-${tool}`);
+        const bounds = (await button.boundingBox())!;
+        const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+        await page.touchscreen.tap(x, y);
+        await expect(button).toHaveAttribute("aria-pressed", "true");
+        await expect(page.getByRole("menu", { name: `${family} variants`, exact: true })).toBeHidden();
+        if (tool === "select" || tool === "wand") await expect(page.locator("#selection-popover")).toBeVisible();
+        await page.touchscreen.tap(x, y);
+        await expect(page.getByRole("menu", { name: `${family} variants`, exact: true })).toBeVisible();
+        await expect(button).toHaveAttribute("aria-expanded", "true");
+    });
+}
+
+test("touch menus work when the browser reports each tap as a single click", async ({ page }) => {
+    await bootApp(page);
+    await page.evaluate(() => document.addEventListener("click", event => {
+        if ((event.target as Element).closest("#tool-move")) Object.defineProperty(event, "detail", { value: 1 });
+    }, true));
+    const button = page.locator("#tool-move");
+    const bounds = (await button.boundingBox())!;
+    const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+    await page.touchscreen.tap(x, y);
+    await page.touchscreen.tap(x, y);
+    await expect(page.getByRole("menu", { name: "Move variants", exact: true })).toBeVisible();
+});
+
+for (const cancellation of ["scroll", "blur", "pointercancel"] as const) test(
+    `a ${cancellation} ends the touch double-press sequence`, async ({ page }) => {
+    await bootApp(page);
+    const button = page.locator("#tool-move");
+    const bounds = (await button.boundingBox())!;
+    const x = bounds.x + bounds.width / 2, y = bounds.y + bounds.height / 2;
+    await page.touchscreen.tap(x, y);
+    await page.evaluate(event => {
+        if (event === "pointercancel") document.getElementById("tool-move")!
+            .dispatchEvent(new PointerEvent(event, { pointerId: 99 }));
+        else window.dispatchEvent(new Event(event));
+    }, cancellation);
+    await page.touchscreen.tap(x, y);
+    await expect(page.getByRole("menu", { name: "Move variants", exact: true })).toBeHidden();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+});
+
 test("a rotated mirror centre supports touch drag and system cancellation without changing canvas pixels", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").tap();
@@ -127,7 +174,8 @@ test("Move area mode supports a modifier-free touch drag", async ({ page }) => {
     await page.getByRole("button", { name: "Close inspector" }).tap();
     await page.touchscreen.tap(painted.cx, painted.cy);
     await page.getByRole("button", { name: "Move", exact: true }).tap();
-    await page.getByRole("button", { name: "Move variants", exact: true }).tap();
+    await page.locator("#tool-move").tap();
+    await page.locator("#tool-move").tap();
     await page.getByRole("menuitemradio", { name: "Move area", exact: true }).tap();
 
     await touchDragCells(page, 1, 1, 3, 1);
@@ -164,7 +212,8 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await expect(card.getByRole("button", { name: "Paste" })).toBeEnabled();
     await page.getByRole("button", { name: "Close inspector" }).tap();
     await page.getByRole("button", { name: "Move", exact: true }).tap();
-    await page.getByRole("button", { name: "Move variants", exact: true }).tap();
+    await page.locator("#tool-move").tap();
+    await page.locator("#tool-move").tap();
     const moveMenu = page.getByRole("menu", { name: "Move variants", exact: true });
     await moveMenu.getByRole("menuitemradio", { name: "Duplicate", exact: true }).tap();
     await expect(page.getByRole("button", { name: "Move", exact: true })).toHaveAttribute("aria-pressed", "true");

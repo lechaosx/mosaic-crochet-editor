@@ -7,7 +7,7 @@ test("selection tools open and reopen the Selection inspector", async ({ page })
     const select = page.getByRole("button", { name: "Select", exact: true });
     await select.click();
     await expect(page.locator("#inspector-title")).toHaveText("Selection");
-    await expect(page.getByRole("button", { name: "Rectangle variants", exact: true })).toBeVisible();
+    await expect(page.locator("#tool-select")).toBeVisible();
     await expect(page.getByRole("group", { name: "Selection mode" })).toHaveCount(0);
 
     await page.getByRole("button", { name: "Close inspector" }).click();
@@ -33,7 +33,7 @@ test("Move offers outcomes through its dock menu without a separate inspector", 
     const move = page.getByRole("button", { name: "Move", exact: true });
     await move.click();
     await expect(page.locator("#move-popover")).toHaveCount(0);
-    await page.getByRole("button", { name: "Move variants", exact: true }).click();
+    await page.locator("#tool-move").press("ArrowDown");
     const menu = page.getByRole("menu", { name: "Move variants", exact: true });
     for (const name of ["Move content", "Duplicate", "Move area"]) {
         await expect(menu.getByRole("menuitemradio", { name, exact: true })).toBeVisible();

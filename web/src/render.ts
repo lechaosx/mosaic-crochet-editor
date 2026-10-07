@@ -1,5 +1,5 @@
 import { PatternState, RowState, RoundState, MirrorCenter, SymKey } from "@mosaic/logic/types";
-import { mirrorAxes } from "@mosaic/logic/symmetry";
+import { mirrorAxes, mirrorsToFlat } from "@mosaic/logic/symmetry";
 import { mirrorTypePresentation } from "./mirror-presentation";
 import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
@@ -354,10 +354,12 @@ function updateFavicon(
 }
 
 export function patternColourPreviewSample(mode: PatternState["mode"], subMode: "full" | "half" | "quarter") {
-    const { pattern, pixels } = applyEditSettings(mode === "row"
+    const full = applyEditSettings(mode === "row"
         ? { mode, width: PREVIEW_CELLS, height: PREVIEW_CELLS, wipe: true }
-        : { mode, innerWidth: 1, innerHeight: 1, rounds: 3, subMode, wipe: true });
-    const W = pattern.canvasWidth, H = pattern.canvasHeight;
+        : { mode, innerWidth: 1, innerHeight: 1, rounds: 3, subMode: "full", wipe: true });
+    const { pattern, pixels } = full;
+    const W = pattern.canvasWidth;
+    const natural = pixels.slice();
     if (pattern.mode === "row") {
         pixels[6 * W + 2] = pixels[6 * W + 2] === 1 ? 2 : 1;
         for (const y of [2, 3]) pixels[y * W + 5] = pixels[y * W + 5] === 1 ? 2 : 1;
@@ -367,11 +369,23 @@ export function patternColourPreviewSample(mode: PatternState["mode"], subMode: 
             pixels[index] = pixels[index] === 1 ? 2 : 1;
         }
     }
-    const plan = pattern.mode === "row"
-        ? build_highlight_plan_row(pixels, W, H)
-        : build_highlight_plan_round(pixels, W, H, pattern.virtualWidth, pattern.virtualHeight,
-            pattern.offsetX, pattern.offsetY, pattern.rounds);
-    return { pattern, pixels, plan };
+    const transforms = mirrorsToFlat([{ id: "preview", enabled: true, x: 3, y: 3,
+        types: mode === "row" ? ["V"] : ["V", "H", "D2"] }]);
+    const changed = pixels.slice();
+    for (let y = 0; y < PREVIEW_CELLS; y++) for (let x = 0; x < W; x++) {
+        if (changed[y * W + x] === natural[y * W + x]) continue;
+        for (const index of transformed_target_indices(W, PREVIEW_CELLS, x, y, transforms)) pixels[index] = changed[y * W + x];
+    }
+    const sample = mode === "round" && subMode !== "full"
+        ? applyEditSettings({ mode, innerWidth: 1, innerHeight: 1, rounds: 3, subMode, wipe: false }, full) : full;
+    const mirror: MirrorCenter = { id: "preview", enabled: true,
+        x: (sample.pattern.canvasWidth - 1) / 2, y: (sample.pattern.canvasHeight - 1) / 2,
+        types: mode === "row" || subMode === "half" ? ["V"] : subMode === "quarter" ? ["D2"] : ["V", "H", "D2"] };
+    const plan = sample.pattern.mode === "row"
+        ? build_highlight_plan_row(sample.pixels, sample.pattern.canvasWidth, sample.pattern.canvasHeight)
+        : build_highlight_plan_round(sample.pixels, sample.pattern.canvasWidth, sample.pattern.canvasHeight,
+            sample.pattern.virtualWidth, sample.pattern.virtualHeight, sample.pattern.offsetX, sample.pattern.offsetY, sample.pattern.rounds);
+    return { ...sample, plan, mirror };
 }
 
 export function renderPatternColourPreview(
@@ -380,7 +394,7 @@ export function renderPatternColourPreview(
     colorA: string, colorB: string, dangerColor: string, accentColor: string,
     opacity: number, antsElapsedMs: number,
 ) {
-    const { pattern, pixels, plan } = patternColourPreviewSample(mode, subMode);
+    const { pattern, pixels, plan, mirror } = patternColourPreviewSample(mode, subMode);
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
     const ctx = canvas.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
@@ -396,8 +410,7 @@ export function renderPatternColourPreview(
     const panY = (height - H * cell) / 2;
     const view = { panX: panX / dpr, panY: panY / dpr, zoom: cell / dpr };
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#161618";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     const matrix = new DOMMatrix().translate(panX, panY).scale(cell);
     ctx.setTransform(matrix);
     for (let y = 0; y < H; y++) {
@@ -417,7 +430,7 @@ export function renderPatternColourPreview(
     renderHighlightSymbols(ctx, view, dpr,
         [null, colorA, colorB], dangerColor, pattern, pixels, plan, matrix, opacity, null, false);
     renderSymmetryGuides(ctx, view, dpr, pattern,
-        [{ id: "preview", enabled: true, x: 2, y: 2, types: ["D1"] }], accentColor, null, true);
+        [mirror], accentColor, null, true);
     const selection = new Uint8Array(W * H);
     for (let y = Math.max(0, H - 3); y < H; y++) {
         for (let x = 0; x < Math.min(3, W); x++) {

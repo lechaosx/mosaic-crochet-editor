@@ -1,6 +1,81 @@
 import { expect, test } from "@playwright/test";
 import { bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant as choose } from "./_helpers";
 
+test("right Pencil projects the executing yarn and restores the latest choice", async ({ page }) => {
+    await bootApp(page);
+    const cell = await cellCoord(page, 2, 2);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down({ button: "right" });
+    await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#swatch-a")).toHaveAttribute("aria-pressed", "false");
+    await page.keyboard.press("2");
+    await page.keyboard.press("1");
+    await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.up({ button: "right" });
+    await expect(page.locator("#swatch-a")).toHaveAttribute("aria-pressed", "true");
+});
+
+for (const cancellation of ["pointercancel", "lostpointercapture", "blur"] as const) test(
+    `${cancellation} restores the latest chosen yarn after alternate Pencil`, async ({ page }) => {
+    await bootApp(page);
+    const cell = await cellCoord(page, 2, 2);
+    await page.mouse.move(cell.cx, cell.cy);
+    await page.mouse.down({ button: "right" });
+    await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("2");
+    await page.keyboard.press("1");
+    await page.evaluate(event => {
+        if (event === "blur") window.dispatchEvent(new Event(event));
+        else document.getElementById("canvas")!.dispatchEvent(new PointerEvent(event, { pointerId: 1, bubbles: true }));
+    }, cancellation);
+    await expect(page.locator("#swatch-a")).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.up({ button: "right" });
+});
+
+test("pen barrel button projects the alternate Pencil yarn through the shared pointer flow", async ({ page }) => {
+    await bootApp(page);
+    const cell = await cellCoord(page, 2, 2);
+    const session = await page.context().newCDPSession(page);
+    await session.send("Input.dispatchMouseEvent", { type: "mousePressed", x: cell.cx, y: cell.cy,
+        button: "right", buttons: 2, clickCount: 1, pointerType: "pen" });
+    await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#status-action")).toHaveText("Pencil · Yarn B");
+    await session.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: cell.cx, y: cell.cy,
+        button: "right", buttons: 0, clickCount: 1, pointerType: "pen" });
+    await expect(page.locator("#swatch-a")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#status-action")).toBeHidden();
+});
+
+test("double press opens the main tool menu and a single press only chooses the tool", async ({ page }) => {
+    await bootApp(page);
+    const tool = page.locator("#tool-select");
+    const menu = page.getByRole("menu", { name: "Rectangle variants", exact: true });
+    await tool.click();
+    await expect(menu).toBeHidden();
+    await tool.dblclick();
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(tool).toBeFocused();
+    await tool.press("ArrowDown");
+    await expect(menu).toBeVisible();
+});
+
+test("Rectangle menu expansion remains independent of the Selection inspector", async ({ page }) => {
+    await bootApp(page);
+    const tool = page.locator("#tool-select");
+    await tool.click();
+    await expect(page.locator("#selection-popover")).toBeVisible();
+    await expect(tool).toHaveAttribute("aria-expanded", "false");
+    await tool.press("ArrowDown");
+    await expect(tool).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(tool).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#selection-popover")).toBeVisible();
+    await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+    await tool.press("ArrowDown");
+    await expect(tool).toHaveAttribute("aria-expanded", "true");
+});
+
 test("middle Pencil inverts without panning or changing the chosen tool or yarn", async ({ page }) => {
     await bootApp(page);
     const cell = await cellCoord(page, 2, 2);
@@ -65,7 +140,7 @@ test("held Rectangle shows its temporary icon and restores the remembered varian
     await page.mouse.up({ button: "right" });
     await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select");
     await expect(page.locator("#status-action")).toBeHidden();
-    await page.getByRole("button", { name: "Rectangle variants", exact: true }).click();
+    await page.locator("#tool-select").press("ArrowDown");
     await expect(page.getByRole("menuitemradio", { name: "Replace", exact: true })).toHaveAttribute("aria-checked", "true");
 });
 
@@ -91,7 +166,7 @@ test("a held action keeps its starting variant while a new choice is remembered 
     await page.mouse.move(cell.cx, cell.cy);
     await page.mouse.down({ button: "right" });
     await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select-add");
-    await page.getByRole("button", { name: "Rectangle variants", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
+    await page.locator("#tool-select").evaluate(button => button.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })));
     await page.getByRole("menuitemradio", { name: "Subtract", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
     await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select-add");
     await expect(page.locator("#tool-select")).toHaveAttribute("data-variant", "remove");
@@ -147,7 +222,7 @@ test("chosen variants remain described with enlarged text", async ({ page }) => 
     await page.evaluate(() => { document.documentElement.style.fontSize = "32px"; });
     for (const [id, family] of [["select", "Rectangle"], ["wand", "Wand"], ["move", "Move"], ["overlay", "Overlay"]]) {
         await expect(page.locator(`#tool-${id}`)).toHaveAccessibleDescription(new RegExp(family));
-        await page.getByRole("button", { name: `${family} variants`, exact: true }).click();
+        await page.locator(`#tool-${family === "Rectangle" ? "select" : family === "Wand" ? "wand" : family === "Move" ? "move" : "overlay"}`).press("ArrowDown");
         await expect(page.getByRole("menu", { name: `${family} variants`, exact: true })).toBeVisible();
         await page.keyboard.press("Escape");
     }
@@ -155,9 +230,9 @@ test("chosen variants remain described with enlarged text", async ({ page }) => 
 
 for (const change of ["scroll", "resize"]) test(`external ${change} dismisses a menu while its own scroll remains usable`, async ({ page }) => {
     await bootApp(page);
-    const trigger = page.getByRole("button", { name: "Move variants", exact: true });
+    const trigger = page.locator("#tool-move");
     const menu = page.getByRole("menu", { name: "Move variants", exact: true });
-    await trigger.click();
+    await trigger.press("ArrowDown");
     await menu.evaluate(element => element.dispatchEvent(new Event("scroll")));
     await expect(menu).toBeVisible();
     if (change === "resize") await page.setViewportSize({ width: 900, height: 700 });
@@ -168,8 +243,8 @@ for (const change of ["scroll", "resize"]) test(`external ${change} dismisses a 
 
 test("group menus preserve choices on open and Escape and support keyboard selection", async ({ page }) => {
     await bootApp(page);
-    const trigger = page.getByRole("button", { name: "Rectangle variants", exact: true });
-    await trigger.click();
+    const trigger = page.locator("#tool-select");
+    await trigger.press("ArrowDown");
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("Escape");
@@ -277,13 +352,13 @@ test("temporary feedback clears on cancel and leaves operation warnings intact",
 
 test("group dismissal by an outside focus or pointer preserves the chosen tool", async ({ page }) => {
     await bootApp(page);
-    const trigger = page.getByRole("button", { name: "Move variants", exact: true });
+    const trigger = page.locator("#tool-move");
     const menu = page.getByRole("menu", { name: "Move variants", exact: true });
-    await trigger.click();
+    await trigger.press("ArrowDown");
     await page.locator("#swatch-b").click();
     await expect(menu).toBeHidden();
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
-    await trigger.click();
+    await trigger.press("ArrowDown");
     await page.locator("#canvas").focus();
     await expect(menu).toBeHidden();
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");

@@ -29,7 +29,7 @@ The intended end-to-end story is:
 
 - Pattern changes preview in place. Compatible geometry changes preserve authored cells and selection sources where their meaning remains stable and prune unusable selections and mirror types; changing between row and centre-out construction starts the new geometry. — **your decision**
 - Editing is direct and tool-led. The chart remains the visual focus, while document commands, authoring tools, contextual inspectors, and navigation have distinct roles. — **your decision**
-- Rectangle, Wand, Move, and Overlay expose remembered variants through the same visible menu, hold, and keyboard routes. Button and modifier accelerators execute temporary actions without changing the chosen variant or yarn. — **Agent's choice**
+- Rectangle, Wand, Move, and Overlay expose remembered variants through menus opened by holding or double pressing the tool, or using the keyboard. Button and modifier accelerators execute temporary actions without changing the chosen variant or yarn. Menu access: **your decision**; remembered variants and accelerators: **Agent's choice**
 - While a pointer or movement key is held, the executing action uses the ordinary selected-tool state and its matching variant icon; releasing or cancelling restores the current chosen tool immediately. — **your decision**
 - Selection is a persistent movable layer rather than a temporary outline. It can be edited, duplicated, transformed, copied, cut, pasted, or committed without forcing the user into a separate document mode. — **your decision**
 - Global Mirror transforms drawing across the whole chart independently of saved selections. Each saved selection has one active None, Grid, Circle, or Mirror category and retains the other categories' settings, including independent Circle and Mirror centres. None keeps the editable source without local copies; Circle uses chosen quarter turns, and Mirror composes its chosen types around one centre. — **your decision**
@@ -47,8 +47,8 @@ The intended end-to-end story is:
 
 - Crochet mode is navigation-only: authored chart edits happen in Design, while Crochet presents generated rows or rounds, progress controls, direction guidance, and the chart state completed through the current instruction. — **your decision**
 - Progress advances by whole rows or rounds, can jump directly to an instruction, and survives compatible stitch edits. It is personal local progress rather than portable project content. — **your decision**
-- Whole pattern follows the final instruction and shows the authored chart with all overlay warnings; navigation wraps through it in both directions. — **your decision**
-- Whole pattern is a transient overview: it retains the last selected instruction's progress, and reopening Crochet resumes that instruction. — **Agent's choice**
+- Pattern overview follows the final instruction and shows the authored chart with all overlay warnings; navigation wraps through it in both directions. — **your decision**
+- Pattern overview is a transient overview: it retains the last selected instruction's progress, and reopening Crochet resumes that instruction. — **Agent's choice**
 - The complete compressed instruction sequence remains available for copying, while the primary workflow emphasizes the current instruction and its location on the chart. — **your decision**
 
 ## Projects, recovery, and ownership

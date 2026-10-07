@@ -8,26 +8,24 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
     const acceleratorHint = button.title;
     group.className = "tool-group";
     button.before(group);
-    const trigger = document.createElement("button");
-    trigger.type = "button";
-    trigger.className = "btn tool-group-menu";
-    trigger.setAttribute("aria-label", `${family} variants`);
-    trigger.title = `${family} variants · hold the tool or press Arrow Down`;
-    trigger.setAttribute("aria-haspopup", "menu");
-    trigger.setAttribute("aria-expanded", "false");
-    trigger.append(icon("chevron"));
+    const indicator = document.createElement("span");
+    indicator.className = "tool-group-indicator";
+    indicator.setAttribute("aria-hidden", "true");
+    indicator.append(icon("chevron"));
+    button.setAttribute("aria-haspopup", "menu");
+    button.setAttribute("aria-expanded", "false");
     const menu = document.createElement("div");
     menu.id = `${button.id}-variants`;
     menu.className = "tool-variant-menu";
     menu.setAttribute("popover", "manual");
     menu.setAttribute("role", "menu");
     menu.setAttribute("aria-label", `${family} variants`);
-    trigger.setAttribute("aria-controls", menu.id);
-    group.append(button, trigger);
+    button.setAttribute("aria-controls", [button.getAttribute("aria-controls"), menu.id].filter(Boolean).join(" "));
+    group.append(button, indicator);
     document.body.append(menu);
     let chosen: T | null = null;
     let displayed: T | null = null;
-    let returnFocus: HTMLElement = trigger;
+    let returnFocus: HTMLElement = button;
     const items = variants.map(variant => {
         const item = document.createElement("button");
         item.type = "button";
@@ -48,8 +46,8 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
     function renderVariant(value: T) {
         const variant = variants.find(item => item.value === value)!;
         button.querySelector("use")!.setAttribute("href", `#icon-${variant.icon}`);
-        button.setAttribute("aria-description", `${family} · ${variant.label}. Hold or press Arrow Down for variants.`);
-        button.title = `${family} · ${variant.label} · hold or open variants. ${acceleratorHint}`;
+        button.setAttribute("aria-description", `${family} · ${variant.label}. Hold, double press, or press Arrow Down for variants.`);
+        button.title = `${family} · ${variant.label} · hold or double press for variants. ${acceleratorHint}`;
         if (family === "Overlay") button.setAttribute("aria-label", `${variant.label === "Place" ? "Place" : variant.label === "Clear" ? "Clear" : "Invert"} overlay`);
     }
     function setVariant(value: T) {
@@ -80,19 +78,15 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
         menu.style.top = `${Math.max(8, Math.min(top, window.innerHeight - menuBounds.height - 8))}px`;
         items[variants.findIndex(variant => variant.value === chosen)].focus();
     }
-    trigger.addEventListener("click", () => {
-        if (menu.matches(":popover-open")) menu.hidePopover();
-        else open(trigger);
-    });
     menu.addEventListener("toggle", event => {
-        trigger.setAttribute("aria-expanded", String((event as ToggleEvent).newState === "open"));
+        button.setAttribute("aria-expanded", String((event as ToggleEvent).newState === "open"));
     });
-    for (const target of [button, trigger]) target.addEventListener("keydown", event => {
+    button.addEventListener("keydown", event => {
         if (event.key === "ArrowDown" || event.key === "ArrowUp"
             || event.key === "ContextMenu" || event.key === "F10" && event.shiftKey) {
             event.preventDefault();
             event.stopPropagation();
-            open(target);
+            open(button);
         }
     });
     menu.addEventListener("keydown", event => {
@@ -125,6 +119,7 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
     let press: { id: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null = null;
     let heldPointer: number | null = null;
     let suppressedPointer: number | null = null;
+    let lastTouchPress = 0;
     function cancelPress() {
         if (press) clearTimeout(press.timer);
         press = null;
@@ -151,7 +146,9 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
         if (heldPointer === event.pointerId) heldPointer = null;
     });
     for (const event of ["pointercancel", "lostpointercapture"] as const) button.addEventListener(event, pointer => {
+        if (event === "pointercancel") lastTouchPress = 0;
         if (press?.id !== pointer.pointerId && heldPointer !== pointer.pointerId) return;
+        lastTouchPress = 0;
         suppressedPointer = pointer.pointerId;
         cancelPress();
         if (heldPointer === pointer.pointerId) {
@@ -160,7 +157,10 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
         }
     });
     button.addEventListener("pointerleave", cancelPress);
-    document.addEventListener("pointerdown", () => { suppressedPointer = null; }, true);
+    document.addEventListener("pointerdown", event => {
+        suppressedPointer = null;
+        if (!group.contains(event.target as Node)) lastTouchPress = 0;
+    }, true);
     document.addEventListener("click", event => {
         if (event.detail !== 0 && suppressedPointer === (event as PointerEvent).pointerId) {
             event.preventDefault();
@@ -168,10 +168,15 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
             suppressedPointer = null;
         }
     }, true);
-    button.addEventListener("click", () => {
-        choose(chosen!);
+    button.addEventListener("click", event => {
+        const touch = (event as PointerEvent).pointerType === "touch";
+        const doubleTouch = touch && lastTouchPress > 0 && event.timeStamp - lastTouchPress < 350;
+        lastTouchPress = touch && !doubleTouch ? event.timeStamp : 0;
+        if (!touch && event.detail === 2 || doubleTouch) open(button);
+        else choose(chosen!);
     });
     window.addEventListener("blur", () => {
+        lastTouchPress = 0;
         if (press) suppressedPointer = press.id;
         cancelPress();
         heldPointer = null;
@@ -179,6 +184,7 @@ export function mountToolGroup<T extends string>(button: HTMLButtonElement, fami
     });
     window.addEventListener("scroll", event => {
         if (event.target instanceof Node && menu.contains(event.target)) return;
+        lastTouchPress = 0;
         if (press) suppressedPointer = press.id;
         cancelPress();
         if (menu.matches(":popover-open")) menu.hidePopover();

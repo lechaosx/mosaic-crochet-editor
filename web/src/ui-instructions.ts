@@ -33,7 +33,6 @@ export function mountInstructions(
             : hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions")
             + (!open && crochetErrors ? ` — ${errors}` : "");
         crochetMode.setAttribute("aria-label", `${label}${!open && crochetErrors ? ` — ${errors}` : ""}`);
-        crochetMode.classList.toggle("btn--danger", !open && crochetErrors > 0);
         crochetMode.setAttribute("aria-pressed", String(open));
     };
     crochetMode.addEventListener("click", () => {
@@ -63,7 +62,7 @@ export function mountInstructions(
         const wholeButton = document.createElement("button");
         wholeButton.type = "button";
         wholeButton.className = "instructions-unit instructions-unit--whole";
-        wholeButton.textContent = "Whole pattern";
+        wholeButton.textContent = "Pattern overview";
         wholeRow.append(wholeButton);
         let liveProgressChanged = (_completedUnits: number) => true;
         let isBusy = true;
@@ -84,7 +83,7 @@ export function mountInstructions(
         const renderCrochet = () => {
             const total = liveUnits.length;
             const current = total === 0 ? 0 : Math.min(liveCompleted + 1, total);
-            liveProgress.textContent = showWhole && total > 0 ? "Whole pattern" : `${current} / ${total}`;
+            liveProgress.textContent = showWhole && total > 0 ? "Pattern overview" : `${current} / ${total}`;
             liveBack.disabled = isBusy || total === 0;
             liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
             liveBack.title = `Back one ${workKind()}`;
@@ -233,8 +232,8 @@ export function mountInstructions(
                     showWhole = false;
                 }
                 wholeButton.classList.toggle("instructions-unit--invalid", wholeInvalid);
-                wholeButton.setAttribute("aria-label", `Whole pattern${wholeInvalid ? ", contains invalid placements" : ""}`);
-                wholeButton.title = `Whole pattern${wholeInvalid ? " · contains invalid placements outside the instructions" : ""}`;
+                wholeButton.setAttribute("aria-label", `Pattern overview${wholeInvalid ? ", contains invalid placements" : ""}`);
+                wholeButton.title = `Pattern overview${wholeInvalid ? " · contains invalid placements outside the instructions" : ""}`;
                 liveSaveWarning.hidden = true;
                 refreshCrochetAvailability();
                 renderCrochet();

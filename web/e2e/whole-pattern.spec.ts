@@ -24,7 +24,7 @@ for (const extent of ["Rows", "Full", "Half", "Quarter"] as const) {
                     virtualWidth: 7, virtualHeight: 7, offsetX: 0, offsetY, rounds: 3 },
             pixels, colorA: "#000000", colorB: "#ffffff" })) });
         await page.locator("#btn-export").click();
-        const whole = page.getByRole("button", { name: "Whole pattern, contains invalid placements", exact: true });
+        const whole = page.getByRole("button", { name: "Pattern overview, contains invalid placements", exact: true });
         await expect(whole).toBeVisible();
         await expect(page.locator('.instructions-unit[aria-label^="Row"], .instructions-unit[aria-label^="Round"]'))
             .toHaveCount(rows ? height : 3);
@@ -76,7 +76,7 @@ test("interior corner warnings remain owned by their generated round", async ({ 
             state: { mode: "round", canvasWidth: 7, canvasHeight: 7, virtualWidth: 7, virtualHeight: 7,
                 offsetX: 0, offsetY: 0, rounds: 3 }, pixels, colorA: "#000000", colorB: "#ffffff" })) });
     await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Whole pattern", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Round 3, Yarn A, contains invalid placements", exact: true })).toBeVisible();
 });
 
@@ -91,20 +91,20 @@ test("warnings owned by a generated row stay on that row", async ({ page }) => {
     await clickCell(page, 0, 1);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Row 9, Yarn A, contains invalid placements", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Whole pattern", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toBeVisible();
 });
 
-test("Whole pattern is transient progress and wraps around real rows", async ({ page }) => {
+test("Pattern overview is transient progress and wraps around real rows", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-export").click();
     const row = page.getByRole("button", { name: "Row 3, Yarn A", exact: true });
     await row.click();
     const saved = await page.evaluate(() => localStorage.getItem("mosaic-live-progress"));
-    const whole = page.getByRole("button", { name: "Whole pattern", exact: true });
+    const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await expect(whole).toBeVisible();
     await whole.click();
     await expect(whole).toHaveAttribute("aria-current", "step");
-    await expect(page.locator("#instructions-live-progress")).toHaveText("Whole pattern");
+    await expect(page.locator("#instructions-live-progress")).toHaveText("Pattern overview");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-live-progress"))).toBe(saved);
     expect(await page.evaluate(() => window.__test_instruction_seam_geometry__)).toBeNull();
     await page.locator("#btn-export").click();
@@ -139,7 +139,7 @@ test("the final real row keeps focused guidance and descriptive hover text", asy
     expect(guidance.validGlyphCoords.every(({ y }) => y === 0)).toBe(true);
     expect(await page.evaluate(() => window.__test_instruction_seam_geometry__)).not.toBeNull();
     await expect(last).toHaveAttribute("title", "Row 9, Yarn A");
-    const whole = page.getByRole("button", { name: "Whole pattern", exact: true });
+    const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await whole.click();
     const complete = await page.evaluate(() => (window as typeof window & {
         __test_instruction_guidance__?: { filtered: boolean; validGlyphCoords: { x: number; y: number }[] };
@@ -157,7 +157,7 @@ test("Whole stays selected through direction and colour changes and is absent fr
     await page.locator("#btn-export").click();
     await page.getByRole("button", { name: "Row 2, Yarn B", exact: true }).click();
     const saved = await page.evaluate(() => localStorage.getItem("mosaic-live-progress"));
-    const whole = page.getByRole("button", { name: "Whole pattern", exact: true });
+    const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await expect(whole).toBeVisible();
     await whole.click();
     await whole.focus();
@@ -176,7 +176,7 @@ test("Whole stays selected through direction and colour changes and is absent fr
     await page.getByRole("button", { name: "Copy instructions" }).click();
     const text = await page.evaluate(() => (window as typeof window & { copied: string }).copied);
     expect(text.split("\n")).toHaveLength(9);
-    expect(text).not.toContain("Whole pattern");
+    expect(text).not.toContain("Pattern overview");
     expect(text.split("\n").map(line => line.match(/^Row \d+ · Yarn ([AB]):/)![1])).toEqual(["A", "B", "A", "B", "A", "B", "A", "B", "A"]);
 });
 
@@ -196,7 +196,7 @@ test("Whole does not enter files or authored history, identical Open retains it,
         history: localStorage.getItem("mosaic-history"), recovery: localStorage.getItem("mosaic-recovery"),
         progress: localStorage.getItem("mosaic-live-progress"),
     }));
-    const whole = page.getByRole("button", { name: "Whole pattern", exact: true });
+    const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await expect(whole).toBeVisible();
     await whole.focus();
     await page.keyboard.press("Enter");

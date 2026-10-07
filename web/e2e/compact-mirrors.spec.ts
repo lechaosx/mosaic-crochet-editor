@@ -24,9 +24,9 @@ for (const [width, fontSize] of [[1440, 16], [390, 16], [1280, 32]]) {
             expect(primary.height).toBeCloseTo(ordinary.height, 0);
             expect(group.width).toBeCloseTo(ordinary.width, 0);
             expect(group.height).toBeCloseTo(ordinary.height, 0);
-            const indicator = page.getByRole("button", { name: `${family} variants`, exact: true });
+            const indicator = tool;
             await expect(indicator).toBeVisible();
-            await indicator.click();
+            await indicator.press("ArrowDown");
             await expect(page.getByRole("menu", { name: `${family} variants`, exact: true })).toBeVisible();
             await page.keyboard.press("Escape");
             await expect(indicator).toBeFocused();

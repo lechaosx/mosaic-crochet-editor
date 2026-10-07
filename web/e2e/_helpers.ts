@@ -10,7 +10,7 @@ export async function addGlobalMirror(page: Page, type: string) {
 }
 
 export async function chooseToolVariant(page: Page, family: string, variant: string) {
-    await page.getByRole("button", { name: `${family} variants`, exact: true }).click();
+    await page.locator(`#tool-${family === "Rectangle" ? "select" : family === "Wand" ? "wand" : family === "Move" ? "move" : "overlay"}`).press("ArrowDown");
     await page.getByRole("menu", { name: `${family} variants`, exact: true })
         .getByRole("menuitemradio", { name: variant, exact: true }).click();
 }

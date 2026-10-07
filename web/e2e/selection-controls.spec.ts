@@ -6,7 +6,9 @@ test("Select and Wand reopen the inspector with accessible saved selection rows"
     await expect(page.locator("#selection-actions")).toHaveCount(0);
     const select = page.getByRole("button", { name: "Select", exact: true });
     await select.click();
-    await expect(select).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#selection-popover")).toBeVisible();
+    await expect(select).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("menu", { name: "Rectangle variants", exact: true })).toBeHidden();
     const list = page.getByRole("list", { name: "Selections" });
     await expect(list.getByRole("listitem")).toHaveCount(1);
     await expect(list.getByRole("button", { name: "New selection", exact: true })).toHaveAttribute("aria-pressed", "true");

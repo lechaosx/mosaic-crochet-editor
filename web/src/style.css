@@ -94,11 +94,11 @@ input  { font: inherit; color: inherit; }
 .document-bar {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   row-gap: var(--space-2);
   column-gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1);
   background: var(--bg-1);
   border-bottom: var(--border);
   flex-shrink: 0;
@@ -113,7 +113,7 @@ input  { font: inherit; color: inherit; }
 
 .g-file { justify-self: start; }
 .g-mode { grid-column: 2; }
-.g-mode .btn { display: grid; position: relative; }
+.g-mode .btn { display: grid; position: relative; background: transparent; }
 .g-mode .btn > span { grid-area: 1 / 1; }
 /* Reserve the longest mode label to keep the chart fixed across workspace changes. */
 .g-mode .btn::after { content: "Continue Crocheting"; visibility: hidden; grid-area: 1 / 1; }
@@ -183,8 +183,9 @@ input  { font: inherit; color: inherit; }
 
 .dock-group-label { display: none; }
 
+.document-bar--compact { display: flex; flex-wrap: wrap; }
 .document-bar--compact .g-file {
-  grid-column: 1;
+  flex: 1 1 auto;
   flex-wrap: wrap;
 }
 .document-bar--compact .btn { padding-inline: var(--space-2); }
@@ -192,12 +193,8 @@ input  { font: inherit; color: inherit; }
 .document-bar--compact .g-hlrot:empty { display: none; }
 
 .document-bar--compact .g-mode {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  justify-self: center;
+  margin-inline-start: auto;
 }
-.document-bar--compact .g-file { grid-row: 2; }
-.document-bar--compact .g-hlrot { grid-row: 2; }
 
 .inspector-host {
   position: fixed;
@@ -238,7 +235,10 @@ input  { font: inherit; color: inherit; }
 
 @media (max-width: 63.999rem) {
   .inspector-host:has(#sym-popover:not([hidden])) { max-height: 38dvh; }
-  .inspector-host:has(#selection-popover:not([hidden])) { max-height: 50dvh; }
+  .inspector-host:has(#selection-popover:not([hidden])) {
+    bottom: var(--authoring-dock-height, 0px);
+    max-height: calc(50dvh - var(--authoring-dock-height, 0px));
+  }
 }
 
 @media (min-width: 64rem) {
@@ -350,18 +350,15 @@ input  { font: inherit; color: inherit; }
   width: var(--hit);
   padding: 0;
 }
-.authoring-dock .tool-group-menu {
+.tool-group-indicator {
   position: absolute;
-  inset: auto -1px -1px auto;
-  width: 17px;
-  min-width: 0;
-  height: 17px;
-  min-height: 0;
-  padding: 0;
-  border-radius: var(--radius-1) 0 var(--radius-1) 0;
-  background: var(--bg-1);
+  inset: auto 3px 2px auto;
+  width: 8px;
+  height: 8px;
+  color: var(--fg-2);
+  pointer-events: none;
 }
-.tool-group-menu .tool-icon { width: 10px; height: 10px; }
+.tool-group-indicator .tool-icon { width: 8px; height: 8px; }
 .tool-variant-menu {
   position: fixed;
   inset: auto;
@@ -377,15 +374,12 @@ input  { font: inherit; color: inherit; }
 .tool-variant-item[aria-checked="true"]::after { content: "✓"; margin-inline-start: auto; }
 .status-action { color: var(--fg-0); }
 
-.btn--danger,
 .btn--destructive {
   background: var(--danger-soft);
   border-color: var(--danger);
   color: var(--fg-0);
 }
-.btn--danger:hover:not(:disabled),
 .btn--destructive:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 20%, var(--bg-2)); }
-.btn--danger::before { content: "!"; position: absolute; inset-inline-start: var(--space-1); font-weight: 700; }
 
 /* ──────────────────────────────────────────────────────────────────────────
    Inputs
@@ -756,7 +750,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 .property-actions .segmented { flex: 1 1 auto; }
 .pattern-colour-preview {
   align-self: center;
-  width: calc(100% - 2 * var(--space-2));
+  width: min(12rem, calc(100% - 2 * var(--space-2)));
   min-height: 0;
   aspect-ratio: 1;
   margin-block-start: var(--space-2);
@@ -980,9 +974,9 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .instructions-unit[aria-current="step"] {
   background: var(--accent-soft);
+  box-shadow: inset 3px 0 var(--accent);
 }
-.instructions-unit[aria-current="step"] code::after,
-.instructions-unit--whole[aria-current="step"]::after { content: " •"; color: var(--fg-0); }
+
 .instructions-unit--complete code { color: var(--fg-1); }
 .instructions-unit.instructions-unit--invalid {
   background: color-mix(in srgb, var(--danger) 8%, var(--bg-1));
@@ -998,6 +992,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 }
 .instructions-unit--whole {
   display: block;
+  text-align: center;
   padding: var(--space-2) var(--space-3);
   font-weight: 700;
 }
@@ -1136,13 +1131,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .toggle input:checked + .toggle-track             { background: var(--accent-soft); }
 .toggle input:checked + .toggle-track::after      { left: calc(100% - 1.0625rem); background: var(--accent); }
-.toggle input:checked + .toggle-track::before {
-  content: "✓";
-  position: absolute;
-  left: 0.25rem;
-  color: var(--fg-0);
-  font-size: 0.75rem;
-}
+
 
 .toggle:has(input:disabled) { cursor: not-allowed; color: var(--fg-2); opacity: 0.55; }
 .toggle input:disabled + .toggle-track             { background: var(--bg-3); }

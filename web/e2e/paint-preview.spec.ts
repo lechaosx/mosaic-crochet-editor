@@ -23,7 +23,7 @@ test("Overlay exposes touch actions while right-click performs the opposite plac
     const clear = page.getByRole("button", { name: "Clear overlay" });
     const invert = page.getByRole("button", { name: "Invert overlay" });
     await expect(place).toBeVisible();
-    await page.getByRole("button", { name: "Overlay variants", exact: true }).click();
+    await page.locator("#tool-overlay").press("ArrowDown");
     await expect(page.getByRole("menuitemradio", { name: "Clear", exact: true })).toBeVisible();
     await expect(page.getByRole("menuitemradio", { name: "Invert", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");

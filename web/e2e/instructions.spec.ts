@@ -291,7 +291,7 @@ test("Crochet summarizes errors without blocking progress", async ({ page }) => 
 
     const crochet = page.getByRole("button", { name: "Begin Crocheting — 1 invalid placement" });
     await expect(crochet).toHaveText("Begin Crocheting");
-    await expect(crochet).toHaveClass(/btn--danger/);
+    await expect(crochet).not.toHaveClass(/btn--danger/);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveText("1 invalid placement");
     await expect(page.locator('.instructions-unit[aria-label="Row 8, Yarn B"]')).toContainText("oc");
@@ -544,10 +544,10 @@ test("a loaded empty round remains a single progress unit", async ({ page }) => 
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.locator('.instructions-unit[aria-label="Round 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
     await expect(page.locator('.instructions-unit[aria-label^="Round"]')).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Whole pattern", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toBeVisible();
     await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 1");
     await page.getByRole("button", { name: "Forward one round" }).click();
-    await expect(page.getByRole("button", { name: "Whole pattern", exact: true })).toHaveAttribute("aria-current", "step");
+    await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toHaveAttribute("aria-current", "step");
 });
 
 test("a local cache scan can cancel at its periodic yield", async ({ page }) => {
@@ -1059,7 +1059,7 @@ test("Crochet renders through the current row and no future rows", async ({ page
     const futureAgain = await cellCoord(page, 4, rowCount - 2);
     expect(await pixelRGB(page, futureAgain.cx, futureAgain.cy)).toEqual([22, 22, 24]);
 
-    await page.getByRole("button", { name: "Whole pattern", exact: true }).click();
+    await page.getByRole("button", { name: "Pattern overview", exact: true }).click();
     expect(await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
             .__test_instruction_guidance__?.filtered)).toBe(false);
@@ -1134,7 +1134,7 @@ test("Crochet wraps through Whole around a single Centre-out round", async ({ pa
     const back = page.getByRole("button", { name: "Back one round" });
     await expect(back).toBeEnabled();
     await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 1");
-    const whole = page.getByRole("button", { name: "Whole pattern", exact: true });
+    const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await back.click();
     await expect(whole).toHaveAttribute("aria-current", "step");
     await back.click();

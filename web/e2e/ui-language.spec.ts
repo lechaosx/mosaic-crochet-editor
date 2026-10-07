@@ -16,8 +16,9 @@ test("workspace transitions preserve canvas geometry near the compact toolbar th
 });
 
 test("increasing text size recomposes document actions without overlapping Crochet", async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 960 });
+    await page.setViewportSize({ width: 1000, height: 960 });
     await bootApp(page);
+    await expect(page.locator("#btn-more")).toBeHidden();
     await page.addStyleTag({ content: "html { font-size: 200%; }" });
     await expect.poll(() => page.evaluate(() => {
         const crochet = document.querySelector("#btn-export")!.getBoundingClientRect();
@@ -48,8 +49,8 @@ test("geometry and extent samples use a common cell scale", async ({ page }) => 
         const pixels = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
         let left = canvas.width, right = 0;
         for (let i = 0; i < pixels.length; i += 4) {
-            if ((pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 0)
-                || (pixels[i] === 255 && pixels[i + 1] === 255 && pixels[i + 2] === 255)) {
+            if (pixels[i + 3] === 255 && ((pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 0)
+                || (pixels[i] === 255 && pixels[i + 1] === 255 && pixels[i + 2] === 255))) {
                 left = Math.min(left, i / 4 % canvas.width);
                 right = Math.max(right, i / 4 % canvas.width);
             }

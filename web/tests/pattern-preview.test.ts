@@ -4,6 +4,18 @@ import { expect, test } from "vitest";
 import { PlanType } from "@mosaic/wasm";
 import { patternColourPreviewSample } from "../src/render";
 
+for (const [mode, extent, axis] of [["row", "full", "V"], ["round", "full", "D2"], ["round", "half", "V"], ["round", "quarter", "D2"]] as const) {
+    test(`${mode} ${extent} preview data follows its central ${axis} mirror`, () => {
+        const { pattern, pixels } = patternColourPreviewSample(mode, extent);
+        const W = pattern.canvasWidth, H = pattern.canvasHeight;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+            const targetX = axis === "V" ? W - 1 - x : W - 1 - y;
+            const targetY = axis === "V" ? y : H - 1 - x;
+            expect(pixels[y * W + x]).toBe(pixels[targetY * W + targetX]);
+        }
+    });
+}
+
 for (const extent of ["full", "half", "quarter"] as const) {
     test(`${extent} centre-out sample includes valid work and non-corner invalid placements`, () => {
         const { pattern, pixels, plan } = patternColourPreviewSample("round", extent);
