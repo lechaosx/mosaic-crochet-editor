@@ -6,7 +6,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Tool menus open on hold or double press, temporary Pencil and Spill actions highlight their executing yarn, and selection variants use clearer icons.
 - Pattern swatches show mirrored motifs in a smaller, clear preview; the menu, centred Crochet action, Settings switches, and Crochet list use calmer, consistent controls.
-- Selection and Mirrors use compact lists with inline actions, a trailing creation row, clearer repeat handles, and fully visible implied mirror guides.
+- Selection and Mirrors group editable sources, centres, and copy axes consistently, with a No selection row, live paired coordinates, unavailable quarter turns, and overlapping placements prevented.
 - Pattern shape changes keep selections attached to preserved stitches, prune vanished selections and mirror types, and switch unsafe copies off; Undo restores them.
 
 ## 4 October 2026

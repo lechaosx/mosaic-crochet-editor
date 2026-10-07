@@ -271,14 +271,14 @@ describe("saved recipe lifecycle", () => {
         expect(store.state.activeRecipeId).toBe(store.state.recipes[1].id);
     });
 
-    test("the only saved selection cannot be deleted", () => {
+    test("the empty compatibility selection remains inactive after a deletion attempt", () => {
         const [only] = restoreGridRecipes(undefined);
         const store = new Store(rowSession(3, 1, { recipes: [only], activeRecipeId: only.id }));
 
         deleteGridRecipe(store, only.id);
 
         expect(store.state.recipes).toEqual([only]);
-        expect(store.state.activeRecipeId).toBe(only.id);
+        expect(store.state.activeRecipeId).toBeNull();
     });
     test("reactivating a sparse source preserves its exact saved bounds", () => {
         const source = { x: 0, y: 0, w: 3, h: 1, pixels: new Uint8Array([0, 1, 0]) };

@@ -1,13 +1,14 @@
 import type { GridRecipe } from "@mosaic/logic/types";
 import { el, radioValue, setRadio, setPressed, setMessage, iconAction, listRow, syncList } from "./dom";
-import type { UICallbacks, InspectorControls } from "./ui-types";
-import { mirrorTypePresentation } from "./mirror-presentation";
+import type { UICallbacks } from "./ui-types";
+import { createMirrorChoices } from "./mirror-choices";
+import { mountCoordinateEditor } from "./coordinate-editor";
 
 export function mountSelection(
     cb: Pick<UICallbacks, "onSelectionCopy" | "onSelectionCut"
-        | "onSelectionPaste" | "onSelectionDeselect" | "onCreateRecipe" | "onActivateRecipe"
+        | "onSelectionPaste" | "onCreateRecipe" | "onActivateRecipe"
         | "onDeleteRecipe" | "onRecipeChange" | "onRecipeCommit" | "onRecipeRevert" | "onApplyRecipe">,
-    inspector: Pick<InspectorControls, "isOpen" | "close">, syncCanvasChromeInsets: () => void) {
+    syncCanvasChromeInsets: () => void) {
     /* ── Selection card ──────────────────────────────────────────────── */
     const selectionStatus = el("status-selection");
     const selectionTitle = el("selection-card-title");
@@ -15,19 +16,10 @@ export function mountSelection(
     const selectionCopy = el<HTMLButtonElement>("selection-copy");
     const selectionCut = el<HTMLButtonElement>("selection-cut");
     const selectionPaste = el<HTMLButtonElement>("selection-paste");
-    const selectionDeselect = el<HTMLButtonElement>("selection-deselect");
     selectionCopy.addEventListener("click", cb.onSelectionCopy);
     selectionCut.addEventListener("click", cb.onSelectionCut);
     selectionPaste.addEventListener("click", cb.onSelectionPaste);
-    selectionDeselect.addEventListener("click", () => {
-        cb.onSelectionDeselect();
-        if (inspector.isOpen("selection")) {
-            inspector.close(false);
-            document.querySelector<HTMLButtonElement>(
-                ".authoring-dock .btn[aria-pressed='true']",
-            )?.focus();
-        }
-    });
+
 
     function setSelectionState(selectedCount: number, clipboardCount: number) {
         const hasSelection = selectedCount > 0;
@@ -49,10 +41,8 @@ export function mountSelection(
             : "";
         selectionCopy.disabled = !hasSelection;
         selectionCut.disabled = !hasSelection;
-        selectionDeselect.disabled = !hasSelection;
         selectionCopy.title = hasSelection ? "Copy selected cells (Ctrl+C)" : "Select cells to copy";
         selectionCut.title = hasSelection ? "Cut selected cells (Ctrl+X)" : "Select cells to cut";
-        selectionDeselect.title = hasSelection ? "Place content and remove the selection (Escape)" : "No selection to deselect";
         selectionPaste.disabled = !hasClip;
         selectionPaste.title = hasClip ? "Paste copied cells (Ctrl+V)" : "Nothing copied";
         if (statusVisibilityChanged) syncCanvasChromeInsets();
@@ -80,7 +70,7 @@ export function mountSelection(
     const recipeTurns = [90, 180, 270].map(turn => el<HTMLInputElement>(`recipe-turn-${turn}`));
     const mirrorCentreX = el<HTMLInputElement>("recipe-mirror-centre-x");
     const mirrorCentreY = el<HTMLInputElement>("recipe-mirror-centre-y");
-    const mirrorTypes = ["v", "h", "d1", "d2", "c"].map(type => el<HTMLInputElement>(`recipe-mirror-${type}`));
+
     const mirrorControls = el("recipe-mirror-controls");
     const recipeError = el("recipe-error");
     let selectedRecipeId: string | null = null;
@@ -113,29 +103,25 @@ export function mountSelection(
             if (event.key === "Enter") { event.preventDefault(); update(change(), true); cb.onRecipeCommit(); }
         });
     }
-    for (const [inputs, apply, fields] of [
-        [[recipeCentreX, recipeCentreY], el("recipe-centre-apply"), ["rotationCentreX", "rotationCentreY"]],
-        [[mirrorCentreX, mirrorCentreY], el("recipe-mirror-centre-apply"), ["mirrorCentreX", "mirrorCentreY"]],
-    ] as const) {
-        const preview = () => update({ [fields[0]]: inputs[0].valueAsNumber, [fields[1]]: inputs[1].valueAsNumber }, true);
-        const commit = () => { preview(); cb.onRecipeCommit(); };
-        inputs.forEach(input => {
-            input.addEventListener("input", preview);
-            input.addEventListener("keydown", event => {
-                if (event.key === "Enter") { event.preventDefault(); commit(); }
-            });
-        });
-        apply.addEventListener("click", commit);
-    }
+    const circlePosition = mountCoordinateEditor(el("recipe-centre-fields"), recipeCentreX, recipeCentreY,
+        p => {
+            update({ rotationCentreX: p.x, rotationCentreY: p.y }, true);
+            recipeTurns.forEach(input => { input.disabled = Number(input.value) !== 180 && !Number.isInteger(p.x - p.y); });
+        }, cb.onRecipeCommit, cb.onRecipeRevert);
+    const mirrorPosition = mountCoordinateEditor(el("recipe-mirror-centre-fields"), mirrorCentreX, mirrorCentreY,
+        p => update({ mirrorCentreX: p.x, mirrorCentreY: p.y }, true), cb.onRecipeCommit, cb.onRecipeRevert);
+    const mirrorChoices = createMirrorChoices(type => {
+        const recipe = projectedRecipes?.find(value => value.id === selectedRecipeId);
+        if (recipe) update({ mirrorTypes: recipe.mirrorTypes.includes(type)
+            ? recipe.mirrorTypes.filter(value => value !== type) : [...recipe.mirrorTypes, type] });
+    }, "recipe-mirror");
+    el("recipe-mirror-types").append(mirrorChoices.element);
     for (const [input, field] of [
         [recipeColumnMirrorHorizontal, "columnMirrorHorizontal"], [recipeColumnMirrorVertical, "columnMirrorVertical"],
         [recipeRowMirrorHorizontal, "rowMirrorHorizontal"], [recipeRowMirrorVertical, "rowMirrorVertical"],
     ] as const) input.addEventListener("change", () => update({ [field]: input.checked }));
     recipeTurns.forEach(input => input.addEventListener("change", () => update({
         rotationTurns: recipeTurns.filter(input => input.checked).map(input => Number(input.value)) as GridRecipe["rotationTurns"],
-    })));
-    mirrorTypes.forEach(input => input.addEventListener("change", () => update({
-        mirrorTypes: mirrorTypes.filter(input => input.checked).map(input => input.value) as GridRecipe["mirrorTypes"],
     })));
     document.querySelectorAll<HTMLInputElement>('[name="recipe-mode"]').forEach(input =>
         input.addEventListener("change", () => { update({ mode: input.value as GridRecipe["mode"] }); syncRecipeSections(); }));
@@ -210,22 +196,12 @@ export function mountSelection(
         recipeColumnMirrorVertical.checked = active.columnMirrorVertical;
         recipeRowMirrorHorizontal.checked = active.rowMirrorHorizontal;
         recipeRowMirrorVertical.checked = active.rowMirrorVertical;
-        recipeCentreX.value = String(active.rotationCentreX);
-        recipeCentreY.value = String(active.rotationCentreY);
+        circlePosition.setPosition(active.id, { x: active.rotationCentreX, y: active.rotationCentreY });
         recipeTurns.forEach(input => { input.checked = active.rotationTurns.includes(Number(input.value) as 90 | 180 | 270); });
-        mirrorCentreX.value = String(active.mirrorCentreX);
-        mirrorCentreY.value = String(active.mirrorCentreY);
-        for (const [index, type] of mirrorTypePresentation(active.mirrorTypes).entries()) {
-            const input = mirrorTypes[index];
-            input.checked = type.chosen;
-            input.parentElement!.classList.toggle("independent-toggle--implied", type.implied);
-            const description = type.implied
-                ? "Implied by the chosen types at this centre. Check to choose directly."
-                : type.chosen ? "Chosen directly at this centre." : "Check to choose this type at this centre.";
-            if (input.getAttribute("aria-description") !== description) input.setAttribute("aria-description", description);
-            const title = `${type.name}. ${description}`;
-            if (input.parentElement!.title !== title) input.parentElement!.title = title;
-        }
+        recipeTurns.forEach(input => { input.disabled = Number(input.value) !== 180
+            && !Number.isInteger(active.rotationCentreX - active.rotationCentreY); });
+        mirrorPosition.setPosition(active.id, { x: active.mirrorCentreX, y: active.mirrorCentreY });
+        mirrorChoices.update(active.mirrorTypes);
         syncRecipeSections();
     }
     function setRecipeError(message: string | null) { setMessage(recipeError, message); }

@@ -63,7 +63,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
     await clickCell(page, 0, 1);
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").press("Tab");
-    await page.getByRole("button", { name: "New selection" }).click();
+    await page.getByRole("button", { name: "No selection" }).click();
     await clickCell(page, 2, 1);
     await page.locator("#recipe-down").fill("1");
     await page.locator("#recipe-down").press("Tab");
@@ -116,7 +116,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
     expect(await recovery(page)).toEqual(cleared);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await expect(page.getByRole("button", { name: "Paste", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "New selection", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "No selection", exact: true })).toBeVisible();
 
     await page.reload();
     await page.waitForFunction(() => !!window.__test_matrix__);
@@ -159,7 +159,7 @@ test("Clear design records saved-repeat changes even with a natural chart and no
     await clickCell(page, 2, 1);
     await page.locator("#recipe-right").fill("2");
     await page.locator("#recipe-right").press("Tab");
-    await page.getByRole("button", { name: "Deselect", exact: true }).click();
+    await page.getByRole("button", { name: "No selection", exact: true }).click();
     const before = await recovery(page);
     expect(before.workspace.float).toBeNull();
     await page.getByRole("button", { name: "Pattern" }).click();
@@ -191,6 +191,6 @@ test("Pattern previews after Clear design preserve the cleared source and revert
     await expect(page.locator("#edit-error")).toBeVisible();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(page.getByRole("button", { name: "New selection", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "No selection", exact: true })).toBeVisible();
     expect(await recovery(page)).toEqual(cleared);
 });

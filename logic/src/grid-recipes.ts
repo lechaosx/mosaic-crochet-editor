@@ -215,10 +215,9 @@ export function recipesForPattern(
 export function normalizeActiveRecipeId(
     recipes: ReadonlyArray<GridRecipe>, activeRecipeId: string | null, float: Float | null,
 ): string | null {
-    if (activeRecipeId === null && float === null) return null;
+    if (float === null) return null;
     const recipe = recipes.find(candidate => candidate.id === activeRecipeId) ?? recipes[0];
     if (!recipe) return null;
-    if (float === null) return recipe.id;
     if (!recipeHasSource(recipe)) return recipe.id;
     const source = recipe.source;
     if (source.x !== float.x || source.y !== float.y || source.w !== float.w || source.h !== float.h) return null;

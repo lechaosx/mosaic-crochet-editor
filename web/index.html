@@ -29,7 +29,7 @@
       <rect x="4.5" y="4.5" width="15" height="15" rx="1"/>
     </symbol>
     <symbol id="icon-overlay-invert" viewBox="0 0 24 24">
-      <rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M7 9h10m-3-3 3 3-3 3M17 15H7m3-3-3 3 3 3"/>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="1"/><path d="M7 9h10m-3-3 3 3-3 3M17 15H7m3-3-3 3 3 3"/>
     </symbol>
     <symbol id="icon-select" viewBox="0 0 24 24">
       <rect x="4.5" y="5" width="15" height="14" rx="1" stroke-dasharray="3 2"/>
@@ -236,12 +236,13 @@
       <button class="btn btn--icon btn--ghost" id="selection-copy" type="button" aria-label="Copy" title="Copy selected cells (Ctrl+C)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-copy"/></svg></button>
       <button class="btn btn--icon btn--ghost" id="selection-cut" type="button" aria-label="Cut" title="Cut selected cells (Ctrl+X)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-cut"/></svg></button>
       <button class="btn btn--icon btn--ghost" id="selection-paste" type="button" aria-label="Paste" title="Paste copied cells (Ctrl+V)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-paste"/></svg></button>
-      <button class="btn btn--icon btn--ghost" id="selection-deselect" type="button" aria-label="Deselect" title="Place content and remove the selection (Escape)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-deselect"/></svg></button>
     </div>
     </div>
     <div class="selection-recipes">
-      <ul id="recipe-list" aria-label="Selections"><li data-recipe-key="placeholder" class="recipe-list-row"><button class="btn btn--ghost recipe-list-activate list-placeholder" id="recipe-create" type="button" title="Select cells on the chart to add a selection"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg>New selection</button></li></ul>
+      <div class="inspector-section-label">Sources</div>
+      <ul id="recipe-list" aria-label="Selections"><li data-recipe-key="placeholder" class="recipe-list-row"><button class="btn btn--ghost recipe-list-activate list-placeholder" id="recipe-create" type="button" title="Clear the active selection; selecting cells creates a new saved source"><svg class="tool-icon" aria-hidden="true"><use href="#icon-deselect"/></svg>No selection</button></li></ul>
       <div id="recipe-controls" hidden>
+        <div class="inspector-section-label">Copies</div>
         <div class="segmented" role="radiogroup" aria-label="Selection transform">
           <label><input id="recipe-mode-none" type="radio" name="recipe-mode" value="none"> None</label>
           <label><input id="recipe-mode-grid" type="radio" name="recipe-mode" value="grid" checked> Grid</label>
@@ -280,9 +281,10 @@
           </div>
         </div>
         <div id="recipe-rotation-controls" class="field-group" hidden>
-          <div class="field-row"><label for="recipe-centre-x">Centre x</label><input id="recipe-centre-x" type="number" step="0.5" value="0"></div>
-          <div class="field-row"><label for="recipe-centre-y">Centre y</label><input id="recipe-centre-y" type="number" step="0.5" value="0"></div>
-          <button class="btn btn--icon btn--ghost" id="recipe-centre-apply" type="button" aria-label="Apply Circle centre position" title="Apply Circle centre position (Enter)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-check"/></svg></button>
+          <fieldset class="coordinate-position"><legend>Centre</legend><div class="coordinate-fields" id="recipe-centre-fields">
+            <label for="recipe-centre-x">X</label><input id="recipe-centre-x" type="number" step="0.5" value="0" aria-label="Circle centre x">
+            <label for="recipe-centre-y">Y</label><input id="recipe-centre-y" type="number" step="0.5" value="0" aria-label="Circle centre y">
+          </div></fieldset>
           <div class="toggle-choices" role="group" aria-label="Quarter turns">
             <label class="independent-toggle"><input id="recipe-turn-90" type="checkbox" value="90"><span>90°</span></label>
             <label class="independent-toggle"><input id="recipe-turn-180" type="checkbox" value="180"><span>180°</span></label>
@@ -290,16 +292,11 @@
           </div>
         </div>
         <div id="recipe-mirror-controls" class="field-group" hidden>
-          <div class="field-row"><label for="recipe-mirror-centre-x">Centre x</label><input id="recipe-mirror-centre-x" type="number" step="0.5" value="0"></div>
-          <div class="field-row"><label for="recipe-mirror-centre-y">Centre y</label><input id="recipe-mirror-centre-y" type="number" step="0.5" value="0"></div>
-          <button class="btn btn--icon btn--ghost" id="recipe-mirror-centre-apply" type="button" aria-label="Apply Mirror centre position" title="Apply Mirror centre position (Enter)"><svg class="tool-icon" aria-hidden="true"><use href="#icon-check"/></svg></button>
-          <div class="toggle-choices" role="group" aria-label="Selection mirror types">
-            <label class="independent-toggle"><input id="recipe-mirror-v" type="checkbox" value="V"><span>Vertical</span></label>
-            <label class="independent-toggle"><input id="recipe-mirror-h" type="checkbox" value="H"><span>Horizontal</span></label>
-            <label class="independent-toggle"><input id="recipe-mirror-d1" type="checkbox" value="D1"><span>Diagonal</span></label>
-            <label class="independent-toggle"><input id="recipe-mirror-d2" type="checkbox" value="D2"><span>Anti-diagonal</span></label>
-            <label class="independent-toggle"><input id="recipe-mirror-c" type="checkbox" value="C"><span>Point symmetry (180°)</span></label>
-          </div>
+          <fieldset class="coordinate-position"><legend>Centre</legend><div class="coordinate-fields" id="recipe-mirror-centre-fields">
+            <label for="recipe-mirror-centre-x">X</label><input id="recipe-mirror-centre-x" type="number" step="0.5" value="0" aria-label="Selection mirror centre x">
+            <label for="recipe-mirror-centre-y">Y</label><input id="recipe-mirror-centre-y" type="number" step="0.5" value="0" aria-label="Selection mirror centre y">
+          </div></fieldset>
+          <div id="recipe-mirror-types"></div>
         </div>
         <button class="btn" id="recipe-apply" type="button" title="Stamp the saved selection into its local repeat instances">Stamp copies</button>
       </div>
@@ -330,12 +327,11 @@
   <section id="sym-popover" class="inspector-panel" aria-label="Global Mirror" hidden>
     <div id="sym-list" class="sym-list" aria-label="Mirror centres"><div data-mirror-key="placeholder" class="sym-list-placeholder"><button class="btn btn--ghost list-placeholder" id="add-mirror" aria-label="Add mirror" title="Add a mirror centre, then choose its types"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg>New mirror</button></div></div>
     <div id="mirror-editor" class="mirror-editor" role="group" aria-label="Selected mirror centre" hidden>
-      <fieldset class="mirror-position">
-        <legend>Position</legend>
-        <div class="mirror-position__fields">
-          <label for="mirror-centre-x">x</label><input id="mirror-centre-x" type="number" step="0.5" aria-label="Mirror centre x">
-          <label for="mirror-centre-y">y</label><input id="mirror-centre-y" type="number" step="0.5" aria-label="Mirror centre y">
-          <button id="mirror-centre-apply" class="btn" type="button" aria-label="Apply centre position" title="Apply both centre coordinates (Enter)">Apply</button>
+      <fieldset class="coordinate-position">
+        <legend>Centre</legend>
+        <div class="coordinate-fields" id="mirror-centre-fields">
+          <label for="mirror-centre-x">X</label><input id="mirror-centre-x" type="number" step="0.5" aria-label="Mirror centre x">
+          <label for="mirror-centre-y">Y</label><input id="mirror-centre-y" type="number" step="0.5" aria-label="Mirror centre y">
         </div>
       </fieldset>
     </div>

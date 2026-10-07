@@ -183,7 +183,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         isOpen: isInspectorOpen, open: openInspector, close: closeInspector, focusFirst: focusFirstInspectorControl,
     };
     const toolbar = mountToolbar(cb, inspector, syncCanvasChromeInsets);
-    const selection = mountSelection(cb, inspector, syncCanvasChromeInsets);
+    const selection = mountSelection(cb, syncCanvasChromeInsets);
     const pattern = mountPattern(cb, inspector, enterDesignForCommand);
     finishPatternEdit = pattern.finishPatternEdit;
     const mirrors = mountMirrors(cb, inspector);

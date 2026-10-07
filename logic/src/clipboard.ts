@@ -5,7 +5,7 @@
 
 import { Float } from "./types";
 import { Store, outOfBounds, visiblePixels } from "./store";
-import { cutCells, matchedCutMask, deleteFloat, syncActiveGridRecipe } from "./selection";
+import { cutCells, matchedCutMask, deleteFloat, syncActiveGridRecipe, selectionSourceIsValid } from "./selection";
 
 // The clipboard is just a Float snapshot.
 let clipboard: Float | null = null;
@@ -37,8 +37,10 @@ export function cutFloat(store: Store): void {
 
 // Paste: non-destructive float at original canvas coords. Anchors any prior
 // float first. Cells that land on holes are dropped.
-export function pasteClipboard(store: Store, beforeCommit?: () => void): boolean {
-    if (!clipboard) return false;
+export type PasteResult = "pasted" | "empty" | "outside" | "conflict";
+
+export function pasteClipboard(store: Store, beforeCommit?: () => void): PasteResult {
+    if (!clipboard) return "empty";
 
     const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
     const fp = new Uint8Array(clipboard.w * clipboard.h);
@@ -54,9 +56,11 @@ export function pasteClipboard(store: Store, beforeCommit?: () => void): boolean
             any = true;
         }
     }
-    if (!any) return false;
+    if (!any) return "outside";
     const newFloat: Float = { x: clipboard.x, y: clipboard.y, w: clipboard.w, h: clipboard.h, pixels: fp };
+    if (!selectionSourceIsValid(store.state, newFloat)) return "conflict";
     beforeCommit?.();
+    if (!selectionSourceIsValid(store.state, newFloat)) return "conflict";
     const currentRecipeId = store.state.activeRecipeId;
     store.commit(s => {
         s.pixels = visiblePixels(s);
@@ -64,7 +68,7 @@ export function pasteClipboard(store: Store, beforeCommit?: () => void): boolean
         s.activeRecipeId = currentRecipeId;
         syncActiveGridRecipe(s);
     }, { history: true });
-    return true;
+    return "pasted";
 }
 
 export function hasClipboard(): boolean { return clipboard !== null; }

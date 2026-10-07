@@ -21,6 +21,15 @@ function currentGridRecipe(s: Readonly<SessionState>): GridRecipe | null {
     return s.recipes.find(recipe => recipe.id === s.activeRecipeId) ?? s.recipes.find(recipe => !recipeHasSource(recipe)) ?? null;
 }
 
+export function selectionSourceIsValid(s: Readonly<SessionState>, float: Float | null, translation = { x: 0, y: 0 }): boolean {
+    if (!float || !float.pixels.some(value => value !== 0)) return true;
+    const recipe = currentGridRecipe(s) ?? emptyGridRecipe();
+    const updated = withRecipeSource(recipe, float, translation);
+    const visible = visiblePixels({ ...s, float });
+    const { canvasWidth: W, canvasHeight: H } = s.pattern;
+    return gridRecipeError(updated, (x, y) => !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0) === null;
+}
+
 export function syncActiveGridRecipe(
     s: SessionState, translation?: { x: number; y: number },
 ): void {
@@ -359,6 +368,7 @@ export function applySelectionMod(
     if (mode === "replace") {
         const base = s.float ? visiblePixels(s) : s.pixels;
         const lifted = liftCells(base, s.pattern, region);
+        if (!selectionSourceIsValid(s, lifted.float)) return;
         store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; syncActiveGridRecipe(state); }, commitOpts);
         return;
     }
@@ -366,6 +376,7 @@ export function applySelectionMod(
     if (!s.float) {
         if (mode === "add") {
             const lifted = liftCells(s.pixels, s.pattern, region);
+            if (!selectionSourceIsValid(s, lifted.float)) return;
             store.commit(state => { state.pixels = lifted.pixels; state.float = lifted.float; syncActiveGridRecipe(state); }, commitOpts);
         }
         return;
@@ -409,6 +420,8 @@ export function applySelectionMod(
                 if (cutMask[y * W + x])
                     ep[(y - eMinY) * ew + (x - eMinX)] = s.pixels[y * W + x];
 
+        const candidate = { x: eMinX, y: eMinY, w: ew, h: eh, pixels: ep };
+        if (!selectionSourceIsValid(s, candidate)) return;
         const newPixels = cutCells(s.pixels, s.pattern, cutMask);
         store.commit(state => {
             state.pixels = newPixels;
@@ -439,6 +452,7 @@ export function applySelectionMod(
     }
     if (!removed) return;
     const anyLeft = newFP.some(v => v !== 0);
+    if (!selectionSourceIsValid(s, anyLeft ? { ...f, pixels: newFP } : null)) return;
     store.commit(state => {
         state.pixels = newCanvasPixels;
         state.float  = anyLeft ? { ...f, pixels: newFP } : null;
@@ -507,5 +521,5 @@ export function deleteFloat(store: Store): void {
             newFP[ly * f.w + lx] = cleared[cy * W + cx];
         }
     }
-    store.commit(state => { state.pixels = cleared; state.float = { ...f, pixels: newFP }; }, { history: true });
+    store.commit(state => { state.pixels = cleared; state.float = newFP.some(pixel => pixel !== 0) ? { ...f, pixels: newFP } : null; }, { history: true });
 }

@@ -1,10 +1,12 @@
 import type { MirrorCenter } from "@mosaic/logic/types";
 import { el, setMessage, iconAction, listRow, syncList, setPressed } from "./dom";
-import { MIRROR_TYPES, mirrorTypePresentation } from "./mirror-presentation";
+import { MIRROR_TYPES } from "./mirror-presentation";
+import { createMirrorChoices } from "./mirror-choices";
+import { mountCoordinateEditor } from "./coordinate-editor";
 import type { UICallbacks, InspectorControls } from "./ui-types";
 
 export function mountMirrors(
-    cb: Pick<UICallbacks, "onAddMirror" | "onToggleMirror" | "onDeleteMirror" | "onSelectMirror" | "onMirrorType" | "onMirrorPosition" | "onReplicateSelection">,
+    cb: Pick<UICallbacks, "onAddMirror" | "onToggleMirror" | "onDeleteMirror" | "onSelectMirror" | "onMirrorType" | "onMirrorPosition" | "onMirrorCommit" | "onMirrorRevert" | "onReplicateSelection">,
     inspector: Pick<InspectorControls, "isOpen" | "close" | "open" | "focusFirst">) {
     const symList = el("sym-list");
     const symToggle = el("btn-sym-toggle");
@@ -45,30 +47,15 @@ export function mountMirrors(
         if (message !== null && !inspector.isOpen("transforms")) inspector.open("transforms", "Global Mirror");
     }
 
-    function resetFields() {
-        const mirror = selectedMirror();
-        if (mirror) { x.value = String(mirror.x); y.value = String(mirror.y); }
-    }
-    function applyPosition() {
-        const mirror = selectedMirror();
-        if (!mirror) return;
-        if (!Number.isFinite(x.valueAsNumber) || !Number.isFinite(y.valueAsNumber)) {
-            setTransformError("Enter a number for each centre coordinate.");
-        } else cb.onMirrorPosition(mirror.id, { x: x.valueAsNumber, y: y.valueAsNumber });
-        resetFields();
-    }
-    for (const input of [x, y]) input.addEventListener("keydown", event => {
-        if (event.key === "Enter") { event.preventDefault(); applyPosition(); }
-        if (event.key === "Escape") {
-            event.preventDefault(); event.stopPropagation(); resetFields();
-        }
-    });
-    el("mirror-centre-apply").addEventListener("click", applyPosition);
-    window.addEventListener("blur", resetFields);
+    const coordinateEditor = mountCoordinateEditor(el("mirror-centre-fields"), x, y,
+        position => { const mirror = selectedMirror(); if (mirror) cb.onMirrorPosition(mirror.id, position, true); },
+        cb.onMirrorCommit, cb.onMirrorRevert);
+    const choices = new Map<string, ReturnType<typeof createMirrorChoices>>();
     const position = (mirror: MirrorCenter) => `(${mirror.x}, ${mirror.y})`;
     const add = el<HTMLButtonElement>("add-mirror");
     function setMirrors(mirrors: ReadonlyArray<MirrorCenter>, selectedId: string | null) {
         projectedMirrors = mirrors;
+        if (editor.parentElement !== symList.parentElement && !mirrors.some(mirror => mirror.id === editor.dataset.mirrorId)) symList.after(editor);
         syncList<MirrorCenter | null>(symList, [...mirrors, null], "mirrorKey", mirror => mirror ? `saved:${mirror.id}` : "placeholder", mirror => {
             const row = document.createElement("div");
             if (!mirror) { row.className = "sym-list-placeholder"; row.append(add); return row; }
@@ -81,7 +68,8 @@ export function mountMirrors(
             summary.className = "sym-list-row__summary";
             select.append(summary);
             select.addEventListener("click", () => cb.onSelectMirror(mirror.id));
-            const toggle = iconAction("check", "Enable mirror");
+            const toggle = document.createElement("button");
+            toggle.type = "button"; toggle.className = "btn btn--ghost mirror-enable";
             toggle.dataset.mirrorAction = "toggle";
             toggle.addEventListener("click", () => cb.onToggleMirror(mirror.id));
             const del = iconAction("delete", "Delete mirror");
@@ -93,15 +81,9 @@ export function mountMirrors(
                 if (fallback) listRow(symList, "mirrorId", fallback.id)?.querySelector<HTMLButtonElement>("[data-mirror-action='delete']")?.focus();
                 else add.focus();
             });
-            const types = document.createElement("div"); types.className = "mirror-type-choices";
-            types.setAttribute("role", "group"); types.setAttribute("aria-label", "Mirror types");
-            for (const type of MIRROR_TYPES) {
-                const button = iconAction(`mirror-${type.key.toLowerCase()}`, type.name);
-                button.dataset.mirrorType = type.key;
-                button.addEventListener("click", () => { cb.onSelectMirror(mirror.id); cb.onMirrorType(mirror.id, type.key); });
-                types.append(button);
-            }
-            row.append(select, toggle, del, types); return row;
+            const types = createMirrorChoices(type => { cb.onSelectMirror(mirror.id); cb.onMirrorType(mirror.id, type); });
+            choices.set(mirror.id, types);
+            row.append(select, toggle, del, types.element); return row;
         }, (row, mirror, index) => {
             if (!mirror) return;
             row.classList.toggle("is-inactive", !mirror.enabled);
@@ -122,24 +104,23 @@ export function mountMirrors(
                 if (button.title !== title) button.title = title;
                 if (button.getAttribute("aria-label") !== title) button.setAttribute("aria-label", title);
                 if (button.getAttribute("aria-description") !== summary) button.setAttribute("aria-description", summary);
-                if (action === "toggle") setPressed(button, mirror.enabled);
+                if (action === "toggle") {
+                    setPressed(button, mirror.enabled);
+                    const label = mirror.enabled ? "On" : "Off";
+                    if (button.textContent !== label) button.textContent = label;
+                }
             }
-            for (const type of mirrorTypePresentation(mirror.types)) {
-                const button = row.querySelector<HTMLButtonElement>(`[data-mirror-type='${type.key}']`)!;
-                setPressed(button, type.chosen);
-                const effective = String(type.chosen || type.implied);
-                if (button.dataset.effective !== effective) button.dataset.effective = effective;
-                const description = type.implied ? "Implied by the chosen types. Click to choose directly."
-                    : type.chosen ? "Chosen directly. Click to remove this type." : "Click to choose this type.";
-                if (button.getAttribute("aria-description") !== description) button.setAttribute("aria-description", description);
-                const title = `${type.name}. ${description}`;
-                if (button.title !== title) button.title = title;
-            }
+            choices.get(mirror.id)!.update(mirror.types);
         });
         const selected = mirrors.find(mirror => mirror.id === selectedId);
         if (editor.hidden !== !selected) editor.hidden = !selected;
         if (editor.dataset.mirrorId !== (selectedId ?? "")) editor.dataset.mirrorId = selectedId ?? "";
-        if (selected) resetFields();
+        if (selected) {
+            coordinateEditor.setPosition(selected.id, { x: selected.x, y: selected.y });
+            const row = listRow(symList, "mirrorId", selected.id)!;
+            if (editor.parentElement !== row) row.insertBefore(editor, row.querySelector(".mirror-type-choices"));
+        }
+        for (const id of choices.keys()) if (!mirrors.some(mirror => mirror.id === id)) choices.delete(id);
     }
 
     return { setMirrors, setTransformState, setTransformError };

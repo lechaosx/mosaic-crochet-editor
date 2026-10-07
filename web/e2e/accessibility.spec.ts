@@ -183,7 +183,8 @@ test("closing an inspector restores focus to the available authoring context", a
 
     await page.keyboard.press("Control+a");
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: "Deselect" }).click();
+    await page.getByRole("button", { name: "No selection" }).click();
+    await page.getByRole("button", { name: "Close inspector" }).click();
     await expect(selectionInspector).toBeHidden();
     await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
 
@@ -191,7 +192,8 @@ test("closing an inspector restores focus to the available authoring context", a
         await chooseToolVariant(page, "Overlay", name.split(" ")[0]);
         await page.keyboard.press("Control+a");
         await page.getByRole("button", { name: "Select", exact: true }).click();
-        await page.getByRole("button", { name: "Deselect" }).click();
+        await page.getByRole("button", { name: "No selection" }).click();
+    await page.getByRole("button", { name: "Close inspector" }).click();
         await expect(selectionInspector).toBeHidden();
         await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
     }
@@ -259,7 +261,8 @@ test("compact menu navigation does not move selected canvas content", async ({ p
     await page.keyboard.press("ArrowDown");
     await page.locator("#more-popover").evaluate((popover: HTMLElement) => popover.hidePopover());
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: "Deselect" }).click();
+    await page.getByRole("button", { name: "No selection" }).click();
+    await page.getByRole("button", { name: "Close inspector" }).click();
 
     const original = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, original.cx, original.cy)).toEqual([0, 0, 0]);

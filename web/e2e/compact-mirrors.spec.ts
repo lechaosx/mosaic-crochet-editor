@@ -45,7 +45,8 @@ test("global mirrors use one focused editor while disabled centres remain editab
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
     const rows = page.locator("#sym-list > .sym-list-row");
     await expect(rows).toHaveCount(2);
-    await expect(rows.getByRole("spinbutton")).toHaveCount(0);
+    await expect(rows.getByRole("spinbutton")).toHaveCount(2);
+    await expect(rows.first().getByRole("spinbutton")).toHaveCount(0);
     await rows.first().getByRole("button", { name: "Select Mirror 1 at (4, 4)", exact: true }).click();
     await expect(page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Vertical", exact: true })).toHaveAttribute("aria-pressed", "true");
     await rows.first().getByRole("button", { name: "Disable Mirror 1 at (4, 4)", exact: true }).click();
@@ -158,7 +159,7 @@ test.describe("phone mirror editing", () => {
         const inspector = (await page.locator("#inspector-host").boundingBox())!;
         for (const target of [page.getByRole("spinbutton", { name: "Mirror centre x" }),
             page.getByRole("spinbutton", { name: "Mirror centre y" }),
-            ...["Apply centre position", "Vertical", "Horizontal", "Diagonal", "Anti-diagonal", "Point symmetry (180°)", "Stamp copies"]
+            ...["Vertical", "Horizontal", "Diagonal", "Anti-diagonal", "Point symmetry (180°)", "Stamp copies"]
                 .map(name => page.getByRole("button", { name, exact: true }))]) {
             await expect(target).toBeEnabled();
             await target.focus();

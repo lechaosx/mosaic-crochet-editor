@@ -206,7 +206,7 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await expect(card.getByRole("button", { name: "Copy" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Cut" })).toBeVisible();
     await expect(card.getByRole("button", { name: "Paste" })).toBeDisabled();
-    await expect(card.getByRole("button", { name: "Deselect" })).toBeVisible();
+    await expect(card.getByRole("button", { name: "No selection" })).toBeVisible();
 
     await card.getByRole("button", { name: "Copy" }).tap();
     await expect(card.getByRole("button", { name: "Paste" })).toBeEnabled();
@@ -243,7 +243,8 @@ test("selection and clipboard lifecycle is available without keyboard modifiers"
     await expect(page.locator("#status-selection")).toHaveText("1 selected");
     await page.getByRole("button", { name: "Close inspector" }).click();
     await summary.click();
-    await card.getByRole("button", { name: "Deselect" }).click();
+    await card.getByRole("button", { name: "No selection" }).click();
+    await page.getByRole("button", { name: "Close inspector" }).click();
     await expect(card).toBeHidden();
     await expect(clipboardSummary).toHaveText("1 copied");
     expect(await pixelRGB(page, destination.cx, destination.cy)).toEqual([0, 0, 0]);

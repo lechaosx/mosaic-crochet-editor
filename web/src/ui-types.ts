@@ -11,7 +11,6 @@ export interface UICallbacks {
     onSelectionCopy:     () => void;
     onSelectionCut:      () => void;
     onSelectionPaste:    () => void;
-    onSelectionDeselect: () => void;
     onPrimaryColor:    (slot: 1 | 2) => void;
     onSwapYarns:       () => void;
     onResetYarnColor:  (slot: 1 | 2) => void;
@@ -22,7 +21,9 @@ export interface UICallbacks {
     onDeleteMirror:    (id: string) => void;
     onSelectMirror:    (id: string) => void;
     onMirrorType:      (id: string, type: SymKey) => void;
-    onMirrorPosition:  (id: string, position: { x: number; y: number }) => MirrorCenter | null;
+    onMirrorPosition:  (id: string, position: { x: number; y: number }, preview?: boolean) => MirrorCenter | null;
+    onMirrorCommit: () => void;
+    onMirrorRevert: () => void;
     onCreateRecipe:    () => void;
     onActivateRecipe:  (id: string) => void;
     onDeleteRecipe:    (id: string) => void;

@@ -389,7 +389,7 @@ test("status is passive and Select opens selection actions", async ({ page }) =>
     await expect(emptySelection).toBeEnabled();
     await emptySelection.click();
     await expect(page.getByRole("list", { name: "Selections" }).getByRole("listitem")).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "New selection" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "No selection" })).toBeVisible();
     await page.keyboard.press("Escape");
 
     await page.keyboard.press("Control+a");

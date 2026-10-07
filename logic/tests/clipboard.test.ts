@@ -77,7 +77,8 @@ describe("cutFloat", () => {
         // Row 0 baseline = A = 1, so cleared cell = 1.
         expect(s.state.pixels[0]).toBe(1);
         expect(s.state.float).toBeNull();
-        expect(s.state.activeRecipeId).toBe(recipe.id);
+        expect(s.state.activeRecipeId).toBeNull();
+        expect(s.state.recipes).toEqual([recipe]);
     });
 
     test("no float: no-op", () => {
@@ -182,7 +183,7 @@ describe("pasteClipboard", () => {
         let commits = 0;
         let prepared = false;
         dest.addObserver(() => commits++);
-        expect(pasteClipboard(dest, () => { prepared = true; })).toBe(false);
+        expect(pasteClipboard(dest, () => { prepared = true; })).toBe("outside");
         expect(dest.state.float).toBe(original);
         expect(dest.state.pixels).toBe(pixels);
         expect(dest.state.activeRecipeId).toBe(recipe.id);
@@ -196,7 +197,7 @@ describe("pasteClipboard", () => {
         const dest = storeOf({ float: makeFloat([{ x: 0, y: 0, v: 2 }]) });
         const snapshots: unknown[] = [];
         dest.setHistoryFn(state => snapshots.push({ pixels: state.pixels.slice(), float: state.float }));
-        expect(pasteClipboard(dest)).toBe(true);
+        expect(pasteClipboard(dest)).toBe("pasted");
         expect(snapshots).toHaveLength(1);
         expect(dest.state.pixels[0]).toBe(2);
         expect(dest.state.float!.x).toBe(1);
@@ -211,7 +212,7 @@ describe("pasteClipboard", () => {
         expect(pasteClipboard(dest, () => {
             expect(dest.state.float).toBe(original);
             events.push("prepare");
-        })).toBe(true);
+        })).toBe("pasted");
         expect(events).toEqual(["prepare", "history"]);
     });
     test("paste populates the active empty selection slot", () => {
@@ -224,7 +225,7 @@ describe("pasteClipboard", () => {
             activeRecipeId: slot.id,
         });
 
-        expect(pasteClipboard(dest)).toBe(true);
+        expect(pasteClipboard(dest)).toBe("pasted");
         expect(dest.state.activeRecipeId).toBe(slot.id);
         expect(dest.state.recipes[0].source).toMatchObject({ x: 1, y: 1, w: 1, h: 1 });
         expect(dest.state.recipes[0].source.mask).toEqual(new Uint8Array([1]));
@@ -242,7 +243,7 @@ describe("pasteClipboard", () => {
             activeRecipeId: recipe.id,
         });
 
-        expect(pasteClipboard(dest)).toBe(true);
+        expect(pasteClipboard(dest)).toBe("pasted");
         expect(dest.state.activeRecipeId).toBe(recipe.id);
         expect(dest.state.recipes[0].source).toMatchObject({ x: 2, y: 1, w: 1, h: 1 });
     });
@@ -258,7 +259,7 @@ describe("pasteClipboard", () => {
         // Fresh store, paste.
         const dest = storeOf({ pixels: filledPixels(3, 3, 1) });
         const ok = pasteClipboard(dest);
-        expect(ok).toBe(true);
+        expect(ok).toBe("pasted");
         expect(inFloat(dest.state.float!, 1, 1)).toBe(true);
         expect(floatAt(dest.state.float!, 1, 1)).toBe(2);
         // Canvas at (1,1) stays untouched (paste is uncut).
@@ -297,7 +298,7 @@ describe("pasteClipboard", () => {
         copyFloat(src);
 
         const dest = new Store(rowSession(3, 3, { pixels: filledPixels(3, 3, 1) }));
-        expect(pasteClipboard(dest)).toBe(false);
+        expect(pasteClipboard(dest)).toBe("outside");
         expect(dest.state.float).toBeNull();
     });
 
@@ -346,8 +347,32 @@ test("Paste into a new selection placeholder keeps earlier saved sources", () =>
     copyFloat(storeOf({ pixels: filledPixels(3, 3, 1), float: makeFloat([{ x: 2, y: 1, v: 2 }]) }));
     const recipe = gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }]));
     const destination = storeOf({ pixels: filledPixels(3, 3, 1), recipes: [recipe], activeRecipeId: null });
-    expect(pasteClipboard(destination)).toBe(true);
+    expect(pasteClipboard(destination)).toBe("pasted");
     expect(destination.state.recipes).toHaveLength(2);
     expect(destination.state.recipes[0]).toEqual(recipe);
     expect(destination.state.recipes[1].source).toMatchObject({ x: 2, y: 1, w: 1, h: 1 });
+});
+
+test("Paste rejects a source that would overlap its saved mirror copies", () => {
+    const copied = makeFloat([{ x: 3, y: 3, v: 1 }, { x: 4, y: 3, v: 1 }]);
+    copyFloat(new Store(rowSession(8, 8, { float: copied })));
+    const source = makeFloat([{ x: 3, y: 3, v: 2 }]);
+    const recipe = { ...gridRecipeFromFloat(source), mode: "mirror" as const, mirrorCentreX: 3.5, mirrorTypes: ["V" as const] };
+    const store = new Store(rowSession(8, 8, { float: source, recipes: [recipe], activeRecipeId: recipe.id }));
+    const before = { ...store.state };
+    expect(pasteClipboard(store)).toBe("conflict");
+    expect(store.state.float).toEqual(before.float);
+    expect(store.state.recipes).toEqual(before.recipes);
+    expect(store.state.pixels).toEqual(before.pixels);
+});
+
+test("Paste rechecks the candidate after settling edits changes the saved transform", () => {
+    const copied = makeFloat([{ x: 3, y: 3, v: 1 }, { x: 4, y: 3, v: 1 }]);
+    copyFloat(new Store(rowSession(8, 8, { float: copied })));
+    const source = makeFloat([{ x: 3, y: 3, v: 2 }]);
+    const recipe = { ...gridRecipeFromFloat(source), mode: "mirror" as const, mirrorCentreX: 2.5, mirrorTypes: ["V" as const] };
+    const store = new Store(rowSession(8, 8, { float: source, recipes: [recipe], activeRecipeId: recipe.id }));
+    pasteClipboard(store, () => store.commit(s => { s.recipes = [{ ...recipe, mirrorCentreX: 3.5 }]; }));
+    expect(store.state.float).toEqual(source);
+    expect(store.state.recipes[0].source).toEqual(recipe.source);
 });

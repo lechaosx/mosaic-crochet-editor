@@ -180,18 +180,18 @@ test("saved repeat extends the active selection and applies its instances", asyn
     await expect(page.locator("#recipe-list")).toContainText("Selection 11\u00a0×\u00a01");
 });
 
-test("Selection starts with a placeholder and New selection preserves earlier entries", async ({ page }) => {
+test("Selection starts with a placeholder and No selection preserves earlier entries", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(page.getByRole("button", { name: "New selection", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "No selection", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("#recipe-controls")).toBeHidden();
 
     await clickCell(page, 2, 1);
     await expect(page.getByRole("button", { name: "Selection 1 1 × 1" })).toBeVisible();
-    await page.getByRole("button", { name: "New selection" }).click();
+    await page.getByRole("button", { name: "No selection" }).click();
 
     await expect(page.getByRole("button", { name: "Selection 1 1 × 1" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "New selection", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "No selection", exact: true })).toHaveAttribute("aria-pressed", "true");
     await clickCell(page, 3, 1);
     await page.getByRole("button", { name: "Delete selection 2" }).click();
     await expect(page.locator("#recipe-list").getByRole("button", { name: /^Selection/ })).toHaveCount(1);
@@ -207,8 +207,8 @@ test("whole-selection mirror copies apply around the transformation centre", asy
     await page.locator("label:has(#recipe-mode-mirror)").click();
     await page.locator("#recipe-mirror-centre-x").fill("4");
     await page.locator("#recipe-mirror-centre-y").fill("3");
-    await page.locator("#recipe-mirror-v").check();
-    await page.locator("#recipe-mirror-h").check();
+    await page.locator("#recipe-mirror-v").click();
+    await page.locator("#recipe-mirror-h").click();
     await page.locator("#recipe-apply").click();
 
     for (const [x, y] of [[2, 2], [3, 2], [5, 2], [6, 2], [2, 4], [3, 4], [5, 4], [6, 4]] as const) {
@@ -340,7 +340,7 @@ test("saved repeat controls reject overlap and claim-limit configurations before
     await page.locator("#recipe-right").dispatchEvent("change");
     await page.locator("#recipe-down").fill("1");
     await page.locator("#recipe-down").dispatchEvent("change");
-    await expect(page.locator("#recipe-error")).toContainText(/overlap/i);
+    await expect(page.locator("#recipe-error")).toBeHidden();
 
     await page.locator("#recipe-right").fill("4096");
     await page.locator("#recipe-right").dispatchEvent("change");
@@ -371,7 +371,7 @@ test("rejected saved-repeat values, modes, and turns return controls to stored s
     await page.locator("#recipe-centre-x").fill("2.5");
     await page.locator("#recipe-centre-x").dispatchEvent("change");
     await page.locator("label:has(#recipe-turn-180)").click();
-    await expect(page.locator("#recipe-error")).toContainText(/overlap/i);
+    await expect(page.locator("#recipe-error")).toBeHidden();
     await expect(page.locator("#recipe-turn-180")).not.toBeChecked();
 
     const stored = await page.evaluate(() =>
@@ -599,7 +599,8 @@ test("Pattern resize deactivates a saved repeat when it removes the source selec
     await page.locator("#edit-width").press("Tab");
     await page.getByRole("button", { name: "Select", exact: true }).click();
 
-    await expect(page.getByRole("button", { name: /^Selection 1 / })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: /^Selection 1 / })).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#recipe-create")).toHaveAttribute("aria-pressed", "true");
 });
 
 for (const action of ["Cut", "Deselect"] as const) {
@@ -611,13 +612,10 @@ for (const action of ["Cut", "Deselect"] as const) {
         await expect(recipe).toHaveAttribute("aria-pressed", "true");
         await expect(page.locator("#recipe-controls")).toBeVisible();
 
-        await page.getByRole("button", { name: action, exact: true }).click();
+        await page.getByRole("button", { name: action === "Deselect" ? "No selection" : action, exact: true }).click();
 
-        if (action === "Deselect") {
-            await expect(page.getByRole("dialog", { name: "Selection" })).toBeHidden();
-            await page.getByRole("button", { name: "Select", exact: true }).click();
-        }
-        await expect(recipe).toHaveAttribute("aria-pressed", action === "Deselect" ? "false" : "true");
+
+        await expect(recipe).toHaveAttribute("aria-pressed", "false");
     });
 }
 

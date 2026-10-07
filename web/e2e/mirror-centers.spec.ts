@@ -102,7 +102,7 @@ test("a mirror row action settles a held center drag before cancellation and has
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].x)).toBe(4);
 });
 
-test("free numeric coordinates keep handles reachable without changing their selected axis", async ({ page }) => {
+test("unusable numeric coordinates retain the last valid centre and selected axes", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await addGlobalMirror(page, "Vertical");
@@ -110,19 +110,19 @@ test("free numeric coordinates keep handles reachable without changing their sel
     const y = page.getByRole("spinbutton", { name: "Mirror centre y" });
     await y.fill("100");
     await y.press("Enter");
-    await expect(y).toHaveValue("8");
+    await expect(y).toHaveValue("4");
     await expect(x).toHaveValue("4");
     await page.getByRole("button", { name: "Vertical", exact: true }).click();
     await x.fill("4"); await x.press("Enter");
     await y.fill("4"); await y.press("Enter");
     await page.getByRole("button", { name: "Diagonal", exact: true }).click();
     await x.fill("10"); await x.press("Enter");
-    await expect(x).toHaveValue("7");
-    await expect(y).toHaveValue("1");
+    await expect(x).toHaveValue("4");
+    await expect(y).toHaveValue("4");
     expect(await page.evaluate(() => {
         const m = JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0];
         return m.x - m.y;
-    })).toBe(6);
+    })).toBe(0);
 });
 
 test("an unavailable typed shortcut retains a held cancellable stroke on a one-cell chart", async ({ page }) => {

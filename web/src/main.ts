@@ -27,7 +27,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection, createGridRecipe,
          activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe, gridRecipeStamp,
-         syncActiveGridRecipe } from "@mosaic/logic/selection";
+         syncActiveGridRecipe, selectionSourceIsValid } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary } from "@mosaic/logic/pattern";
@@ -325,6 +325,7 @@ let patternHistorySession = false;
 let savingPatternHistory = false;
 let applyingPatternPreview = false;
 let recipeEditBaseline: GridRecipe[] | null = null;
+let mirrorEditBaseline: MirrorCenter[] | null = null;
 let recipeHistorySession = false;
 let savingRecipeHistory = false;
 store.setHistoryFn(s => {
@@ -547,22 +548,16 @@ function toggleMirrorById(id: string) {
     refreshSymmetryUi();
 }
 
-function onMirrorPosition(id: string, position: { x: number; y: number }): MirrorCenter | null {
+function onMirrorPosition(id: string, position: { x: number; y: number }, preview = false): MirrorCenter | null {
     const mirror = store.state.mirrors.find(a => a.id === id);
     if (!mirror) return null;
     let updated = { ...mirror, x: snapHalf(position.x), y: snapHalf(position.y) };
-    if (mirrorIsProjectValid(updated, store.state.pattern)) {
-        updated = mirrorsForPattern([updated], store.state.pattern)[0];
-        if (updated.x < 0 || updated.y < 0 || updated.x > store.state.pattern.canvasWidth - 1
-            || updated.y > store.state.pattern.canvasHeight - 1) {
-            ui.setTransformError("Keep the centre inside the chart. Change the coordinates or choose fewer types.");
-            return mirror;
-        }
-    }
-    return commitMirrorChange(mirror, updated);
+    if (updated.x < 0 || updated.y < 0 || updated.x > store.state.pattern.canvasWidth - 1
+        || updated.y > store.state.pattern.canvasHeight - 1) return mirror;
+    return commitMirrorChange(mirror, updated, preview);
 }
 
-function commitMirrorChange(mirror: MirrorCenter, updated: MirrorCenter): MirrorCenter {
+function commitMirrorChange(mirror: MirrorCenter, updated: MirrorCenter, preview = false): MirrorCenter {
     if (!mirrorIsProjectValid(updated, store.state.pattern)) {
         ui.setTransformError(updated.types.some(type => type === "D1" || type === "D2")
             && Number.isInteger(updated.x) !== Number.isInteger(updated.y)
@@ -572,13 +567,26 @@ function commitMirrorChange(mirror: MirrorCenter, updated: MirrorCenter): Mirror
     }
     ui.setTransformError(null);
     if (!mirrorsEqual([updated], [mirror])) {
-        finishAuthoredInput();
+        if (!preview || !mirrorEditBaseline) finishAuthoredInput();
+        if (preview && !mirrorEditBaseline) mirrorEditBaseline = store.state.mirrors;
         store.commit(s => {
             s.mirrors = s.mirrors.map(value => value.id === mirror.id ? updated : value);
-        }, { history: true });
+        }, { history: !preview, persist: !preview });
     }
     refreshSymmetryUi();
     return updated;
+}
+
+function onMirrorCommit() {
+    const baseline = mirrorEditBaseline;
+    mirrorEditBaseline = null;
+    if (baseline && !mirrorsEqual(baseline, store.state.mirrors)) store.commit(() => {}, { recompute: false, history: true });
+}
+function onMirrorRevert() {
+    const baseline = mirrorEditBaseline;
+    mirrorEditBaseline = null;
+    if (baseline) store.commit(s => { s.mirrors = baseline; }, { recompute: false });
+    refreshSymmetryUi();
 }
 
 function onMirrorType(id: string, type: SymKey) {
@@ -648,6 +656,7 @@ function onRecipeChange(id: string, change: Partial<GridRecipe>, preview = false
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
     const error = gridRecipeError(updated, (x, y) => !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0);
     if (error) {
+        if (/overlap|matching whole-cell/.test(error)) { if (preview) ui.setRecipeError(null); else refreshRecipeUi(); return false; }
         if (preview) ui.setRecipeError(error); else refreshRecipeUi(error);
         return false;
     }
@@ -697,7 +706,7 @@ function onApplyRecipe() {
             const { canvasWidth: W, canvasHeight: H } = projected.pattern;
             const error = gridRecipeError(withRecipeSource(recipe, projected.float),
                 (x, y) => !outOfBounds(x, y, W, H) && projected.pixels[y * W + x] !== 0);
-            if (error) { refreshRecipeUi(error); return; }
+            if (error) { refreshRecipeUi(/overlap/.test(error) ? null : error); return; }
             syncActiveGridRecipe(projected);
         }
         result = gridRecipeStamp(projected).result;
@@ -707,7 +716,7 @@ function onApplyRecipe() {
         }
     } else result = applyGridRecipe(store, recipeEditBaseline || gesture || keyboardMove ? finishAuthoredInput : undefined);
     refreshRecipeUi(result === "no-selection" ? "Select cells for this selection first."
-        : result === "conflict" ? "Repeat instances overlap." : null);
+        : null);
 }
 
 // ── Tool / colour / settings handlers ────────────────────────────────────────
@@ -825,8 +834,9 @@ function toggleNavigate() {
 // `pasteClipboard` itself only touches state; the tool switch is a UI side
 // effect that lives here in the orchestrator.
 function onPaste() {
-    if (!pasteClipboard(store, finishAuthoredInput)) {
-        ui.setCanvasFeedback(clipboardCellCount() === 0
+    const result = pasteClipboard(store, finishAuthoredInput);
+    if (result !== "pasted") {
+        ui.setCanvasFeedback(result === "conflict" ? null : result === "empty"
             ? "Clipboard is empty · copy a selection first"
             : "Copied selection cannot fit this pattern · no cells land on the chart");
         return;
@@ -839,6 +849,7 @@ function onCopy() {
     ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 }
 function finishAuthoredInput() {
+    onMirrorCommit();
     onRecipeCommit();
     finishKeyboardMove();
     gestureInputs.finish();
@@ -1366,7 +1377,6 @@ const ui: UIHandle = mountUI({
     onSelectionCopy: onCopy,
     onSelectionCut: onCut,
     onSelectionPaste: onPaste,
-    onSelectionDeselect: onDeselect,
     onPrimaryColor: setPrimary,
     onSwapYarns,
     onResetYarnColor: resetYarnColor,
@@ -1378,6 +1388,8 @@ const ui: UIHandle = mountUI({
     onSelectMirror,
     onMirrorType,
     onMirrorPosition,
+    onMirrorCommit,
+    onMirrorRevert,
     onCreateRecipe,
     onActivateRecipe,
     onDeleteRecipe,
@@ -1633,8 +1645,10 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                                 newFP[ly * pf.w + lx] = store.state.pixels[cy * W + cx];
                         }
                     }
+                    if (!selectionSourceIsValid(store.state, { ...f, x: newX, y: newY, pixels: newFP }, { x: newX - f.x, y: newY - f.y })) return;
                     store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }); } }, { persist: false });
                 } else {
+                    if (!selectionSourceIsValid(store.state, { ...f, x: newX, y: newY }, { x: newX - f.x, y: newY - f.y })) return;
                     store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }); } }, { persist: false });
                 }
             }
@@ -1942,6 +1956,7 @@ function moveWithArrow(e: KeyboardEvent) {
                     pixels[ly * mask.w + lx] = s.pixels[(y + ly) * W + x + lx];
             }
         }
+        if (!selectionSourceIsValid(s, { ...f, x, y, pixels }, { x: x - f.x, y: y - f.y })) return;
         s.float = { ...f, x, y, pixels };
         syncActiveGridRecipe(s, { x: x - f.x, y: y - f.y });
     }, { persist: false });

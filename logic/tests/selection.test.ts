@@ -727,7 +727,8 @@ describe("applySelectionMod / remove", () => {
         });
         applySelectionMod(s, maskOf(3, 3, [[0, 0]]), "remove");
         expect(s.state.float).toBeNull();
-        expect(s.state.activeRecipeId).toBe(recipe.id);
+        expect(s.state.activeRecipeId).toBeNull();
+        expect(s.state.recipes).toEqual([recipe]);
     });
 
     test("source-position bounds gate each of the four directions individually", () => {
@@ -944,4 +945,25 @@ describe("deleteFloat", () => {
         deleteFloat(s);
         expect(s.state.float).toBeNull();
     });
+});
+
+test("an overlapping replacement keeps the last valid selection and source together", () => {
+    const store = new Store(rowSession(8, 8));
+    commitSelectRect(store, 3, 3, 3, 3, "replace");
+    store.commit(s => { s.recipes = s.recipes.map(recipe => ({ ...recipe, mode: "mirror", mirrorCentreX: 3.5, mirrorTypes: ["V"] })); });
+    const before = { ...store.state };
+    commitSelectRect(store, 3, 3, 4, 3, "replace");
+    expect(store.state.float).toEqual(before.float);
+    expect(store.state.recipes).toEqual(before.recipes);
+    expect(store.state.pixels).toEqual(before.pixels);
+});
+
+test("Delete with no remaining chart cells clears the active selection and retains its saved source", () => {
+    const float = makeFloat([{ x: 10, y: 10, v: 2 }]);
+    const recipe = gridRecipeFromFloat(float);
+    const store = new Store(rowSession(3, 3, { float, recipes: [recipe], activeRecipeId: recipe.id }));
+    deleteFloat(store);
+    expect(store.state.float).toBeNull();
+    expect(store.state.activeRecipeId).toBeNull();
+    expect(store.state.recipes).toEqual([recipe]);
 });

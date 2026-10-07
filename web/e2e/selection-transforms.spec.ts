@@ -57,8 +57,8 @@ test("Circle and Mirror retain independent centres and execute exclusive destina
     await page.locator("#recipe-mirror-centre-x").fill("2.5");
     await page.locator("#recipe-mirror-centre-y").fill("2.5");
     await page.locator("#recipe-mirror-centre-y").press("Enter");
-    await page.locator("#recipe-mirror-v").check();
-    await page.locator("#recipe-mirror-h").check();
+    await page.locator("#recipe-mirror-v").click();
+    await page.locator("#recipe-mirror-h").click();
     expect(await recipe(page)).toMatchObject({ mode: "mirror", mirrorCentreX: 2.5, mirrorCentreY: 2.5,
         mirrorTypes: ["V", "H"], source: { x: 3, y: 3 } });
     await page.locator("#recipe-apply").click();
@@ -121,7 +121,7 @@ test("paired Circle precision previews valid half-grid pairs and coalesces relat
     const x = page.locator("#recipe-centre-x"), y = page.locator("#recipe-centre-y");
     for (const value of ["3.5", "4", "4.5"]) {
         await x.fill(value);
-        await expect(page.locator("#recipe-error")).toContainText(/matching/i);
+        await expect(page.locator("#recipe-error")).toBeHidden();
         await expect(x).toHaveValue(value);
         await y.fill(value);
         await y.press("Enter");
@@ -192,7 +192,7 @@ test("a pending overlapping Rectangle is rejected by Stamp without settling its 
     await category(page, "Mirror");
     await page.locator("#recipe-mirror-centre-x").fill("3.5");
     await page.locator("#recipe-mirror-centre-x").press("Enter");
-    await page.locator("#recipe-mirror-v").check();
+    await page.locator("#recipe-mirror-v").click();
     const before = await page.evaluate(() => ({ history: localStorage.getItem("mosaic-history"),
         recovery: localStorage.getItem("mosaic-recovery") }));
     const start = await cellCoord(page, 3, 3), end = await cellCoord(page, 4, 3);
@@ -201,7 +201,7 @@ test("a pending overlapping Rectangle is rejected by Stamp without settling its 
     await page.locator("#recipe-apply").focus(); await page.keyboard.press("Space");
     expect(await page.evaluate(() => ({ history: localStorage.getItem("mosaic-history"),
         recovery: localStorage.getItem("mosaic-recovery") }))).toEqual(before);
-    await expect(page.locator("#recipe-error")).toContainText(/overlap/i);
+    await expect(page.locator("#recipe-error")).toBeHidden();
     await page.keyboard.press("Escape"); await page.mouse.up();
     expect(await recipe(page)).toMatchObject({ mode: "mirror", source: { x: 3, y: 3, w: 1, mask: [1] }, mirrorTypes: ["V"] });
 });
@@ -230,11 +230,11 @@ test("accepted Stamp uses the pending Rectangle source and leaves selection and 
 test("Mirror precision accepts a paired half-grid diagonal centre and retains Circle independently", async ({ page }) => {
     await selection(page);
     await category(page, "Mirror");
-    await page.locator("#recipe-mirror-d1").check();
+    await page.locator("#recipe-mirror-d1").click();
     await page.locator("#recipe-mirror-centre-x").fill("3.5");
-    await expect(page.locator("#recipe-error")).toContainText(/matching/i);
+    await expect(page.locator("#recipe-error")).toBeHidden();
     await page.locator("#recipe-mirror-centre-y").fill("3.5");
-    await page.getByRole("button", { name: "Apply Mirror centre position", exact: true }).click();
+    await page.locator("#recipe-mirror-centre-y").press("Enter");
     expect(await recipe(page)).toMatchObject({ mirrorCentreX: 3.5, mirrorCentreY: 3.5, rotationCentreX: 3, rotationCentreY: 3 });
     await page.locator("#recipe-mirror-centre-x").fill("4");
     await page.locator("#recipe-mirror-centre-x").press("Enter");
@@ -243,24 +243,24 @@ test("Mirror precision accepts a paired half-grid diagonal centre and retains Ci
     expect(await recipe(page)).toMatchObject({ mirrorCentreX: 3.5, mirrorCentreY: 3.5, mirrorTypes: ["D1"], rotationCentreX: 3 });
 });
 
-test("local Mirror describes implied types while checkboxes and history retain explicit choices", async ({ page }) => {
+test("local Mirror describes implied types while buttons and history retain explicit choices", async ({ page }) => {
     await selection(page);
     await category(page, "Mirror");
-    await page.locator("#recipe-mirror-v").check();
-    await page.locator("#recipe-mirror-h").check();
-    const point = page.getByRole("checkbox", { name: "Point symmetry (180°)", exact: true });
-    await expect(point).not.toBeChecked();
+    await page.locator("#recipe-mirror-v").click();
+    await page.locator("#recipe-mirror-h").click();
+    const point = page.getByRole("button", { name: "Point symmetry (180°)", exact: true });
+    await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(point).toHaveAccessibleDescription(/Implied/);
     expect((await recipe(page)).mirrorTypes).toEqual(["V", "H"]);
     const count = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
-    await point.check();
-    await expect(point).toBeChecked();
+    await point.click();
+    await expect(point).toHaveAttribute("aria-pressed", "true");
     expect((await recipe(page)).mirrorTypes).toEqual(["V", "H", "C"]);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length)).toBe(count + 1);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
-    await expect(point).not.toBeChecked();
+    await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(point).toHaveAccessibleDescription(/Implied/);
-    await page.locator("#recipe-mirror-h").uncheck();
+    await page.locator("#recipe-mirror-h").click();
     await expect(point).not.toHaveAccessibleDescription(/Implied/);
     expect((await recipe(page)).mirrorTypes).toEqual(["V"]);
 });
@@ -273,7 +273,7 @@ for (const ordering of ["independent choices", "recipe and source field keys"] a
     await category(page, "Mirror");
     await page.locator("#recipe-mirror-centre-x").fill("2.5"); await page.locator("#recipe-mirror-centre-y").fill("2.5");
     await page.locator("#recipe-mirror-centre-y").press("Enter");
-    await page.locator("#recipe-mirror-v").check(); await page.locator("#recipe-mirror-h").check();
+    await page.locator("#recipe-mirror-v").click(); await page.locator("#recipe-mirror-h").click();
     await page.evaluate(() => {
         const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
         target.showSaveFilePicker = async () => ({ createWritable: async () => ({
@@ -316,7 +316,7 @@ test("a successful legacy file conversion uses a neutral notice and keeps an ide
     await category(page, "Mirror");
     await page.locator("#recipe-mirror-centre-x").fill("2.5"); await page.locator("#recipe-mirror-centre-y").fill("2.5");
     await page.locator("#recipe-mirror-centre-y").press("Enter");
-    await page.locator("#recipe-mirror-v").check(); await page.locator("#recipe-mirror-h").check();
+    await page.locator("#recipe-mirror-v").click(); await page.locator("#recipe-mirror-h").click();
     await page.evaluate(() => {
         const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
         target.showSaveFilePicker = async () => ({ createWritable: async () => ({

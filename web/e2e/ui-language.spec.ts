@@ -69,15 +69,14 @@ test("geometry and extent samples use a common cell scale", async ({ page }) => 
 test("selection commands stay visible and unavailable commands cannot execute", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    for (const name of ["Copy", "Cut", "Paste", "Deselect"]) {
+    for (const name of ["Copy", "Cut", "Paste"]) {
         await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
     }
     await clickCell(page, 2, 1);
     await page.getByRole("button", { name: "Copy", exact: true }).click();
-    await page.getByRole("button", { name: "Deselect", exact: true }).click();
-    await page.getByRole("button", { name: "Select", exact: true }).click();
-    for (const name of ["Copy", "Cut", "Deselect"]) {
+    await page.getByRole("button", { name: "No selection", exact: true }).click();
+    for (const name of ["Copy", "Cut"]) {
         await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
     }

@@ -11,7 +11,7 @@ test("Select and Wand reopen the inspector with accessible saved selection rows"
     await expect(page.getByRole("menu", { name: "Rectangle variants", exact: true })).toBeHidden();
     const list = page.getByRole("list", { name: "Selections" });
     await expect(list.getByRole("listitem")).toHaveCount(1);
-    await expect(list.getByRole("button", { name: "New selection", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(list.getByRole("button", { name: "No selection", exact: true })).toHaveAttribute("aria-pressed", "true");
     await clickCell(page, 2, 1);
     await expect(list.getByRole("listitem")).toHaveCount(2);
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes);
@@ -91,7 +91,7 @@ test("keyboard deletion moves focus to a surviving saved selection", async ({ pa
     await page.keyboard.press("Enter");
     await expect(page.getByRole("button", { name: "Delete selection 1" })).toBeFocused();
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "New selection", exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "No selection", exact: true })).toBeFocused();
 });
 
 test("Pattern shape changes prune vanished selections and mirrors, and Undo restores them", async ({ page }) => {
@@ -196,7 +196,7 @@ test("round resizing disables unsafe copies and preserves the editable source af
     await page.locator('label:has(#recipe-mode-circle)').click();
     await page.locator("#recipe-centre-x").fill("2");
     await page.locator("#recipe-centre-y").fill("2");
-    await page.locator("#recipe-centre-apply").click();
+    await page.locator("#recipe-centre-y").press("Enter");
     await page.locator("#recipe-turn-180").check();
     const old = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0]);
     expect(old).toMatchObject({ mode: "circle", rotationTurns: [180] });
