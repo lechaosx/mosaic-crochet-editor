@@ -44,13 +44,13 @@ The tool-variant proposal replaces the earlier layout with three permanently vis
 
 | Family | Left button | Right button | Middle button |
 |---|---|---|---|
-| Color | Chosen tool, selected yarn | Existing alternative behavior: other yarn for Pencil/Spill, opposite natural yarn at the clicked stitch for Eraser, existing Invert behavior | Temporary color Invert |
-| Overlay | Chosen action | Opposite Place/Clear action; Invert remains Invert | Temporary overlay Invert |
-| Rectangle / Wand | Chosen variant | Temporary Add | Temporary Subtract |
-| Move | Chosen variant | Temporary Duplicate | Temporary Move area |
+| Color | Chosen tool, selected yarn | Existing alternative behavior: other yarn for Pencil/Spill, opposite natural yarn at the clicked stitch for Eraser, existing Invert behavior | Pan |
+| Overlay | Chosen action | Opposite Place/Clear action; Invert remains Invert | Pan |
+| Rectangle / Wand | Chosen variant | Temporary Add | Pan |
+| Move | Chosen variant | Temporary Duplicate | Pan |
 | Navigate / Crochet canvas | Pan | No authored edit | Pan |
 
-Space-drag, the visible Navigate control, and touch pan/zoom remain navigation routes. In authoring families, middle-click changes from pan to the action above. For selection, Shift means Add and takes precedence over Ctrl/Cmd Subtract. For movement, Alt means Move area and takes precedence over Ctrl/Cmd Duplicate. Resolve an explicit modifier before the button accelerator, then the chosen variant; apply the same rule to pointer and keyboard commands. Pin these combinations with tests. A temporary action never changes the remembered variant or selected yarn.
+Middle-drag pans with every tool and modifier combination. Space-drag, the visible Navigate control, and touch pan/zoom also navigate. For selection, Shift means Add and takes precedence over Ctrl/Cmd Subtract. For movement, Alt means Move area and takes precedence over Ctrl/Cmd Duplicate. Resolve an explicit modifier before the button accelerator, then the chosen variant; apply the same rule to pointer and keyboard commands. Pin these combinations with tests. A temporary action never changes the remembered variant or selected yarn.
 
 ### Approved local-transform compatibility policy
 
@@ -228,8 +228,8 @@ Scope: saved selection definitions and activation, local transform evaluation, i
 - Apply the approved conversion for existing selections and dormant settings; preserve pattern content and verify round trips through project files, recovery, and history.
 - Use the shared list and property treatments, consistent independent mirror toggles, and Stamp copies.
 - Add Grid's two step handles, Circle's center point, and Mirror's center point. Grid handles apply the same gap/offset changes and alternate-spacing synchronization as the corresponding fields; they do not collapse alternating reflections or change repeat counts. Display the relevant alternate layout as guides, and clamp/snap drags to the existing valid parameter domain. Local handles are visible and interactive only with Rectangle or Wand selection tools active. Passive guides may remain available to show the scope of subsequent painting.
-- Provide precision fields for all handles. Screen-sized hit targets, overlapping-handle disambiguation, rotated views, snapping, and touch input must preserve geometry. Global mirror handles are editable through the mirror context; local handles use the selection context.
-- Keep the established thin Accent marching-ants appearance for source selections, drag previews, and generated instances. Increase generated-copy opacity to fix dim Grid copies without adding thicker layered outlines or redesigning ordinary selections.
+- Provide precision fields for all handles. Screen-sized hit targets, overlapping-handle disambiguation, rotated views, snapping, and touch input must preserve geometry. Rectangle and Wand show and edit local handles and full local Mirror guides, including implied axes, while hiding global guides. Other tools show global guides, with global centre grips available through the Mirrors inspector. Only the primary pointer button drags a visible transform grip.
+- Source selections and drag previews use animated dashed boundaries; generated copies use thinner solid boundaries. Contrast underlays keep both legible with any yarn and Accent colours. Each shared edge is drawn once, with the source taking priority; touching copies retain their individual boundaries.
 - Preview property changes and handle drags in place. Match Pattern's coalesced edit behavior; category/toggle actions remain deliberate undo actions. A rejected setting or overlapping/unsafe transform retains the last valid result and exposes useful feedback.
 - Keep authored Full/Half/Quarter extents independent from selection and mirror transformations.
 
@@ -257,7 +257,7 @@ Scope: Crochet view/progress composition, remaining cross-workflow defects, docu
 - Wrap Forward from Whole pattern to the first instruction and Back from the first instruction to Whole pattern. Apply the approved view-only progress contract, including reopening Crochet, regeneration, compatible edits, and restoration of existing progress records.
 - Keep Whole pattern out of copied generated instructions, yarn alternation, row/round numbering, and instruction totals. Preserve direct row/round navigation and the existing chart dialect.
 - Remove the separate leading chevron column from Crochet instructions. Preserve current-step, focus, and invalid-placement cues without reserving a column; hover text identifies the row/round and yarn rather than saying “Go to”.
-- Apply the user's final visual corrections: restore the established selection-outline appearance with brighter generated copies, and replace separate execution borders/post-release flashes with normal temporary tool/variant selection only while input is held. Preserve remembered choices and document outcomes.
+- Apply the user's final visual corrections: distinguish animated source boundaries from thin solid copy boundaries with readable contrast, and replace separate execution borders/post-release flashes with normal temporary tool/variant selection only while input is held. Preserve remembered choices and document outcomes.
 - Verify semantic states and wording across Pattern, Settings, tool groups, selection lists, mirror lists, and Crochet. Reproduce and fix remaining in-scope edge cases through tests; report broader product proposals separately.
 - Compare final compressed bundle sizes, startup, drawing/gesture performance, transformed drawing, DOM update churn, and Crochet navigation against chunk 0. Investigate unexplained regressions and report feature-related costs with evidence; avoid flaky absolute timing assertions in CI.
 - Run the full suite, production build, representative accessibility/visual checks, and round-trip persistence fixtures.

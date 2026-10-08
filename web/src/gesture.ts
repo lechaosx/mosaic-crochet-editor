@@ -11,7 +11,7 @@ export interface PointerModifiers {
 }
 
 export interface GestureCallbacks {
-    onPaintStart:  (button: 0 | 1 | 2, modifiers: PointerModifiers, clientX: number, clientY: number) => void;
+    onPaintStart:  (button: 0 | 2, modifiers: PointerModifiers, clientX: number, clientY: number) => void;
     onPaintAt:     (clientX: number, clientY: number) => void;
     onPaintEnd:    () => void;     // commit stroke (record history if changed)
     onPaintCancel: () => void;     // discard stroke (revert to pre-stroke pixels)
@@ -58,7 +58,7 @@ export function mountGestures(
         if (e.button !== 0 && e.button !== 1 && e.button !== 2) return;
         if (e.button === 1 || e.button === 2) e.preventDefault();
         if (cb.navigate() && e.button === 2) return;
-        if (cb.navigate() && (e.button === 0 || e.button === 1)) {
+        if (e.button === 1 || cb.navigate() && e.button === 0) {
             e.preventDefault();
             if (mode !== "idle") return;
             pan = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY,

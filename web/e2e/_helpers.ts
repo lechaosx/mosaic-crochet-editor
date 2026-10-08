@@ -15,6 +15,29 @@ export async function chooseToolVariant(page: Page, family: string, variant: str
         .getByRole("menuitemradio", { name: variant, exact: true }).click();
 }
 
+export async function selectionHandleCoords(page: Page): Promise<{ cx: number; cy: number }[]> {
+    await page.evaluate(() => {
+        const target = window as unknown as { selectionGrips?: { cx: number; cy: number }[] };
+        if (target.selectionGrips) return;
+        target.selectionGrips = [];
+        const proto = CanvasRenderingContext2D.prototype, arc = proto.arc, fill = proto.fillRect;
+        proto.fillRect = function (x, y, w, h) {
+            if (this.canvas.id === "canvas" && w === this.canvas.width && h === this.canvas.height) target.selectionGrips = [];
+            fill.call(this, x, y, w, h);
+        };
+        proto.arc = function (x, y, radius, start, end, ccw) {
+            const matrix = this.getTransform(), scale = Math.hypot(matrix.a, matrix.b) / devicePixelRatio;
+            if (this.canvas.id === "canvas" && radius * scale >= 8) {
+                const point = matrix.transformPoint({ x, y }), bounds = this.canvas.getBoundingClientRect();
+                target.selectionGrips!.push({ cx: point.x / devicePixelRatio + bounds.left, cy: point.y / devicePixelRatio + bounds.top });
+            }
+            arc.call(this, x, y, radius, start, end, ccw);
+        };
+    });
+    await page.getByRole("button", { name: "Fit view", exact: true }).click();
+    return page.evaluate(() => (window as unknown as { selectionGrips: { cx: number; cy: number }[] }).selectionGrips);
+}
+
 declare global {
     interface Window {
         __test_matrix__?: DOMMatrix;

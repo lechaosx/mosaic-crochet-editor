@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB, selectionHandleCoords } from "./_helpers";
 
 async function selection(page: Parameters<typeof bootApp>[0]) {
     await bootApp(page);
@@ -74,7 +74,9 @@ test("Circle and Mirror retain independent centres and execute exclusive destina
 
 test("Grid step drag edits its field parameters and cancels back to the source configuration", async ({ page }) => {
     await selection(page);
-    const start = await cellCoord(page, 3.5, 2.5), end = await cellCoord(page, 5.5, 3.5);
+    const [start] = await selectionHandleCoords(page);
+    const source = await cellCoord(page, 3, 3), destination = await cellCoord(page, 5, 4);
+    const end = { cx: start.cx + destination.cx - source.cx, cy: start.cy + destination.cy - source.cy };
     await page.mouse.move(start.cx, start.cy);
     await page.mouse.down();
     await page.mouse.move(end.cx, end.cy, { steps: 8 });
@@ -142,7 +144,9 @@ test("paired Circle precision previews valid half-grid pairs and coalesces relat
 
 test("a deliberate category action settles a held local drag and has its own Undo", async ({ page }) => {
     await selection(page);
-    const start = await cellCoord(page, 3.5, 2.5), end = await cellCoord(page, 5.5, 3.5);
+    const [start] = await selectionHandleCoords(page);
+    const source = await cellCoord(page, 3, 3), destination = await cellCoord(page, 5, 4);
+    const end = { cx: start.cx + destination.cx - source.cx, cy: start.cy + destination.cy - source.cy };
     await page.mouse.move(start.cx, start.cy); await page.mouse.down();
     await page.mouse.move(end.cx, end.cy, { steps: 5 });
     await page.locator("#recipe-mode-none").focus();
@@ -158,7 +162,9 @@ test("a deliberate category action settles a held local drag and has its own Und
 test("Stamp with no copies retains a held cancellable Grid preview without history", async ({ page }) => {
     await selection(page);
     const before = await page.evaluate(() => localStorage.getItem("mosaic-history"));
-    const start = await cellCoord(page, 3.5, 2.5), end = await cellCoord(page, 5.5, 3.5);
+    const [start] = await selectionHandleCoords(page);
+    const source = await cellCoord(page, 3, 3), destination = await cellCoord(page, 5, 4);
+    const end = { cx: start.cx + destination.cx - source.cx, cy: start.cy + destination.cy - source.cy };
     await page.mouse.move(start.cx, start.cy); await page.mouse.down();
     await page.mouse.move(end.cx, end.cy, { steps: 5 });
     await page.locator("#recipe-apply").focus(); await page.keyboard.press("Space");
@@ -396,13 +402,16 @@ test.describe("high-DPI phone selection controls", () => {
         await page.getByRole("button", { name: "Fit view", exact: true }).click();
         await page.getByRole("button", { name: "Rotate view right", exact: true }).click();
         await page.waitForFunction(() => Math.abs(window.__test_matrix__!.a - window.__test_matrix__!.b) < 1e-10);
-        const anchor = await cellCoord(page, 4.5, 4.5), columnEnd = await cellCoord(page, 5.5, 4.5);
-        await touchDrag(page, { cx: anchor.cx - 24, cy: anchor.cy + 18 }, { cx: columnEnd.cx - 24, cy: columnEnd.cy });
+        const [column] = await selectionHandleCoords(page);
+        const origin = await cellCoord(page, 3, 3), columnEnd = await cellCoord(page, 4, 3);
+        await touchDrag(page, { cx: column.cx + 12, cy: column.cy },
+            { cx: column.cx + 12 + columnEnd.cx - origin.cx, cy: column.cy + columnEnd.cy - origin.cy });
         expect(await recipe(page)).toMatchObject({ columnSpacing: 2, columnOffset: 2, rowSpacing: 1, rowOffset: 2,
             source: { x: 3, y: 3, mask: [1] } });
         await page.getByRole("button", { name: "Undo", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
-        const restored = await cellCoord(page, 4.5, 4.5), rowEnd = await cellCoord(page, 4.5, 5.5);
-        await touchDrag(page, { cx: restored.cx + 24, cy: restored.cy }, { cx: rowEnd.cx + 24, cy: rowEnd.cy });
+        const [, row] = await selectionHandleCoords(page);
+        const rowOrigin = await cellCoord(page, 3, 3), rowEnd = await cellCoord(page, 3, 4);
+        await touchDrag(page, row, { cx: row.cx + rowEnd.cx - rowOrigin.cx, cy: row.cy + rowEnd.cy - rowOrigin.cy });
         expect(await recipe(page)).toMatchObject({ columnSpacing: 1, rowSpacing: 2, rowOffset: 2, source: { x: 3, y: 3 } });
     });
 

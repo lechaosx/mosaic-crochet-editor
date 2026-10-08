@@ -8,7 +8,7 @@ import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indi
 import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction } from "@mosaic/logic/tool-input";
 import { makeViewport, makeRendererState, observeCanvasResize,
-         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, selectionTransformHandles, type SelectionTransformHandle, updateCoordinates } from "./render";
+         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, pickSelectionTransformHandle, type SelectionTransformHandle, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
@@ -226,9 +226,10 @@ type Gesture =
         preRecipes: GridRecipe[];
         preActiveRecipeId: string | null;
       }
-    | { kind: "recipe-drag"; id: string; handle: SelectionTransformHandle; preRecipes: GridRecipe[] }
+    | { kind: "recipe-drag"; id: string; handle: SelectionTransformHandle; grabX: number; grabY: number; preRecipes: GridRecipe[] }
     | { kind: "mirror-drag";
         id: string;
+        grabX: number; grabY: number;
         preMirrors: MirrorCenter[];
       }
     ;
@@ -288,7 +289,7 @@ function syncSelectPreview() {
 
 function renderCanvas() {
     syncProjectColorInputs(store.state);
-    rs.selectionHandlesVisible = !instructionsOpen && !rs.previewRepeatGuides
+    rs.selectionHandlesVisible = !instructionsOpen
         && (store.state.activeTool === "select" || store.state.activeTool === "wand");
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
@@ -1511,26 +1512,27 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         }
         gestureFeedbackShown = false;
         ui.setCanvasFeedback(null);
-        if (rs.previewRepeatGuides) {
+        if (button === 0 && rs.previewRepeatGuides && !rs.selectionHandlesVisible) {
             const frac = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
             const hit = pickMirrorCenter(store.state.mirrors, frac.x, frac.y, editableMirrorTolerance(), rs.selectedMirrorId);
             if (hit) {
                 viewport.canvas.style.cursor = "grabbing";
                 rs.selectedMirrorId = hit.id;
-                gesture = { kind: "mirror-drag", id: hit.id, preMirrors: [...store.state.mirrors] };
+                gesture = { kind: "mirror-drag", id: hit.id, grabX: frac.x - hit.x - 0.5, grabY: frac.y - hit.y - 0.5, preMirrors: [...store.state.mirrors] };
                 refreshSymmetryUi();
                 renderCanvas();
                 return;
             }
         }
         const recipe = activeGridRecipe(store.state);
-        if (recipe && (store.state.activeTool === "select" || store.state.activeTool === "wand") && !rs.previewRepeatGuides) {
+        if (button === 0 && !mods.shift && !mods.ctrl && !mods.alt && recipe && rs.selectionHandlesVisible && !rs.hideCommittedSelection) {
             const frac = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
-            const hit = selectionTransformHandles(recipe, viewport.view.zoom, rs.visualRotation).find(handle =>
-                Math.hypot(frac.x - handle.x, frac.y - handle.y) < editableMirrorTolerance());
+            const hit = pickSelectionTransformHandle(recipe, viewport.view.zoom, rs.visualRotation, frac.x, frac.y);
             if (hit) {
                 viewport.canvas.style.cursor = "grabbing";
-                gesture = { kind: "recipe-drag", id: recipe.id, handle: hit, preRecipes: store.state.recipes };
+                onRecipeCommit();
+                recipeHistorySession = false;
+                gesture = { kind: "recipe-drag", id: recipe.id, handle: hit, grabX: frac.x - hit.x, grabY: frac.y - hit.y, preRecipes: store.state.recipes };
                 return;
             }
         }
@@ -1653,11 +1655,17 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         if (gesture.kind === "recipe-drag") {
             const g = gesture;
             const recipe = store.state.recipes.find(value => value.id === g.id)!;
-            const frac = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
+            const pointer = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
+            const frac = { x: pointer.x - g.grabX, y: pointer.y - g.grabY };
             if (g.handle.kind === "column" || g.handle.kind === "row") {
-                const updated = withGridStep(recipe, g.handle.kind, {
-                    x: frac.x - g.handle.offsetX - recipe.source.x, y: frac.y - g.handle.offsetY - recipe.source.y,
-                });
+                const step = {
+                    x: (frac.x - g.handle.offsetX - recipe.source.x - recipe.source.w / 2) * g.handle.direction,
+                    y: (frac.y - g.handle.offsetY - recipe.source.y - recipe.source.h / 2) * g.handle.direction,
+                };
+                const evaluated = evaluateGridRecipe(recipe);
+                const current = g.handle.kind === "column" ? evaluated.columnStep : evaluated.rowStep;
+                if (Math.round(step.x) === current.x && Math.round(step.y) === current.y) return;
+                const updated = withGridStep(recipe, g.handle.kind, step);
                 onRecipeChange(g.id, updated, true);
             } else {
                 let x = snapHalf(frac.x - 0.5), y = snapHalf(frac.y - 0.5);
@@ -1669,6 +1677,9 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                         - (b.x - (frac.x - 0.5)) ** 2 - (b.y - (frac.y - 0.5)) ** 2);
                     ({ x, y } = options[0]);
                 }
+                const centreX = recipe.mode === "circle" ? recipe.rotationCentreX : recipe.mirrorCentreX;
+                const centreY = recipe.mode === "circle" ? recipe.rotationCentreY : recipe.mirrorCentreY;
+                if (x === centreX && y === centreY) return;
                 onRecipeChange(g.id, recipe.mode === "circle" ? { rotationCentreX: x, rotationCentreY: y }
                     : { mirrorCentreX: x, mirrorCentreY: y }, true);
             }
@@ -1681,7 +1692,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             );
             const id = gesture.id;
             const mirror = store.state.mirrors.find(value => value.id === id)!;
-            const updated = snapMirrorCenter(mirror, { x: frac.x - 0.5, y: frac.y - 0.5 }, store.state.pattern);
+            const updated = snapMirrorCenter(mirror, { x: frac.x - gesture.grabX - 0.5, y: frac.y - gesture.grabY - 0.5 }, store.state.pattern);
             if (updated && !mirrorsEqual([mirror], [updated])) {
                 store.commit(s => { s.mirrors = s.mirrors.map(value => value.id === id ? updated : value); }, { persist: false });
                 refreshSymmetryUi();
@@ -1862,12 +1873,15 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
 document.addEventListener("pointerdown", finishKeyboardMove, { capture: true });
 
 viewport.canvas.addEventListener("pointermove", event => {
-    if (instructionsOpen || event.buttons || !rs.previewRepeatGuides) return;
+    if (instructionsOpen || event.buttons) return;
     const frac = screenToPatternFrac(
         viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation,
         store.state.pattern, event.clientX, event.clientY,
     );
-    const hit = pickMirrorCenter(store.state.mirrors, frac.x, frac.y, editableMirrorTolerance(), rs.selectedMirrorId);
+    const recipe = activeGridRecipe(store.state);
+    const hit = rs.selectionHandlesVisible
+        ? recipe && !rs.hideCommittedSelection && pickSelectionTransformHandle(recipe, viewport.view.zoom, rs.visualRotation, frac.x, frac.y)
+        : rs.previewRepeatGuides && pickMirrorCenter(store.state.mirrors, frac.x, frac.y, editableMirrorTolerance(), rs.selectedMirrorId);
     viewport.canvas.style.cursor = hit ? "grab" : "";
 });
 viewport.canvas.addEventListener("pointerleave", () => {

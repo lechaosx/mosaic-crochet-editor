@@ -167,7 +167,7 @@ test("centre hit targets stay screen-sized when zoomed out and dragging follows 
     for (let i = 0; i < 12; i++) await zoomOut.click();
     const start = await cellCoord(page, 4, 4), end = await cellCoord(page, 2, 4);
     await page.mouse.move(start.cx + 18, start.cy); await page.mouse.down();
-    await page.mouse.move(end.cx, end.cy, { steps: 5 }); await page.mouse.up();
+    await page.mouse.move(end.cx + 18, end.cy, { steps: 5 }); await page.mouse.up();
     await expect(page.getByRole("spinbutton", { name: "Mirror centre x" })).toHaveValue("2");
     await page.getByRole("button", { name: "Fit view", exact: true }).click();
     await page.getByRole("button", { name: "Rotate view right", exact: true }).click();

@@ -511,13 +511,17 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
     const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
     const activeRecipe = activeRecipeId === null ? null : recipes.find(recipe => recipe.id === activeRecipeId) ?? null;
-    if (activeRecipe && float
+    if (activeRecipe && float && !rs.hideCommittedSelection
         && float.x === activeRecipe.source.x && float.y === activeRecipe.source.y
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
         renderRecipeInstances(ctx, view, dpr, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
         if (rs.selectionHandlesVisible) renderRecipeHandles(ctx, view, activeRecipe, accentColor, rs.visualRotation);
     }
-    renderSymmetryGuides(ctx, view, dpr, pattern, mirrors, accentColor, rs.selectedMirrorId, rs.previewRepeatGuides);
+    if (rs.selectionHandlesVisible) {
+        if (activeRecipe?.mode === "mirror" && !rs.hideCommittedSelection) renderSymmetryGuides(ctx, view, dpr, pattern,
+            [{ id: activeRecipe.id, enabled: true, x: activeRecipe.mirrorCentreX, y: activeRecipe.mirrorCentreY,
+                types: activeRecipe.mirrorTypes }], accentColor, null, false);
+    } else renderSymmetryGuides(ctx, view, dpr, pattern, mirrors, accentColor, rs.selectedMirrorId, rs.previewRepeatGuides);
     // During a drag, the preview wins even when empty (drag started outside
     // canvas in replace mode → old float outline visually disappears immediately).
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
@@ -556,16 +560,45 @@ function renderRecipeInstances(
 ) {
     const paths = recipeInstancePaths(pattern, pixels, recipe);
     ctx.save();
-    for (const instance of paths) renderSelectionPaths(ctx, view, dpr, instance, color, dashOffset);
+    const source = recipe.source;
+    const sourceMask = source.mask.slice();
+    for (let y = 0; y < source.h; y++) for (let x = 0; x < source.w; x++) {
+        const cx = source.x + x, cy = source.y + y;
+        if (cx < 0 || cy < 0 || cx >= pattern.canvasWidth || cy >= pattern.canvasHeight
+            || pixels[cy * pattern.canvasWidth + cx] === 0) sourceMask[y * source.w + x] = 0;
+    }
+    const occupied = new Set(tracedBoundary(sourceMask, source.w, source.h).flatMap(path => {
+        const keys: string[] = [];
+        for (let i = 2; i < path.length; i += 2) keys.push(boundaryEdgeKey(path[i - 2] + source.x, path[i - 1] + source.y,
+            path[i] + source.x, path[i + 1] + source.y));
+        return keys;
+    }));
+    for (const instance of paths) {
+        const unique: number[][] = [];
+        for (const path of instance) {
+            let run: number[] = [];
+            for (let i = 2; i < path.length; i += 2) {
+                const key = boundaryEdgeKey(path[i - 2], path[i - 1], path[i], path[i + 1]);
+                if (occupied.has(key)) { if (run.length > 0) unique.push(run); run = []; continue; }
+                occupied.add(key);
+                if (run.length === 0) run.push(path[i - 2], path[i - 1]);
+                run.push(path[i], path[i + 1]);
+            }
+            if (run.length > 0) unique.push(run);
+        }
+        renderSelectionPaths(ctx, view, dpr, unique, color, 0, true);
+    }
     ctx.restore();
-    (window as unknown as { __test_repeat_outlines__?: { paths: number[][][]; dashOffset: number } })
-        .__test_repeat_outlines__ = { paths, dashOffset };
+    (window as unknown as { __test_repeat_outlines__?: { paths: number[][][] } })
+        .__test_repeat_outlines__ = { paths };
 }
 
 export interface SelectionTransformHandle {
     kind: "column" | "row" | "centre";
     x: number; y: number;
     offsetX: number; offsetY: number;
+    direction: 1 | -1;
+    ghost: boolean;
 }
 
 export function selectionTransformHandles(recipe: GridRecipe, zoom: number, rotation: number): SelectionTransformHandle[] {
@@ -573,53 +606,93 @@ export function selectionTransformHandles(recipe: GridRecipe, zoom: number, rota
     if (recipe.mode === "circle" || recipe.mode === "mirror") return [{ kind: "centre",
         x: (recipe.mode === "circle" ? recipe.rotationCentreX : recipe.mirrorCentreX) + 0.5,
         y: (recipe.mode === "circle" ? recipe.rotationCentreY : recipe.mirrorCentreY) + 0.5,
-        offsetX: 0, offsetY: 0 }];
+        offsetX: 0, offsetY: 0, direction: 1, ghost: false }];
     const evaluated = evaluateGridRecipe(recipe);
-    const handles: SelectionTransformHandle[] = [
-        { kind: "column", x: recipe.source.x + evaluated.columnStep.x, y: recipe.source.y + evaluated.columnStep.y, offsetX: 0, offsetY: 0 },
-        { kind: "row", x: recipe.source.x + evaluated.rowStep.x, y: recipe.source.y + evaluated.rowStep.y, offsetX: 0, offsetY: 0 },
-    ];
+    const origin = { x: recipe.source.x + recipe.source.w / 2, y: recipe.source.y + recipe.source.h / 2 };
+    const handles = (["column", "row"] as const).map(kind => {
+        const direction = (kind === "column" ? recipe.right === 0 && recipe.left > 0 : recipe.down === 0 && recipe.up > 0) ? -1 : 1;
+        const step = kind === "column" ? evaluated.columnStep : evaluated.rowStep;
+        const anchorX = origin.x + direction * step.x, anchorY = origin.y + direction * step.y;
+        const offsetX = kind === "row" ? Math.max(origin.x, anchorX) + recipe.source.w / 2 + 24 / zoom - anchorX : 0;
+        const offsetY = kind === "column" ? Math.min(origin.y, anchorY) - recipe.source.h / 2 - 24 / zoom - anchorY : 0;
+        return { kind, x: anchorX + offsetX, y: anchorY + offsetY,
+            offsetX, offsetY, direction, ghost: kind === "column" ? recipe.left + recipe.right === 0 : recipe.up + recipe.down === 0 };
+    }) satisfies SelectionTransformHandle[];
     if (Math.hypot(handles[0].x - handles[1].x, handles[0].y - handles[1].y) * zoom < 48) {
+        const dx = handles[0].x - handles[1].x, dy = handles[0].y - handles[1].y;
+        const length = Math.hypot(dx, dy);
         const angle = rotation * Math.PI / 180;
+        const connectorX = handles[0].x - origin.x, connectorY = handles[0].y - origin.y;
+        const connectorLength = Math.hypot(connectorX, connectorY);
+        const ux = length > 0 ? dx / length : connectorLength > 0 ? -connectorY / connectorLength : Math.cos(angle);
+        const uy = length > 0 ? dy / length : connectorLength > 0 ? connectorX / connectorLength : -Math.sin(angle);
+        const distance = (48 / zoom - length) / 2;
         handles.forEach((handle, index) => {
-            const offset = (index === 0 ? -24 : 24) / zoom;
-            handle.offsetX = Math.cos(angle) * offset; handle.offsetY = -Math.sin(angle) * offset;
-            handle.x += handle.offsetX; handle.y += handle.offsetY;
+            const sign = index === 0 ? 1 : -1;
+            handle.offsetX += ux * distance * sign; handle.offsetY += uy * distance * sign;
+            handle.x += ux * distance * sign; handle.y += uy * distance * sign;
         });
     }
     return handles;
 }
 
+export function pickSelectionTransformHandle(recipe: GridRecipe, zoom: number, rotation: number, x: number, y: number): SelectionTransformHandle | null {
+    return selectionTransformHandles(recipe, zoom, rotation)
+        .map(handle => ({ handle, distance: Math.hypot(x - handle.x, y - handle.y) * zoom }))
+        .filter(candidate => candidate.distance <= 22).sort((a, b) => a.distance - b.distance)[0]?.handle ?? null;
+}
+
 function renderRecipeHandles(ctx: CanvasRenderingContext2D, view: ViewState, recipe: GridRecipe, color: string, rotation: number) {
     const px = 1 / view.zoom;
     const handles = selectionTransformHandles(recipe, view.zoom, rotation);
-    const evaluated = recipe.mode === "grid" ? evaluateGridRecipe(recipe) : null;
+    const origin = { x: recipe.source.x + recipe.source.w / 2, y: recipe.source.y + recipe.source.h / 2 };
     ctx.save(); ctx.setLineDash([]); ctx.lineWidth = 2 * px;
-    if (evaluated) {
-        ctx.strokeStyle = color;
-        for (const step of [evaluated.columnStep, evaluated.rowStep, evaluated.columnStepAlternate, evaluated.rowStepAlternate]) {
-            ctx.beginPath(); ctx.moveTo(recipe.source.x, recipe.source.y);
-            ctx.lineTo(recipe.source.x + step.x, recipe.source.y + step.y); ctx.stroke();
+    if (recipe.mode === "grid") {
+        for (const handle of handles) {
+            const x = handle.x - handle.offsetX, y = handle.y - handle.offsetY;
+            ctx.beginPath();
+            if (handle.kind === "column") {
+                const sourceTop = origin.y - recipe.source.h / 2, copyTop = y - recipe.source.h / 2;
+                const top = Math.min(sourceTop, copyTop) - 24 * px;
+                ctx.moveTo(origin.x, sourceTop); ctx.lineTo(origin.x, top); ctx.lineTo(x, top); ctx.lineTo(x, copyTop);
+                ctx.moveTo(x, top); ctx.lineTo(handle.x, handle.y);
+            } else {
+                const sourceRight = origin.x + recipe.source.w / 2, copyRight = x + recipe.source.w / 2;
+                const right = Math.max(sourceRight, copyRight) + 24 * px;
+                ctx.moveTo(sourceRight, origin.y); ctx.lineTo(right, origin.y); ctx.lineTo(right, y); ctx.lineTo(copyRight, y);
+                ctx.moveTo(right, y); ctx.lineTo(handle.x, handle.y);
+            }
+            ctx.lineWidth = 4 * px; ctx.strokeStyle = "#000"; ctx.stroke();
+            ctx.lineWidth = 2 * px; ctx.strokeStyle = "#fff"; ctx.stroke();
         }
     }
     for (const handle of handles) {
-        ctx.beginPath(); ctx.moveTo(handle.x - handle.offsetX, handle.y - handle.offsetY); ctx.lineTo(handle.x, handle.y);
-        ctx.strokeStyle = color; ctx.stroke();
         ctx.save(); ctx.translate(handle.x, handle.y); ctx.rotate(-rotation * Math.PI / 180);
-        ctx.beginPath();
-        ctx.arc(0, 0, 11 * px, 0, Math.PI * 2);
-        ctx.fillStyle = "#fff"; ctx.fill(); ctx.strokeStyle = color; ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, 16 * px, 0, Math.PI * 2);
+        ctx.fillStyle = "#161618"; ctx.fill();
+        ctx.lineWidth = 3 * px; ctx.strokeStyle = "#fff"; ctx.stroke();
+        ctx.lineWidth = 1 * px; ctx.strokeStyle = color; ctx.stroke();
+        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * px;
         ctx.beginPath();
         if (handle.kind === "centre") {
-            ctx.moveTo(-5 * px, 0); ctx.lineTo(5 * px, 0); ctx.moveTo(0, -5 * px); ctx.lineTo(0, 5 * px);
+            ctx.moveTo(-6 * px, 0); ctx.lineTo(6 * px, 0); ctx.moveTo(0, -6 * px); ctx.lineTo(0, 6 * px);
+            ctx.stroke();
         } else {
-            const step = handle.kind === "column" ? evaluated!.columnStep : evaluated!.rowStep;
-            ctx.rotate(Math.atan2(step.y, step.x) + rotation * Math.PI / 180);
+            ctx.save();
+            if (handle.kind === "row") ctx.rotate(Math.PI / 2);
             ctx.moveTo(-6 * px, 0); ctx.lineTo(6 * px, 0);
             ctx.moveTo(-3 * px, -3 * px); ctx.lineTo(-6 * px, 0); ctx.lineTo(-3 * px, 3 * px);
             ctx.moveTo(3 * px, -3 * px); ctx.lineTo(6 * px, 0); ctx.lineTo(3 * px, 3 * px);
+            ctx.stroke(); ctx.restore();
+            const label = (handle.kind === "column" ? "Columns" : "Rows") + (handle.ghost ? " · preview" : "");
+            ctx.font = `${11 * px}px system-ui, sans-serif`;
+            ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            const width = ctx.measureText(label).width + 10 * px;
+            const labelX = handle.kind === "row" ? 22 * px + width / 2 : 0;
+            const labelY = handle.kind === "column" ? -30 * px : 0;
+            ctx.fillStyle = "#161618"; ctx.fillRect(labelX - width / 2, labelY - 9 * px, width, 18 * px);
+            ctx.fillStyle = "#fff"; ctx.fillText(label, labelX, labelY);
         }
-        ctx.stroke();
         ctx.restore();
     }
     ctx.restore();
@@ -650,27 +723,34 @@ export function recipeInstancePaths(
     });
 }
 
+type BoundaryEdge = [number, number, number, number] & { used?: boolean };
+
+function boundaryEdgeKey(x1: number, y1: number, x2: number, y2: number): string {
+    return x1 < x2 || x1 === x2 && y1 < y2 ? `${x1},${y1}|${x2},${y2}` : `${x2},${y2}|${x1},${y1}`;
+}
+
 function tracedSparseBoundary(selection: ReadonlySet<string>): number[][] {
-    type Edge = [number, number, number, number] & { used?: boolean };
-    const edges: Edge[] = [];
-    const edgeFrom = new Map<string, Edge[]>();
-    const addEdge = (x1: number, y1: number, x2: number, y2: number) => {
-        const edge: Edge = [x1, y1, x2, y2];
-        edges.push(edge);
-        const key = `${x1},${y1}`;
+    const edges: BoundaryEdge[] = [];
+    for (const key of selection) {
+        const [x, y] = key.split(",").map(Number);
+        if (!selection.has(`${x},${y - 1}`)) edges.push([x, y, x + 1, y]);
+        if (!selection.has(`${x + 1},${y}`)) edges.push([x + 1, y, x + 1, y + 1]);
+        if (!selection.has(`${x},${y + 1}`)) edges.push([x + 1, y + 1, x, y + 1]);
+        if (!selection.has(`${x - 1},${y}`)) edges.push([x, y + 1, x, y]);
+    }
+    return traceBoundaryEdges(edges);
+}
+
+function traceBoundaryEdges(edges: BoundaryEdge[]): number[][] {
+    const edgeFrom = new Map<string, BoundaryEdge[]>();
+    for (const edge of edges) {
+        const key = `${edge[0]},${edge[1]}`;
         const outgoing = edgeFrom.get(key);
         if (outgoing) outgoing.push(edge);
         else edgeFrom.set(key, [edge]);
-    };
-    for (const key of selection) {
-        const [x, y] = key.split(",").map(Number);
-        if (!selection.has(`${x},${y - 1}`)) addEdge(x, y, x + 1, y);
-        if (!selection.has(`${x + 1},${y}`)) addEdge(x + 1, y, x + 1, y + 1);
-        if (!selection.has(`${x},${y + 1}`)) addEdge(x + 1, y + 1, x, y + 1);
-        if (!selection.has(`${x - 1},${y}`)) addEdge(x, y + 1, x, y);
     }
     const paths: number[][] = [];
-    const direction = (edge: Edge) => {
+    const direction = (edge: BoundaryEdge) => {
         const dx = edge[2] - edge[0], dy = edge[3] - edge[1];
         if (dx === 1) return 0;
         if (dy === 1) return 1;
@@ -681,7 +761,7 @@ function tracedSparseBoundary(selection: ReadonlySet<string>): number[][] {
         if (start.used) continue;
         const startKey = `${start[0]},${start[1]}`;
         const path: number[] = [];
-        let edge: Edge | undefined = start;
+        let edge: BoundaryEdge | undefined = start;
         while (edge && !edge.used) {
             edge.used = true;
             if (path.length === 0) path.push(edge[0], edge[1]);
@@ -757,37 +837,16 @@ function renderInstructionSeam(
 // ants dash offset flows around the perimeter (rather than restarting per
 // cell-edge, which would look like flickering noise instead of motion).
 function tracedBoundary(selection: Uint8Array, W: number, H: number): number[][] {
-    const cornerKey = (x: number, y: number) => y * (W + 1) + x;
-    const edgeFrom = new Map<number, [number, number, number, number]>();
-    const sel = (x: number, y: number) =>
-        x >= 0 && x < W && y >= 0 && y < H && selection[y * W + x] === 1;
-
-    for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-            if (!sel(x, y)) continue;
-            if (!sel(x,     y - 1)) edgeFrom.set(cornerKey(x,     y),     [x,     y,     x + 1, y    ]); // top    →
-            if (!sel(x + 1, y))     edgeFrom.set(cornerKey(x + 1, y),     [x + 1, y,     x + 1, y + 1]); // right  ↓
-            if (!sel(x,     y + 1)) edgeFrom.set(cornerKey(x + 1, y + 1), [x + 1, y + 1, x,     y + 1]); // bottom ←
-            if (!sel(x - 1, y))     edgeFrom.set(cornerKey(x,     y + 1), [x,     y + 1, x,     y    ]); // left   ↑
-        }
+    const edges: BoundaryEdge[] = [];
+    const sel = (x: number, y: number) => x >= 0 && x < W && y >= 0 && y < H && selection[y * W + x] === 1;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (!sel(x, y)) continue;
+        if (!sel(x, y - 1)) edges.push([x, y, x + 1, y]);
+        if (!sel(x + 1, y)) edges.push([x + 1, y, x + 1, y + 1]);
+        if (!sel(x, y + 1)) edges.push([x + 1, y + 1, x, y + 1]);
+        if (!sel(x - 1, y)) edges.push([x, y + 1, x, y]);
     }
-
-    const paths: number[][] = [];
-    while (edgeFrom.size > 0) {
-        const startKey: number = edgeFrom.keys().next().value!;
-        const path: number[] = [];
-        let key = startKey;
-        while (edgeFrom.has(key)) {
-            const e = edgeFrom.get(key)!;
-            edgeFrom.delete(key);
-            if (path.length === 0) path.push(e[0], e[1]);
-            path.push(e[2], e[3]);
-            key = cornerKey(e[2], e[3]);
-            if (key === startKey) break;
-        }
-        if (path.length >= 4) paths.push(path);
-    }
-    return paths;
+    return traceBoundaryEdges(edges);
 }
 
 function renderSelection(
@@ -803,21 +862,32 @@ function renderSelection(
 function renderSelectionPaths(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     paths: ReadonlyArray<ReadonlyArray<number>>, color: string, dashOffset: number,
+    copy = false,
 ) {
     const px = 1 / (view.zoom * dpr);
     const dash = 6 * px;
 
     ctx.save();
-    ctx.lineWidth = 3 * px;
-    ctx.setLineDash([dash, dash]);
-    ctx.lineDashOffset = dashOffset;
-    ctx.strokeStyle = color;
     ctx.beginPath();
     for (const path of paths) {
         ctx.moveTo(path[0], path[1]);
         for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
     }
-    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.lineWidth = (copy ? 4 : 6) * px;
+    ctx.strokeStyle = "#000000"; ctx.stroke();
+    ctx.lineWidth = (copy ? 3 : 4) * px;
+    ctx.strokeStyle = "#ffffff"; ctx.stroke();
+    ctx.lineWidth = (copy ? 1 : 2) * px;
+    ctx.setLineDash(copy ? [] : [dash, dash]);
+    ctx.lineDashOffset = copy ? 0 : dashOffset;
+    if (!copy) {
+        ctx.lineWidth = 3 * px; ctx.strokeStyle = "#000000"; ctx.stroke();
+        ctx.lineWidth = 2 * px;
+    }
+    ctx.strokeStyle = color; ctx.stroke();
+    if (!copy) (window as unknown as { __test_source_outline__?: { paths: ReadonlyArray<ReadonlyArray<number>>; dashOffset: number } })
+        .__test_source_outline__ = { paths, dashOffset };
     ctx.restore();
 }
 

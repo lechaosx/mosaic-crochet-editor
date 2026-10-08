@@ -217,7 +217,7 @@ test("whole-selection mirror copies apply around the transformation centre", asy
     }
 });
 
-test("adjacent repeat instances keep separate animated outlines", async ({ page }) => {
+test("adjacent repeat instances keep separate outlines and the source animates", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
@@ -225,18 +225,19 @@ test("adjacent repeat instances keep separate animated outlines", async ({ page 
     await page.locator("#recipe-right").dispatchEvent("change");
 
     await expect.poll(() => page.evaluate(() => (window as unknown as {
-        __test_repeat_outlines__?: { paths: number[][][]; dashOffset: number };
+        __test_repeat_outlines__?: { paths: number[][][] };
     }).__test_repeat_outlines__?.paths.length)).toBe(2);
     const first = await page.evaluate(() => (window as unknown as {
-        __test_repeat_outlines__: { paths: number[][][]; dashOffset: number };
+        __test_repeat_outlines__: { paths: number[][][] };
     }).__test_repeat_outlines__);
+    const phase = await page.evaluate(() => (window as unknown as { __test_source_outline__: { dashOffset: number } }).__test_source_outline__.dashOffset);
     expect(first.paths.every(instance => instance.length === 1 && instance[0].length === 10)).toBe(true);
     await expect.poll(() => page.evaluate(() => (window as unknown as {
-        __test_repeat_outlines__: { dashOffset: number };
-    }).__test_repeat_outlines__.dashOffset)).not.toBe(first.dashOffset);
+        __test_source_outline__: { dashOffset: number };
+    }).__test_source_outline__.dashOffset)).not.toBe(phase);
 });
 
-test("repeat marching ants stop when reduced motion is requested", async ({ page }) => {
+test("source marching ants stop when reduced motion is requested", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
@@ -244,12 +245,12 @@ test("repeat marching ants stop when reduced motion is requested", async ({ page
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").dispatchEvent("change");
     const before = await page.evaluate(() => (window as unknown as {
-        __test_repeat_outlines__: { dashOffset: number };
-    }).__test_repeat_outlines__.dashOffset);
+        __test_source_outline__: { dashOffset: number };
+    }).__test_source_outline__.dashOffset);
     await page.waitForTimeout(200);
     expect(await page.evaluate(() => (window as unknown as {
-        __test_repeat_outlines__: { dashOffset: number };
-    }).__test_repeat_outlines__.dashOffset)).toBe(before);
+        __test_source_outline__: { dashOffset: number };
+    }).__test_source_outline__.dashOffset)).toBe(before);
 });
 
 test("saved grid repeats apply independent directions, angled vectors, and one gap per axis", async ({ page }) => {

@@ -102,18 +102,18 @@ test("Rectangle menu expansion remains independent of the Selection inspector", 
     await expect(tool).toHaveAttribute("aria-expanded", "true");
 });
 
-test("middle Pencil inverts without panning or changing the chosen tool or yarn", async ({ page }) => {
+test("right Pencil uses the other yarn without panning or changing its chosen state", async ({ page }) => {
     await bootApp(page);
     const cell = await cellCoord(page, 2, 2);
     const before = await pixelRGB(page, cell.cx, cell.cy);
     const matrix = await page.evaluate(() => window.__test_matrix__!.toString());
     await page.mouse.move(cell.cx, cell.cy);
-    await page.mouse.down({ button: "middle" });
-    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator("#status-action")).toContainText("Invert");
+    await page.mouse.down({ button: "right" });
+    await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#status-action")).toContainText("Pencil");
     await expect(page.locator("#status-action")).toBeVisible();
-    await page.mouse.up({ button: "middle" });
+    await page.mouse.up({ button: "right" });
     expect(await pixelRGB(page, cell.cx, cell.cy)).not.toEqual(before);
     expect(await page.evaluate(() => window.__test_matrix__!.toString())).toBe(matrix);
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
@@ -121,15 +121,15 @@ test("middle Pencil inverts without panning or changing the chosen tool or yarn"
     await expect(page.locator("#status-action")).toBeHidden();
 });
 
-test("right Rectangle adds and middle subtracts, with Shift ahead of either button", async ({ page }) => {
+test("right Rectangle adds and Control subtracts, with Shift ahead of Control", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);
     await clickCell(page, 3, 1, { button: "right" });
     await expect(page.locator("#status-selection")).toHaveText("2 selected");
-    await clickCell(page, 1, 1, { button: "middle" });
+    await clickCell(page, 1, 1, { modifiers: ["Control"] });
     await expect(page.locator("#status-selection")).toHaveText("1 selected");
-    await clickCell(page, 5, 1, { button: "middle", modifiers: ["Shift", "Control"] });
+    await clickCell(page, 5, 1, { modifiers: ["Shift", "Control"] });
     await expect(page.locator("#status-selection")).toHaveText("2 selected");
 });
 
@@ -203,11 +203,11 @@ test("a held action keeps its starting variant while a new choice is remembered 
 
 for (const [family, tool, chosen, button, modifiers, icon, restored] of [
     ["Wand", "wand", "Replace", "right", [], "wand-add", "wand"],
-    ["Wand", "wand", "Replace", "middle", [], "wand-remove", "wand"],
-    ["Rectangle", "select", "Replace", "middle", ["Shift", "Control"], "select-add", "select"],
+    ["Wand", "wand", "Replace", "left", ["Control"], "wand-remove", "wand"],
+    ["Rectangle", "select", "Replace", "left", ["Shift", "Control"], "select-add", "select"],
     ["Move", "move", "Move content", "right", ["Alt", "Control"], "move-area", "move"],
     ["Overlay", "overlay", "Place", "right", [], "overlay-clear", "overlay-place"],
-    ["Overlay", "overlay", "Clear", "middle", [], "overlay-invert", "overlay-clear"],
+    ["Overlay", "overlay", "Invert", "right", [], "overlay-invert", "overlay-invert"],
 ] as const) test(`${family} ${button} held action shows ${icon} and restores its chosen icon`, async ({ page }) => {
     await bootApp(page);
     await choose(page, family, chosen);
@@ -228,18 +228,18 @@ for (const cancellation of ["pointercancel", "lostpointercapture", "blur"] as co
     await bootApp(page);
     const cell = await cellCoord(page, 2, 2);
     await page.mouse.move(cell.cx, cell.cy);
-    await page.mouse.down({ button: "middle" });
-    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "true");
+    await page.mouse.down({ button: "right" });
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("e");
-    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
     await page.evaluate(event => {
         if (event === "blur") window.dispatchEvent(new Event(event));
         else document.getElementById("canvas")!.dispatchEvent(new PointerEvent(event, { pointerId: 1, bubbles: true }));
     }, cancellation);
     await expect(page.locator("#tool-eraser")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.locator("#tool-invert")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator("#status-action")).toBeHidden();
-    await page.mouse.up({ button: "middle" });
+    await page.mouse.up({ button: "right" });
 });
 
 test("chosen variants remain described with enlarged text", async ({ page }) => {
@@ -323,7 +323,7 @@ test("Overlay hints describe the chosen action rather than a fixed Place action"
     }
 });
 
-test("right Move duplicates and middle Move moves the area", async ({ page }) => {
+test("right Move duplicates and Alt-drag moves the area", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 1, 1);
     await page.keyboard.press("s");
@@ -340,9 +340,11 @@ test("right Move duplicates and middle Move moves the area", async ({ page }) =>
     expect(await pixelRGB(page, target.cx, target.cy)).toEqual([0, 0, 0]);
     const area = await cellCoord(page, 5, 1);
     await page.mouse.move(target.cx, target.cy);
-    await page.mouse.down({ button: "middle" });
+    await page.keyboard.down("Alt");
+    await page.mouse.down();
     await page.mouse.move(area.cx, area.cy, { steps: 3 });
-    await page.mouse.up({ button: "middle" });
+    await page.mouse.up();
+    await page.keyboard.up("Alt");
     expect(await pixelRGB(page, target.cx, target.cy)).toEqual([0, 0, 0]);
     expect(await pixelRGB(page, area.cx, area.cy)).toEqual([255, 255, 255]);
     await expect(page.locator("#move-popover")).toHaveCount(0);
@@ -418,16 +420,16 @@ test("Navigate and Crochet right-click do not edit; middle-click remains navigat
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document)).toEqual(before);
 });
 
-test("middle Overlay inverts, respects the chosen yarn, and keeps the chosen Place action", async ({ page }) => {
+test("chosen Overlay Invert respects its yarn and remains chosen", async ({ page }) => {
     await bootApp(page);
-    await page.keyboard.press("o");
+    await choose(page, "Overlay", "Invert");
     await page.keyboard.press("2");
     const cell = await cellCoord(page, 2, 1);
     const before = await pixelRGB(page, cell.cx, cell.cy);
-    await clickCell(page, 2, 1, { button: "middle" });
+    await clickCell(page, 2, 1, {});
     expect(await pixelRGB(page, cell.cx, cell.cy)).not.toEqual(before);
-    await expect(page.locator("#tool-overlay")).toHaveAccessibleDescription(/Overlay · Place/);
+    await expect(page.locator("#tool-overlay")).toHaveAccessibleDescription(/Overlay · Invert/);
     await expect(page.locator("#swatch-b")).toHaveAttribute("aria-pressed", "true");
-    await clickCell(page, 2, 1, { button: "middle" });
+    await clickCell(page, 2, 1, {});
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(before);
 });

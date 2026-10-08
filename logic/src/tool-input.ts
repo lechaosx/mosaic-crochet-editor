@@ -1,7 +1,7 @@
 import type { Tool, ToolVariants } from "./types";
 
 export interface ToolInput {
-    button: 0 | 1 | 2;
+    button: 0 | 2;
     shift: boolean;
     ctrl: boolean;
     alt: boolean;
@@ -19,7 +19,7 @@ export type ToolAction = PaintAction
 
 export function resolveMoveInput(chosen: ToolVariants["move"], input: ToolInput): ToolVariants["move"] {
     return input.alt ? "mask-only" : input.ctrl ? "duplicate"
-        : input.button === 2 ? "duplicate" : input.button === 1 ? "mask-only" : chosen;
+        : input.button === 2 ? "duplicate" : chosen;
 }
 
 export function resolveToolInput(tool: Tool, variants: ToolVariants, primary: 1 | 2, input: ToolInput): ToolAction {
@@ -27,15 +27,13 @@ export function resolveToolInput(tool: Tool, variants: ToolVariants, primary: 1 
     if (tool === "select" || tool === "wand") return {
         kind: tool,
         mode: input.shift ? "add" : input.ctrl ? "remove"
-            : input.button === 2 ? "add" : input.button === 1 ? "remove" : variants[tool],
+            : input.button === 2 ? "add" : variants[tool],
     };
     if (tool === "overlay") {
         const chosen = variants.overlay;
-        const overlayAction = input.button === 1 ? "invert"
-            : input.button === 2 ? chosen === "place" ? "clear" : chosen === "clear" ? "place" : "invert" : chosen;
+        const overlayAction = input.button === 2 ? chosen === "place" ? "clear" : chosen === "clear" ? "place" : "invert" : chosen;
         return { kind: "paint", tool, color: primary, overlayAction };
     }
-    if (input.button === 1) return { kind: "paint", tool: "invert", color: primary };
     if (tool === "eraser") return { kind: "paint", tool, color: primary, oppositeNatural: input.button === 2 };
     const color = input.button === 2 && tool !== "invert" ? primary === 1 ? 2 : 1 : primary;
     return { kind: "paint", tool, color };
