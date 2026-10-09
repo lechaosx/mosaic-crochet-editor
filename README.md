@@ -6,8 +6,8 @@ A browser-based editor for designing alternating-yarn mosaic crochet charts and 
 
 <table>
 <tr>
-<td><img src="doc/screenshot.png" alt="Mosaic Crochet Editor showing a chart and its symmetry controls"></td>
-<td><img src="doc/photo.jpg" alt="A crocheted square made from a chart"></td>
+<td><img src="doc/screenshot.png" alt="Mosaic Crochet Editor showing the centre-out chart for the photographed square and Pattern controls"></td>
+<td><img src="doc/photo.jpg" alt="Crocheted square corresponding to the chart, in black and variegated blue yarn"></td>
 </tr>
 </table>
 
