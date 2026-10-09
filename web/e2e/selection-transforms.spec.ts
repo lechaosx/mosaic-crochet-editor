@@ -274,7 +274,7 @@ test("local Mirror describes implied types while buttons and history retain expl
     });
     await expect(point).not.toHaveCSS("background-color", chosen.background);
     await expect(point).not.toHaveCSS("border-top-color", chosen.border);
-    await expect(point).not.toHaveCSS("color", chosen.foreground);
+    await expect(point).toHaveCSS("color", chosen.foreground);
     const implied = await point.evaluate(element => {
         const style = getComputedStyle(element);
         return { background: style.backgroundColor, border: style.borderTopColor, foreground: style.color };
