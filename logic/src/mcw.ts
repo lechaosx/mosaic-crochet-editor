@@ -73,11 +73,12 @@ function readRecipes(value: unknown, legacy = false): GridRecipe[] {
 }
 
 function writeRecipes(recipes: ReadonlyArray<GridRecipe> = []): McwV6["recipes"] {
-    const checked = readRecipes((recipes.length ? recipes : [emptyGridRecipe()]).map(recipe => ({ ...recipe, source: {
+    const checked = readRecipes(recipes.map(recipe => ({ ...recipe, source: {
         ...recipe.source,
         mask: packMask(recipe.source.mask),
     } })));
-    return checked.map(recipe => ({ ...recipe, source: { ...recipe.source, mask: packMask(recipe.source.mask) } }));
+    return checked.filter(recipe => recipe.source.mask.length > 0)
+        .map(recipe => ({ ...recipe, source: { ...recipe.source, mask: packMask(recipe.source.mask) } }));
 }
 
 function invalidFile(): Error {

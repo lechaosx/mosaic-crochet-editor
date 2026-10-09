@@ -1,8 +1,37 @@
 // Persistence + boot-time consistency checks.
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
+
+test("Save downloads no empty selection record and Open restores an editable unselected project", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 0, 1);
+    await page.evaluate(() => { delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker; });
+    const before = await page.evaluate(() => ({ recovery: localStorage.getItem("mosaic-recovery"), history: localStorage.getItem("mosaic-history") }));
+    const downloading = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    const download = await downloading;
+    expect(download.suggestedFilename()).toBe("pattern.mcw");
+    const source = await readFile((await download.path())!, "utf8");
+    expect(JSON.parse(source).recipes).toEqual([]);
+    expect(await page.evaluate(() => ({ recovery: localStorage.getItem("mosaic-recovery"), history: localStorage.getItem("mosaic-history") }))).toEqual(before);
+
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);
+    await expect(page.getByRole("button", { name: "Selection 1 1 × 1", exact: true })).toBeVisible();
+    const choosing = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await (await choosing).setFiles({ name: "compact.mcw", mimeType: "application/json", buffer: Buffer.from(source) });
+    await expect(page.getByRole("button", { name: "Selection 1 1 × 1", exact: true })).toHaveCount(0);
+    await expect(page.locator("#document-error")).toBeHidden();
+    const cell = await cellCoord(page, 0, 1);
+    expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
+    await page.keyboard.press("s");
+    await clickCell(page, 0, 1);
+    await expect(page.getByRole("button", { name: "Selection 1 1 × 1", exact: true })).toBeVisible();
+});
 
 test("local recovery failure stays visible and does not imply an mcw save", async ({ page }) => {
     await page.addInitScript(() => {

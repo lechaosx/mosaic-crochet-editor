@@ -6,7 +6,7 @@ import {
 import { decodeMcw, encodeMcw } from "../src/mcw";
 import type { Axis, MirrorCenter } from "../src/types";
 import { migrateAxes } from "../src/symmetry";
-import { evaluateGridRecipe, gridRecipeFromFloat } from "../src/grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeFromFloat } from "../src/grid-recipes";
 import { filledPixels } from "./_helpers";
 
 function mcwFixture(name: string): string {
@@ -29,7 +29,8 @@ describe(".mcw codec", () => {
         expect(legacy.accentColorOverride).toBeNull();
 
         const upgraded = decodeMcw(encodeMcw(legacy));
-        expect(upgraded).toEqual(legacy);
+        expect({ ...upgraded, recipes: legacy.recipes }).toEqual(legacy);
+        expect(upgraded.recipes[0].source.mask).toEqual(new Uint8Array());
     });
 
     test("migrates v2 files to the empty global mirror project boundary", () => {
@@ -39,7 +40,9 @@ describe(".mcw codec", () => {
         expect(current.dangerColorOverride).toBeNull();
         expect(current.accentColorOverride).toBeNull();
 
-        expect(decodeMcw(encodeMcw(current))).toEqual(current);
+        const restored = decodeMcw(encodeMcw(current));
+        expect({ ...restored, recipes: current.recipes }).toEqual(current);
+        expect(restored.recipes[0].source.mask).toEqual(new Uint8Array());
     });
 
     test.each([
@@ -81,13 +84,66 @@ describe(".mcw codec", () => {
             dangerColorOverride: "#123456",
             accentColorOverride: "#abcdef",
         });
-        expect(encoded.recipes).toHaveLength(1);
-        expect(encoded.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: "" });
+        expect(encoded.recipes).toEqual([]);
         expect(encoded).not.toHaveProperty("workspace");
         const decoded = decodeMcw(JSON.stringify(encoded));
         expect({ ...decoded, recipes: [] }).toEqual(document);
         expect(decoded.recipes).toHaveLength(1);
         expect(decoded.recipes[0].source.mask).toEqual(new Uint8Array());
+    });
+
+    test.each(["no recipes", "empty selection slot"])("saves %s without placeholder data", kind => {
+        const document = decodeMcw(mcwFixture("pattern-v2.mcw"));
+        document.recipes = kind === "no recipes" ? [] : [emptyGridRecipe()];
+        const source = encodeMcw(document);
+        expect(JSON.parse(source).recipes).toEqual([]);
+        const restored = decodeMcw(source);
+        expect(restored.recipes).toHaveLength(1);
+        expect(restored.recipes[0].source).toEqual({ x: 0, y: 0, w: 0, h: 0, mask: new Uint8Array() });
+        expect(encodeMcw(restored)).toBe(source);
+    });
+
+    test.each([3, 4, 5, 6])("opens a v%s empty selection slot and saves it compactly", version => {
+        const document = decodeMcw(mcwFixture("pattern-v2.mcw"));
+        const slot = emptyGridRecipe();
+        const file = {
+            version, state: document.pattern, pixels: packPixels(document.pixels),
+            colorA: document.colorA, colorB: document.colorB, axes: [], mirrors: [],
+            recipes: [{ ...slot, source: { ...slot.source, mask: "" } }],
+        };
+        const restored = decodeMcw(JSON.stringify(file));
+        expect(restored.recipes).toEqual([slot]);
+        expect(JSON.parse(encodeMcw(restored)).recipes).toEqual([]);
+    });
+
+    test("omits empty slots among real selections while preserving sources and retained settings", () => {
+        const document = decodeMcw(mcwFixture("pattern-v2.mcw"));
+        const first = gridRecipeFromFloat({ x: 0, y: 0, w: 1, h: 1, pixels: new Uint8Array([1]) });
+        const second = gridRecipeFromFloat({ x: 1, y: 1, w: 1, h: 1, pixels: new Uint8Array([2]) });
+        Object.assign(first, { mode: "none", right: 3, columnSpacing: 2, rotationTurns: [180], mirrorTypes: ["V"] });
+        Object.assign(second, { mode: "mirror", mirrorCentreX: 0.5, mirrorCentreY: 0.5,
+            mirrorTypes: ["H"], rotationTurns: [90, 270], rowOffset: -1 });
+        const slot = emptyGridRecipe();
+        document.recipes = [first, slot, second];
+        const source = encodeMcw(document);
+        expect(JSON.parse(source).recipes.map((recipe: { id: string }) => recipe.id)).toEqual([first.id, second.id]);
+        expect(decodeMcw(source).recipes).toEqual([first, second]);
+        expect(document.recipes).toEqual([first, slot, second]);
+    });
+
+    test.each([
+        { left: -1 },
+        { mirrorCentreX: 0.25 },
+        { source: { x: 0, y: 0, w: 1, h: 0, mask: new Uint8Array() } },
+    ])("validates empty slots before omitting them: %o", malformed => {
+        const document = decodeMcw(mcwFixture("pattern-v2.mcw"));
+        const slot = { ...emptyGridRecipe(), ...malformed };
+        expect(() => encodeMcw({ ...document, recipes: [slot] })).toThrow("Invalid pattern file.");
+        expect(() => decodeMcw(JSON.stringify({
+            version: 6, state: document.pattern, pixels: packPixels(document.pixels),
+            colorA: document.colorA, colorB: document.colorB, mirrors: [],
+            recipes: [{ ...slot, source: { ...slot.source, mask: "" } }],
+        }))).toThrow("Invalid pattern file.");
     });
 
     test.each(["dangerColorOverride", "accentColorOverride"])(
