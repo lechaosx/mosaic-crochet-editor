@@ -78,6 +78,7 @@ test("unapplied centre coordinate pairs reset on Escape and window blur", async 
 });
 
 test("implied types belong to one centre, remain explicit toggles, and are never saved implicitly", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
@@ -86,13 +87,43 @@ test("implied types belong to one centre, remain explicit toggles, and are never
     const point = page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Point reflection (180°)", exact: true });
     await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(point).toHaveAccessibleDescription(/Implied/);
+    await expect(point).toBeEnabled();
+    await expect(point).toHaveCSS("opacity", "1");
+    const chosen = await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Vertical", exact: true })
+        .evaluate(element => {
+            const style = getComputedStyle(element);
+            return { background: style.backgroundColor, border: style.borderTopColor, foreground: style.color };
+        });
+    await expect(point).not.toHaveCSS("background-color", chosen.background);
+    await expect(point).not.toHaveCSS("border-top-color", chosen.border);
+    await expect(point).not.toHaveCSS("color", chosen.foreground);
+    const implied = await point.evaluate(element => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, border: style.borderTopColor, foreground: style.color };
+    });
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["V", "H"]);
     const count = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
     await point.click();
+    await page.mouse.move(0, 0);
     await expect(point).toHaveAttribute("aria-pressed", "true");
+    await expect(point).toHaveCSS("background-color", chosen.background);
+    await expect(point).toHaveCSS("border-top-color", chosen.border);
+    await expect(point).toHaveCSS("color", chosen.foreground);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length)).toBe(count + 1);
     await point.click();
+    await page.mouse.move(0, 0);
+    await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(point).toHaveAccessibleDescription(/Implied/);
+    await expect(point).toHaveCSS("background-color", implied.background);
+    await expect(point).toHaveCSS("border-top-color", implied.border);
+    await expect(point).toHaveCSS("color", implied.foreground);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["V", "H"]);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(point).toHaveAttribute("aria-pressed", "true");
+    await expect(point).toHaveCSS("background-color", chosen.background);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(point).toHaveAttribute("aria-pressed", "false");
+    await expect(point).toHaveCSS("background-color", implied.background);
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
     await expect(point).not.toHaveAccessibleDescription(/Implied/);
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();

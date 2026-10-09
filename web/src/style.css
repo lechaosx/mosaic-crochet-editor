@@ -348,6 +348,12 @@ input  { font: inherit; color: inherit; }
   color: var(--fg-0);
 }
 
+.btn--implied {
+  background: var(--bg-2);
+  border-color: var(--bg-3);
+  color: var(--fg-2);
+}
+
 .tool-group { position: relative; display: flex; flex: 0 0 var(--hit); width: var(--hit); height: var(--hit); }
 .authoring-dock .tool-group > .btn:first-child {
   width: var(--hit);

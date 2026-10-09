@@ -258,6 +258,7 @@ test("Mirror precision accepts a paired half-grid diagonal centre and retains Ci
 });
 
 test("local Mirror describes implied types while buttons and history retain explicit choices", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await selection(page);
     await category(page, "Mirror");
     await page.locator("#recipe-mirror-v").click();
@@ -265,15 +266,44 @@ test("local Mirror describes implied types while buttons and history retain expl
     const point = page.getByRole("button", { name: "Point reflection (180°)", exact: true });
     await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(point).toHaveAccessibleDescription(/Implied/);
+    await expect(point).toBeEnabled();
+    await expect(point).toHaveCSS("opacity", "1");
+    const chosen = await page.locator("#recipe-mirror-v").evaluate(element => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, border: style.borderTopColor, foreground: style.color };
+    });
+    await expect(point).not.toHaveCSS("background-color", chosen.background);
+    await expect(point).not.toHaveCSS("border-top-color", chosen.border);
+    await expect(point).not.toHaveCSS("color", chosen.foreground);
+    const implied = await point.evaluate(element => {
+        const style = getComputedStyle(element);
+        return { background: style.backgroundColor, border: style.borderTopColor, foreground: style.color };
+    });
     expect((await recipe(page)).mirrorTypes).toEqual(["V", "H"]);
     const count = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
     await point.click();
+    await page.mouse.move(0, 0);
     await expect(point).toHaveAttribute("aria-pressed", "true");
+    await expect(point).toHaveCSS("background-color", chosen.background);
+    await expect(point).toHaveCSS("border-top-color", chosen.border);
+    await expect(point).toHaveCSS("color", chosen.foreground);
     expect((await recipe(page)).mirrorTypes).toEqual(["V", "H", "C"]);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length)).toBe(count + 1);
+    await point.click();
+    await page.mouse.move(0, 0);
+    await expect(point).toHaveAttribute("aria-pressed", "false");
+    await expect(point).toHaveAccessibleDescription(/Implied/);
+    await expect(point).toHaveCSS("background-color", implied.background);
+    await expect(point).toHaveCSS("border-top-color", implied.border);
+    await expect(point).toHaveCSS("color", implied.foreground);
+    expect((await recipe(page)).mirrorTypes).toEqual(["V", "H"]);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(point).toHaveAttribute("aria-pressed", "true");
+    await expect(point).toHaveCSS("background-color", chosen.background);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(point).toHaveAccessibleDescription(/Implied/);
+    await expect(point).toHaveCSS("background-color", implied.background);
     await page.locator("#recipe-mirror-h").click();
     await expect(point).not.toHaveAccessibleDescription(/Implied/);
     expect((await recipe(page)).mirrorTypes).toEqual(["V"]);

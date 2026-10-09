@@ -17,7 +17,8 @@ export function createMirrorChoices(toggle: (type: SymKey) => void, idPrefix?: s
         for (const type of mirrorTypePresentation(chosen)) {
             const button = element.querySelector<HTMLButtonElement>(`[data-mirror-type='${type.key}']`)!;
             setPressed(button, type.chosen);
-            button.classList.toggle("btn--active", type.chosen || type.implied);
+            button.classList.toggle("btn--active", type.chosen);
+            button.classList.toggle("btn--implied", type.implied);
             const error = type.chosen ? null : unavailable(type.key);
             button.disabled = error !== null;
             const description = error ?? (type.implied ? "Implied by the chosen types. Click to choose directly."
