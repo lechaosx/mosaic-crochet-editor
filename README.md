@@ -11,6 +11,29 @@ A browser-based editor for designing alternating-yarn mosaic crochet charts and 
 </tr>
 </table>
 
+<details>
+<summary>Crochet instructions for the pictured square</summary>
+
+```text
+Round 1 · Yarn A: ([sc, ch] × 4)
+Round 2 · Yarn B: [(sc, ch, sc), oc] × 4
+Round 3 · Yarn A: [(sc, ch, sc), oc, sc, oc] × 4
+Round 4 · Yarn B: [(sc, ch, sc), oc, [sc, oc] × 2] × 4
+Round 5 · Yarn A: [(sc, ch, sc), oc, [sc, oc] × 3] × 4
+Round 6 · Yarn B: [(sc, ch, sc), oc, [sc × 3, oc] × 2] × 4
+Round 7 · Yarn A: [(sc, ch, sc), [oc, sc] × 2, sc × 3, [sc, oc] × 2] × 4
+Round 8 · Yarn B: [(sc, ch, sc), oc, [sc × 3, oc] × 3] × 4
+Round 9 · Yarn A: [(sc, ch, sc), oc, sc × 4, [sc, oc] × 2, sc × 5, oc] × 4
+Round 10 · Yarn B: [(sc, ch, sc), oc, [sc × 7, oc] × 2] × 4
+Round 11 · Yarn A: [(sc, ch, sc), oc, sc × 17, oc] × 4
+Round 12 · Yarn B: [(sc, ch, sc), sc, [sc, oc, sc × 2] × 5] × 4
+Round 13 · Yarn A: [(sc, ch, sc), oc, sc × 2, [sc, oc] × 8, sc × 3, oc] × 4
+Round 14 · Yarn B: [(sc, ch, sc), oc, sc × 2, [sc × 3, oc] × 4, sc × 5, oc] × 4
+Round 15 · Yarn A: [(sc, ch, sc), sc × 27] × 4
+```
+
+</details>
+
 ## Capabilities
 
 - Rectangular row patterns and full, half, or quarter centre-out patterns
