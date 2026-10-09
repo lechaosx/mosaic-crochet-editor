@@ -1,12 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
 import { addGlobalMirror, bootApp, cellCoord, clickCell } from "./_helpers";
 
+interface DrawingStroke { paths: number[][]; dash: number[]; width: number; color: string; alpha: number; offset: number; scale: number }
+
 async function traceDrawing(page: Page) {
     await page.evaluate(() => {
         const proto = CanvasRenderingContext2D.prototype;
         const paths = new WeakMap<CanvasRenderingContext2D, number[][]>();
         const begin = proto.beginPath, move = proto.moveTo, line = proto.lineTo, stroke = proto.stroke, fill = proto.fillRect, arc = proto.arc;
-        const target = window as unknown as { drawing: { paths: number[][]; dash: number[]; width: number; color: unknown }[] };
+        const target = window as unknown as { drawing: DrawingStroke[] };
         target.drawing = [];
         const grips = window as unknown as { grips: { x: number; y: number }[] }; grips.grips = [];
         proto.arc = function (x, y, radius, start, end, ccw) {
@@ -26,7 +28,8 @@ async function traceDrawing(page: Page) {
         };
         proto.stroke = function (...args: Parameters<typeof stroke>) {
             if (this.canvas.id === "canvas") target.drawing.push({ paths: structuredClone(paths.get(this) ?? []),
-                dash: this.getLineDash(), width: this.lineWidth, color: this.strokeStyle });
+                dash: this.getLineDash(), width: this.lineWidth, color: this.strokeStyle as string,
+                alpha: this.globalAlpha, offset: this.lineDashOffset, scale: Math.hypot(this.getTransform().a, this.getTransform().b) });
             stroke.apply(this, args);
         };
     });
@@ -49,7 +52,7 @@ test("diagonally touching source cells have complete closed marching-ant loops",
     expect(paths.every(path => path.length === 10 && path[0] === path.at(-2) && path[1] === path.at(-1))).toBe(true);
 });
 
-test("touching copies keep individual seams with one stroke per shared edge and a stronger animated source", async ({ page }) => {
+test("touching copies use slightly dimmed original marching ants and one stroke per shared edge", async ({ page }) => {
     await selectSource(page);
     await page.locator("#tool-select").click();
     await page.locator("#recipe-right").fill("2");
@@ -58,16 +61,62 @@ test("touching copies keep individual seams with one stroke per shared edge and 
     await page.keyboard.press("p");
     await traceDrawing(page);
     await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-    const drawing = await page.evaluate(() => (window as unknown as { drawing: { paths: number[][]; dash: number[]; width: number; color: string }[] }).drawing);
+    const drawing = await page.evaluate(() => (window as unknown as { drawing: DrawingStroke[] }).drawing);
     const color = await page.locator("#accent-color").inputValue();
     const accent = drawing.filter(stroke => stroke.color.toLowerCase() === color.toLowerCase());
-    expect(accent.some(stroke => stroke.dash.length === 0)).toBe(true);
-    expect(accent.some(stroke => stroke.dash.length > 0)).toBe(true);
+    expect(accent).toHaveLength(3);
+    expect(accent.map(stroke => stroke.alpha)).toEqual([0.85, 0.85, 1]);
+    for (const stroke of accent) {
+        expect(stroke.dash).toHaveLength(2);
+        for (const value of stroke.dash) expect(value * stroke.scale).toBeCloseTo(6);
+        expect(stroke.width * stroke.scale).toBeCloseTo(3);
+    }
+    const selectionPaths = new Set(accent.map(stroke => JSON.stringify(stroke.paths)));
+    expect(drawing.filter(stroke => selectionPaths.has(JSON.stringify(stroke.paths)))).toEqual(accent);
     const edges = accent.flatMap(stroke => stroke.paths.flatMap(path => Array.from({ length: path.length / 2 - 1 }, (_, i) =>
         [path.slice(i * 2, i * 2 + 2).join(","), path.slice(i * 2 + 2, i * 2 + 4).join(",")].sort().join("|"))));
     expect(new Set(edges).size).toBe(edges.length);
     expect(edges).toContain("3,2|3,3");
     expect(edges).toContain("4,2|4,3");
+});
+
+for (const directions of [["left"], ["left", "right", "up", "down"]]) test(`copy dash phase follows its original perimeter across suppressed ${directions.length === 1 ? "middle" : "prefix"} edges`, async ({ page }) => {
+    await selectSource(page);
+    await page.locator("#tool-select").click();
+    for (const direction of directions) {
+        await page.locator(`#recipe-${direction}`).fill("1"); await page.locator(`#recipe-${direction}`).press("Enter");
+    }
+    await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+    await page.keyboard.press("p");
+    await traceDrawing(page);
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    const color = await page.locator("#accent-color").inputValue();
+    const { strokes, originals } = await page.evaluate(color => ({
+        strokes: (window as unknown as { drawing: DrawingStroke[] }).drawing.filter(stroke => stroke.color.toLowerCase() === color.toLowerCase()),
+        originals: (window as unknown as { __test_repeat_outlines__: { paths: number[][][] } }).__test_repeat_outlines__.paths.flat(),
+    }), color);
+    const source = strokes.at(-1)!;
+    const owners = new Map<number[], number>();
+    let skippedPrefix = false;
+    for (const stroke of strokes.slice(0, -1)) for (const run of stroke.paths) {
+        const original = originals.find(path => {
+            for (let i = 0; i < path.length - 2; i += 2) {
+                if (run.every((value, j) => value === path[i + j])) return true;
+            }
+            return false;
+        });
+        expect(original).toBeDefined();
+        owners.set(original!, (owners.get(original!) ?? 0) + 1);
+        let distance = 0;
+        for (let i = 0; i < original!.length - 2; i += 2) {
+            if (original![i] === run[0] && original![i + 1] === run[1]) break;
+            distance += Math.hypot(original![i + 2] - original![i], original![i + 3] - original![i + 1]);
+        }
+        skippedPrefix ||= distance > 0;
+        expect(stroke.offset).toBeCloseTo(source.offset + distance);
+    }
+    expect(skippedPrefix).toBe(true);
+    if (directions.length === 1) expect([...owners.values()].some(count => count > 1)).toBe(true);
 });
 
 for (const tool of ["p", "f", "e", "i", "o", "s", "w", "m"]) test(`middle drag pans with ${tool} and modifiers without authored changes`, async ({ page }) => {
@@ -151,6 +200,23 @@ test("a new Rectangle preview hides the old source copies and their grips", asyn
     await page.mouse.up();
 });
 
+test("Rectangle sweeps retain the original dimmed drag-preview marching ants", async ({ page }) => {
+    await selectSource(page);
+    await traceDrawing(page);
+    const start = await cellCoord(page, 5, 5), end = await cellCoord(page, 6, 6);
+    await page.mouse.move(start.cx, start.cy); await page.mouse.down(); await page.mouse.move(end.cx, end.cy);
+    const color = await page.locator("#accent-color").inputValue();
+    const strokes = await page.evaluate(color => (window as unknown as { drawing: DrawingStroke[] }).drawing
+        .filter(stroke => stroke.color.toLowerCase() === color.toLowerCase()), color);
+    expect(strokes.map(stroke => stroke.alpha)).toEqual([1, 0.45]);
+    for (const stroke of strokes) {
+        expect(stroke.width * stroke.scale).toBeCloseTo(3);
+        expect(stroke.dash).toHaveLength(2);
+        for (const value of stroke.dash) expect(value * stroke.scale).toBeCloseTo(6);
+    }
+    await page.mouse.up();
+});
+
 test("a Grid grip edge click preserves spacing and history before a deliberate drag", async ({ page }) => {
     await selectSource(page);
     await page.locator("#tool-select").click();
@@ -167,24 +233,35 @@ test("a Grid grip edge click preserves spacing and history before a deliberate d
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0])).toEqual(before.recipe);
 });
 
-test("source marching ants remain visibly animated with white Accent", async ({ page }) => {
+for (const reducedMotion of [false, true]) test(`source and copy marching ants ${reducedMotion ? "stop with reduced motion" : "both visibly animate"}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: reducedMotion ? "reduce" : "no-preference" });
     await selectSource(page);
+    await page.locator("#tool-select").click();
+    await page.locator("#recipe-right").fill("1"); await page.locator("#recipe-right").press("Enter");
+    await page.getByRole("button", { name: "Close inspector", exact: true }).click();
     await traceDrawing(page);
     await page.locator("#btn-edit").click();
-    await page.locator("#accent-color").fill("#ffffff");
+    await page.locator("#accent-color").fill("#ff0066");
     await page.getByRole("button", { name: "Close inspector", exact: true }).click();
     await page.keyboard.press("p");
     await page.waitForTimeout(200);
-    const bitmap = () => page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
-        const matrix = window.__test_matrix__!, top = matrix.transformPoint({ x: 2, y: 2 });
-        const width = Math.floor(matrix.a) - 12;
-        return Array.from(canvas.getContext("2d")!.getImageData(Math.floor(top.x) + 6, Math.floor(top.y) - 3, width, 7).data);
+    const frame = () => page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
+        const matrix = window.__test_matrix__!;
+        return [2, 3].map(x => {
+            const top = matrix.transformPoint({ x, y: 2 }), width = Math.floor(matrix.a) - 12;
+            return Array.from(canvas.getContext("2d")!.getImageData(Math.floor(top.x) + 6, Math.floor(top.y) - 2, width, 5).data);
+        });
     });
-    const before = await bitmap();
-    await expect.poll(async () => {
-        const next = await bitmap();
-        return Math.max(...next.map((value, i) => Math.abs(value - before[i])));
-    }).toBeGreaterThan(100);
+    const before = await frame();
+    if (reducedMotion) {
+        await page.waitForTimeout(250);
+        expect(await frame()).toEqual(before);
+    } else {
+        for (const index of [0, 1]) await expect.poll(async () => {
+            const next = (await frame())[index];
+            return Math.max(...next.map((value, i) => Math.abs(value - before[index][i])));
+        }).toBeGreaterThan(100);
+    }
 });
 
 test("a Grid drag following a numeric edit has its own Undo action", async ({ page }) => {

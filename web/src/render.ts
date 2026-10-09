@@ -574,19 +574,26 @@ function renderRecipeInstances(
         return keys;
     }));
     for (const instance of paths) {
-        const unique: number[][] = [];
         for (const path of instance) {
             let run: number[] = [];
+            let length = 0, runOffset = dashOffset;
             for (let i = 2; i < path.length; i += 2) {
                 const key = boundaryEdgeKey(path[i - 2], path[i - 1], path[i], path[i + 1]);
-                if (occupied.has(key)) { if (run.length > 0) unique.push(run); run = []; continue; }
-                occupied.add(key);
-                if (run.length === 0) run.push(path[i - 2], path[i - 1]);
-                run.push(path[i], path[i + 1]);
+                if (occupied.has(key)) {
+                    if (run.length > 0) renderSelectionPaths(ctx, view, dpr, [run], color, runOffset, true);
+                    run = [];
+                } else {
+                    occupied.add(key);
+                    if (run.length === 0) {
+                        run.push(path[i - 2], path[i - 1]);
+                        runOffset = dashOffset + length;
+                    }
+                    run.push(path[i], path[i + 1]);
+                }
+                length += Math.hypot(path[i] - path[i - 2], path[i + 1] - path[i - 1]);
             }
-            if (run.length > 0) unique.push(run);
+            if (run.length > 0) renderSelectionPaths(ctx, view, dpr, [run], color, runOffset, true);
         }
-        renderSelectionPaths(ctx, view, dpr, unique, color, 0, true);
     }
     ctx.restore();
     (window as unknown as { __test_repeat_outlines__?: { paths: number[][][] } })
@@ -868,24 +875,17 @@ function renderSelectionPaths(
     const dash = 6 * px;
 
     ctx.save();
+    if (copy) ctx.globalAlpha *= 0.85;
+    ctx.lineWidth = 3 * px;
+    ctx.setLineDash([dash, dash]);
+    ctx.lineDashOffset = dashOffset;
+    ctx.strokeStyle = color;
     ctx.beginPath();
     for (const path of paths) {
         ctx.moveTo(path[0], path[1]);
         for (let i = 2; i < path.length; i += 2) ctx.lineTo(path[i], path[i + 1]);
     }
-    ctx.setLineDash([]);
-    ctx.lineWidth = (copy ? 4 : 6) * px;
-    ctx.strokeStyle = "#000000"; ctx.stroke();
-    ctx.lineWidth = (copy ? 3 : 4) * px;
-    ctx.strokeStyle = "#ffffff"; ctx.stroke();
-    ctx.lineWidth = (copy ? 1 : 2) * px;
-    ctx.setLineDash(copy ? [] : [dash, dash]);
-    ctx.lineDashOffset = copy ? 0 : dashOffset;
-    if (!copy) {
-        ctx.lineWidth = 3 * px; ctx.strokeStyle = "#000000"; ctx.stroke();
-        ctx.lineWidth = 2 * px;
-    }
-    ctx.strokeStyle = color; ctx.stroke();
+    ctx.stroke();
     if (!copy) (window as unknown as { __test_source_outline__?: { paths: ReadonlyArray<ReadonlyArray<number>>; dashOffset: number } })
         .__test_source_outline__ = { paths, dashOffset };
     ctx.restore();

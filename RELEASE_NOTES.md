@@ -4,7 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 8 October 2026
 
-- Selection sources and copies have distinct, complete boundaries; Grid grips show their neighbour spacing and stagger without jumping when grabbed.
+- Selections retain their original marching ants, with slightly dimmed animated copies and single shared borders; Grid grips show their neighbour spacing and stagger without jumping when grabbed.
 - Middle-drag pans with every tool, and Rectangle and Wand show local Mirror axes while other tools show global guides.
 
 ## 7 October 2026
