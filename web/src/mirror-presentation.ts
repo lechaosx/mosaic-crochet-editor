@@ -6,7 +6,7 @@ export const MIRROR_TYPES: { key: SymKey; name: string; shortcut: string; code: 
     { key: "H", name: "Horizontal", shortcut: "H", code: 1, orientation: [1, 0, 0, -1] },
     { key: "D1", name: "Diagonal", shortcut: "D", code: 3, orientation: [0, 1, 1, 0] },
     { key: "D2", name: "Anti-diagonal", shortcut: "A", code: 4, orientation: [0, -1, -1, 0] },
-    { key: "C", name: "Point symmetry (180°)", shortcut: "C", code: 2, orientation: [-1, 0, 0, -1] },
+    { key: "C", name: "Point reflection (180°)", shortcut: "C", code: 2, orientation: [-1, 0, 0, -1] },
 ];
 
 export function mirrorTypePresentation(chosen: readonly SymKey[]) {

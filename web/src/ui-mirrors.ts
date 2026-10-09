@@ -6,7 +6,7 @@ import { mountCoordinateEditor } from "./coordinate-editor";
 import type { UICallbacks, InspectorControls } from "./ui-types";
 
 export function mountMirrors(
-    cb: Pick<UICallbacks, "onAddMirror" | "onToggleMirror" | "onDeleteMirror" | "onSelectMirror" | "onMirrorType" | "onMirrorPosition" | "onMirrorCommit" | "onMirrorRevert" | "onReplicateSelection">,
+    cb: Pick<UICallbacks, "onAddMirror" | "onToggleMirror" | "onDeleteMirror" | "onSelectMirror" | "onMirrorType" | "mirrorTypeError" | "onMirrorPosition" | "onMirrorCommit" | "onMirrorRevert" | "onReplicateSelection">,
     inspector: Pick<InspectorControls, "isOpen" | "close" | "open" | "focusFirst">) {
     const symList = el("sym-list");
     const symToggle = el("btn-sym-toggle");
@@ -49,8 +49,12 @@ export function mountMirrors(
 
     const coordinateEditor = mountCoordinateEditor(el("mirror-centre-fields"), x, y,
         position => { const mirror = selectedMirror(); if (mirror) cb.onMirrorPosition(mirror.id, position, true); },
-        cb.onMirrorCommit, cb.onMirrorRevert);
+        cb.onMirrorCommit, cb.onMirrorRevert, () => { const mirror = selectedMirror(); if (mirror) updateChoices(mirror); });
     const choices = new Map<string, ReturnType<typeof createMirrorChoices>>();
+    function updateChoices(mirror: MirrorCenter) {
+        const draft = mirror.id === editor.dataset.mirrorId ? coordinateEditor.getPosition() : mirror;
+        choices.get(mirror.id)?.update(mirror.types, type => cb.mirrorTypeError({ ...mirror, ...draft }, type));
+    }
     const position = (mirror: MirrorCenter) => `(${mirror.x}, ${mirror.y})`;
     const add = el<HTMLButtonElement>("add-mirror");
     function setMirrors(mirrors: ReadonlyArray<MirrorCenter>, selectedId: string | null) {
@@ -68,10 +72,12 @@ export function mountMirrors(
             summary.className = "sym-list-row__summary";
             select.append(summary);
             select.addEventListener("click", () => cb.onSelectMirror(mirror.id));
-            const toggle = document.createElement("button");
-            toggle.type = "button"; toggle.className = "btn btn--ghost mirror-enable";
+            const toggleLabel = document.createElement("label"); toggleLabel.className = "toggle";
+            const toggle = document.createElement("input"); toggle.type = "checkbox";
+            const track = document.createElement("span"); track.className = "toggle-track";
+            toggleLabel.append(toggle, track);
             toggle.dataset.mirrorAction = "toggle";
-            toggle.addEventListener("click", () => cb.onToggleMirror(mirror.id));
+            toggle.addEventListener("change", () => cb.onToggleMirror(mirror.id));
             const del = iconAction("delete", "Delete mirror");
             del.dataset.mirrorAction = "delete";
             del.addEventListener("click", () => {
@@ -83,34 +89,31 @@ export function mountMirrors(
             });
             const types = createMirrorChoices(type => { cb.onSelectMirror(mirror.id); cb.onMirrorType(mirror.id, type); });
             choices.set(mirror.id, types);
-            row.append(select, toggle, del, types.element); return row;
-        }, (row, mirror, index) => {
+            row.append(select, toggleLabel, del, types.element); return row;
+        }, (row, mirror) => {
             if (!mirror) return;
             row.classList.toggle("is-inactive", !mirror.enabled);
             row.classList.toggle("is-selected", mirror.id === selectedId);
-            const name = `Mirror ${index + 1}`;
             const coordinates = row.querySelector(".sym-list-row__summary")!;
             if (coordinates.textContent !== position(mirror)) coordinates.textContent = position(mirror);
             const summary = mirror.types.map(key => key === "C" ? "180°" : MIRROR_TYPES.find(type => type.key === key)!.name).join(" · ") || "No types chosen";
             const select = row.querySelector<HTMLButtonElement>("[data-mirror-action='select']")!;
-            const selectTitle = `Select ${name} at ${position(mirror)}`;
+            const selectTitle = `Select mirror at ${position(mirror)}`;
             if (select.title !== selectTitle) select.title = selectTitle;
             if (select.getAttribute("aria-label") !== selectTitle) select.setAttribute("aria-label", selectTitle);
             if (select.getAttribute("aria-description") !== summary) select.setAttribute("aria-description", summary);
             setPressed(select, mirror.id === selectedId);
             for (const action of ["toggle", "delete"]) {
-                const button = row.querySelector<HTMLButtonElement>(`[data-mirror-action='${action}']`)!;
-                const title = `${action === "delete" ? "Delete" : mirror.enabled ? "Disable" : "Enable"} ${name} at ${position(mirror)}`;
+                const button = row.querySelector<HTMLInputElement | HTMLButtonElement>(`[data-mirror-action='${action}']`)!;
+                const title = `${action === "delete" ? "Delete" : "Enable"} mirror at ${position(mirror)}`;
                 if (button.title !== title) button.title = title;
                 if (button.getAttribute("aria-label") !== title) button.setAttribute("aria-label", title);
                 if (button.getAttribute("aria-description") !== summary) button.setAttribute("aria-description", summary);
                 if (action === "toggle") {
-                    setPressed(button, mirror.enabled);
-                    const label = mirror.enabled ? "On" : "Off";
-                    if (button.textContent !== label) button.textContent = label;
+                    (button as HTMLInputElement).checked = mirror.enabled;
                 }
             }
-            choices.get(mirror.id)!.update(mirror.types);
+            updateChoices(mirror);
         });
         const selected = mirrors.find(mirror => mirror.id === selectedId);
         if (editor.hidden !== !selected) editor.hidden = !selected;

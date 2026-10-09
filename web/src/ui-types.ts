@@ -20,6 +20,8 @@ export interface UICallbacks {
     onToggleMirror:    (id: string) => void;
     onDeleteMirror:    (id: string) => void;
     onSelectMirror:    (id: string) => void;
+    mirrorTypeError: (mirror: MirrorCenter, type: SymKey) => string | null;
+    recipeMirrorTypeError: (recipe: GridRecipe) => string | null;
     onMirrorType:      (id: string, type: SymKey) => void;
     onMirrorPosition:  (id: string, position: { x: number; y: number }, preview?: boolean) => MirrorCenter | null;
     onMirrorCommit: () => void;

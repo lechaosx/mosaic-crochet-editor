@@ -2,6 +2,10 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 9 October 2026
+
+- Mirrors identify centres by coordinates, group all five reflection types together, use familiar enable switches, and disable types unavailable at the current centre.
+
 ## 8 October 2026
 
 - Selections retain their original marching ants, with slightly dimmed animated copies and single shared borders; Grid grips show their neighbour spacing and stagger without jumping when grabbed.

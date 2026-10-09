@@ -47,17 +47,17 @@ test("global mirrors use one focused editor while disabled centres remain editab
     await expect(rows).toHaveCount(2);
     await expect(rows.getByRole("spinbutton")).toHaveCount(2);
     await expect(rows.first().getByRole("spinbutton")).toHaveCount(0);
-    await rows.first().getByRole("button", { name: "Select Mirror 1 at (4, 4)", exact: true }).click();
+    await rows.first().getByRole("button", { name: "Select mirror at (4, 4)", exact: true }).click();
     await expect(page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Vertical", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await rows.first().getByRole("button", { name: "Disable Mirror 1 at (4, 4)", exact: true }).click();
+    await rows.first().getByRole("checkbox", { name: "Enable mirror at (4, 4)", exact: true }).locator("..").click();
     const x = page.getByRole("spinbutton", { name: "Mirror centre x" });
     await x.fill("3"); await x.press("Enter");
     await expect(x).toBeFocused();
     await expect(x).toHaveValue("3");
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
         .toMatchObject({ x: 3, enabled: false, types: ["V"] });
-    await rows.first().getByRole("button", { name: "Delete Mirror 1 at (3, 4)", exact: true }).click();
-    await expect(rows.first().getByRole("button", { name: "Delete Mirror 1 at (4, 4)", exact: true })).toBeFocused();
+    await rows.first().getByRole("button", { name: "Delete mirror at (3, 4)", exact: true }).click();
+    await expect(rows.first().getByRole("button", { name: "Delete mirror at (4, 4)", exact: true })).toBeFocused();
     await expect(x).toHaveValue("4");
     await expect(page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
@@ -83,7 +83,7 @@ test("implied types belong to one centre, remain explicit toggles, and are never
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Vertical", exact: true }).click();
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
-    const point = page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Point symmetry (180°)", exact: true });
+    const point = page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Point reflection (180°)", exact: true });
     await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(point).toHaveAccessibleDescription(/Implied/);
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["V", "H"]);
@@ -159,7 +159,7 @@ test.describe("phone mirror editing", () => {
         const inspector = (await page.locator("#inspector-host").boundingBox())!;
         for (const target of [page.getByRole("spinbutton", { name: "Mirror centre x" }),
             page.getByRole("spinbutton", { name: "Mirror centre y" }),
-            ...["Vertical", "Horizontal", "Diagonal", "Anti-diagonal", "Point symmetry (180°)", "Stamp copies"]
+            ...["Vertical", "Horizontal", "Diagonal", "Anti-diagonal", "Point reflection (180°)", "Stamp copies"]
                 .map(name => page.getByRole("button", { name, exact: true }))]) {
             await expect(target).toBeEnabled();
             await target.focus();
@@ -172,28 +172,28 @@ test.describe("phone mirror editing", () => {
     });
 });
 
-test("coincident mirrors remain distinguishable by accessible identity and chosen types after deletion and Undo", async ({ page }) => {
+test("coincident mirrors retain coordinate identity and chosen types after deletion and Undo", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Vertical", exact: true }).click();
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
-    const first = page.getByRole("button", { name: "Select Mirror 1 at (4, 4)", exact: true });
-    const second = page.getByRole("button", { name: "Select Mirror 2 at (4, 4)", exact: true });
+    const first = page.getByRole("button", { name: "Select mirror at (4, 4)", exact: true }).first();
+    const second = page.getByRole("button", { name: "Select mirror at (4, 4)", exact: true }).last();
     await expect(first).toHaveAccessibleDescription("Vertical");
     await expect(second).toHaveAccessibleDescription("Horizontal");
     const row = await page.locator("#sym-list > .sym-list-row").last().elementHandle();
-    await page.getByRole("button", { name: "Delete Mirror 1 at (4, 4)", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Delete Mirror 1 at (4, 4)", exact: true })).toBeFocused();
-    await expect(page.getByRole("button", { name: "Select Mirror 1 at (4, 4)", exact: true })).toHaveAccessibleDescription("Horizontal");
+    await page.getByRole("button", { name: "Delete mirror at (4, 4)", exact: true }).first().click();
+    await expect(page.getByRole("button", { name: "Delete mirror at (4, 4)", exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Select mirror at (4, 4)", exact: true })).toHaveAccessibleDescription("Horizontal");
     expect(await row!.evaluate(element => element.isConnected)).toBe(true);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(first).toHaveAccessibleDescription("Vertical");
     await expect(second).toHaveAccessibleDescription("Horizontal");
 });
 
-test("mirror types live directly on their centre row and implied types look active", async ({ page }) => {
+test("mirror types form one independent group on their centre row", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
@@ -201,8 +201,34 @@ test("mirror types live directly on their centre row and implied types look acti
     await expect(row.getByRole("button", { name: "Vertical", exact: true })).toBeVisible();
     await row.getByRole("button", { name: "Vertical", exact: true }).click();
     await row.getByRole("button", { name: "Horizontal", exact: true }).click();
-    const point = row.getByRole("button", { name: "Point symmetry (180°)", exact: true });
-    await expect(point).toHaveAttribute("data-effective", "true");
+    const point = row.getByRole("button", { name: "Point reflection (180°)", exact: true });
+    await expect(row.getByRole("group", { name: "Reflection", exact: true })).toHaveCount(0);
+    await expect(row.getByRole("group", { name: "Rotation", exact: true })).toHaveCount(0);
+    await expect(row.getByRole("group", { name: "Mirror types", exact: true }).getByRole("button")).toHaveCount(5);
+    await expect(point).toHaveAccessibleDescription(/Implied/);
     await expect(point).toHaveAttribute("aria-pressed", "false");
     await expect(page.locator("#mirror-type-hint")).toHaveCount(0);
 });
+
+for (const [width, fontSize] of [[390, 16], [320, 32]]) test(
+    `mirror switches and types retain touch targets at ${width}px and ${fontSize}px text`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 960 });
+        await bootApp(page);
+        await page.evaluate(size => { document.documentElement.style.fontSize = `${size}px`; }, fontSize);
+        await page.locator("#btn-sym-toggle").click();
+        await page.getByRole("button", { name: "Add mirror", exact: true }).click();
+        const row = page.locator(".sym-list-row.is-selected");
+        const hit = await row.evaluate(element => parseFloat(getComputedStyle(element).getPropertyValue("--hit")));
+        const targets = [row.getByRole("checkbox", { name: "Enable mirror at (4, 4)", exact: true }).locator(".."),
+            ...["Vertical", "Horizontal", "Diagonal", "Anti-diagonal", "Point reflection (180°)"]
+                .map(name => row.getByRole("button", { name, exact: true }))];
+        const bounds = (await row.boundingBox())!;
+        for (const target of targets) {
+            await target.scrollIntoViewIfNeeded();
+            const box = (await target.boundingBox())!;
+            expect(box.width).toBeGreaterThanOrEqual(hit);
+            expect(box.height).toBeGreaterThanOrEqual(hit);
+            expect(box.x).toBeGreaterThanOrEqual(bounds.x);
+            expect(box.x + box.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+        }
+    });

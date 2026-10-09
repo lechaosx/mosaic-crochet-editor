@@ -20,7 +20,7 @@ test("dragging a mirror handle with Duplicate preserves the lifted source and ca
     })).toEqual(before);
 });
 
-test("mirror center has independent types and rejects a parity-incompatible toggle", async ({ page }) => {
+test("mirror center has independent types and disables parity-incompatible types", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await addGlobalMirror(page, "Vertical");
@@ -28,10 +28,9 @@ test("mirror center has independent types and rejects a parity-incompatible togg
     await row.getByRole("spinbutton", { name: "Mirror centre x" }).fill("3.5");
     await row.getByRole("spinbutton", { name: "Mirror centre x" }).press("Enter");
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
-    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Point symmetry (180°)", exact: true }).click();
-    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Diagonal", exact: true }).click();
-    await expect(page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Diagonal", exact: true })).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator("#transform-error")).toContainText("whole or half");
+    await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Point reflection (180°)", exact: true }).click();
+    for (const name of ["Diagonal", "Anti-diagonal"]) await expect(page.locator(".sym-list-row.is-selected").getByRole("button", { name, exact: true })).toBeDisabled();
+    await expect(page.locator("#transform-error")).toBeHidden();
     await expect(row.getByRole("spinbutton", { name: "Mirror centre x" })).toHaveValue("3.5");
     await expect(row.getByRole("spinbutton", { name: "Mirror centre y" })).toHaveValue("4");
     await row.getByRole("spinbutton", { name: "Mirror centre y" }).fill("3.5");
@@ -191,7 +190,7 @@ for (const action of ["toggle", "delete", "type", "coordinate"] as const) {
         } else {
             const button = action === "type" ? page.getByRole("button", { name: "Horizontal", exact: true })
                 : page.locator(`[data-mirror-action='${action}']`);
-            await button.focus(); await page.keyboard.press("Enter");
+            await button.focus(); await page.keyboard.press(action === "toggle" ? "Space" : "Enter");
         }
         await page.evaluate(() => window.dispatchEvent(new Event("blur"))); await page.mouse.up();
         const painted = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
@@ -264,7 +263,7 @@ test("composed mirror drawing survives a new-format Save, Open, and recovery rel
     await expect.poll(() => page.evaluate(() => (window as unknown as { savedMcw?: string }).savedMcw)).toBeTruthy();
     const saved = await page.evaluate(() => (window as unknown as { savedMcw: string }).savedMcw);
     expect(JSON.parse(saved)).toMatchObject({ version: 6, mirrors: before.workspace.mirrors });
-    await page.locator("[data-mirror-action='toggle']").click();
+    await page.locator("[data-mirror-action='toggle']").locator("..").click();
     const chooser = page.waitForEvent("filechooser"); await page.locator("#btn-load").click();
     await (await chooser).setFiles({ name: "composed-centre.mcw", mimeType: "application/json", buffer: Buffer.from(saved) });
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors)).toEqual(before.workspace.mirrors);
@@ -306,3 +305,42 @@ for (const width of [1280, 390]) {
         expect(await cellCoord(page, 4, 4)).toEqual(centre);
     });
 }
+
+test("global type availability follows centre drafts, edges, cancellation, and Undo", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#btn-sym-toggle").click();
+    await page.getByRole("button", { name: "Add mirror", exact: true }).click();
+    const row = page.locator(".sym-list-row.is-selected");
+    const x = page.getByRole("spinbutton", { name: "Mirror centre x" });
+    const y = page.getByRole("spinbutton", { name: "Mirror centre y" });
+    const axis = (name: string) => row.getByRole("button", { name, exact: true });
+    await x.fill("0");
+    await expect(axis("Vertical")).toBeDisabled();
+    await expect(axis("Point reflection (180°)")).toBeDisabled();
+    for (const name of ["Horizontal", "Diagonal", "Anti-diagonal"]) await expect(axis(name)).toBeEnabled();
+    await x.press("Escape");
+    await expect(axis("Vertical")).toBeEnabled();
+    await axis("Diagonal").click();
+    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    await x.fill("3.5");
+    await expect(axis("Anti-diagonal")).toBeDisabled();
+    await expect(axis("Diagonal")).toBeEnabled();
+    const disabled = (await axis("Anti-diagonal").boundingBox())!;
+    await page.mouse.click(disabled.x + disabled.width / 2, disabled.y + disabled.height / 2);
+    await expect(x).toHaveValue("3.5");
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["D1"]);
+    for (const name of ["Vertical", "Horizontal", "Point reflection (180°)"]) await expect(axis(name)).toBeEnabled();
+    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+    await x.press("Enter");
+    await expect(x).toHaveValue("4");
+    await expect(axis("Anti-diagonal")).toBeEnabled();
+    await x.fill("3.5"); await y.fill("3.5"); await y.press("Enter");
+    await expect(axis("Anti-diagonal")).toBeEnabled();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(x).toHaveValue("4");
+    await x.fill("");
+    await expect(axis("Vertical")).toBeDisabled();
+    await expect(axis("Diagonal")).toBeEnabled();
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await expect(axis("Vertical")).toBeEnabled();
+});

@@ -7,7 +7,7 @@ import { mountCoordinateEditor } from "./coordinate-editor";
 export function mountSelection(
     cb: Pick<UICallbacks, "onSelectionCopy" | "onSelectionCut"
         | "onSelectionPaste" | "onCreateRecipe" | "onActivateRecipe"
-        | "onDeleteRecipe" | "onRecipeChange" | "onRecipeCommit" | "onRecipeRevert" | "onApplyRecipe">,
+        | "onDeleteRecipe" | "onRecipeChange" | "onRecipeCommit" | "onRecipeRevert" | "onApplyRecipe" | "recipeMirrorTypeError">,
     syncCanvasChromeInsets: () => void) {
     /* ── Selection card ──────────────────────────────────────────────── */
     const selectionStatus = el("status-selection");
@@ -109,12 +109,21 @@ export function mountSelection(
             recipeTurns.forEach(input => { input.disabled = Number(input.value) !== 180 && !Number.isInteger(p.x - p.y); });
         }, cb.onRecipeCommit, cb.onRecipeRevert);
     const mirrorPosition = mountCoordinateEditor(el("recipe-mirror-centre-fields"), mirrorCentreX, mirrorCentreY,
-        p => update({ mirrorCentreX: p.x, mirrorCentreY: p.y }, true), cb.onRecipeCommit, cb.onRecipeRevert);
+        p => update({ mirrorCentreX: p.x, mirrorCentreY: p.y }, true), cb.onRecipeCommit, cb.onRecipeRevert, updateMirrorChoices);
     const mirrorChoices = createMirrorChoices(type => {
         const recipe = projectedRecipes?.find(value => value.id === selectedRecipeId);
         if (recipe) update({ mirrorTypes: recipe.mirrorTypes.includes(type)
             ? recipe.mirrorTypes.filter(value => value !== type) : [...recipe.mirrorTypes, type] });
     }, "recipe-mirror");
+    function updateMirrorChoices() {
+        const recipe = projectedRecipes?.find(value => value.id === selectedRecipeId);
+        if (!recipe) return;
+        const draft = mirrorPosition.getPosition();
+        const draftRecipe = { ...recipe, mode: "mirror" as const, mirrorCentreX: draft.x, mirrorCentreY: draft.y };
+        const accepted = cb.recipeMirrorTypeError(draftRecipe) ? recipe : draftRecipe;
+        mirrorChoices.update(recipe.mirrorTypes, type => cb.recipeMirrorTypeError({ ...draftRecipe, mirrorTypes: [type] })
+            ?? cb.recipeMirrorTypeError({ ...accepted, mode: "mirror", mirrorTypes: [...recipe.mirrorTypes, type] }));
+    }
     el("recipe-mirror-types").append(mirrorChoices.element);
     for (const [input, field] of [
         [recipeColumnMirrorHorizontal, "columnMirrorHorizontal"], [recipeColumnMirrorVertical, "columnMirrorVertical"],
@@ -201,7 +210,7 @@ export function mountSelection(
         recipeTurns.forEach(input => { input.disabled = Number(input.value) !== 180
             && !Number.isInteger(active.rotationCentreX - active.rotationCentreY); });
         mirrorPosition.setPosition(active.id, { x: active.mirrorCentreX, y: active.mirrorCentreY });
-        mirrorChoices.update(active.mirrorTypes);
+        updateMirrorChoices();
         syncRecipeSections();
     }
     function setRecipeError(message: string | null) { setMessage(recipeError, message); }

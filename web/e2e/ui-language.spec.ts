@@ -159,10 +159,10 @@ test("mirror updates preserve position fields, row identity, and focused actions
     await position.press("Enter");
     await expect(position).toBeFocused();
     await expect(position).toHaveValue("3.5");
-    const toggle = page.getByRole("button", { name: "Disable Mirror 1 at (3.5, 4)" });
+    const toggle = page.getByRole("checkbox", { name: "Enable mirror at (3.5, 4)" });
     await toggle.focus();
-    await page.keyboard.press("Enter");
-    await expect(page.getByRole("button", { name: "Enable Mirror 1 at (3.5, 4)" })).toBeFocused();
+    await page.keyboard.press("Space");
+    await expect(page.getByRole("checkbox", { name: "Enable mirror at (3.5, 4)" })).toBeFocused();
     expect(await row!.evaluate(element => element.isConnected)).toBe(true);
 });
 

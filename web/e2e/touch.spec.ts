@@ -51,7 +51,7 @@ for (const cancellation of ["scroll", "blur", "pointercancel"] as const) test(
 test("a rotated mirror centre supports touch drag and system cancellation without changing canvas pixels", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").tap();
-    await addGlobalMirror(page, "Point symmetry (180°)");
+    await addGlobalMirror(page, "Point reflection (180°)");
     const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
     await page.getByRole("button", { name: "Rotate view right", exact: true }).tap();
     await page.waitForTimeout(350);

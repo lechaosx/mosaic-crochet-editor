@@ -1385,6 +1385,15 @@ const ui: UIHandle = mountUI({
     onDeleteMirror: deleteMirrorById,
     onSelectMirror,
     onMirrorType,
+    mirrorTypeError: (mirror, type) => mirrorIsProjectValid({ ...mirror, types: [type] }, store.state.pattern) ? null
+        : (type === "D1" || type === "D2") && !Number.isInteger(mirror.x - mirror.y)
+            ? "Diagonals need both centre coordinates to be whole or half numbers."
+            : "Keep this mirror type where it can transform chart cells.",
+    recipeMirrorTypeError: recipe => {
+        const visible = visiblePixels(store.state);
+        const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+        return gridRecipeError(recipe, (x, y) => !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0);
+    },
     onMirrorPosition,
     onMirrorCommit,
     onMirrorRevert,

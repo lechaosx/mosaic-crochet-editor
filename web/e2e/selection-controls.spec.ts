@@ -176,7 +176,7 @@ for (const record of ["recipes", "mirrors"] as const) {
             await page.getByRole("button", { name: "Selection 1 1 × 1" }).click();
             await expect(page.locator("#recipe-create")).toBeVisible();
         } else {
-            await page.getByRole("button", { name: "Select Mirror 1 at (4, 4)", exact: true }).click();
+            await page.getByRole("button", { name: "Select mirror at (4, 4)", exact: true }).click();
             await expect(page.locator("#add-mirror")).toBeVisible();
         }
         expect(errors).toEqual([]);
