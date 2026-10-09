@@ -4,28 +4,19 @@ import { describe, expect, test } from "vitest";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { recipeInstancePaths, selectionTransformHandles } from "../src/render";
 
-test("Grid grips reference visible left/up neighbour centres and keep a touch-sized separation", () => {
+test("Grid uses inspector fields without canvas handles or hit targets", () => {
     const recipe = gridRecipeFromFloat({ x: 4, y: 4, w: 2, h: 2, pixels: new Uint8Array(4).fill(1) });
-    recipe.left = 1; recipe.up = 1;
-    const handles = selectionTransformHandles(recipe, 40, 0);
-    expect(handles[0].x - handles[0].offsetX).toBe(3);
-    expect(handles[0].y - handles[0].offsetY).toBe(5);
-    expect(handles[1].x - handles[1].offsetX).toBe(5);
-    expect(handles[1].y - handles[1].offsetY).toBe(3);
-    recipe.columnOffset = 2; recipe.rowOffset = 2; recipe.right = 1; recipe.down = 1;
-    const close = selectionTransformHandles(recipe, 10, 45);
-    expect(Math.hypot(close[0].x - close[1].x, close[0].y - close[1].y) * 10).toBeGreaterThanOrEqual(44);
+    recipe.right = 2; recipe.down = 1; recipe.columnOffset = 2; recipe.rowOffset = -2;
+    expect(selectionTransformHandles(recipe)).toEqual([]);
 });
 
-test("staggered Grid grips stay outside both source and neighbour bounds", () => {
+for (const mode of ["circle", "mirror"] as const) test(`${mode} retains its independent centre handle`, () => {
     const recipe = gridRecipeFromFloat({ x: 4, y: 4, w: 2, h: 2, pixels: new Uint8Array(4).fill(1) });
-    recipe.right = 1; recipe.down = 1;
-    recipe.columnOffset = 2; recipe.rowOffset = -2;
-    const [column, row] = selectionTransformHandles(recipe, 40, 0);
-    expect(column.y).toBeLessThan(4);
-    expect(column.y).toBeLessThan(column.y - column.offsetY - 1);
-    expect(row.x).toBeGreaterThan(6);
-    expect(row.x).toBeGreaterThan(row.x - row.offsetX + 1);
+    recipe.mode = mode; recipe.rotationCentreX = 2; recipe.rotationCentreY = 3;
+    recipe.mirrorCentreX = 6; recipe.mirrorCentreY = 7;
+    expect(selectionTransformHandles(recipe)).toMatchObject([
+        { x: mode === "circle" ? 2.5 : 6.5, y: mode === "circle" ? 3.5 : 7.5 },
+    ]);
 });
 
 describe("repeat instance outlines", () => {

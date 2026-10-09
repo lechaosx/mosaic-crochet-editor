@@ -601,108 +601,34 @@ function renderRecipeInstances(
 }
 
 export interface SelectionTransformHandle {
-    kind: "column" | "row" | "centre";
     x: number; y: number;
-    offsetX: number; offsetY: number;
-    direction: 1 | -1;
-    ghost: boolean;
 }
 
-export function selectionTransformHandles(recipe: GridRecipe, zoom: number, rotation: number): SelectionTransformHandle[] {
-    if (recipe.source.mask.length === 0 || recipe.mode === "none") return [];
-    if (recipe.mode === "circle" || recipe.mode === "mirror") return [{ kind: "centre",
-        x: (recipe.mode === "circle" ? recipe.rotationCentreX : recipe.mirrorCentreX) + 0.5,
-        y: (recipe.mode === "circle" ? recipe.rotationCentreY : recipe.mirrorCentreY) + 0.5,
-        offsetX: 0, offsetY: 0, direction: 1, ghost: false }];
-    const evaluated = evaluateGridRecipe(recipe);
-    const origin = { x: recipe.source.x + recipe.source.w / 2, y: recipe.source.y + recipe.source.h / 2 };
-    const handles = (["column", "row"] as const).map(kind => {
-        const direction = (kind === "column" ? recipe.right === 0 && recipe.left > 0 : recipe.down === 0 && recipe.up > 0) ? -1 : 1;
-        const step = kind === "column" ? evaluated.columnStep : evaluated.rowStep;
-        const anchorX = origin.x + direction * step.x, anchorY = origin.y + direction * step.y;
-        const offsetX = kind === "row" ? Math.max(origin.x, anchorX) + recipe.source.w / 2 + 24 / zoom - anchorX : 0;
-        const offsetY = kind === "column" ? Math.min(origin.y, anchorY) - recipe.source.h / 2 - 24 / zoom - anchorY : 0;
-        return { kind, x: anchorX + offsetX, y: anchorY + offsetY,
-            offsetX, offsetY, direction, ghost: kind === "column" ? recipe.left + recipe.right === 0 : recipe.up + recipe.down === 0 };
-    }) satisfies SelectionTransformHandle[];
-    if (Math.hypot(handles[0].x - handles[1].x, handles[0].y - handles[1].y) * zoom < 48) {
-        const dx = handles[0].x - handles[1].x, dy = handles[0].y - handles[1].y;
-        const length = Math.hypot(dx, dy);
-        const angle = rotation * Math.PI / 180;
-        const connectorX = handles[0].x - origin.x, connectorY = handles[0].y - origin.y;
-        const connectorLength = Math.hypot(connectorX, connectorY);
-        const ux = length > 0 ? dx / length : connectorLength > 0 ? -connectorY / connectorLength : Math.cos(angle);
-        const uy = length > 0 ? dy / length : connectorLength > 0 ? connectorX / connectorLength : -Math.sin(angle);
-        const distance = (48 / zoom - length) / 2;
-        handles.forEach((handle, index) => {
-            const sign = index === 0 ? 1 : -1;
-            handle.offsetX += ux * distance * sign; handle.offsetY += uy * distance * sign;
-            handle.x += ux * distance * sign; handle.y += uy * distance * sign;
-        });
-    }
-    return handles;
+export function selectionTransformHandles(recipe: GridRecipe): SelectionTransformHandle[] {
+    if (recipe.source.mask.length === 0 || recipe.mode !== "circle" && recipe.mode !== "mirror") return [];
+    return [{ x: (recipe.mode === "circle" ? recipe.rotationCentreX : recipe.mirrorCentreX) + 0.5,
+        y: (recipe.mode === "circle" ? recipe.rotationCentreY : recipe.mirrorCentreY) + 0.5 }];
 }
 
-export function pickSelectionTransformHandle(recipe: GridRecipe, zoom: number, rotation: number, x: number, y: number): SelectionTransformHandle | null {
-    return selectionTransformHandles(recipe, zoom, rotation)
-        .map(handle => ({ handle, distance: Math.hypot(x - handle.x, y - handle.y) * zoom }))
-        .filter(candidate => candidate.distance <= 22).sort((a, b) => a.distance - b.distance)[0]?.handle ?? null;
+export function pickSelectionTransformHandle(recipe: GridRecipe, zoom: number, x: number, y: number): SelectionTransformHandle | null {
+    return selectionTransformHandles(recipe)
+        .find(handle => Math.hypot(x - handle.x, y - handle.y) * zoom <= 22) ?? null;
 }
 
 function renderRecipeHandles(ctx: CanvasRenderingContext2D, view: ViewState, recipe: GridRecipe, color: string, rotation: number) {
     const px = 1 / view.zoom;
-    const handles = selectionTransformHandles(recipe, view.zoom, rotation);
-    const origin = { x: recipe.source.x + recipe.source.w / 2, y: recipe.source.y + recipe.source.h / 2 };
-    ctx.save(); ctx.setLineDash([]); ctx.lineWidth = 2 * px;
-    if (recipe.mode === "grid") {
-        for (const handle of handles) {
-            const x = handle.x - handle.offsetX, y = handle.y - handle.offsetY;
-            ctx.beginPath();
-            if (handle.kind === "column") {
-                const sourceTop = origin.y - recipe.source.h / 2, copyTop = y - recipe.source.h / 2;
-                const top = Math.min(sourceTop, copyTop) - 24 * px;
-                ctx.moveTo(origin.x, sourceTop); ctx.lineTo(origin.x, top); ctx.lineTo(x, top); ctx.lineTo(x, copyTop);
-                ctx.moveTo(x, top); ctx.lineTo(handle.x, handle.y);
-            } else {
-                const sourceRight = origin.x + recipe.source.w / 2, copyRight = x + recipe.source.w / 2;
-                const right = Math.max(sourceRight, copyRight) + 24 * px;
-                ctx.moveTo(sourceRight, origin.y); ctx.lineTo(right, origin.y); ctx.lineTo(right, y); ctx.lineTo(copyRight, y);
-                ctx.moveTo(right, y); ctx.lineTo(handle.x, handle.y);
-            }
-            ctx.lineWidth = 4 * px; ctx.strokeStyle = "#000"; ctx.stroke();
-            ctx.lineWidth = 2 * px; ctx.strokeStyle = "#fff"; ctx.stroke();
-        }
-    }
-    for (const handle of handles) {
-        ctx.save(); ctx.translate(handle.x, handle.y); ctx.rotate(-rotation * Math.PI / 180);
+    for (const handle of selectionTransformHandles(recipe)) {
+        ctx.save(); ctx.setLineDash([]); ctx.translate(handle.x, handle.y); ctx.rotate(-rotation * Math.PI / 180);
         ctx.beginPath(); ctx.arc(0, 0, 16 * px, 0, Math.PI * 2);
         ctx.fillStyle = "#161618"; ctx.fill();
         ctx.lineWidth = 3 * px; ctx.strokeStyle = "#fff"; ctx.stroke();
         ctx.lineWidth = 1 * px; ctx.strokeStyle = color; ctx.stroke();
         ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * px;
         ctx.beginPath();
-        if (handle.kind === "centre") {
-            ctx.moveTo(-6 * px, 0); ctx.lineTo(6 * px, 0); ctx.moveTo(0, -6 * px); ctx.lineTo(0, 6 * px);
-            ctx.stroke();
-        } else {
-            ctx.save();
-            if (handle.kind === "row") ctx.rotate(Math.PI / 2);
-            ctx.moveTo(-6 * px, 0); ctx.lineTo(6 * px, 0);
-            ctx.moveTo(-3 * px, -3 * px); ctx.lineTo(-6 * px, 0); ctx.lineTo(-3 * px, 3 * px);
-            ctx.moveTo(3 * px, -3 * px); ctx.lineTo(6 * px, 0); ctx.lineTo(3 * px, 3 * px);
-            ctx.stroke(); ctx.restore();
-            const label = (handle.kind === "column" ? "Columns" : "Rows") + (handle.ghost ? " · preview" : "");
-            ctx.font = `${11 * px}px system-ui, sans-serif`;
-            ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            const width = ctx.measureText(label).width + 10 * px;
-            const labelX = handle.kind === "row" ? 22 * px + width / 2 : 0;
-            const labelY = handle.kind === "column" ? -30 * px : 0;
-            ctx.fillStyle = "#161618"; ctx.fillRect(labelX - width / 2, labelY - 9 * px, width, 18 * px);
-            ctx.fillStyle = "#fff"; ctx.fillText(label, labelX, labelY);
-        }
+        ctx.moveTo(-6 * px, 0); ctx.lineTo(6 * px, 0); ctx.moveTo(0, -6 * px); ctx.lineTo(0, 6 * px);
+        ctx.stroke();
         ctx.restore();
     }
-    ctx.restore();
 }
 
 export function recipeInstancePaths(
@@ -875,7 +801,7 @@ function renderSelectionPaths(
     const dash = 6 * px;
 
     ctx.save();
-    if (copy) ctx.globalAlpha *= 0.85;
+    if (copy) ctx.globalAlpha *= 0.65;
     ctx.lineWidth = 3 * px;
     ctx.setLineDash([dash, dash]);
     ctx.lineDashOffset = dashOffset;

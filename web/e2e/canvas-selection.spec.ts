@@ -52,7 +52,7 @@ test("diagonally touching source cells have complete closed marching-ant loops",
     expect(paths.every(path => path.length === 10 && path[0] === path.at(-2) && path[1] === path.at(-1))).toBe(true);
 });
 
-test("touching copies use slightly dimmed original marching ants and one stroke per shared edge", async ({ page }) => {
+test("touching copies use dimmed original marching ants and one stroke per shared edge", async ({ page }) => {
     await selectSource(page);
     await page.locator("#tool-select").click();
     await page.locator("#recipe-right").fill("2");
@@ -65,7 +65,7 @@ test("touching copies use slightly dimmed original marching ants and one stroke 
     const color = await page.locator("#accent-color").inputValue();
     const accent = drawing.filter(stroke => stroke.color.toLowerCase() === color.toLowerCase());
     expect(accent).toHaveLength(3);
-    expect(accent.map(stroke => stroke.alpha)).toEqual([0.85, 0.85, 1]);
+    expect(accent.map(stroke => stroke.alpha)).toEqual([0.65, 0.65, 1]);
     for (const stroke of accent) {
         expect(stroke.dash).toHaveLength(2);
         for (const value of stroke.dash) expect(value * stroke.scale).toBeCloseTo(6);
@@ -217,20 +217,25 @@ test("Rectangle sweeps retain the original dimmed drag-preview marching ants", a
     await page.mouse.up();
 });
 
-test("a Grid grip edge click preserves spacing and history before a deliberate drag", async ({ page }) => {
+test("Grid renders no grips or labels while Circle and Mirror retain centre grips", async ({ page }) => {
     await selectSource(page);
     await page.locator("#tool-select").click();
-    const before = await page.evaluate(() => ({ recipe: JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0],
-        history: localStorage.getItem("mosaic-history") }));
     await traceDrawing(page);
-    for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Zoom out", exact: true }).click();
-    const at = await page.evaluate(() => (window as unknown as { grips: { x: number; y: number }[] }).grips[0]);
-    await page.mouse.move(at.x + 20, at.y); await page.mouse.down();
-    await expect(page.locator("#recipe-gap-x")).toHaveValue("0");
-    await expect(page.locator("#recipe-column-offset")).toHaveValue("0");
-    await page.mouse.up();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toBe(before.history);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0])).toEqual(before.recipe);
+    await page.evaluate(() => {
+        const proto = CanvasRenderingContext2D.prototype, fill = proto.fillText;
+        const target = window as unknown as { gridLabels: string[] }; target.gridLabels = [];
+        proto.fillText = function (text, ...args: Parameters<typeof fill> extends [string, ...infer A] ? A : never) {
+            if (this.canvas.id === "canvas" && /Columns|Rows/.test(text)) target.gridLabels.push(text);
+            fill.call(this, text, ...args);
+        };
+    });
+    await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+    expect(await page.evaluate(() => (window as unknown as { grips: unknown[] }).grips)).toEqual([]);
+    expect(await page.evaluate(() => (window as unknown as { gridLabels: string[] }).gridLabels)).toEqual([]);
+    for (const mode of ["Circle", "Mirror"]) {
+        await page.locator("label").filter({ has: page.getByRole("radio", { name: mode, exact: true }) }).click();
+        expect(await page.evaluate(() => (window as unknown as { grips: unknown[] }).grips)).toHaveLength(1);
+    }
 });
 
 for (const reducedMotion of [false, true]) test(`source and copy marching ants ${reducedMotion ? "stop with reduced motion" : "both visibly animate"}`, async ({ page }) => {
@@ -264,19 +269,14 @@ for (const reducedMotion of [false, true]) test(`source and copy marching ants $
     }
 });
 
-test("a Grid drag following a numeric edit has its own Undo action", async ({ page }) => {
+test("Grid numeric spacing edits coalesce for Undo", async ({ page }) => {
     await selectSource(page);
     await page.locator("#tool-select").click();
     await page.locator("#recipe-gap-x").fill("1"); await page.locator("#recipe-gap-x").press("Enter");
-    await traceDrawing(page);
-    await page.getByRole("button", { name: "Zoom out", exact: true }).click();
-    const at = await page.evaluate(() => (window as unknown as { grips: { x: number; y: number }[] }).grips[0]);
-    const step = await page.evaluate(() => window.__test_matrix__!.a / devicePixelRatio);
-    await page.mouse.move(at.x, at.y); await page.mouse.down();
-    await page.mouse.move(at.x + step, at.y); await page.mouse.up();
-    await expect(page.locator("#recipe-gap-x")).toHaveValue("2");
-    await page.keyboard.press("Control+z");
-    await expect(page.locator("#recipe-gap-x")).toHaveValue("1");
+    await page.locator("#recipe-column-offset").fill("2"); await page.locator("#recipe-column-offset").press("Enter");
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    await expect(page.locator("#recipe-gap-x")).toHaveValue("0");
+    await expect(page.locator("#recipe-column-offset")).toHaveValue("0");
 });
 
 test("right clicks at a global mirror grip execute the chosen tool alternative", async ({ page }) => {
@@ -288,4 +288,38 @@ test("right clicks at a global mirror grip execute the chosen tool alternative",
     await expect(page.locator("#status-action")).toContainText("Pencil · Yarn B");
     await page.mouse.move(end.cx, end.cy); await page.mouse.up({ button: "right" });
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors)).toEqual(before);
+});
+
+for (const dpr of [1, 3]) test.describe(`touching Grid copies at DPR ${dpr}`, () => {
+    test.use({ deviceScaleFactor: dpr });
+
+    test("Rectangle keeps shared copy borders visibly marching at low zoom", async ({ page }) => {
+        await selectSource(page);
+        await page.locator("#tool-select").click();
+        for (const [field, value] of [["right", "3"], ["down", "2"]]) {
+            await page.locator(`#recipe-${field}`).fill(value);
+            await page.locator(`#recipe-${field}`).press("Enter");
+        }
+        await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+        await page.locator("#btn-edit").click();
+        await page.locator("#accent-color").fill("#ff0066");
+        await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+        while (await page.evaluate(() => window.__test_matrix__!.a / devicePixelRatio) > 29) {
+            await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+        }
+        const frames: boolean[][] = [];
+        for (let frame = 0; frame < 6; frame++) {
+            frames.push(await page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
+                const m = window.__test_matrix__!, ctx = canvas.getContext("2d")!;
+                const start = m.transformPoint({ x: 4, y: 3 }), end = m.transformPoint({ x: 4, y: 4 });
+                return Array.from({ length: Math.floor(end.y - start.y) - 4 }, (_, index) => {
+                    const pixel = ctx.getImageData(Math.floor(start.x), Math.floor(start.y) + index + 2, 1, 1).data;
+                    return pixel[0] - pixel[1] > 30;
+                });
+            }));
+            await page.waitForTimeout(110);
+        }
+        const covered = frames[0].filter((_, index) => frames.some(frame => frame[index])).length;
+        expect(covered).toBeGreaterThan(frames[0].length / 2);
+    });
 });

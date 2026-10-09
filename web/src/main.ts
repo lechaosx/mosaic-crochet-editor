@@ -8,7 +8,7 @@ import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indi
 import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction } from "@mosaic/logic/tool-input";
 import { makeViewport, makeRendererState, observeCanvasResize,
-         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, pickSelectionTransformHandle, type SelectionTransformHandle, updateCoordinates } from "./render";
+         render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, pickSelectionTransformHandle, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
 import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
@@ -16,7 +16,7 @@ import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitiali
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
          mirrorIsProjectValid, mirrorsForPattern } from "@mosaic/logic/symmetry";
 import { mirrorsToFlat } from "@mosaic/logic/symmetry";
-import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withGridStep, withRecipeSource, recipesForPattern } from "@mosaic/logic/grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withRecipeSource, recipesForPattern } from "@mosaic/logic/grid-recipes";
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
@@ -226,7 +226,7 @@ type Gesture =
         preRecipes: GridRecipe[];
         preActiveRecipeId: string | null;
       }
-    | { kind: "recipe-drag"; id: string; handle: SelectionTransformHandle; grabX: number; grabY: number; preRecipes: GridRecipe[] }
+    | { kind: "recipe-drag"; id: string; grabX: number; grabY: number; preRecipes: GridRecipe[] }
     | { kind: "mirror-drag";
         id: string;
         grabX: number; grabY: number;
@@ -1536,12 +1536,12 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         const recipe = activeGridRecipe(store.state);
         if (button === 0 && !mods.shift && !mods.ctrl && !mods.alt && recipe && rs.selectionHandlesVisible && !rs.hideCommittedSelection) {
             const frac = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
-            const hit = pickSelectionTransformHandle(recipe, viewport.view.zoom, rs.visualRotation, frac.x, frac.y);
+            const hit = pickSelectionTransformHandle(recipe, viewport.view.zoom, frac.x, frac.y);
             if (hit) {
                 viewport.canvas.style.cursor = "grabbing";
                 onRecipeCommit();
                 recipeHistorySession = false;
-                gesture = { kind: "recipe-drag", id: recipe.id, handle: hit, grabX: frac.x - hit.x, grabY: frac.y - hit.y, preRecipes: store.state.recipes };
+                gesture = { kind: "recipe-drag", id: recipe.id, grabX: frac.x - hit.x, grabY: frac.y - hit.y, preRecipes: store.state.recipes };
                 return;
             }
         }
@@ -1666,32 +1666,20 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             const recipe = store.state.recipes.find(value => value.id === g.id)!;
             const pointer = screenToPatternFrac(viewport.canvas, viewport.view, viewport.dpr, rs.visualRotation, store.state.pattern, cx, cy);
             const frac = { x: pointer.x - g.grabX, y: pointer.y - g.grabY };
-            if (g.handle.kind === "column" || g.handle.kind === "row") {
-                const step = {
-                    x: (frac.x - g.handle.offsetX - recipe.source.x - recipe.source.w / 2) * g.handle.direction,
-                    y: (frac.y - g.handle.offsetY - recipe.source.y - recipe.source.h / 2) * g.handle.direction,
-                };
-                const evaluated = evaluateGridRecipe(recipe);
-                const current = g.handle.kind === "column" ? evaluated.columnStep : evaluated.rowStep;
-                if (Math.round(step.x) === current.x && Math.round(step.y) === current.y) return;
-                const updated = withGridStep(recipe, g.handle.kind, step);
-                onRecipeChange(g.id, updated, true);
-            } else {
-                let x = snapHalf(frac.x - 0.5), y = snapHalf(frac.y - 0.5);
-                const needsParity = recipe.mode === "circle" ? recipe.rotationTurns.some(turn => turn !== 180)
-                    : recipe.mirrorTypes.some(type => type === "D1" || type === "D2");
-                if (needsParity && !Number.isInteger(x - y)) {
-                    const options = [{ x: x - 0.5, y }, { x: x + 0.5, y }, { x, y: y - 0.5 }, { x, y: y + 0.5 }];
-                    options.sort((a, b) => (a.x - (frac.x - 0.5)) ** 2 + (a.y - (frac.y - 0.5)) ** 2
-                        - (b.x - (frac.x - 0.5)) ** 2 - (b.y - (frac.y - 0.5)) ** 2);
-                    ({ x, y } = options[0]);
-                }
-                const centreX = recipe.mode === "circle" ? recipe.rotationCentreX : recipe.mirrorCentreX;
-                const centreY = recipe.mode === "circle" ? recipe.rotationCentreY : recipe.mirrorCentreY;
-                if (x === centreX && y === centreY) return;
-                onRecipeChange(g.id, recipe.mode === "circle" ? { rotationCentreX: x, rotationCentreY: y }
-                    : { mirrorCentreX: x, mirrorCentreY: y }, true);
+            let x = snapHalf(frac.x - 0.5), y = snapHalf(frac.y - 0.5);
+            const needsParity = recipe.mode === "circle" ? recipe.rotationTurns.some(turn => turn !== 180)
+                : recipe.mirrorTypes.some(type => type === "D1" || type === "D2");
+            if (needsParity && !Number.isInteger(x - y)) {
+                const options = [{ x: x - 0.5, y }, { x: x + 0.5, y }, { x, y: y - 0.5 }, { x, y: y + 0.5 }];
+                options.sort((a, b) => (a.x - (frac.x - 0.5)) ** 2 + (a.y - (frac.y - 0.5)) ** 2
+                    - (b.x - (frac.x - 0.5)) ** 2 - (b.y - (frac.y - 0.5)) ** 2);
+                ({ x, y } = options[0]);
             }
+            const centreX = recipe.mode === "circle" ? recipe.rotationCentreX : recipe.mirrorCentreX;
+            const centreY = recipe.mode === "circle" ? recipe.rotationCentreY : recipe.mirrorCentreY;
+            if (x === centreX && y === centreY) return;
+            onRecipeChange(g.id, recipe.mode === "circle" ? { rotationCentreX: x, rotationCentreY: y }
+                : { mirrorCentreX: x, mirrorCentreY: y }, true);
             return;
         }
         if (gesture.kind === "mirror-drag") {
@@ -1889,7 +1877,7 @@ viewport.canvas.addEventListener("pointermove", event => {
     );
     const recipe = activeGridRecipe(store.state);
     const hit = rs.selectionHandlesVisible
-        ? recipe && !rs.hideCommittedSelection && pickSelectionTransformHandle(recipe, viewport.view.zoom, rs.visualRotation, frac.x, frac.y)
+        ? recipe && !rs.hideCommittedSelection && pickSelectionTransformHandle(recipe, viewport.view.zoom, frac.x, frac.y)
         : rs.previewRepeatGuides && pickMirrorCenter(store.state.mirrors, frac.x, frac.y, editableMirrorTolerance(), rs.selectedMirrorId);
     viewport.canvas.style.cursor = hit ? "grab" : "";
 });

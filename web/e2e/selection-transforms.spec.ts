@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { bootApp, cellCoord, clickCell, pixelRGB, selectionHandleCoords } from "./_helpers";
 
 async function selection(page: Parameters<typeof bootApp>[0]) {
@@ -18,14 +18,6 @@ async function category(page: Parameters<typeof bootApp>[0], name: string) {
 }
 async function recipe(page: Parameters<typeof bootApp>[0]) {
     return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0]);
-}
-async function touchDrag(page: Page, start: { cx: number; cy: number }, end: { cx: number; cy: number }) {
-    const session = await page.context().newCDPSession(page);
-    await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: start.cx, y: start.cy, id: 0 }] });
-    for (let step = 1; step <= 6; step++) await session.send("Input.dispatchTouchEvent", { type: "touchMove",
-        touchPoints: [{ x: start.cx + (end.cx - start.cx) * step / 6, y: start.cy + (end.cy - start.cy) * step / 6, id: 0 }] });
-    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await session.detach();
 }
 
 test("None keeps the source editable while every dormant transform is disabled", async ({ page }) => {
@@ -72,25 +64,39 @@ test("Circle and Mirror retain independent centres and execute exclusive destina
     expect(await recipe(page)).toMatchObject({ mode: "circle", mirrorCentreX: 2.5, mirrorCentreY: 2.5, mirrorTypes: ["V", "H"] });
 });
 
-test("Grid step drag edits its field parameters and cancels back to the source configuration", async ({ page }) => {
+test("Grid inspector spacing and offset place copies and cancel invalid edits", async ({ page }) => {
     await selection(page);
-    const [start] = await selectionHandleCoords(page);
-    const source = await cellCoord(page, 3, 3), destination = await cellCoord(page, 5, 4);
-    const end = { cx: start.cx + destination.cx - source.cx, cy: start.cy + destination.cy - source.cy };
-    await page.mouse.move(start.cx, start.cy);
-    await page.mouse.down();
-    await page.mouse.move(end.cx, end.cy, { steps: 8 });
-    await page.mouse.up();
+    for (const [field, value] of [["right", "1"], ["gap-x", "2"], ["column-offset", "1"]]) {
+        await page.locator(`#recipe-${field}`).fill(value);
+        await page.locator(`#recipe-${field}`).press("Enter");
+    }
     expect(await recipe(page)).toMatchObject({ columnSpacing: 2, columnSpacingAlternate: 2, columnOffset: 1,
-        source: { x: 3, y: 3, mask: [1] }, right: 0 });
-    await page.keyboard.press("Control+z");
-    expect(await recipe(page)).toMatchObject({ columnSpacing: 0, columnOffset: 0 });
-    await page.mouse.move(start.cx, start.cy);
-    await page.mouse.down();
-    await page.mouse.move(end.cx, end.cy, { steps: 8 });
-    await page.keyboard.press("Escape");
-    await page.mouse.up();
-    expect(await recipe(page)).toMatchObject({ columnSpacing: 0, columnOffset: 0, source: { x: 3, y: 3 } });
+        source: { x: 3, y: 3, mask: [1] }, right: 1 });
+    await page.locator("#recipe-apply").click();
+    const copy = await cellCoord(page, 6, 4);
+    expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([0, 0, 0]);
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    const before = await recipe(page);
+    await page.locator("#recipe-gap-x").fill("-1"); await page.locator("#recipe-gap-x").press("Enter");
+    expect(await recipe(page)).toEqual(before);
+    await expect(page.locator("#recipe-gap-x")).toHaveValue(String(before.columnSpacing));
+});
+
+for (const tool of ["s", "w"]) test(`former Grid grip locations execute ${tool} selection normally`, async ({ page }) => {
+    await selection(page);
+    await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+    await page.keyboard.press(tool);
+    if (await page.locator("#inspector-host").isVisible()) await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+    const at = await page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
+        const m = window.__test_matrix__!, bounds = canvas.getBoundingClientRect();
+        const point = m.transformPoint({ x: 4.5, y: 3 - 24 / (m.a / devicePixelRatio) });
+        return { x: point.x / devicePixelRatio + bounds.left, y: point.y / devicePixelRatio + bounds.top };
+    });
+    const before = await recipe(page);
+    await page.mouse.move(at.x, at.y); await page.mouse.down();
+    await expect(page.locator("#status-action")).toContainText("Replace");
+    await page.keyboard.press("Escape"); await page.mouse.up();
+    expect(await recipe(page)).toEqual(before);
 });
 
 test("legacy recovery conversion is an informational, dismissible notice without a history or camera edit", async ({ page }) => {
@@ -144,6 +150,7 @@ test("paired Circle precision previews valid half-grid pairs and coalesces relat
 
 test("a deliberate category action settles a held local drag and has its own Undo", async ({ page }) => {
     await selection(page);
+    await category(page, "Circle");
     const [start] = await selectionHandleCoords(page);
     const source = await cellCoord(page, 3, 3), destination = await cellCoord(page, 5, 4);
     const end = { cx: start.cx + destination.cx - source.cx, cy: start.cy + destination.cy - source.cy };
@@ -152,15 +159,16 @@ test("a deliberate category action settles a held local drag and has its own Und
     await page.locator("#recipe-mode-none").focus();
     await page.keyboard.press("Space");
     await page.keyboard.press("Escape"); await page.mouse.up();
-    expect(await recipe(page)).toMatchObject({ mode: "none", columnSpacing: 2, columnOffset: 1 });
+    expect(await recipe(page)).toMatchObject({ mode: "none", rotationCentreX: 5, rotationCentreY: 4 });
     await page.keyboard.press("Control+z");
-    expect(await recipe(page)).toMatchObject({ mode: "grid", columnSpacing: 2, columnOffset: 1 });
+    expect(await recipe(page)).toMatchObject({ mode: "circle", rotationCentreX: 5, rotationCentreY: 4 });
     await page.keyboard.press("Control+z");
-    expect(await recipe(page)).toMatchObject({ mode: "grid", columnSpacing: 0, columnOffset: 0 });
+    expect(await recipe(page)).toMatchObject({ mode: "circle", rotationCentreX: 3, rotationCentreY: 3 });
 });
 
-test("Stamp with no copies retains a held cancellable Grid preview without history", async ({ page }) => {
+test("Stamp with no copies retains a held cancellable Circle preview without history", async ({ page }) => {
     await selection(page);
+    await category(page, "Circle");
     const before = await page.evaluate(() => localStorage.getItem("mosaic-history"));
     const [start] = await selectionHandleCoords(page);
     const source = await cellCoord(page, 3, 3), destination = await cellCoord(page, 5, 4);
@@ -170,7 +178,7 @@ test("Stamp with no copies retains a held cancellable Grid preview without histo
     await page.locator("#recipe-apply").focus(); await page.keyboard.press("Space");
     expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toBe(before);
     await page.keyboard.press("Escape"); await page.mouse.up();
-    expect(await recipe(page)).toMatchObject({ mode: "grid", columnSpacing: 0, columnOffset: 0 });
+    expect(await recipe(page)).toMatchObject({ mode: "circle", rotationCentreX: 3, rotationCentreY: 3 });
 });
 
 test("accepted local Stamp settles a held Move and creates a distinct Undo", async ({ page }) => {
@@ -391,28 +399,26 @@ test("Circle handles are inactive during painting and Crochet while the chosen t
 test.describe("high-DPI phone selection controls", () => {
     test.use({ viewport: { width: 414, height: 896 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, reducedMotion: "reduce" });
 
-    test("rotated touch targets and coincident Grid steps remain independently editable", async ({ page }) => {
+    test("Grid inspector parameters stay editable with rotated offscreen copies", async ({ page }) => {
         await selection(page);
-        await page.locator("#recipe-column-offset").fill("2"); await page.locator("#recipe-column-offset").press("Enter");
-        await page.locator("#recipe-row-offset").fill("2"); await page.locator("#recipe-row-offset").press("Enter");
-        await page.locator("#recipe-gap-x").fill("1"); await page.locator("#recipe-gap-x").press("Enter");
-        await page.locator("#recipe-gap-y").fill("1"); await page.locator("#recipe-gap-y").press("Enter");
+        for (const [field, value] of [["right", "10"], ["down", "10"], ["column-offset", "2"],
+            ["row-offset", "2"], ["gap-x", "1"], ["gap-y", "1"]]) {
+            await page.locator(`#recipe-${field}`).fill(value);
+            await page.locator(`#recipe-${field}`).press("Enter");
+        }
         await category(page, "None"); await category(page, "Grid");
         await page.getByRole("button", { name: "Close inspector", exact: true }).click();
-        await page.getByRole("button", { name: "Fit view", exact: true }).click();
         await page.getByRole("button", { name: "Rotate view right", exact: true }).click();
         await page.waitForFunction(() => Math.abs(window.__test_matrix__!.a - window.__test_matrix__!.b) < 1e-10);
-        const [column] = await selectionHandleCoords(page);
-        const origin = await cellCoord(page, 3, 3), columnEnd = await cellCoord(page, 4, 3);
-        await touchDrag(page, { cx: column.cx + 12, cy: column.cy },
-            { cx: column.cx + 12 + columnEnd.cx - origin.cx, cy: column.cy + columnEnd.cy - origin.cy });
-        expect(await recipe(page)).toMatchObject({ columnSpacing: 2, columnOffset: 2, rowSpacing: 1, rowOffset: 2,
+        expect(await selectionHandleCoords(page)).toEqual([]);
+        await page.locator("#tool-select").click();
+        await page.locator("#recipe-gap-x").fill("2"); await page.locator("#recipe-gap-x").press("Enter");
+        await page.locator("#recipe-gap-y").fill("2"); await page.locator("#recipe-gap-y").press("Enter");
+        expect(await recipe(page)).toMatchObject({ columnSpacing: 2, columnSpacingAlternate: 2,
+            columnOffset: 2, rowSpacing: 2, rowSpacingAlternate: 2, rowOffset: 2, right: 10, down: 10,
             source: { x: 3, y: 3, mask: [1] } });
         await page.getByRole("button", { name: "Undo", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
-        const [, row] = await selectionHandleCoords(page);
-        const rowOrigin = await cellCoord(page, 3, 3), rowEnd = await cellCoord(page, 3, 4);
-        await touchDrag(page, row, { cx: row.cx + rowEnd.cx - rowOrigin.cx, cy: row.cy + rowEnd.cy - rowOrigin.cy });
-        expect(await recipe(page)).toMatchObject({ columnSpacing: 1, rowSpacing: 2, rowOffset: 2, source: { x: 3, y: 3 } });
+        expect(await recipe(page)).toMatchObject({ columnSpacing: 1, rowSpacing: 1 });
     });
 
     test("source and generated outlines remain visible across zoom, yarns, and Accent palettes", async ({ page }) => {
