@@ -2,6 +2,39 @@ import { expect, test } from "@playwright/test";
 import { bootApp, clickCell, cellCoord } from "./_helpers";
 import { contrastingProjectColors } from "../src/contrast-colors";
 
+for (const width of [1440, 390]) {
+    test(`Crochet mode button shares ordinary document button states at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 900 });
+        await bootApp(page);
+        const mode = page.locator("#btn-export");
+        const ordinary = page.getByRole("button", { name: width === 1440 ? "Pattern" : "Menu", exact: true });
+        const appearance = async (button: typeof mode) => button.evaluate(element => {
+            const style = getComputedStyle(element);
+            return { background: style.backgroundColor, border: style.borderColor, color: style.color };
+        });
+        for (const label of ["Begin Crocheting", "Back to Design"]) {
+            await expect(mode).toHaveAccessibleName(label);
+            await page.mouse.move(width - 1, 899);
+            await expect.poll(async () => appearance(mode)).toEqual(await appearance(ordinary));
+            await ordinary.hover();
+            await page.waitForTimeout(200);
+            const hovered = await appearance(ordinary);
+            await page.mouse.down();
+            await page.waitForTimeout(200);
+            const pressed = await appearance(ordinary);
+            await page.mouse.move(width - 1, 899);
+            await page.mouse.up();
+            await mode.hover();
+            await expect.poll(async () => appearance(mode)).toEqual(hovered);
+            await page.mouse.down();
+            await expect.poll(async () => appearance(mode)).toEqual(pressed);
+            await page.mouse.move(width - 1, 899);
+            await page.mouse.up();
+            if (label === "Begin Crocheting") await mode.click();
+        }
+    });
+}
+
 for (const commit of [false, true]) {
     test(`returning Pattern dimensions to their starting values preserves history and Crochet progress (${commit ? "Enter" : "preview"})`, async ({ page }) => {
         await bootApp(page);

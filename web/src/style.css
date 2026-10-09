@@ -113,9 +113,9 @@ input  { font: inherit; color: inherit; }
 
 .g-file { justify-self: start; }
 .g-mode { grid-column: 2; }
-.g-mode .btn { display: grid; position: relative; background: transparent; }
+.g-mode .btn { display: grid; position: relative; }
 .g-mode .btn > span { grid-area: 1 / 1; }
-.g-mode .btn.btn--danger { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+.g-mode .btn.btn--danger { border-color: var(--danger); }
 /* Reserve the longest mode label to keep the chart fixed across workspace changes. */
 .g-mode .btn::after { content: "Continue Crocheting"; visibility: hidden; grid-area: 1 / 1; }
 .g-hlrot { justify-self: end; }
@@ -917,7 +917,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   gap: var(--space-3);
 }
 
-.instructions-options { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 1.4em; row-gap: var(--space-1); }
+.instructions-options { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: var(--space-1); }
 .instructions-options :is(.instructions-progress, .instructions-action-status) { grid-column: 1 / -1; }
 .instructions-action-status:empty { display: none; }
 
@@ -944,7 +944,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   align-items: center;
   gap: var(--space-2);
   padding-top: var(--space-3);
-  border-top: var(--border);
 }
 #instructions-live-progress { text-align: center; font-variant-numeric: tabular-nums; }
 
@@ -1067,7 +1066,6 @@ input[type="checkbox"] { accent-color: var(--accent); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#export-progress[hidden] { display: block; visibility: hidden; }
 
 .warning {
   padding: var(--space-2) var(--space-3);

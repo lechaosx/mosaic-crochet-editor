@@ -494,7 +494,22 @@ test("alternate direction switches cached instructions without regenerating", as
     await expect(page.locator("#export-progress")).toBeHidden();
 });
 
-test("generation progress does not reframe the Crochet list when it clears", async ({ page }) => {
+for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    test(`Crochet options leave no empty feedback space above the list at ${viewport.width}px`, async ({ page }) => {
+        await page.setViewportSize(viewport);
+        await bootApp(page);
+        await page.getByRole("button", { name: "Begin Crocheting" }).click();
+        await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+        await expect(page.locator("#export-progress")).toBeHidden();
+        await expect(page.getByRole("status", { name: "Copy instructions status", includeHidden: true })).toBeEmpty();
+        const options = await page.getByRole("group", { name: "Crochet options" }).boundingBox();
+        const copy = await page.getByRole("button", { name: "Copy instructions" }).boundingBox();
+        const alternate = await page.locator("label:has(#alternate)").boundingBox();
+        expect(options!.y + options!.height).toBeCloseTo(Math.max(copy!.y + copy!.height, alternate!.y + alternate!.height), 0);
+    });
+}
+
+test("generation feedback occupies space only while generation is active", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-height").fill("80");
@@ -503,10 +518,15 @@ test("generation progress does not reframe the Crochet list when it clears", asy
     await page.locator("#btn-export").click();
     await expect(page.locator("#export-progress")).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
+    await expect(page.locator("#export-progress")).toHaveText(/^Generating… \d+ \/ 80$/);
     const whileGenerating = await page.locator("#instructions-units").boundingBox();
+    const progress = await page.locator("#export-progress").boundingBox();
+    expect(progress!.y + progress!.height).toBeLessThan(whileGenerating!.y);
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await expect(page.locator("#export-progress")).toBeHidden();
     const complete = await page.locator("#instructions-units").boundingBox();
-    expect(complete).toEqual(whileGenerating);
+    expect(complete!.y).toBeLessThan(whileGenerating!.y);
+    expect(complete!.y + complete!.height).toBeCloseTo(whileGenerating!.y + whileGenerating!.height, 0);
 });
 
 test("Crochet can return to Design during a long generation", async ({ page }) => {
@@ -1162,6 +1182,12 @@ test("Crochet reports copy completion", async ({ page }) => {
 
     await page.getByRole("button", { name: "Copy instructions" }).click();
     await expect(status).toHaveText("Copied");
+    await expect(status).toBeVisible();
+    const statusBox = await status.boundingBox();
+    const optionsBox = await page.getByRole("group", { name: "Crochet options" }).boundingBox();
+    const listBox = await page.getByRole("list", { name: "Instructions", exact: true }).boundingBox();
+    expect(statusBox!.y + statusBox!.height).toBeLessThanOrEqual(optionsBox!.y + optionsBox!.height);
+    expect(statusBox!.y + statusBox!.height).toBeLessThan(listBox!.y);
     copied = await page.evaluate(() => (window as typeof window & { __copied?: string }).__copied ?? "");
     expect(copied.split("\n")[0]).toMatch(/^Row 1 · Yarn A: /);
     expect(copied).toContain("sc × 9");

@@ -6,6 +6,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Mirrors identify centres by coordinates, group all five reflection types together, distinguish chosen types from implied types while keeping both visibly available, use familiar enable switches, and disable types unavailable at the current centre.
 - Grid copies use inspector fields for spacing and offsets, with dimmer marching ants and unobscured shared borders.
+- Crochet removes unused feedback space and the extra navigation divider, and its mode button uses the standard button appearance with a danger border for warnings.
 
 ## 8 October 2026
 
