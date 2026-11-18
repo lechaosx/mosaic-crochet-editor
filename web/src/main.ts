@@ -1135,30 +1135,16 @@ async function onLoad() {
         closeAbout();
         return;
     }
-    gestureInputs.cancel();
-    clearExecutingAction();
-    instructionsView?.close(false);
+    endSessionInteractions();
     if (!sameAuthoredPattern(loaded.pattern, loaded.pixels)) clearCrochetProgress();
-    rs.targetRotation = null;
-    rs.rotAnim = null;
-    fitToView(
-        viewport.canvas, viewport.view, loaded.pattern, 0,
-        ui.getCanvasWorkspace(),
-    );
-    store.replace(
+    showSession(
         { ...store.state, pattern: loaded.pattern, pixels: loaded.pixels,
           colorA: loaded.colorA, colorB: loaded.colorB, mirrors: loaded.mirrors,
           dangerColorOverride: loaded.dangerColorOverride ?? null,
           accentColorOverride: loaded.accentColorOverride ?? null,
           recipes: loaded.recipes, activeRecipeId: null, float: null, rotation: 0 },
-        { history: true, persist: true },
+        { history: true },
     );
-    closeAbout();
-    (document.getElementById("color-a") as HTMLInputElement).value = loaded.colorA;
-    (document.getElementById("color-b") as HTMLInputElement).value = loaded.colorB;
-    ui.setColors(loaded.colorA, loaded.colorB);
-    ui.syncEditInputs(loaded.pattern);
-    refreshSymmetryUi();
 }
 
 // ── Instructions ─────────────────────────────────────────────────────────────
@@ -1463,55 +1449,54 @@ function clearCrochetProgress() {
 store.addObserver(syncCrochetProgressControl);
 syncCrochetProgressControl();
 
-function beginFreshPattern() {
+// Run before deciding anything from the current session: cancelling a stroke
+// reverts its uncommitted pixels.
+function endSessionInteractions() {
     gestureInputs.cancel();
     clearExecutingAction();
-    const fresh = defaultSession();
     instructionsView?.close(false);
+}
+
+// Replaces the whole session and resets its view. `history` pushes `session`
+// onto the current undo history; otherwise the caller has already set it.
+function showSession(session: SessionState, { history = false } = {}) {
+    rs.targetRotation = null;
+    rs.rotAnim = null;
+    fitToView(
+        viewport.canvas, viewport.view, session.pattern, session.rotation,
+        ui.getCanvasWorkspace(),
+    );
+    store.replace(session, { history, persist: true });
+    syncDomInputs(session);
+    ui.setColors(session.colorA, session.colorB);
+    ui.syncEditInputs(session.pattern);
+    refreshSymmetryUi();
+    closeAbout();
+}
+
+function beginFreshPattern() {
+    endSessionInteractions();
+    const fresh = defaultSession();
     fresh.pixels = initialize_row_pattern(
         fresh.pattern.canvasWidth, fresh.pattern.canvasHeight,
     ).slice();
     if (!sameAuthoredPattern(fresh.pattern, fresh.pixels)) clearCrochetProgress();
-    rs.targetRotation = null;
-    rs.rotAnim = null;
-    fitToView(
-        viewport.canvas, viewport.view, fresh.pattern, fresh.rotation,
-        ui.getCanvasWorkspace(),
-    );
     commitHistory(historyFrom(fresh));
     patternHistorySession = false;
-    store.replace(fresh, { persist: true });
-    syncDomInputs(fresh);
+    showSession(fresh);
     ui.setTool(fresh.activeTool);
     ui.setPrimary(fresh.primaryColor);
-    ui.setColors(fresh.colorA, fresh.colorB);
-    ui.syncEditInputs(fresh.pattern);
-    refreshSymmetryUi();
     ui.setHistory(false, false);
-    closeAbout();
     (document.getElementById("btn-edit") as HTMLButtonElement).click();
 }
 
 function useExample() {
-    gestureInputs.cancel();
-    clearExecutingAction();
+    endSessionInteractions();
     const example = exampleSession();
-    instructionsView?.close(false);
-    rs.targetRotation = null;
-    rs.rotAnim = null;
-    fitToView(
-        viewport.canvas, viewport.view, example.pattern, example.rotation,
-        ui.getCanvasWorkspace(),
-    );
     commitHistory(historyFrom(example));
-    store.replace(example, { persist: true });
-    syncDomInputs(example);
+    showSession(example);
     ui.setTool(example.activeTool);
     ui.setPrimary(example.primaryColor);
-    ui.setColors(example.colorA, example.colorB);
-    ui.syncEditInputs(example.pattern);
-    refreshSymmetryUi();
-    closeAbout();
 }
 
 document.getElementById("about-new")!.addEventListener("click", beginFreshPattern);
