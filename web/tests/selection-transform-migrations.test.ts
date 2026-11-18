@@ -4,7 +4,7 @@ import { decodeMcw, decodeMcwWithMigration, encodeMcw } from "@mosaic/logic/mcw"
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { packFloat, packPixels } from "@mosaic/logic/storage";
 import { loadFromLocalStorage, saveToLocalStorage } from "../src/storage-io";
-import { historyEnsureInitialized, historyPeek, historySave, historyUndo, historyRedo } from "../src/history";
+import { historyFrom, historyPeek, historySave, historyUndo, historyRedo, loadHistory, writeHistory } from "../src/history";
 import { rowSession } from "./_helpers";
 
 beforeEach(() => localStorage.clear());
@@ -105,17 +105,19 @@ test.each([5, 6, 7].flatMap(version => legacyCases.map(policy => ({ version, ...
             recipes: [{ ...legacy, source: { ...recipe.source, mask: [1, 0, 1] } }] },
     }] }));
     let noticed = false;
-    historyEnsureInitialized(session, () => { noticed = true; });
+    let h = loadHistory(() => { noticed = true; })!;
     expect(noticed).toBe(policy.changed);
-    const before = historyPeek()!;
+    const before = historyPeek(h);
     expect(before).toMatchObject({ pattern: session.pattern, pixels: session.pixels, colorA: session.colorA,
         colorB: session.colorB, float, activeRecipeId: recipe.id });
     expect(before.recipes[0]).toMatchObject({ id: recipe.id, mode: policy.mode, mirrorTypes: policy.types,
         rotationTurns: policy.turns, rotationCentreX: 2, rotationCentreY: 2, mirrorCentreX: 2, mirrorCentreY: 2, source: recipe.source });
     expect(before.dangerColorOverride).toBeUndefined();
-    historySave({ ...session, ...before, recipes: [{ ...before.recipes[0], mode: "none", mirrorCentreX: 6 }] });
-    expect(historyUndo()!.recipes).toEqual(before.recipes);
-    expect(historyRedo()!.recipes[0]).toMatchObject({ mode: "none", rotationCentreX: 2, mirrorCentreX: 6 });
+    h = historySave(h, { ...session, ...before, recipes: [{ ...before.recipes[0], mode: "none", mirrorCentreX: 6 }] });
+    h = historyUndo(h)!;
+    expect(historyPeek(h).recipes).toEqual(before.recipes);
+    h = historyRedo(h)!;
+    expect(historyPeek(h).recipes[0]).toMatchObject({ mode: "none", rotationCentreX: 2, mirrorCentreX: 6 });
 });
 
 test("an unchanged current recovery discloses changed behavior in an older Undo snapshot once", () => {
@@ -129,11 +131,11 @@ test("an unchanged current recovery discloses changed behavior in an older Undo 
     let notices = 0;
     const restored = loadFromLocalStorage(() => notices++)!;
     expect(notices).toBe(0);
-    historyEnsureInitialized(restored, () => notices++);
+    loadHistory(() => notices++);
     expect(notices).toBe(1);
-    historyEnsureInitialized(restored, () => notices++);
+    const h = loadHistory(() => notices++)!;
     expect(notices).toBe(1);
-    expect(historyPeek()!.recipes[0].mode).toBe("mirror");
+    expect(historyPeek(h).recipes[0].mode).toBe("mirror");
 });
 
 test("current marked project, recovery, and history reject incomplete legacy-looking categories atomically", () => {
@@ -147,11 +149,11 @@ test("current marked project, recovery, and history reject incomplete legacy-loo
     recovery.workspace.recipes = [legacy];
     localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
     expect(loadFromLocalStorage(() => notices++)).toBeNull();
-    historySave(session);
+    writeHistory(historyFrom(session));
     const history = JSON.parse(localStorage.getItem("mosaic-history")!);
     history.snapshots[0].transforms.recipes = [legacy];
     localStorage.setItem("mosaic-history", JSON.stringify(history));
-    expect(historyPeek()).toBeNull();
+    expect(loadHistory()).toBeNull();
     expect(notices).toBe(0);
 });
 
@@ -166,11 +168,11 @@ test.each(["mode", "rotationCentreX", "mirrorCentreY", "rotationTurns", "mirrorT
         delete recovery.workspace.recipes[0][field];
         localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
         expect(loadFromLocalStorage()).toBeNull();
-        historySave(session);
+        writeHistory(historyFrom(session));
         const history = JSON.parse(localStorage.getItem("mosaic-history")!);
         delete history.snapshots[0].transforms.recipes[0][field];
         localStorage.setItem("mosaic-history", JSON.stringify(history));
-        expect(historyPeek()).toBeNull();
+        expect(loadHistory()).toBeNull();
     });
 
 const malformedCategories = [
@@ -192,10 +194,10 @@ test.each(malformedCategories.flatMap(value => ["project", "recovery", "history"
             localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
             expect(loadFromLocalStorage()).toBeNull();
         } else {
-            historySave(session);
+            writeHistory(historyFrom(session));
             const history = JSON.parse(localStorage.getItem("mosaic-history")!);
             history.snapshots[0].transforms.recipes[0][field] = value;
             localStorage.setItem("mosaic-history", JSON.stringify(history));
-            expect(historyPeek()).toBeNull();
+            expect(loadHistory()).toBeNull();
         }
     });

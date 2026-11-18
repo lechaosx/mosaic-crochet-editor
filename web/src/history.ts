@@ -1,7 +1,6 @@
-// Undo / redo snapshot stack — persistence-only, dim-aware. Each snapshot
-// carries its own `PatternState` so undo crosses dimension / mode changes.
-// On QuotaExceededError we drop the oldest snapshot(s) and retry until the new
-// one fits — the freshly-added snapshot at the tail is always preserved.
+// Undo / redo snapshot stack, dim-aware: each snapshot carries its own
+// `PatternState` so undo crosses dimension / mode changes. `UndoHistory` values are
+// immutable; the owner persists each new value with `writeHistory`.
 
 import { PatternState, Float, Axis, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
@@ -38,6 +37,10 @@ interface Snapshot {
         recipes?: unknown[];
         activeRecipeId?: string | null;
     };
+}
+export interface UndoHistory {
+    readonly snapshots: readonly Snapshot[];
+    readonly index:     number;
 }
 interface HistoryBlob {
     version:   8;
@@ -89,35 +92,43 @@ function migrateHistory(value: unknown): HistoryBlob | null {
     };
 }
 
-function read(onMigration?: () => void): HistoryBlob | null {
+// Null when nothing usable is stored. A migrated blob is written back in the
+// current format.
+export function loadHistory(onMigration?: () => void): UndoHistory | null {
     const current = localStorage.getItem(HISTORY_KEY);
     const sourceKey = current === null ? LEGACY_HISTORY_KEY : HISTORY_KEY;
     const raw = current ?? localStorage.getItem(LEGACY_HISTORY_KEY);
     if (!raw) return null;
     try {
         const parsed = JSON.parse(raw);
-        const history = migrateHistory(parsed);
-        if (!history) return null;
+        const migrated = migrateHistory(parsed);
+        if (!migrated) return null;
         if (parsed.version !== HISTORY_VERSION && parsed.snapshots.some((snapshot: Snapshot) =>
             legacySelectionBehaviorChanged(snapshot.transforms?.recipes))) onMigration?.();
-        if (sourceKey === LEGACY_HISTORY_KEY || parsed.version !== HISTORY_VERSION) write(history);
-        return history;
+        const history = sourceKey === LEGACY_HISTORY_KEY || parsed.version !== HISTORY_VERSION
+            ? writeHistory(migrated) : migrated;
+        return history.snapshots.length > 0 ? history : null;
     } catch { return null; }
 }
 
-function write(h: HistoryBlob) {
+// Returns the history as stored: on QuotaExceededError the oldest snapshots are
+// dropped until it fits. If the newest snapshot alone does not fit, nothing is
+// written and it is returned alone.
+export function writeHistory(h: UndoHistory): UndoHistory {
+    const blob: HistoryBlob = { version: HISTORY_VERSION, snapshots: [...h.snapshots], index: h.index };
     while (true) {
         try {
-            localStorage.setItem(HISTORY_KEY, JSON.stringify(h));
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(blob));
             localStorage.removeItem(LEGACY_HISTORY_KEY);
-            return;
+            break;
         } catch (e) {
             if (!(e instanceof DOMException) || e.name !== "QuotaExceededError") throw e;
-            if (h.snapshots.length <= 1) return;
-            h.snapshots.shift();
-            h.index = Math.max(0, h.index - 1);
+            if (blob.snapshots.length <= 1) break;
+            blob.snapshots.shift();
+            blob.index = Math.max(0, blob.index - 1);
         }
     }
+    return { snapshots: blob.snapshots, index: blob.index };
 }
 
 function snapshotFrom(s: Readonly<SessionState>): Snapshot {
@@ -144,48 +155,43 @@ function snapshotsEqual(a: Snapshot, b: Snapshot): boolean {
         && JSON.stringify(a.document.state) === JSON.stringify(b.document.state);
 }
 
-export function historySave(s: Readonly<SessionState>) {
-    const h    = read() ?? { version: HISTORY_VERSION, snapshots: [], index: -1 };
+export function historyFrom(s: Readonly<SessionState>): UndoHistory {
+    return { snapshots: [snapshotFrom(s)], index: 0 };
+}
+
+// Returns `h` itself when `s` matches the current snapshot, so the owner can
+// skip persisting.
+export function historySave(h: UndoHistory, s: Readonly<SessionState>): UndoHistory {
     const snap = snapshotFrom(s);
     const head = h.index >= 0 ? h.snapshots[h.index] : null;
-    if (head && snapshotsEqual(head, snap)) return;
-    h.snapshots.splice(h.index + 1);
-    h.snapshots.push(snap);
-    if (h.snapshots.length > MAX) h.snapshots.shift();
-    h.index = h.snapshots.length - 1;
-    write(h);
+    if (head && snapshotsEqual(head, snap)) return h;
+    const snapshots = [...h.snapshots.slice(0, h.index + 1), snap];
+    if (snapshots.length > MAX) snapshots.shift();
+    return { snapshots, index: snapshots.length - 1 };
 }
 
-export function historyReplaceCurrent(s: Readonly<SessionState>): boolean {
-    const h = read();
-    if (!h || h.index < 0) {
-        historyReset(s);
-        return false;
-    }
-    h.snapshots.splice(h.index + 1);
+// `replaced` is false when the current snapshot was instead dropped for matching
+// the one before it, or the history was reseeded.
+export function historyReplaceCurrent(h: UndoHistory, s: Readonly<SessionState>): { history: UndoHistory; replaced: boolean } {
+    if (h.index < 0) return { history: historyFrom(s), replaced: false };
     const snap = snapshotFrom(s);
+    const kept = h.snapshots.slice(0, h.index);
     if (h.index > 0 && snapshotsEqual(h.snapshots[h.index - 1], snap)) {
-        h.snapshots.splice(h.index, 1);
-        h.index--;
-        write(h);
-        return false;
+        return { history: { snapshots: kept, index: h.index - 1 }, replaced: false };
     }
-    h.snapshots[h.index] = snap;
-    write(h);
-    return true;
+    return { history: { snapshots: [...kept, snap], index: h.index }, replaced: true };
 }
 
-export function historyReset(s: Readonly<SessionState>) {
-    write({ version: HISTORY_VERSION, snapshots: [snapshotFrom(s)], index: 0 });
+export function canUndo(h: UndoHistory): boolean { return h.index > 0; }
+export function canRedo(h: UndoHistory): boolean { return h.index < h.snapshots.length - 1; }
+
+export function historyUndo(h: UndoHistory): UndoHistory | null {
+    return canUndo(h) ? { ...h, index: h.index - 1 } : null;
 }
 
-export function historyEnsureInitialized(s: Readonly<SessionState>, onMigration?: () => void) {
-    const h = read(onMigration);
-    if (!h || h.snapshots.length === 0) historyReset(s);
+export function historyRedo(h: UndoHistory): UndoHistory | null {
+    return canRedo(h) ? { ...h, index: h.index + 1 } : null;
 }
-
-export function canUndo(): boolean { const h = read(); return h !== null && h.index > 0; }
-export function canRedo(): boolean { const h = read(); return h !== null && h.index < h.snapshots.length - 1; }
 
 export interface Restored {
     pattern: PatternState;
@@ -200,7 +206,7 @@ export interface Restored {
     accentColorOverride?: string | null;
 }
 
-function restoredAt(h: HistoryBlob): Restored {
+export function historyPeek(h: UndoHistory): Restored {
     const s = h.snapshots[h.index];
     const mirrors = readMirrorRecords(s.transforms.mirrors) ?? [];
     const recipes = restoreGridRecipes(s.transforms.recipes, false);
@@ -221,24 +227,4 @@ function restoredAt(h: HistoryBlob): Restored {
         dangerColorOverride: s.document.dangerColorOverride,
         accentColorOverride: s.document.accentColorOverride,
     };
-}
-
-export function historyPeek(): Restored | null {
-    const h = read();
-    if (!h || h.index < 0) return null;
-    return restoredAt(h);
-}
-
-export function historyUndo(): Restored | null {
-    const h = read(); if (!h || h.index <= 0) return null;
-    h.index--;
-    write(h);
-    return restoredAt(h);
-}
-
-export function historyRedo(): Restored | null {
-    const h = read(); if (!h || h.index >= h.snapshots.length - 1) return null;
-    h.index++;
-    write(h);
-    return restoredAt(h);
 }

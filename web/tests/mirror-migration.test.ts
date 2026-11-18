@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, expect, test } from "vitest";
 import { loadFromLocalStorage } from "../src/storage-io";
-import { historyPeek, historyUndo, historyRedo } from "../src/history";
+import { historyPeek, historyUndo, historyRedo, loadHistory } from "../src/history";
 import { rowSession, makeFloat } from "./_helpers";
 import { packFloat, packPixels } from "@mosaic/logic/storage";
 import { gridRecipeFromFloat, storedGridRecipes } from "@mosaic/logic/grid-recipes";
@@ -52,15 +52,18 @@ test.each([undefined, 5, 6])("history v%s preserves axis identity and authored s
     const snapshots = [snapshot, { ...snapshot, document: { ...snapshot.document, colorA: "#123456" } }];
     const raw = version === undefined ? { snapshots: snapshots.map(s => ({ ...s.document, float: packFloat(float), axes })), index: 1 } : { version, snapshots, index: 1 };
     localStorage.setItem("mosaic-history", JSON.stringify(raw));
-    expect(historyPeek()!.mirrors).toEqual(mirrors);
-    expect(historyUndo()!).toMatchObject({ mirrors, colorA: "#000000" });
-    expect(historyRedo()!).toMatchObject({ mirrors, colorA: "#123456" });
-    expect(historyPeek()!.pixels).toEqual(session.pixels);
-    expect(historyPeek()!.float).toEqual(float);
+    let h = loadHistory()!;
+    expect(historyPeek(h).mirrors).toEqual(mirrors);
+    h = historyUndo(h)!;
+    expect(historyPeek(h)).toMatchObject({ mirrors, colorA: "#000000" });
+    h = historyRedo(h)!;
+    expect(historyPeek(h)).toMatchObject({ mirrors, colorA: "#123456" });
+    expect(historyPeek(h).pixels).toEqual(session.pixels);
+    expect(historyPeek(h).float).toEqual(float);
     if (version !== undefined) {
-        expect(historyPeek()!.recipes).toEqual([recipe]);
-        expect(historyPeek()!.activeRecipeId).toBe(recipe.id);
-        expect(historyPeek()!).toMatchObject({ dangerColorOverride: null, accentColorOverride: "#abcdef" });
+        expect(historyPeek(h).recipes).toEqual([recipe]);
+        expect(historyPeek(h).activeRecipeId).toBe(recipe.id);
+        expect(historyPeek(h)).toMatchObject({ dangerColorOverride: null, accentColorOverride: "#abcdef" });
     }
     expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(8);
     expect(JSON.parse(localStorage.getItem("mosaic-history")!).snapshots[0].transforms).not.toHaveProperty("axes");

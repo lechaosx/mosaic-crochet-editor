@@ -11,8 +11,8 @@ import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, pickSelectionTransformHandle, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
-import { historySave, historyReplaceCurrent, historyReset, historyEnsureInitialized,
-         historyUndo, historyRedo, canUndo, canRedo, Restored } from "./history";
+import { UndoHistory, historyFrom, historySave, historyReplaceCurrent, historyUndo, historyRedo, historyPeek,
+         canUndo, canRedo, loadHistory, writeHistory, Restored } from "./history";
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
          mirrorIsProjectValid, mirrorsForPattern } from "@mosaic/logic/symmetry";
 import { mirrorsToFlat } from "@mosaic/logic/symmetry";
@@ -144,7 +144,13 @@ let preferences: AppPreferences = loadAppPreferences();
 const rs       = makeRendererState(preferences);
 let projectColorsSynced: string | null = null;
 const store    = new Store(saved ?? defaultSession());
-if (saved) historyEnsureInitialized(store.state, () => { selectionMigrationNotice = true; });
+// Without a recovered session, boot replaces this once the default pattern is built.
+let undoHistory: UndoHistory = saved
+    ? loadHistory(() => { selectionMigrationNotice = true; }) ?? writeHistory(historyFrom(store.state))
+    : historyFrom(store.state);
+function commitHistory(next: UndoHistory) {
+    if (next !== undoHistory) undoHistory = writeHistory(next);
+}
 const aboutDialog = document.getElementById("about-dialog") as HTMLDialogElement;
 const aboutReleaseNotes = document.getElementById("about-release-notes") as HTMLElement;
 const currentReleaseHash = aboutReleaseNotes.dataset.currentHash!;
@@ -331,14 +337,14 @@ let savingRecipeHistory = false;
 store.setHistoryFn(s => {
     if (!savingPatternHistory) patternHistorySession = false;
     if (!savingRecipeHistory) recipeHistorySession = false;
-    historySave(s);
+    commitHistory(historySave(undoHistory, s));
 });
 store.setPersistFn(s => {
     ui.setRecoveryStatus(saveToLocalStorage(s) ? "saved" : "failed");
 });
 
 // Observers — run after every commit.
-store.addObserver(() => ui.setHistory(canUndo(), canRedo()));
+store.addObserver(() => ui.setHistory(canUndo(undoHistory), canRedo(undoHistory)));
 store.addObserver(s => ui.setViewState(
     s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
@@ -677,13 +683,16 @@ function onRecipeCommit() {
     if (baseline && !gridRecipesEqual(baseline, store.state.recipes)) {
         savingRecipeHistory = true;
         try {
-            if (recipeHistorySession) recipeHistorySession = historyReplaceCurrent(store.state);
-            else {
+            if (recipeHistorySession) {
+                const { history: next, replaced } = historyReplaceCurrent(undoHistory, store.state);
+                commitHistory(next);
+                recipeHistorySession = replaced;
+            } else {
                 store.commit(() => {}, { recompute: false, render: false, history: true });
                 recipeHistorySession = true;
             }
             saveToLocalStorage(store.state);
-            ui.setHistory(canUndo(), canRedo());
+            ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
         } finally { savingRecipeHistory = false; }
     }
     ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
@@ -1001,8 +1010,10 @@ function onEditCommit(clearDesign = false) {
         } finally {
             applyingPatternPreview = false;
         }
-        patternHistorySession = historyReplaceCurrent(store.state);
-        ui.setHistory(canUndo(), canRedo());
+        const { history: next, replaced } = historyReplaceCurrent(undoHistory, store.state);
+        commitHistory(next);
+        patternHistorySession = replaced;
+        ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
     } else if (changed) {
         savingPatternHistory = true;
         try {
@@ -1073,8 +1084,11 @@ function undo() {
     gestureInputs.cancel();
     clearExecutingAction();
     patternHistorySession = false;
-    const r = historyUndo();
-    if (r) { instructionsView?.close(false); applyRestored(r); }
+    const previous = historyUndo(undoHistory);
+    if (!previous) return;
+    commitHistory(previous);
+    instructionsView?.close(false);
+    applyRestored(historyPeek(undoHistory));
 }
 function redo() {
     if (document.querySelector("dialog:modal")) return;
@@ -1082,8 +1096,11 @@ function redo() {
     gestureInputs.cancel();
     clearExecutingAction();
     patternHistorySession = false;
-    const r = historyRedo();
-    if (r) { instructionsView?.close(false); applyRestored(r); }
+    const next = historyRedo(undoHistory);
+    if (!next) return;
+    commitHistory(next);
+    instructionsView?.close(false);
+    applyRestored(historyPeek(undoHistory));
 }
 
 // ── Save / load ──────────────────────────────────────────────────────────────
@@ -1461,7 +1478,7 @@ function beginFreshPattern() {
         viewport.canvas, viewport.view, fresh.pattern, fresh.rotation,
         ui.getCanvasWorkspace(),
     );
-    historyReset(fresh);
+    commitHistory(historyFrom(fresh));
     patternHistorySession = false;
     store.replace(fresh, { persist: true });
     syncDomInputs(fresh);
@@ -1486,7 +1503,7 @@ function useExample() {
         viewport.canvas, viewport.view, example.pattern, example.rotation,
         ui.getCanvasWorkspace(),
     );
-    historyReset(example);
+    commitHistory(historyFrom(example));
     store.replace(example, { persist: true });
     syncDomInputs(example);
     ui.setTool(example.activeTool);
@@ -2096,7 +2113,7 @@ ui.setColors(store.state.colorA, store.state.colorB);
 ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
 ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 ui.syncEditInputs(store.state.pattern);
-ui.setHistory(canUndo(), canRedo());
+ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
 ui.setRecoveryStatus(saved ? "recovered" : "saved");
 if (selectionMigrationNotice) ui.setDocumentNotice("Recovered selection transforms were converted: Circle uses chosen turns; Mirror composes its types. Pattern stitches and colours are unchanged.");
 ui.setCrochetErrors(crochetErrorCount());
@@ -2116,8 +2133,8 @@ if (saved) {
     );
     store.commit(s => { s.pattern = pattern; s.pixels = pixels; }, { persist: false });
     refreshSymmetryUi();
-    historyReset(store.state);
-    ui.setHistory(canUndo(), canRedo());
+    commitHistory(historyFrom(store.state));
+    ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
 }
 ui.setViewState(store.state.rotation, false);
 if (shouldShowAbout(currentReleaseHash)) showAbout();

@@ -1,10 +1,9 @@
-// @vitest-environment jsdom
 // History property tests — pure logic properties live in logic/tests/properties.test.ts.
-import { describe, test, beforeEach } from "vitest";
+import { describe, test } from "vitest";
 import fc from "fast-check";
 
 import {
-    historyReset, historySave, historyUndo, historyRedo, historyPeek,
+    historyFrom, historySave, historyUndo, historyRedo, historyPeek, canUndo, canRedo,
 } from "../src/history";
 import { rowSession } from "./_helpers";
 import type { PatternState } from "@mosaic/logic/types";
@@ -22,21 +21,17 @@ const rowPatternWithPixels = rowPattern.chain(p =>
 );
 
 describe("history undo/redo balance", () => {
-    beforeEach(() => { localStorage.clear(); });
-
     test("N saves, N undos lands at the seed state", () => {
         fc.assert(fc.property(
             fc.array(rowPatternWithPixels, { minLength: 1, maxLength: 5 }),
             (states) => {
-                localStorage.clear();
                 const seed = rowSession(3, 3);
-                historyReset(seed);
+                let h = historyFrom(seed);
                 for (const { pattern, pixels } of states) {
-                    historySave(rowSession(pattern.canvasWidth, pattern.canvasHeight, { pattern, pixels }));
+                    h = historySave(h, rowSession(pattern.canvasWidth, pattern.canvasHeight, { pattern, pixels }));
                 }
-                while (historyUndo()) { /* empty */ }
-                const peeked = historyPeek();
-                return peeked !== null && peeked.pixels.length === seed.pixels.length;
+                while (canUndo(h)) h = historyUndo(h)!;
+                return historyPeek(h).pixels.length === seed.pixels.length;
             },
         ));
     });
@@ -45,20 +40,17 @@ describe("history undo/redo balance", () => {
         fc.assert(fc.property(
             fc.array(rowPatternWithPixels, { minLength: 1, maxLength: 5 }),
             (states) => {
-                localStorage.clear();
-                historyReset(rowSession(3, 3));
+                let h = historyFrom(rowSession(3, 3));
                 for (const { pattern, pixels } of states) {
-                    historySave(rowSession(pattern.canvasWidth, pattern.canvasHeight, { pattern, pixels }));
+                    h = historySave(h, rowSession(pattern.canvasWidth, pattern.canvasHeight, { pattern, pixels }));
                 }
-                const final = historyPeek();
+                const final = historyPeek(h);
                 let undone = 0;
-                while (historyUndo()) undone++;
+                while (canUndo(h)) { h = historyUndo(h)!; undone++; }
                 let redone = 0;
-                while (historyRedo()) redone++;
+                while (canRedo(h)) { h = historyRedo(h)!; redone++; }
                 if (undone !== redone) return false;
-                const after = historyPeek();
-                if (!final || !after) return false;
-                return final.pixels.length === after.pixels.length;
+                return final.pixels.length === historyPeek(h).pixels.length;
             },
         ));
     });

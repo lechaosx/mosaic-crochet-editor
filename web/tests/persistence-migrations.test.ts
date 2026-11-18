@@ -5,7 +5,7 @@ import { packFloat, packPixels } from "@mosaic/logic/storage";
 import { migrateAxes } from "@mosaic/logic/symmetry";
 import { loadFromLocalStorage } from "../src/storage-io";
 import { loadAppPreferences } from "../src/preferences";
-import { historyPeek } from "../src/history";
+import { historyPeek, loadHistory } from "../src/history";
 import { makeFloat, rowSession } from "./_helpers";
 
 beforeEach(() => { localStorage.clear(); });
@@ -78,7 +78,7 @@ describe("browser persistence migrations", () => {
             index: 0,
         }));
 
-        expect(historyPeek()).toMatchObject({
+        expect(historyPeek(loadHistory()!)).toMatchObject({
             pattern: session.pattern,
             mirrors: migrateAxes(axes, session.pattern),
         });
@@ -105,7 +105,7 @@ describe("browser persistence migrations", () => {
         localStorage.setItem("mosaic-history", JSON.stringify({ version: 999 }));
 
         expect(loadFromLocalStorage()).toBeNull();
-        expect(historyPeek()).toBeNull();
+        expect(loadHistory()).toBeNull();
     });
 
     test("keeps legacy recovery when writing the migrated envelope fails", () => {
