@@ -162,3 +162,64 @@ export async function bootApp(page: Page) {
         await page.keyboard.press("Escape");
     }
 }
+
+// The helpers below keep the storage layout of the recovery, undo history and
+// Crochet progress records out of the specs that observe them.
+
+// Persisted record, parsed, or null when absent.
+function storedRecord(page: Page, key: string): Promise<any> {
+    return page.evaluate(key => {
+        const raw = localStorage.getItem(key);
+        return raw === null ? null : JSON.parse(raw);
+    }, key);
+}
+
+export function storedRecovery(page: Page) {
+    return storedRecord(page, "mosaic-recovery");
+}
+
+export function storedHistory(page: Page) {
+    return storedRecord(page, "mosaic-history");
+}
+
+export async function storedHistoryLength(page: Page): Promise<number> {
+    return (await storedHistory(page)).snapshots.length;
+}
+
+export function storedLiveProgress(page: Page) {
+    return storedRecord(page, "mosaic-live-progress");
+}
+
+// From the next navigation on, writing the record throws as when storage is full.
+function failWrites(page: Page, key: string) {
+    return page.addInitScript(key => {
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (itemKey, value) {
+            if (itemKey === key) throw new DOMException("full", "QuotaExceededError");
+            return setItem.call(this, itemKey, value);
+        };
+    }, key);
+}
+
+export function failRecoveryWrites(page: Page) {
+    return failWrites(page, "mosaic-recovery");
+}
+
+export function failLiveProgressWrites(page: Page) {
+    return failWrites(page, "mosaic-live-progress");
+}
+
+// From the next navigation on, counts recovery writes since that page load.
+// Returns a reader for the current count.
+export async function countRecoveryWrites(page: Page): Promise<() => Promise<number>> {
+    await page.addInitScript(() => {
+        const setItem = Storage.prototype.setItem;
+        let writes = 0;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === "mosaic-recovery") writes++;
+            return setItem.call(this, key, value);
+        };
+        Object.defineProperty(window, "__recoveryWriteCount", { get: () => writes });
+    });
+    return () => page.evaluate(() => (window as typeof window & { __recoveryWriteCount: number }).__recoveryWriteCount);
+}

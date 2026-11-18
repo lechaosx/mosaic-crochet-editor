@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { addGlobalMirror, bootApp, cellCoord, pixelRGB, touchDragCells, touchPanZoom } from "./_helpers";
+import { addGlobalMirror, bootApp, cellCoord, pixelRGB, touchDragCells, touchPanZoom, storedHistory, storedHistoryLength, storedRecovery } from "./_helpers";
 
 for (const [tool, family] of [["select", "Rectangle"], ["wand", "Wand"], ["move", "Move"], ["overlay", "Overlay"]]) {
     test(`two taps at the same ${family} button open its menu`, async ({ page }) => {
@@ -52,23 +52,23 @@ test("a rotated mirror centre supports touch drag and system cancellation withou
     await bootApp(page);
     await page.locator("#btn-sym-toggle").tap();
     await addGlobalMirror(page, "Point reflection (180°)");
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
+    const before = (await storedRecovery(page)).document.pixels;
     await page.getByRole("button", { name: "Rotate view right", exact: true }).tap();
     await page.waitForTimeout(350);
     await touchDragCells(page, 4, 4, 3, 2);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 3, y: 2 });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(before);
-    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    expect((await storedRecovery(page)).document.pixels).toEqual(before);
+    const history = await storedHistory(page);
     const start = await cellCoord(page, 3, 2), end = await cellCoord(page, 2, 3);
     const session = await page.context().newCDPSession(page);
     await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: start.cx, y: start.cy, id: 0 }] });
     await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: end.cx, y: end.cy, id: 0 }] });
     await session.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] });
     await session.detach();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 3, y: 2 });
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+    expect(await storedHistory(page)).toEqual(history);
 });
 
 test("single-finger drag paints", async ({ page }) => {
@@ -133,9 +133,7 @@ test("system pointer cancellation restores the stroke without adding history", a
     await session.detach();
 
     expect(await pixelRGB(page, point.cx, point.cy)).toEqual(before);
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    )).toBe(1);
+    expect(await storedHistoryLength(page)).toBe(1);
 });
 
 test("two-finger drag and pinch changes the view without leaving a paint mark", async ({ page }) => {
@@ -161,9 +159,7 @@ test("two-finger drag and pinch changes the view without leaving a paint mark", 
     expect(after).not.toEqual(before);
     const source = await cellCoord(page, 1, 1);
     expect(await pixelRGB(page, source.cx, source.cy)).not.toEqual([0, 0, 0]);
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    )).toBe(1);
+    expect(await storedHistoryLength(page)).toBe(1);
 });
 
 test("Move area mode supports a modifier-free touch drag", async ({ page }) => {
@@ -180,7 +176,7 @@ test("Move area mode supports a modifier-free touch drag", async ({ page }) => {
 
     await touchDragCells(page, 1, 1, 3, 1);
 
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float))
+    expect((await storedRecovery(page)).workspace.float)
         .toMatchObject({ x: 3, y: 1, w: 1, h: 1 });
     const src = await cellCoord(page, 1, 1);
     const dst = await cellCoord(page, 3, 1);

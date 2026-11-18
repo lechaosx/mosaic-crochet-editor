@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB, storedRecovery } from "./_helpers";
 
 test("guidance opacity changes chart markers without changing placement rules", async ({ page }) => {
     await bootApp(page);
@@ -31,18 +31,18 @@ test("prevention blocks a new impossible mark but allows its correction", async 
     const preventionLabel = page.locator("label:has(#lock-invalid)");
     await expect(prevention).toBeChecked();
     await page.keyboard.press("Escape");
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
+    const before = (await storedRecovery(page)).document.pixels;
 
     await clickCell(page, 1, 0, { button: "right" });
     await expect(page.locator("#status-feedback")).toContainText("Protected");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toBe(before);
+    expect((await storedRecovery(page)).document.pixels).toBe(before);
 
     await page.getByRole("button", { name: "Settings" }).click();
     await preventionLabel.click();
     await expect(prevention).not.toBeChecked();
     await page.keyboard.press("Escape");
     await clickCell(page, 1, 0, { button: "right" });
-    const wrong = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
+    const wrong = (await storedRecovery(page)).document.pixels;
     expect(wrong).not.toBe(before);
 
     await page.getByRole("button", { name: "Settings" }).click();
@@ -50,5 +50,5 @@ test("prevention blocks a new impossible mark but allows its correction", async 
     await expect(prevention).toBeChecked();
     await page.keyboard.press("Escape");
     await clickCell(page, 1, 0);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toBe(before);
+    expect((await storedRecovery(page)).document.pixels).toBe(before);
 });

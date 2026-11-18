@@ -3,7 +3,7 @@
 // wiring (gesture event → modifier capture in `onPaintStart`).
 
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
+import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant, storedHistoryLength, storedRecovery } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
 const B: [number, number, number] = [255, 255, 255];
@@ -38,20 +38,14 @@ test("one wand sweep creates one undoable selection edit", async ({ page }) => {
     await clickCell(page, 0, 1);
     await clickCell(page, 4, 1);
     await page.keyboard.press("w");
-    const historyBefore = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    );
+    const historyBefore = await storedHistoryLength(page);
 
     await dragCells(page, 0, 1, 4, 1);
 
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    )).toBe(historyBefore + 1);
+    expect(await storedHistoryLength(page)).toBe(historyBefore + 1);
 
     await page.keyboard.press("Control+z");
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float,
-    )).toBeNull();
+    expect((await storedRecovery(page)).workspace.float).toBeNull();
     for (const x of [0, 4]) {
         const cell = await cellCoord(page, x, 1);
         expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);

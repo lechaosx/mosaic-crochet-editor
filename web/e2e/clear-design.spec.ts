@@ -1,42 +1,38 @@
-import { test, expect, type Page } from "@playwright/test";
-import { addGlobalMirror, bootApp, clickCell } from "./_helpers";
-
-async function recovery(page: Page) {
-    return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
-}
+import { test, expect } from "@playwright/test";
+import { addGlobalMirror, bootApp, clickCell, storedHistory, storedHistoryLength, storedLiveProgress, storedRecovery } from "./_helpers";
 
 test("Clear design on an empty default design leaves history unchanged", async ({ page }) => {
     await bootApp(page);
-    const before = await recovery(page);
-    const historyBefore = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    const before = await storedRecovery(page);
+    const historyBefore = await storedHistory(page);
     await page.getByRole("button", { name: "Pattern" }).click();
 
     await expect(page.getByRole("button", { name: "Clear design" })).toBeDisabled();
 
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toBe(historyBefore);
-    expect(await recovery(page)).toEqual(before);
+    expect(await storedHistory(page)).toEqual(historyBefore);
+    expect(await storedRecovery(page)).toEqual(before);
     await expect(page.getByRole("button", { name: "Undo" })).toBeDisabled();
 });
 
 test("Pattern edits before and after Clear design remain separate undo actions", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 0, 1);
-    const original = await recovery(page);
+    const original = await storedRecovery(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("7");
     await page.locator("#edit-width").press("Tab");
-    const beforeClear = await recovery(page);
+    const beforeClear = await storedRecovery(page);
     await page.getByRole("button", { name: "Clear design" }).click();
-    const cleared = await recovery(page);
+    const cleared = await storedRecovery(page);
     await page.locator("#edit-height").fill("6");
     await page.locator("#edit-height").press("Tab");
 
     await page.getByRole("button", { name: "Undo" }).click();
-    expect(await recovery(page)).toEqual(cleared);
+    expect(await storedRecovery(page)).toEqual(cleared);
     await page.getByRole("button", { name: "Undo" }).click();
-    expect(await recovery(page)).toEqual(beforeClear);
+    expect(await storedRecovery(page)).toEqual(beforeClear);
     await page.getByRole("button", { name: "Undo" }).click();
-    expect(await recovery(page)).toEqual(original);
+    expect(await storedRecovery(page)).toEqual(original);
 });
 
 test("Clear design removes drawing and transform context in one recoverable edit", async ({ page }) => {
@@ -56,7 +52,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("label:has(#labels-on)").click();
     await page.keyboard.press("Escape");
-    const natural = await recovery(page);
+    const natural = await storedRecovery(page);
     await clickCell(page, 0, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 0, 1);
@@ -74,10 +70,8 @@ test("Clear design removes drawing and transform context in one recoverable edit
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.getByRole("button", { name: "Navigate" }).click();
-    const before = await recovery(page);
-    const historyBefore = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    );
+    const before = await storedRecovery(page);
+    const historyBefore = await storedHistoryLength(page);
     const viewBefore = await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()));
     const preferencesBefore = await page.evaluate(() => localStorage.getItem("mosaic-preferences"));
     expect(before.workspace.float).not.toBeNull();
@@ -86,7 +80,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
 
     await page.locator("#edit-reset").click();
 
-    const cleared = await recovery(page);
+    const cleared = await storedRecovery(page);
     expect(cleared.document).toEqual({ ...before.document, pixels: natural.document.pixels });
     expect(cleared.workspace.float).toBeNull();
     expect(cleared.workspace.mirrors).toEqual([]);
@@ -105,21 +99,19 @@ test("Clear design removes drawing and transform context in one recoverable edit
     await expect(page.getByRole("button", { name: "Navigate" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", { name: "Clear design" }))
         .toHaveAttribute("title", "Clear drawing, selections, repeats, and mirrors");
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length,
-    )).toBe(historyBefore + 1);
+    expect(await storedHistoryLength(page)).toBe(historyBefore + 1);
 
     await page.getByRole("button", { name: "Undo" }).click();
-    expect(await recovery(page)).toEqual(before);
+    expect(await storedRecovery(page)).toEqual(before);
     await page.getByRole("button", { name: "Redo" }).click();
-    expect(await recovery(page)).toEqual(cleared);
+    expect(await storedRecovery(page)).toEqual(cleared);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await expect(page.getByRole("button", { name: "Paste", exact: true })).toBeEnabled();
     await expect(page.getByRole("button", { name: "No selection", exact: true })).toBeVisible();
 
     await page.reload();
     await page.waitForFunction(() => !!window.__test_matrix__);
-    expect(await recovery(page)).toEqual({ ...cleared, workspace: { ...cleared.workspace, activeTool: "select" } });
+    expect(await storedRecovery(page)).toEqual({ ...cleared, workspace: { ...cleared.workspace, activeTool: "select" } });
 });
 
 test("Clear design preserves authored centre-out geometry and compatible Crochet progress", async ({ page }) => {
@@ -128,7 +120,7 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Half", { exact: true }).click();
     await page.keyboard.press("Escape");
-    const natural = await recovery(page);
+    const natural = await storedRecovery(page);
     await page.getByRole("button", { name: "Invert", exact: true }).click();
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Select", exact: true }).click();
@@ -137,18 +129,18 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     await page.locator("#recipe-right").press("Tab");
     await page.getByRole("button", { name: "Begin Crocheting" }).click();
     await page.locator(".instructions-unit").nth(2).click();
-    const progress = await page.evaluate(() => localStorage.getItem("mosaic-live-progress"));
-    expect(JSON.parse(progress!).completedUnits).toBeGreaterThan(0);
+    const progress = await storedLiveProgress(page);
+    expect(progress.completedUnits).toBeGreaterThan(0);
     await page.getByRole("button", { name: "Back to Design" }).click();
     await page.getByRole("button", { name: "Pattern" }).click();
 
     await page.locator("#edit-reset").click();
 
-    const cleared = await recovery(page);
+    const cleared = await storedRecovery(page);
     expect(cleared.document).toEqual(natural.document);
     expect(cleared.workspace.float).toBeNull();
     expect(cleared.workspace.recipes[0].source.mask).toEqual([]);
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-live-progress"))).toBe(progress);
+    expect(await storedLiveProgress(page)).toEqual(progress);
     await page.locator("#btn-export").click();
     await expect(page.locator(".instructions-unit").nth(2)).toHaveAttribute("aria-current", "step");
 });
@@ -160,12 +152,12 @@ test("Clear design stays disabled with saved repeats and a natural chart", async
     await page.locator("#recipe-right").fill("2");
     await page.locator("#recipe-right").press("Tab");
     await page.getByRole("button", { name: "No selection", exact: true }).click();
-    const before = await recovery(page);
+    const before = await storedRecovery(page);
     expect(before.workspace.float).toBeNull();
     await page.getByRole("button", { name: "Pattern" }).click();
 
     await expect(page.locator("#edit-reset")).toBeDisabled();
-    expect(await recovery(page)).toEqual(before);
+    expect(await storedRecovery(page)).toEqual(before);
 });
 
 test("Pattern previews after Clear design preserve the cleared source and revert invalid changes", async ({ page }) => {
@@ -177,17 +169,17 @@ test("Pattern previews after Clear design preserve the cleared source and revert
     await page.locator("#recipe-right").press("Tab");
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-reset").click();
-    const cleared = await recovery(page);
+    const cleared = await storedRecovery(page);
 
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").fill("9");
     await page.locator("#edit-width").press("Tab");
-    expect(await recovery(page)).toEqual(cleared);
+    expect(await storedRecovery(page)).toEqual(cleared);
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").fill("2000000");
     await expect(page.locator("#edit-error")).toBeVisible();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await expect(page.getByRole("button", { name: "No selection", exact: true })).toBeVisible();
-    expect(await recovery(page)).toEqual(cleared);
+    expect(await storedRecovery(page)).toEqual(cleared);
 });

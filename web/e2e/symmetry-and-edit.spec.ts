@@ -1,6 +1,6 @@
 // Symmetry toggles + Pattern inspector resize.
 import { test, expect } from "@playwright/test";
-import { addGlobalMirror, bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
+import { addGlobalMirror, bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant, storedHistory, storedRecovery } from "./_helpers";
 
 test("vertical symmetry mirrors paint horizontally", async ({ page }) => {
     await bootApp(page);
@@ -45,9 +45,7 @@ test("Mirror inspector lets Pencil drag a centre without painting", async ({ pag
     await addGlobalMirror(page, "Vertical");
     const start = await cellCoord(page, 4, 4);
     const end = await cellCoord(page, 2, 4);
-    const before = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels,
-    );
+    const before = (await storedRecovery(page)).document.pixels;
 
     await page.mouse.move(start.cx, start.cy);
     await page.mouse.down();
@@ -56,9 +54,7 @@ test("Mirror inspector lets Pencil drag a centre without painting", async ({ pag
 
     await expect(page.getByRole("button", { name: "Pencil" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("checkbox", { name: "Enable mirror at (2, 4)" })).toBeVisible();
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels,
-    )).toEqual(before);
+    expect((await storedRecovery(page)).document.pixels).toEqual(before);
 });
 
 test("exact symmetry position entry is one undoable edit", async ({ page }) => {
@@ -375,9 +371,7 @@ test("rejected saved-repeat values, modes, and turns return controls to stored s
     await expect(page.locator("#recipe-error")).toBeHidden();
     await expect(page.locator("#recipe-turn-180")).not.toBeChecked();
 
-    const stored = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0],
-    );
+    const stored = (await storedRecovery(page)).workspace.recipes[0];
     expect(stored).toMatchObject({ left: 0, mode: "circle", rotationTurns: [] });
 });
 
@@ -420,13 +414,11 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
             const selected = await cellCoord(page, x, 1);
             expect(await pixelRGB(page, selected.cx, selected.cy)).toEqual([0, 0, 0]);
         }
-        const outsideYarns = await page.evaluate(() => {
-            const { document } = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-            const packed = atob(document.pixels);
-            return [1, 4, 5, 6].map(x => {
-                const index = document.state.canvasWidth + x;
-                return (packed.charCodeAt(index >> 3) >> (index & 7)) & 1;
-            });
+        const { document } = await storedRecovery(page);
+        const packed = atob(document.pixels);
+        const outsideYarns = [1, 4, 5, 6].map(x => {
+            const index = document.state.canvasWidth + x;
+            return (packed.charCodeAt(index >> 3) >> (index & 7)) & 1;
         });
         expect(outsideYarns).toEqual([1, 1, 1, 1]);
         for (const x of [1, 4, 5, 6]) {
@@ -476,9 +468,7 @@ test("saved repeat source follows moves and pointer cancel restores it", async (
     await page.locator("#recipe-right").press("Enter");
     await page.getByRole("button", { name: "Move", exact: true }).click();
     await dragCells(page, 2, 1, 3, 1);
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
-    )).toBe(3);
+    expect((await storedRecovery(page)).workspace.recipes[0].rotationCentreX).toBe(3);
     if (!await page.locator("#selection-popover").isVisible()) {
         await page.getByRole("button", { name: "Select", exact: true }).click();
     }
@@ -543,9 +533,7 @@ test("saved repeat source follows an explicit duplicate move", async ({ page }) 
     await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Move · Duplicate/);
 
     await dragCells(page, 1, 1, 3, 1);
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
-    )).toBe(3);
+    expect((await storedRecovery(page)).workspace.recipes[0].rotationCentreX).toBe(3);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.locator("#recipe-apply").click();
 
@@ -573,9 +561,7 @@ test("saved repeat source follows an explicit move-area move", async ({ page }) 
     await expect(page.locator("#tool-move")).toHaveAccessibleDescription(/Move · Move area/);
 
     await dragCells(page, 1, 1, 3, 1);
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0].rotationCentreX,
-    )).toBe(3);
+    expect((await storedRecovery(page)).workspace.recipes[0].rotationCentreX).toBe(3);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await page.locator("#recipe-apply").click();
 
@@ -632,7 +618,7 @@ test("move-area into a round hole deactivates the saved repeat when nothing can 
 
     await dragCells(page, 0, 6, 6, 6);
 
-    const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
+    const recovery = await storedRecovery(page);
     expect(recovery.workspace.float).toBeNull();
     expect(recovery.workspace.activeRecipeId).toBeNull();
 });
@@ -764,7 +750,7 @@ test("Load rejects a future file without replacing the active session", async ({
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
-    const before = await page.evaluate(() => localStorage.getItem("mosaic-recovery"));
+    const before = await storedRecovery(page);
 
     const chooserPromise = page.waitForEvent("filechooser");
     await page.locator("#btn-load").click();
@@ -777,7 +763,7 @@ test("Load rejects a future file without replacing the active session", async ({
 
     const alert = page.getByRole("alert");
     await expect(alert).toContainText("This pattern uses unsupported .mcw version 7.");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBe(before);
+    expect(await storedRecovery(page)).toEqual(before);
 
     await page.setViewportSize({ width: 360, height: 740 });
     await page.getByRole("button", { name: "Dismiss document error" }).click();
@@ -791,10 +777,7 @@ test("Open restores a global mirror without resetting Crochet progress", async (
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await page.getByRole("button", { name: "Forward one row" }).click();
     await page.locator("#btn-export").click();
-    const project = await page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        return recovery.document;
-    });
+    const project = (await storedRecovery(page)).document;
 
     const chooserPromise = page.waitForEvent("filechooser");
     await page.locator("#btn-load").click();
@@ -821,9 +804,7 @@ test("Open restores a global mirror without resetting Crochet progress", async (
     const mirrored = await cellCoord(page, 4, 1);
     expect(await pixelRGB(page, mirrored.cx, mirrored.cy)).toEqual([0, 0, 0]);
 
-    const legacyProject = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
-    );
+    const legacyProject = (await storedRecovery(page)).document;
     const legacyChooserPromise = page.waitForEvent("filechooser");
     await page.locator("#btn-load").click();
     const legacyChooser = await legacyChooserPromise;
@@ -840,16 +821,12 @@ test("Open leaves an identical global-mirror project view unchanged", async ({ p
     await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);
     await page.keyboard.press("v");
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors.length,
-    )).toBe(1);
+    await expect.poll(async () => (await storedRecovery(page)).workspace.mirrors.length).toBe(1);
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.waitForTimeout(300);
-    const project = await page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        return { ...recovery.document, mirrors: recovery.workspace.mirrors };
-    });
+    const recovery = await storedRecovery(page);
+    const project = { ...recovery.document, mirrors: recovery.workspace.mirrors };
     const before = await page.evaluate(() => {
         const matrix = window.__test_matrix__!;
         return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
@@ -880,9 +857,7 @@ test("identical Open preserves Crochet progress and an active float", async ({ p
     await dragCells(page, 1, 1, 1, 1);
     await page.keyboard.press("m");
     await dragCells(page, 1, 1, 1, 2);
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float?.y,
-    )).toBe(2);
+    await expect.poll(async () => (await storedRecovery(page)).workspace.float?.y).toBe(2);
     await page.evaluate(() => {
         const target = window as unknown as {
             savedMcw?: string;
@@ -906,16 +881,15 @@ test("identical Open preserves Crochet progress and an active float", async ({ p
     )).not.toBeNull();
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.waitForTimeout(300);
-    const before = await page.evaluate(() => {
-        const recovery = localStorage.getItem("mosaic-recovery")!;
-        const matrix = window.__test_matrix__!;
-        return {
-            savedMcw: (window as unknown as { savedMcw: string }).savedMcw,
-            recovery,
-            history: localStorage.getItem("mosaic-history"),
-            matrix: [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f],
-        };
-    });
+    const before = {
+        savedMcw: await page.evaluate(() => (window as unknown as { savedMcw: string }).savedMcw),
+        recovery: await storedRecovery(page),
+        history: await storedHistory(page),
+        matrix: await page.evaluate(() => {
+            const matrix = window.__test_matrix__!;
+            return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
+        }),
+    };
 
     const chooserPromise = page.waitForEvent("filechooser");
     await page.locator("#btn-load").click();
@@ -927,12 +901,12 @@ test("identical Open preserves Crochet progress and an active float", async ({ p
     });
 
     await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
-    await expect.poll(() => page.evaluate(() => ({
-        recovery: localStorage.getItem("mosaic-recovery"),
-        history: localStorage.getItem("mosaic-history"),
-        matrix: (() => {
+    await expect.poll(async () => ({
+        recovery: await storedRecovery(page),
+        history: await storedHistory(page),
+        matrix: await page.evaluate(() => {
             const matrix = window.__test_matrix__!;
             return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
-        })(),
-    }))).toEqual({ recovery: before.recovery, history: before.history, matrix: before.matrix });
+        }),
+    })).toEqual({ recovery: before.recovery, history: before.history, matrix: before.matrix });
 });

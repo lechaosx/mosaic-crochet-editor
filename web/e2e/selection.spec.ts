@@ -4,7 +4,7 @@
 // stroke landed inside the lifted area.
 
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, storedRecovery } from "./_helpers";
 
 test("Ctrl+A lifts every paintable cell into a float", async ({ page }) => {
     await bootApp(page);
@@ -346,11 +346,11 @@ test("Alt+Arrow preserves float when it is entirely outside the canvas", async (
     await clickCell(page, 1, 1);
     await page.keyboard.press("m");
     for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float);
+    const before = (await storedRecovery(page)).workspace.float;
     await page.keyboard.down("Alt");
     await page.keyboard.press("ArrowRight");
     await page.keyboard.up("Alt");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float)).toEqual(before);
+    expect((await storedRecovery(page)).workspace.float).toEqual(before);
     await expect(page.locator("#status-feedback")).toContainText("Selection is outside the pattern");
 });
 

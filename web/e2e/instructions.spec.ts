@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, cellCoord, pixelRGB, chooseToolVariant } from "./_helpers";
+import { bootApp, clickCell, cellCoord, pixelRGB, chooseToolVariant, failLiveProgressWrites } from "./_helpers";
 
 test("a crocheter gets a focused workspace while the global document bar stays available", async ({ page }) => {
     await page.setViewportSize({ width: 2200, height: 900 });
@@ -1122,15 +1122,7 @@ test("Crochet progress remains available when the chart has errors", async ({ pa
 });
 
 test("Crochet reports when its progress cannot be saved locally", async ({ page }) => {
-    await page.addInitScript(() => {
-        const setItem = Storage.prototype.setItem;
-        Storage.prototype.setItem = function (key, value) {
-            if (key === "mosaic-live-progress") {
-                throw new DOMException("full", "QuotaExceededError");
-            }
-            return setItem.call(this, key, value);
-        };
-    });
+    await failLiveProgressWrites(page);
     await bootApp(page);
 
     await page.locator("#btn-export").click();

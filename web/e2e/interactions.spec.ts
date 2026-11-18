@@ -4,17 +4,13 @@
 // live in `tests/interactions.test.ts` — faster, more reliable.
 
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, storedHistoryLength, storedRecovery } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
 const B: [number, number, number] = [255, 255, 255];
 
-async function historyLength(page: import("@playwright/test").Page): Promise<number> {
-    return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
-}
-
 async function recoveryWidth(page: import("@playwright/test").Page): Promise<number> {
-    return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.state.canvasWidth);
+    return (await storedRecovery(page)).document.state.canvasWidth;
 }
 
 test("Pattern remains modeless across canvas authoring and inspector changes", async ({ page }) => {
@@ -60,7 +56,7 @@ test("Pattern keeps canvas zoom available", async ({ page }) => {
 
 test("a Pattern session collapses into one undoable before-and-after state", async ({ page }) => {
     await bootApp(page);
-    const before = await historyLength(page);
+    const before = await storedHistoryLength(page);
     await page.locator("#btn-edit").click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").fill("6");
@@ -74,7 +70,7 @@ test("a Pattern session collapses into one undoable before-and-after state", asy
 
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await recoveryWidth(page)).toBe(6);
-    expect(await historyLength(page)).toBe(before + 1);
+    expect(await storedHistoryLength(page)).toBe(before + 1);
     await page.getByRole("button", { name: "Undo" }).click();
     expect(await recoveryWidth(page)).toBe(9);
     await expect(page.locator("#edit-height")).toHaveValue("9");
@@ -85,35 +81,35 @@ test("a Pattern session collapses into one undoable before-and-after state", asy
 
 test("opening and closing Pattern without changes adds no undo step", async ({ page }) => {
     await bootApp(page);
-    const before = await historyLength(page);
+    const before = await storedHistoryLength(page);
 
     await page.locator("#btn-edit").click();
     await page.locator("#btn-edit").click();
 
-    expect(await historyLength(page)).toBe(before);
+    expect(await storedHistoryLength(page)).toBe(before);
 });
 
 test("a Pattern session that returns to its baseline leaves no history entry", async ({ page }) => {
     await bootApp(page);
-    const before = await historyLength(page);
+    const before = await storedHistoryLength(page);
     await page.locator("#btn-edit").click();
     const width = page.locator("#edit-width");
     await width.fill("10");
     await width.press("Tab");
     await width.fill("9");
     await width.press("Tab");
-    expect(await historyLength(page)).toBe(before);
+    expect(await storedHistoryLength(page)).toBe(before);
 
     await width.fill("8");
     await width.press("Tab");
-    expect(await historyLength(page)).toBe(before + 1);
+    expect(await storedHistoryLength(page)).toBe(before + 1);
     await page.getByRole("button", { name: "Undo" }).click();
     expect(await recoveryWidth(page)).toBe(9);
 });
 
 test("Escape closes Pattern without reverting committed changes", async ({ page }) => {
     await bootApp(page);
-    const before = await historyLength(page);
+    const before = await storedHistoryLength(page);
     await page.locator("#btn-edit").click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").press("Tab");
@@ -122,7 +118,7 @@ test("Escape closes Pattern without reverting committed changes", async ({ page 
 
     await expect(page.locator("#edit-pattern-widget")).toBeHidden();
     expect(await recoveryWidth(page)).toBe(5);
-    expect(await historyLength(page)).toBe(before + 1);
+    expect(await storedHistoryLength(page)).toBe(before + 1);
 });
 
 test("invalid Pattern input retains the last valid preview", async ({ page }) => {
@@ -171,30 +167,23 @@ test("Pattern construction previews restore the captured baseline when switched 
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 0, 8);
-    const baseline = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
-    );
+    const baseline = (await storedRecovery(page)).document;
 
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await expect(page.getByRole("img", { name: /Centre-out colour preview/ })).toBeVisible();
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.state.mode,
-    )).toBe("round");
+    await expect.poll(async () => (await storedRecovery(page)).document.state.mode).toBe("round");
     await page.getByRole("radiogroup", { name: "Pattern geometry" })
         .getByText("Rows", { exact: true }).click();
 
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
-    )).toEqual(baseline);
+    await expect.poll(async () => (await storedRecovery(page)).document).toEqual(baseline);
 });
 
 test("tool and yarn choices do not replace the Pattern construction source", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 0, 8);
-    const baseline = await page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+    const baseline = await storedRecovery(page).then(recovery => {
         return {
             document: recovery.document,
             mirrors: recovery.workspace.mirrors,
@@ -212,8 +201,8 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
     await page.getByRole("radiogroup", { name: "Pattern geometry" })
         .getByText("Rows", { exact: true }).click();
 
-    await expect.poll(() => page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+    await expect.poll(async () => {
+        const recovery = await storedRecovery(page);
         return {
             authored: {
                 document: recovery.document,
@@ -226,7 +215,7 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
             activeTool: recovery.workspace.activeTool,
             primaryColor: recovery.workspace.primaryColor,
         };
-    })).toEqual({ authored: baseline, activeTool: "fill", primaryColor: 1 });
+    }).toEqual({ authored: baseline, activeTool: "fill", primaryColor: 1 });
 });
 
 test("Pattern session source advances after modeless canvas edits", async ({ page }) => {
@@ -240,17 +229,13 @@ test("Pattern session source advances after modeless canvas edits", async ({ pag
     const before = await pixelRGB(page, editedCell.cx, editedCell.cy);
     await dragCells(page, 0, 1, 3, 1);
     expect(await pixelRGB(page, editedCell.cx, editedCell.cy)).not.toEqual(before);
-    const edited = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
-    );
+    const edited = (await storedRecovery(page)).document;
 
     await width.fill("11");
     await width.fill("10");
     await width.press("Tab");
 
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
-    )).toEqual(edited);
+    await expect.poll(async () => (await storedRecovery(page)).document).toEqual(edited);
 });
 
 test("Pattern construction round-trip restores associated selection and mirror state", async ({ page }) => {
@@ -258,8 +243,7 @@ test("Pattern construction round-trip restores associated selection and mirror s
     await page.keyboard.press("v");
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    const baseline = await page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+    const baseline = await storedRecovery(page).then(recovery => {
         return {
             document: recovery.document,
             mirrors: recovery.workspace.mirrors,
@@ -273,15 +257,15 @@ test("Pattern construction round-trip restores associated selection and mirror s
     await page.getByRole("radiogroup", { name: "Pattern geometry" })
         .getByText("Rows", { exact: true }).click();
 
-    await expect.poll(() => page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
+    await expect.poll(async () => {
+        const recovery = await storedRecovery(page);
         return {
             document: recovery.document,
             mirrors: recovery.workspace.mirrors,
             float: recovery.workspace.float,
             activeRecipeId: recovery.workspace.activeRecipeId,
         };
-    })).toEqual(baseline);
+    }).toEqual(baseline);
 });
 
 test("Pattern extent switches restore cells clipped by a smaller preview", async ({ page }) => {
@@ -298,17 +282,13 @@ test("Pattern extent switches restore cells clipped by a smaller preview", async
     }).click();
     await clickCell(page, 10, 6);
     expect(await pixelRGB(page, paintedCell.cx, paintedCell.cy)).not.toEqual(before);
-    const baseline = await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
-    );
+    const baseline = (await storedRecovery(page)).document;
 
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Quarter", { exact: true }).click();
     await page.getByText("Full", { exact: true }).click();
 
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document,
-    )).toEqual(baseline);
+    await expect.poll(async () => (await storedRecovery(page)).document).toEqual(baseline);
 });
 
 test("Clear design restores natural colours immediately and is undoable", async ({ page }) => {
@@ -316,14 +296,14 @@ test("Clear design restores natural colours immediately and is undoable", async 
     await clickCell(page, 0, 1);
     const cell = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
-    const beforeReset = await historyLength(page);
+    const beforeReset = await storedHistoryLength(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     const fittedCell = await cellCoord(page, 0, 1);
 
     await page.getByRole("button", { name: "Clear design" }).click();
 
     expect(await pixelRGB(page, fittedCell.cx, fittedCell.cy)).toEqual(B);
-    expect(await historyLength(page)).toBe(beforeReset + 1);
+    expect(await storedHistoryLength(page)).toBe(beforeReset + 1);
     await page.getByRole("button", { name: "Undo" }).click();
     const restoredCell = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, restoredCell.cx, restoredCell.cy)).toEqual(A);

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB, storedHistory, storedLiveProgress, storedRecovery } from "./_helpers";
 
 for (const extent of ["Rows", "Full", "Half", "Quarter"] as const) {
     test(`${extent} Whole reveals warnings outside generated work using project Danger`, async ({ page }) => {
@@ -99,13 +99,13 @@ test("Pattern overview is transient progress and wraps around real rows", async 
     await page.locator("#btn-export").click();
     const row = page.getByRole("button", { name: "Row 3, Yarn A", exact: true });
     await row.click();
-    const saved = await page.evaluate(() => localStorage.getItem("mosaic-live-progress"));
+    const saved = await storedLiveProgress(page);
     const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await expect(whole).toBeVisible();
     await whole.click();
     await expect(whole).toHaveAttribute("aria-current", "step");
     await expect(page.locator("#instructions-live-progress")).toHaveText("Pattern overview");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-live-progress"))).toBe(saved);
+    expect(await storedLiveProgress(page)).toEqual(saved);
     expect(await page.evaluate(() => window.__test_instruction_seam_geometry__)).toBeNull();
     await page.locator("#btn-export").click();
     await page.locator("#btn-export").click();
@@ -156,7 +156,7 @@ test("Whole stays selected through direction and colour changes and is absent fr
     await bootApp(page);
     await page.locator("#btn-export").click();
     await page.getByRole("button", { name: "Row 2, Yarn B", exact: true }).click();
-    const saved = await page.evaluate(() => localStorage.getItem("mosaic-live-progress"));
+    const saved = await storedLiveProgress(page);
     const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await expect(whole).toBeVisible();
     await whole.click();
@@ -172,7 +172,7 @@ test("Whole stays selected through direction and colour changes and is absent fr
     });
     await expect(whole).toHaveAttribute("aria-current", "step");
     await expect(page.locator('.instructions-unit-number[data-yarn="A"]').first()).toHaveCSS("background-color", "rgb(18, 52, 86)");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-live-progress"))).toBe(saved);
+    expect(await storedLiveProgress(page)).toEqual(saved);
     await page.getByRole("button", { name: "Copy instructions" }).click();
     const text = await page.evaluate(() => (window as typeof window & { copied: string }).copied);
     expect(text.split("\n")).toHaveLength(9);
@@ -191,22 +191,22 @@ test("Whole does not enter files or authored history, identical Open retains it,
     await page.locator("#btn-export").click();
     await page.getByRole("button", { name: "Row 4, Yarn B", exact: true }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    const before = await page.evaluate(() => ({
-        file: (window as unknown as { savedMcw: string }).savedMcw,
-        history: localStorage.getItem("mosaic-history"), recovery: localStorage.getItem("mosaic-recovery"),
-        progress: localStorage.getItem("mosaic-live-progress"),
-    }));
+    const before = {
+        file: await page.evaluate(() => (window as unknown as { savedMcw: string }).savedMcw),
+        history: await storedHistory(page), recovery: await storedRecovery(page),
+        progress: await storedLiveProgress(page),
+    };
     const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await expect(whole).toBeVisible();
     await whole.focus();
     await page.keyboard.press("Enter");
     await expect(whole).toHaveAttribute("aria-current", "step");
     await page.getByRole("button", { name: "Save", exact: true }).click();
-    expect(await page.evaluate(() => ({
-        file: (window as unknown as { savedMcw: string }).savedMcw,
-        history: localStorage.getItem("mosaic-history"), recovery: localStorage.getItem("mosaic-recovery"),
-        progress: localStorage.getItem("mosaic-live-progress"),
-    }))).toEqual(before);
+    expect({
+        file: await page.evaluate(() => (window as unknown as { savedMcw: string }).savedMcw),
+        history: await storedHistory(page), recovery: await storedRecovery(page),
+        progress: await storedLiveProgress(page),
+    }).toEqual(before);
     const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Open", exact: true }).click();
     await (await chooser).setFiles({ name: "same.mcw", mimeType: "application/json", buffer: Buffer.from(before.file) });
@@ -220,5 +220,5 @@ test("Whole does not enter files or authored history, identical Open retains it,
         input.checked = !input.checked; input.dispatchEvent(new Event("change", { bubbles: true }));
     });
     await expect(page.getByRole("button", { name: "Row 4, Yarn B", exact: true })).toBeFocused();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-live-progress"))).toBe(before.progress);
+    expect(await storedLiveProgress(page)).toEqual(before.progress);
 });

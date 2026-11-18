@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, dragCells, cellCoord, pixelRGB, storedRecovery } from "./_helpers";
 
 test("Select and Wand reopen the inspector with accessible saved selection rows", async ({ page }) => {
     await bootApp(page);
@@ -14,10 +14,10 @@ test("Select and Wand reopen the inspector with accessible saved selection rows"
     await expect(list.getByRole("button", { name: "No selection", exact: true })).toHaveAttribute("aria-pressed", "true");
     await clickCell(page, 2, 1);
     await expect(list.getByRole("listitem")).toHaveCount(2);
-    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes);
+    const saved = (await storedRecovery(page)).workspace.recipes;
     await page.locator("#recipe-create").click();
     await page.locator("#recipe-create").click();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes)).toEqual(saved);
+    expect((await storedRecovery(page)).workspace.recipes).toEqual(saved);
     await expect(list.getByRole("listitem")).toHaveCount(2);
     const first = list.getByRole("button", { name: "Selection 1 1 × 1" });
     await first.focus();
@@ -103,18 +103,18 @@ test("Pattern shape changes prune vanished selections and mirrors, and Undo rest
     await page.locator("#btn-sym-toggle").click();
     await page.locator("#add-mirror").click();
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Vertical", exact: true }).click();
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace);
+    const before = (await storedRecovery(page)).workspace;
     await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("4");
     await page.locator("#edit-width").press("Tab");
     await page.keyboard.press("Escape");
-    const after = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace);
+    const after = (await storedRecovery(page)).workspace;
     expect(after.recipes).toHaveLength(1);
     expect(after.recipes[0].id).toBe(before.recipes[1].id);
     expect(after.recipes[0].source).toMatchObject({ x: 1, y: 1, w: 1, h: 1 });
     expect(after.mirrors).toEqual([]);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
-    const restored = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace);
+    const restored = (await storedRecovery(page)).workspace;
     expect(restored.recipes).toEqual(before.recipes);
     expect(restored.mirrors).toEqual(before.mirrors);
     expect(restored.float).toEqual(before.float);
@@ -129,7 +129,7 @@ test("new selection placeholder survives recovery without replacing an earlier s
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await expect(page.locator("#recipe-create")).toHaveAttribute("aria-pressed", "true");
     await clickCell(page, 3, 1);
-    const sources = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes.map((recipe: { source: unknown }) => recipe.source));
+    const sources = (await storedRecovery(page)).workspace.recipes.map((recipe: { source: unknown }) => recipe.source);
     expect(sources).toHaveLength(2);
     expect(sources[0]).toMatchObject({ x: 1, y: 1, w: 1, h: 1 });
     expect(sources[1]).toMatchObject({ x: 3, y: 1, w: 1, h: 1 });
@@ -140,10 +140,10 @@ test("Paste instantiates the new selection placeholder without overwriting saved
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Copy", exact: true }).click();
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0]);
+    const before = (await storedRecovery(page)).workspace.recipes[0];
     await page.locator("#recipe-create").click();
     await page.getByRole("button", { name: "Paste", exact: true }).click();
-    const recipes = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes);
+    const recipes = (await storedRecovery(page)).workspace.recipes;
     expect(recipes).toHaveLength(2);
     expect(recipes[0]).toEqual(before);
     expect(recipes[1].source).toEqual(before.source);
@@ -170,7 +170,7 @@ for (const record of ["recipes", "mirrors"] as const) {
         const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
         const chooser = page.waitForEvent("filechooser"); await page.locator("#btn-load").click();
         await (await chooser).setFiles({ name: "saved-id-new.mcw", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
-        await expect.poll(() => page.evaluate(key => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace[key][0].id, record)).toBe("new");
+        await expect.poll(async () => (await storedRecovery(page)).workspace[record][0].id).toBe("new");
         if (record === "recipes") {
             await page.getByRole("button", { name: "Select", exact: true }).click();
             await page.getByRole("button", { name: "Selection 1 1 × 1" }).click();
@@ -198,12 +198,12 @@ test("round resizing disables unsafe copies and preserves the editable source af
     await page.locator("#recipe-centre-y").fill("2");
     await page.locator("#recipe-centre-y").press("Enter");
     await page.locator("#recipe-turn-180").check();
-    const old = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0]);
+    const old = (await storedRecovery(page)).workspace.recipes[0];
     expect(old).toMatchObject({ mode: "circle", rotationTurns: [180] });
     await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-inner-width").fill("2"); await page.locator("#edit-inner-width").press("Tab");
     await page.keyboard.press("Escape");
-    const updated = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0]);
+    const updated = (await storedRecovery(page)).workspace.recipes[0];
     expect(updated).toMatchObject({ id: old.id, mode: "none", rotationTurns: [180], source: { x: 0, y: 0, w: 5, h: 3 } });
     await page.reload(); await page.waitForFunction(() => !!window.__test_matrix__);
     await page.getByRole("button", { name: "Select", exact: true }).click();

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant as choose } from "./_helpers";
+import { bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant as choose, storedHistory, storedRecovery } from "./_helpers";
 
 test("right Pencil projects the executing yarn and restores the latest choice", async ({ page }) => {
     await bootApp(page);
@@ -162,7 +162,7 @@ test("held Rectangle shows its temporary icon and restores the remembered varian
     await page.mouse.down({ button: "right" });
     await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select-add");
     await expect(page.locator("#tool-select")).toHaveAccessibleDescription(/Rectangle · Add/);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.toolVariants.select)).toBe("replace");
+    expect((await storedRecovery(page)).workspace.toolVariants.select).toBe("replace");
     await page.mouse.up({ button: "right" });
     await expect(page.locator("#tool-select use")).toHaveAttribute("href", "#icon-select");
     await expect(page.locator("#status-action")).toBeHidden();
@@ -300,9 +300,9 @@ test("each family remembers its chosen variant after leaving, an empty selection
         await expect(page.locator(`#tool-${id}`)).toHaveAccessibleDescription(new RegExp(label));
     }
     await expect(page.locator("#tool-pencil")).toHaveAttribute("aria-pressed", "true");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).version)).toBe(9);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots
-        .some((snapshot: object) => JSON.stringify(snapshot).includes("toolVariants")))).toBe(false);
+    expect((await storedRecovery(page)).version).toBe(9);
+    expect((await storedHistory(page)).snapshots
+        .some((snapshot: object) => JSON.stringify(snapshot).includes("toolVariants"))).toBe(false);
 });
 
 test("Overlay keyboard activation retains its chosen variant", async ({ page }) => {
@@ -410,14 +410,14 @@ test("holding and releasing outside the tool leaves the menu available without a
 
 test("Navigate and Crochet right-click do not edit; middle-click remains navigation", async ({ page }) => {
     await bootApp(page);
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document);
+    const before = (await storedRecovery(page)).document;
     await page.locator("#view-navigate").click();
     await clickCell(page, 1, 1, { button: "right" });
     await clickCell(page, 1, 1, { button: "middle" });
     await page.locator("#btn-export").click();
     await clickCell(page, 1, 1, { button: "right" });
     await clickCell(page, 1, 1, { button: "middle" });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document)).toEqual(before);
+    expect((await storedRecovery(page)).document).toEqual(before);
 });
 
 test("chosen Overlay Invert respects its yarn and remains chosen", async ({ page }) => {

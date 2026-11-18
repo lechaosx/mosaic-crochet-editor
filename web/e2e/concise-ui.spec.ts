@@ -1,6 +1,6 @@
 import { contrastingProjectColors } from "../src/contrast-colors";
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, clickCell } from "./_helpers";
+import { bootApp, cellCoord, clickCell, storedRecovery } from "./_helpers";
 
 for (const mode of ["row", "round"] as const) {
     test(`${mode} colour preview shows its warning within the yarn chart`, async ({ page }) => {
@@ -148,7 +148,7 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
         accent: true,
         danger: true,
     });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document))
+    expect((await storedRecovery(page)).document)
         .toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: "#abcdef" });
 
     await page.keyboard.press("Escape");
@@ -278,32 +278,24 @@ test("Pattern colour resets restore automatic guidance and preserve browser defa
     await expect(accent).toHaveValue(contrastingProjectColors("#000000", "#ffffff").accent);
 
     await danger.fill("#123456");
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
-    )).toBe("#123456");
+    await expect.poll(async () => (await storedRecovery(page)).document.dangerColorOverride).toBe("#123456");
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-preferences")!).dangerColor))
         .toBe(contrastingProjectColors("#000000", "#ffffff").danger);
 
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Undo" }).click();
     await expect(danger).toHaveValue("#123456");
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
-    )).toBe("#123456");
+    await expect.poll(async () => (await storedRecovery(page)).document.dangerColorOverride).toBe("#123456");
 
     await page.getByRole("button", { name: "Use automatic Danger colour" }).click();
     await expect(danger).toHaveValue(contrastingProjectColors("#000000", "#ffffff").danger);
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.dangerColorOverride,
-    )).toBeNull();
+    await expect.poll(async () => (await storedRecovery(page)).document.dangerColorOverride).toBeNull();
 
     await accent.fill("#abcdef");
     await accent.dispatchEvent("change");
     await page.getByRole("button", { name: "Use automatic Accent colour" }).click();
     await expect(accent).toHaveValue(contrastingProjectColors("#000000", "#ffffff").accent);
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).document.accentColorOverride,
-    )).toBeNull();
+    await expect.poll(async () => (await storedRecovery(page)).document.accentColorOverride).toBeNull();
 
     await page.locator("#edit-pattern-widget").getByLabel("Yarn A", { exact: true }).fill("#112233");
     await page.locator("#edit-pattern-widget").getByLabel("Yarn B", { exact: true }).fill("#445566");
@@ -319,7 +311,7 @@ test("opening project contrast overrides keeps app defaults and Crochet progress
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
     await page.getByRole("button", { name: "Forward one row" }).click();
     await page.locator("#btn-export").click();
-    const project = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document);
+    const project = (await storedRecovery(page)).document;
     const defaults = await page.evaluate(() => localStorage.getItem("mosaic-preferences"));
 
     const chooserPromise = page.waitForEvent("filechooser");
@@ -354,10 +346,10 @@ test("app preferences survive reload and are not part of undo or recovery snapsh
 
     await clickCell(page, 1, 1);
     await page.getByRole("button", { name: "Undo" }).click();
-    expect(await page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        return { preferences: recovery.preferences, stored: localStorage.getItem("mosaic-preferences") };
-    })).toEqual({
+    expect({
+        preferences: (await storedRecovery(page)).preferences,
+        stored: await page.evaluate(() => localStorage.getItem("mosaic-preferences")),
+    }).toEqual({
         preferences: undefined,
         stored: JSON.stringify({
             version: 1,

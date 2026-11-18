@@ -1,6 +1,6 @@
 import { contrastingProjectColors } from "../src/contrast-colors";
 import { test, expect } from "@playwright/test";
-import { addGlobalMirror, bootApp, clickCell } from "./_helpers";
+import { addGlobalMirror, bootApp, clickCell, storedRecovery } from "./_helpers";
 
 test("workspace transitions preserve canvas geometry near the compact toolbar threshold", async ({ page }) => {
     await page.setViewportSize({ width: 860, height: 900 });
@@ -119,14 +119,12 @@ test("Open updates a mirror's types and coordinates when its identity is retaine
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await addGlobalMirror(page, "Vertical");
-    const project = await page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        return {
-            version: 3,
-            ...recovery.document,
-            axes: [{ id: recovery.workspace.mirrors[0].id, kind: "H", active: true, y: 2 }],
-        };
-    });
+    const recovery = await storedRecovery(page);
+    const project = {
+        version: 3,
+        ...recovery.document,
+        axes: [{ id: recovery.workspace.mirrors[0].id, kind: "H", active: true, y: 2 }],
+    };
     const chooserPromise = page.waitForEvent("filechooser");
     await page.locator("#btn-load").click();
     await (await chooserPromise).setFiles({
@@ -144,9 +142,7 @@ test("Open updates a mirror's types and coordinates when its identity is retaine
     await position.press("Enter");
     await expect(position).toHaveValue("3.5");
     await expect(position).toBeFocused();
-    await expect.poll(() => page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors,
-    )).toEqual([{ id: project.axes[0].id, enabled: true, x: 4, y: 3.5, types: ["H"] }]);
+    await expect.poll(async () => (await storedRecovery(page)).workspace.mirrors).toEqual([{ id: project.axes[0].id, enabled: true, x: 4, y: 3.5, types: ["H"] }]);
 });
 
 test("mirror updates preserve position fields, row identity, and focused actions", async ({ page }) => {

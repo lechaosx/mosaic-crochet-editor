@@ -1,15 +1,11 @@
 import { test, expect, Page } from "@playwright/test";
-import { bootApp } from "./_helpers";
+import { bootApp, storedHistoryLength } from "./_helpers";
 
 async function matrix(page: Page) {
     return page.evaluate(() => {
         const m = window.__test_matrix__!;
         return { a: m.a, b: m.b, e: m.e, f: m.f };
     });
-}
-
-async function historyLength(page: Page) {
-    return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
 }
 
 async function dragCanvas(page: Page, button: "left" | "middle" = "left") {
@@ -25,7 +21,7 @@ async function dragCanvas(page: Page, button: "left" | "middle" = "left") {
 test("canvas view controls zoom, fit, rotate, and reset without editing", async ({ page }) => {
     await bootApp(page);
     const before = await matrix(page);
-    const history = await historyLength(page);
+    const history = await storedHistoryLength(page);
     const controls = page.getByRole("group", { name: "Canvas view" });
 
     await expect(controls.getByRole("button", { name: "Fit view" })).toBeVisible();
@@ -57,13 +53,13 @@ test("canvas view controls zoom, fit, rotate, and reset without editing", async 
     await expect(reset).toHaveAccessibleName("Reset view orientation from −45°");
     await expect(arrow).toHaveCSS("transform", "matrix(0.707107, -0.707107, 0.707107, 0.707107, 0, 0)");
     await reset.click();
-    expect(await historyLength(page)).toBe(history);
+    expect(await storedHistoryLength(page)).toBe(history);
 });
 
 test("Navigate button pans without changing the active authoring tool", async ({ page }) => {
     await bootApp(page);
     const before = await matrix(page);
-    const history = await historyLength(page);
+    const history = await storedHistoryLength(page);
     const navigate = page.getByRole("button", { name: "Navigate" });
 
     await navigate.click();
@@ -74,7 +70,7 @@ test("Navigate button pans without changing the active authoring tool", async ({
     expect(after.e).not.toBeCloseTo(before.e, 2);
     expect(after.f).not.toBeCloseTo(before.f, 2);
     await expect(page.getByRole("button", { name: "Pencil" })).toHaveAttribute("aria-pressed", "true");
-    expect(await historyLength(page)).toBe(history);
+    expect(await storedHistoryLength(page)).toBe(history);
 
     await page.getByRole("button", { name: "Spill" }).click();
     await expect(navigate).toHaveAttribute("aria-pressed", "false");
@@ -83,7 +79,7 @@ test("Navigate button pans without changing the active authoring tool", async ({
 test("Space-drag is momentary Navigate and middle-drag pans while Navigate is active", async ({ page }) => {
     await bootApp(page);
     const navigate = page.getByRole("button", { name: "Navigate" });
-    const history = await historyLength(page);
+    const history = await storedHistoryLength(page);
     const beforeSpace = await matrix(page);
 
     await page.getByRole("img", { name: "Editable pattern chart" }).focus();
@@ -98,5 +94,5 @@ test("Space-drag is momentary Navigate and middle-drag pans while Navigate is ac
     await navigate.click();
     await dragCanvas(page, "middle");
     expect((await matrix(page)).e).not.toBeCloseTo(beforeMiddle.e, 2);
-    expect(await historyLength(page)).toBe(history);
+    expect(await storedHistoryLength(page)).toBe(history);
 });

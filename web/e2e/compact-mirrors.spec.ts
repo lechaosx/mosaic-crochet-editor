@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { bootApp, clickCell, pixelRGB, cellCoord } from "./_helpers";
+import { bootApp, clickCell, pixelRGB, cellCoord, storedHistory, storedHistoryLength, storedRecovery } from "./_helpers";
 
 for (const [width, fontSize] of [[1440, 16], [390, 16], [1280, 32]]) {
     test(`variant tools share the ordinary icon footprint at ${width}px and ${fontSize}px text`, async ({ page }) => {
@@ -54,7 +54,7 @@ test("global mirrors use one focused editor while disabled centres remain editab
     await x.fill("3"); await x.press("Enter");
     await expect(x).toBeFocused();
     await expect(x).toHaveValue("3");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 3, enabled: false, types: ["V"] });
     await rows.first().getByRole("button", { name: "Delete mirror at (3, 4)", exact: true }).click();
     await expect(rows.first().getByRole("button", { name: "Delete mirror at (4, 4)", exact: true })).toBeFocused();
@@ -68,13 +68,13 @@ test("unapplied centre coordinate pairs reset on Escape and window blur", async 
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
     const x = page.getByRole("spinbutton", { name: "Mirror centre x" });
     const y = page.getByRole("spinbutton", { name: "Mirror centre y" });
-    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    const history = await storedHistory(page);
     await x.fill("2.5"); await y.fill("3.5"); await y.press("Escape");
     await expect(x).toHaveValue("4"); await expect(y).toHaveValue("4");
     await expect(page.getByRole("button", { name: "Add mirror", exact: true })).toBeVisible();
     await x.fill("1"); await page.evaluate(() => window.dispatchEvent(new Event("blur")));
     await expect(x).toHaveValue("4");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+    expect(await storedHistory(page)).toEqual(history);
 });
 
 test("implied types belong to one centre, remain explicit toggles, and are never saved implicitly", async ({ page }) => {
@@ -101,15 +101,15 @@ test("implied types belong to one centre, remain explicit toggles, and are never
         const style = getComputedStyle(element);
         return { background: style.backgroundColor, border: style.borderTopColor, foreground: style.color };
     });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["V", "H"]);
-    const count = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
+    expect((await storedRecovery(page)).workspace.mirrors[0].types).toEqual(["V", "H"]);
+    const count = await storedHistoryLength(page);
     await point.click();
     await page.mouse.move(0, 0);
     await expect(point).toHaveAttribute("aria-pressed", "true");
     await expect(point).toHaveCSS("background-color", chosen.background);
     await expect(point).toHaveCSS("border-top-color", chosen.border);
     await expect(point).toHaveCSS("color", chosen.foreground);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length)).toBe(count + 1);
+    expect(await storedHistoryLength(page)).toBe(count + 1);
     await point.click();
     await page.mouse.move(0, 0);
     await expect(point).toHaveAttribute("aria-pressed", "false");
@@ -117,7 +117,7 @@ test("implied types belong to one centre, remain explicit toggles, and are never
     await expect(point).toHaveCSS("background-color", implied.background);
     await expect(point).toHaveCSS("border-top-color", implied.border);
     await expect(point).toHaveCSS("color", implied.foreground);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["V", "H"]);
+    expect((await storedRecovery(page)).workspace.mirrors[0].types).toEqual(["V", "H"]);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(point).toHaveAttribute("aria-pressed", "true");
     await expect(point).toHaveCSS("background-color", chosen.background);
@@ -130,7 +130,7 @@ test("implied types belong to one centre, remain explicit toggles, and are never
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
     await expect(point).not.toHaveAccessibleDescription(/Implied/);
     await page.reload(); await page.waitForFunction(() => !!window.__test_matrix__);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors.map((mirror: { types: string[] }) => mirror.types)))
+    expect((await storedRecovery(page)).workspace.mirrors.map((mirror: { types: string[] }) => mirror.types))
         .toEqual([["V"], ["H"]]);
 });
 
@@ -162,7 +162,7 @@ test("implied presentation preserves clipped global drawing around off-centre mi
     }
     const impliedTarget = await cellCoord(page, 0, 2);
     expect(await pixelRGB(page, impliedTarget.cx, impliedTarget.cy)).toEqual([0, 0, 0]);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["V", "D1"]);
+    expect((await storedRecovery(page)).workspace.mirrors[0].types).toEqual(["V", "D1"]);
     await page.locator("#btn-sym-toggle").click();
     await page.locator(".sym-list-row.is-selected").getByRole("button", { name: "Horizontal", exact: true }).click();
     await page.locator("#btn-sym-toggle").click();

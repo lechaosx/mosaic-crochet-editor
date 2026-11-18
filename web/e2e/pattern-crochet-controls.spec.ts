@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { bootApp, clickCell, cellCoord } from "./_helpers";
+import { bootApp, clickCell, cellCoord, storedHistory, storedLiveProgress } from "./_helpers";
 import { contrastingProjectColors } from "../src/contrast-colors";
 
 for (const width of [1440, 390]) {
@@ -41,15 +41,15 @@ for (const commit of [false, true]) {
         await page.locator("#btn-export").click();
         await page.getByRole("button", { name: "Forward one row" }).click();
         await page.locator("#btn-export").click();
-        const progress = await page.evaluate(() => localStorage.getItem("mosaic-live-progress"));
-        const history = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!));
+        const progress = await storedLiveProgress(page);
+        const history = await storedHistory(page);
         await page.getByRole("button", { name: "Pattern", exact: true }).click();
         const width = page.locator("#edit-width"), height = page.locator("#edit-height");
         const originalWidth = await width.inputValue(), originalHeight = await height.inputValue();
         await height.fill("2");
         if (commit) await height.press("Enter");
         await expect(page.locator("#crochet-mode-label")).toHaveText("Begin Crocheting");
-        expect(await page.evaluate(() => localStorage.getItem("mosaic-live-progress"))).toBe(progress);
+        expect(await storedLiveProgress(page)).toEqual(progress);
         await height.fill(originalHeight);
         if (commit) await height.press("Enter");
         await width.fill(String(Number(originalWidth) + 2));
@@ -57,7 +57,7 @@ for (const commit of [false, true]) {
         await width.fill(originalWidth);
         if (commit) await width.press("Enter");
         await page.keyboard.press("Escape");
-        expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!))).toEqual(history);
+        expect(await storedHistory(page)).toEqual(history);
         await expect(page.locator("#crochet-mode-label")).toHaveText("Continue Crocheting");
         await page.locator("#btn-export").click();
         await expect(page.locator(".instructions-unit[aria-current='step']")).toHaveAccessibleName("Row 2, Yarn B");

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { addGlobalMirror, bootApp, cellCoord, clickCell, dragCells, chooseToolVariant, pixelRGB } from "./_helpers";
+import { addGlobalMirror, bootApp, cellCoord, clickCell, dragCells, chooseToolVariant, pixelRGB, storedHistory, storedHistoryLength, storedRecovery } from "./_helpers";
 
 test("dragging a mirror handle with Duplicate preserves the lifted source and canvas", async ({ page }) => {
     await bootApp(page);
@@ -9,15 +9,11 @@ test("dragging a mirror handle with Duplicate preserves the lifted source and ca
     await chooseToolVariant(page, "Move", "Duplicate");
     await page.locator("#btn-sym-toggle").click();
     await addGlobalMirror(page, "Vertical");
-    const before = await page.evaluate(() => {
-        const s = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        return { pixels: s.document.pixels, float: s.workspace.float, recipes: s.workspace.recipes };
-    });
+    const before = await storedRecovery(page).then(s =>
+        ({ pixels: s.document.pixels, float: s.workspace.float, recipes: s.workspace.recipes }));
     await dragCells(page, 4, 4, 3, 4);
-    expect(await page.evaluate(() => {
-        const s = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        return { pixels: s.document.pixels, float: s.workspace.float, recipes: s.workspace.recipes };
-    })).toEqual(before);
+    expect(await storedRecovery(page).then(s =>
+        ({ pixels: s.document.pixels, float: s.workspace.float, recipes: s.workspace.recipes }))).toEqual(before);
 });
 
 test("mirror center has independent types and disables parity-incompatible types", async ({ page }) => {
@@ -44,10 +40,10 @@ test("only the center handle drags while the mirror inspector is open, with one 
     await page.locator("#btn-sym-toggle").click();
     await addGlobalMirror(page, "Vertical");
     const x = page.getByRole("spinbutton", { name: "Mirror centre x" });
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
+    const before = (await storedRecovery(page)).document.pixels;
     await dragCells(page, 4, 4, 2, 3);
     await expect(x).toHaveValue("2");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(before);
+    expect((await storedRecovery(page)).document.pixels).toEqual(before);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(x).toHaveValue("4");
     await dragCells(page, 4, 1, 2, 1);
@@ -63,7 +59,7 @@ test("only the center handle drags while the mirror inspector is open, with one 
     await expect(x).toHaveValue("4");
     await page.locator("#btn-sym-toggle").click();
     await clickCell(page, 4, 4);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].x)).toBe(4);
+    expect((await storedRecovery(page)).workspace.mirrors[0].x).toBe(4);
 });
 
 test("Move area can drag a mirror center with a wholly off-chart source", async ({ page }) => {
@@ -77,7 +73,7 @@ test("Move area can drag a mirror center with a wholly off-chart source", async 
     await addGlobalMirror(page, "Vertical");
     await dragCells(page, 4, 4, 2, 3);
     await expect(page.getByRole("spinbutton", { name: "Mirror centre x" })).toHaveValue("2");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.float.x)).toBe(-4);
+    expect((await storedRecovery(page)).workspace.float.x).toBe(-4);
 });
 
 test("a mirror row action settles a held center drag before cancellation and has its own undo", async ({ page }) => {
@@ -92,13 +88,13 @@ test("a mirror row action settles a held center drag before cancellation and has
     await page.keyboard.press("Space");
     await page.keyboard.press("Escape");
     await page.mouse.up();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 2, enabled: false });
     await page.getByRole("button", { name: "Undo", exact: true }).click();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 2, enabled: true });
     await page.getByRole("button", { name: "Undo", exact: true }).click();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].x)).toBe(4);
+    expect((await storedRecovery(page)).workspace.mirrors[0].x).toBe(4);
 });
 
 test("unusable numeric coordinates retain the last valid centre and selected axes", async ({ page }) => {
@@ -118,10 +114,8 @@ test("unusable numeric coordinates retain the last valid centre and selected axe
     await x.fill("10"); await x.press("Enter");
     await expect(x).toHaveValue("4");
     await expect(y).toHaveValue("4");
-    expect(await page.evaluate(() => {
-        const m = JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0];
-        return m.x - m.y;
-    })).toBe(0);
+    const m = (await storedRecovery(page)).workspace.mirrors[0];
+    expect(m.x - m.y).toBe(0);
 });
 
 test("an unavailable typed shortcut retains a held cancellable stroke on a one-cell chart", async ({ page }) => {
@@ -131,30 +125,30 @@ test("an unavailable typed shortcut retains a held cancellable stroke on a one-c
     await (await chooser).setFiles({ name: "one-cell.mcw", mimeType: "application/json", buffer: Buffer.from(JSON.stringify({
         version: 1, state: { mode: "row", canvasWidth: 1, canvasHeight: 1 }, pixels: [2], colorA: "#000000", colorB: "#ffffff",
     })) });
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.state))
+    await expect.poll(async () => (await storedRecovery(page)).document.state)
         .toMatchObject({ canvasWidth: 1, canvasHeight: 1 });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page.locator("label:has(#lock-invalid)").click();
     await page.keyboard.press("Escape");
     const start = await cellCoord(page, 0, 0);
     const before = await pixelRGB(page, start.cx, start.cy);
-    const pixels = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
-    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    const pixels = (await storedRecovery(page)).document.pixels;
+    const history = await storedHistory(page);
     await page.mouse.move(start.cx, start.cy); await page.mouse.down();
     expect(await pixelRGB(page, start.cx, start.cy)).not.toEqual(before);
     await page.keyboard.press("v");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+    expect(await storedHistory(page)).toEqual(history);
     await page.evaluate(() => window.dispatchEvent(new Event("blur")));
     await page.mouse.up();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(pixels);
+    expect((await storedRecovery(page)).document.pixels).toEqual(pixels);
     const restored = await cellCoord(page, 0, 0);
     expect(await pixelRGB(page, restored.cx, restored.cy)).toEqual(before);
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+    expect(await storedHistory(page)).toEqual(history);
     await page.keyboard.press("Escape");
     await page.locator("#btn-sym-toggle").click();
     await page.getByRole("button", { name: "Add mirror", exact: true }).click();
     await expect(page.locator(".sym-list-row")).toHaveCount(1);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 0, y: 0, enabled: true, types: [] });
 });
 
@@ -182,7 +176,7 @@ for (const action of ["toggle", "delete", "type", "coordinate"] as const) {
         await page.locator("#btn-sym-toggle").click();
         await addGlobalMirror(page, "Vertical");
         const start = await cellCoord(page, 1, 1);
-        const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
+        const before = (await storedRecovery(page)).document.pixels;
         await page.mouse.move(start.cx, start.cy); await page.mouse.down();
         if (action === "coordinate") {
             const x = page.getByRole("spinbutton", { name: "Mirror centre x" });
@@ -193,14 +187,14 @@ for (const action of ["toggle", "delete", "type", "coordinate"] as const) {
             await button.focus(); await page.keyboard.press(action === "toggle" ? "Space" : "Enter");
         }
         await page.evaluate(() => window.dispatchEvent(new Event("blur"))); await page.mouse.up();
-        const painted = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels);
+        const painted = (await storedRecovery(page)).document.pixels;
         expect(painted).not.toEqual(before);
         await page.getByRole("button", { name: "Undo", exact: true }).click();
-        expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(painted);
+        expect((await storedRecovery(page)).document.pixels).toEqual(painted);
         await page.getByRole("button", { name: "Undo", exact: true }).click();
-        expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(before);
+        expect((await storedRecovery(page)).document.pixels).toEqual(before);
         await page.getByRole("button", { name: "Redo", exact: true }).click();
-        expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(painted);
+        expect((await storedRecovery(page)).document.pixels).toEqual(painted);
     });
 }
 
@@ -208,7 +202,7 @@ test("rejected numeric edit leaves a held centre drag cancellable", async ({ pag
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click();
     await addGlobalMirror(page, "Vertical");
-    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    const history = await storedHistory(page);
     const start = await cellCoord(page, 4, 4), end = await cellCoord(page, 2, 4);
     await page.mouse.move(start.cx, start.cy); await page.mouse.down();
     await page.mouse.move(end.cx, end.cy, { steps: 5 });
@@ -217,7 +211,7 @@ test("rejected numeric edit leaves a held centre drag cancellable", async ({ pag
     await expect(x).toHaveValue("2");
     await page.evaluate(() => window.dispatchEvent(new Event("blur"))); await page.mouse.up();
     await expect(x).toHaveValue("4");
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+    expect(await storedHistory(page)).toEqual(history);
 });
 
 test("paired numeric coordinates reach diagonal half parity in one action and reject incompatible pairs", async ({ page }) => {
@@ -227,17 +221,17 @@ test("paired numeric coordinates reach diagonal half parity in one action and re
     await page.getByRole("button", { name: "Anti-diagonal", exact: true }).click();
     const x = page.getByRole("spinbutton", { name: "Mirror centre x" });
     const y = page.getByRole("spinbutton", { name: "Mirror centre y" });
-    const history = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length);
+    const history = await storedHistoryLength(page);
     await x.fill("3.5"); await y.fill("3.5");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 4, y: 4, types: ["D1", "D2"] });
     await y.press("Enter");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0]))
+    expect((await storedRecovery(page)).workspace.mirrors[0])
         .toMatchObject({ x: 3.5, y: 3.5, types: ["D1", "D2"] });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length)).toBe(history + 1);
+    expect(await storedHistoryLength(page)).toBe(history + 1);
     await x.fill("3"); await y.press("Enter");
     await expect(x).toHaveValue("3.5"); await expect(y).toHaveValue("3.5");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-history")!).snapshots.length)).toBe(history + 1);
+    expect(await storedHistoryLength(page)).toBe(history + 1);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
     await expect(x).toHaveValue("4"); await expect(y).toHaveValue("4");
 });
@@ -252,7 +246,7 @@ test("composed mirror drawing survives a new-format Save, Open, and recovery rel
         const point = await cellCoord(page, x, y);
         expect(await pixelRGB(page, point.cx, point.cy)).toEqual([0, 0, 0]);
     }
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
+    const before = await storedRecovery(page);
     await page.evaluate(() => {
         const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
         target.showSaveFilePicker = async () => ({ createWritable: async () => ({
@@ -266,10 +260,10 @@ test("composed mirror drawing survives a new-format Save, Open, and recovery rel
     await page.locator("[data-mirror-action='toggle']").locator("..").click();
     const chooser = page.waitForEvent("filechooser"); await page.locator("#btn-load").click();
     await (await chooser).setFiles({ name: "composed-centre.mcw", mimeType: "application/json", buffer: Buffer.from(saved) });
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors)).toEqual(before.workspace.mirrors);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).document.pixels)).toEqual(before.document.pixels);
+    await expect.poll(async () => (await storedRecovery(page)).workspace.mirrors).toEqual(before.workspace.mirrors);
+    expect((await storedRecovery(page)).document.pixels).toEqual(before.document.pixels);
     await page.reload(); await page.waitForFunction(() => !!window.__test_matrix__);
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors)).toEqual(before.workspace.mirrors);
+    expect((await storedRecovery(page)).workspace.mirrors).toEqual(before.workspace.mirrors);
 });
 
 for (const width of [1280, 390]) {
@@ -282,10 +276,10 @@ for (const width of [1280, 390]) {
         await page.getByRole("button", { name: "Rotate view right", exact: true }).click();
         await page.waitForTimeout(350);
         await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-        const before = await page.evaluate(() => ({ recovery: localStorage.getItem("mosaic-recovery"), history: localStorage.getItem("mosaic-history") }));
+        const before = { recovery: await storedRecovery(page), history: await storedHistory(page) };
         const rect = await page.locator("#canvas").boundingBox();
         const centre = await cellCoord(page, 4, 4);
-        const recovery = JSON.parse(before.recovery!);
+        const recovery = before.recovery;
         const mirror = recovery.workspace.mirrors[0];
         const chooser = page.waitForEvent("filechooser");
         if (await page.locator("#btn-load").isVisible()) await page.locator("#btn-load").click();
@@ -297,7 +291,7 @@ for (const width of [1280, 390]) {
             version: 5, ...recovery.document, mirrors: [mirror, mirror],
         })) });
         await expect(page.locator("#document-error")).toBeVisible();
-        expect(await page.evaluate(() => ({ recovery: localStorage.getItem("mosaic-recovery"), history: localStorage.getItem("mosaic-history") }))).toEqual(before);
+        expect({ recovery: await storedRecovery(page), history: await storedHistory(page) }).toEqual(before);
         expect(await page.locator("#canvas").boundingBox()).toEqual(rect);
         expect(await cellCoord(page, 4, 4)).toEqual(centre);
         await page.getByRole("button", { name: "Dismiss document error", exact: true }).click();
@@ -321,16 +315,16 @@ test("global type availability follows centre drafts, edges, cancellation, and U
     await x.press("Escape");
     await expect(axis("Vertical")).toBeEnabled();
     await axis("Diagonal").click();
-    const history = await page.evaluate(() => localStorage.getItem("mosaic-history"));
+    const history = await storedHistory(page);
     await x.fill("3.5");
     await expect(axis("Anti-diagonal")).toBeDisabled();
     await expect(axis("Diagonal")).toBeEnabled();
     const disabled = (await axis("Anti-diagonal").boundingBox())!;
     await page.mouse.click(disabled.x + disabled.width / 2, disabled.y + disabled.height / 2);
     await expect(x).toHaveValue("3.5");
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors[0].types)).toEqual(["D1"]);
+    expect((await storedRecovery(page)).workspace.mirrors[0].types).toEqual(["D1"]);
     for (const name of ["Vertical", "Horizontal", "Point reflection (180°)"]) await expect(axis(name)).toBeEnabled();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-history"))).toEqual(history);
+    expect(await storedHistory(page)).toEqual(history);
     await x.press("Enter");
     await expect(x).toHaveValue("4");
     await expect(axis("Anti-diagonal")).toBeEnabled();

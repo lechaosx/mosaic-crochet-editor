@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addGlobalMirror, bootApp, cellCoord, clickCell } from "./_helpers";
+import { addGlobalMirror, bootApp, cellCoord, clickCell, storedHistory, storedRecovery } from "./_helpers";
 
 interface DrawingStroke { paths: number[][]; dash: number[]; width: number; color: string; alpha: number; offset: number; scale: number }
 
@@ -123,17 +123,17 @@ for (const tool of ["p", "f", "e", "i", "o", "s", "w", "m"]) test(`middle drag p
     await selectSource(page);
     await page.keyboard.press(tool);
     if (await page.locator("#inspector-host").isVisible()) await page.getByRole("button", { name: "Close inspector", exact: true }).click();
-    const before = await page.evaluate(() => ({ history: localStorage.getItem("mosaic-history"), recovery: localStorage.getItem("mosaic-recovery"),
-        matrix: window.__test_matrix__!.toString() }));
+    const before = { history: await storedHistory(page), recovery: await storedRecovery(page),
+        matrix: await page.evaluate(() => window.__test_matrix__!.toString()) };
     const at = await cellCoord(page, 4, 4);
     await page.keyboard.down("Shift"); await page.keyboard.down("Control"); await page.keyboard.down("Alt");
     await page.mouse.move(at.cx, at.cy); await page.mouse.down({ button: "middle" });
     await expect(page.locator("#status-action")).toBeHidden();
     await page.mouse.move(at.cx + 50, at.cy + 30); await page.mouse.up({ button: "middle" });
     await page.keyboard.up("Alt"); await page.keyboard.up("Control"); await page.keyboard.up("Shift");
-    const after = await page.evaluate(() => ({ history: localStorage.getItem("mosaic-history"), recovery: localStorage.getItem("mosaic-recovery"),
-        matrix: window.__test_matrix__!.toString() }));
-    expect(after.history).toBe(before.history); expect(after.recovery).toBe(before.recovery);
+    const after = { history: await storedHistory(page), recovery: await storedRecovery(page),
+        matrix: await page.evaluate(() => window.__test_matrix__!.toString()) };
+    expect(after.history).toEqual(before.history); expect(after.recovery).toEqual(before.recovery);
     expect(after.matrix).not.toBe(before.matrix);
 });
 
@@ -172,16 +172,16 @@ for (const mode of ["Circle", "Mirror"] as const) test(`off-centre primary ${mod
     await page.locator("#tool-select").click();
     await page.locator("label").filter({ has: page.getByRole("radio", { name: mode, exact: true }) }).click();
     await page.getByRole("button", { name: "Close inspector", exact: true }).click();
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0]);
+    const before = (await storedRecovery(page)).workspace.recipes[0];
     const at = await cellCoord(page, 2, 2);
     await page.mouse.move(at.cx + 17, at.cy); await page.mouse.down();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0])).toEqual(before);
+    expect((await storedRecovery(page)).workspace.recipes[0]).toEqual(before);
     await page.mouse.up();
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0])).toEqual(before);
+    expect((await storedRecovery(page)).workspace.recipes[0]).toEqual(before);
     await page.mouse.move(at.cx, at.cy); await page.mouse.down({ button: "right" });
     await expect(page.locator("#status-action")).toContainText("Add");
     await page.mouse.up({ button: "right" });
-    const after = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.recipes[0]);
+    const after = (await storedRecovery(page)).workspace.recipes[0];
     expect(after.rotationCentreX).toBe(before.rotationCentreX); expect(after.mirrorCentreX).toBe(before.mirrorCentreX);
 });
 
@@ -282,12 +282,12 @@ test("Grid numeric spacing edits coalesce for Undo", async ({ page }) => {
 test("right clicks at a global mirror grip execute the chosen tool alternative", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-sym-toggle").click(); await addGlobalMirror(page, "Vertical");
-    const before = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors);
+    const before = (await storedRecovery(page)).workspace.mirrors;
     const at = await cellCoord(page, 4, 4), end = await cellCoord(page, 5, 4);
     await page.mouse.move(at.cx, at.cy); await page.mouse.down({ button: "right" });
     await expect(page.locator("#status-action")).toContainText("Pencil · Yarn B");
     await page.mouse.move(end.cx, end.cy); await page.mouse.up({ button: "right" });
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors)).toEqual(before);
+    expect((await storedRecovery(page)).workspace.mirrors).toEqual(before);
 });
 
 for (const dpr of [1, 3]) test.describe(`touching Grid copies at DPR ${dpr}`, () => {

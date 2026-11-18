@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { storedRecovery } from "./_helpers";
 
 async function bootFresh(page: import("@playwright/test").Page) {
     await page.goto("/");
@@ -24,7 +25,7 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
     await expect(about.getByRole("button", { name: "New" })).toBeFocused();
     await expect(about.getByRole("button", { name: "Open" })).toBeVisible();
     await expect(about.getByRole("button", { name: "Example" })).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBeNull();
+    expect(await storedRecovery(page)).toBeNull();
     const currentReleaseHash = await about.locator("#about-release-notes").getAttribute("data-current-hash");
     expect(currentReleaseHash).toMatch(/^[a-f0-9]{64}$/);
 
@@ -32,10 +33,8 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
 
     await expect(about).toBeHidden();
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
-    expect(await page.evaluate(() =>
-        JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace.mirrors,
-    )).toEqual([]);
+    expect(await storedRecovery(page)).not.toBeNull();
+    expect((await storedRecovery(page)).workspace.mirrors).toEqual([]);
     expect(await page.evaluate(() => localStorage.getItem("mosaic-about-release-notes")))
         .toBe(currentReleaseHash);
 });
@@ -57,7 +56,7 @@ test("canceling the About file picker keeps the dialog available", async ({ page
         .getByRole("button", { name: "Open", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).toBeNull();
+    expect(await storedRecovery(page)).toBeNull();
 });
 
 test("opening an mcw file from About enters the editor", async ({ page }) => {
@@ -79,7 +78,7 @@ test("opening an mcw file from About enters the editor", async ({ page }) => {
     });
 
     await expect(page.locator("#about-dialog")).toBeHidden();
-    const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
+    const recovery = await storedRecovery(page);
     expect(recovery.document.state.canvasWidth).toBe(3);
 });
 
@@ -133,14 +132,14 @@ test("legacy browser recovery still shows About for unseen release notes", async
 
     await expect(page.locator("#about-dialog")).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem("mosaic-pattern-v4"))).toBeNull();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-recovery"))).not.toBeNull();
+    expect(await storedRecovery(page)).not.toBeNull();
 });
 
 test("example is editable and demonstrates overlay, global mirror, and Crochet", async ({ page }) => {
     await bootFresh(page);
     await page.getByRole("button", { name: "Example" }).click();
 
-    const recovery = await page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!));
+    const recovery = await storedRecovery(page);
     expect(recovery.workspace.mirrors.length).toBeGreaterThan(0);
     expect(recovery.workspace.recipes).toHaveLength(1);
     expect(recovery.workspace.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: [] });

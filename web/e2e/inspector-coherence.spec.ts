@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, dragCells, chooseToolVariant } from "./_helpers";
+import { bootApp, clickCell, dragCells, chooseToolVariant, storedRecovery } from "./_helpers";
 
-const workspace = (page: import("@playwright/test").Page) => page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-recovery")!).workspace);
+const workspace = async (page: import("@playwright/test").Page) => (await storedRecovery(page)).workspace;
 
 test("No selection preserves saved sources and the next gesture makes another source", async ({ page }) => {
     await bootApp(page);

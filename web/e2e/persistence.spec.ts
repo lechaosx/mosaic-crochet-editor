@@ -1,7 +1,7 @@
 // Persistence + boot-time consistency checks.
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, cellCoord, countRecoveryWrites, failRecoveryWrites, pixelRGB, storedHistory, storedRecovery } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
 
@@ -9,14 +9,14 @@ test("Save downloads no empty selection record and Open restores an editable uns
     await bootApp(page);
     await clickCell(page, 0, 1);
     await page.evaluate(() => { delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker; });
-    const before = await page.evaluate(() => ({ recovery: localStorage.getItem("mosaic-recovery"), history: localStorage.getItem("mosaic-history") }));
+    const before = { recovery: await storedRecovery(page), history: await storedHistory(page) };
     const downloading = page.waitForEvent("download");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     const download = await downloading;
     expect(download.suggestedFilename()).toBe("pattern.mcw");
     const source = await readFile((await download.path())!, "utf8");
     expect(JSON.parse(source).recipes).toEqual([]);
-    expect(await page.evaluate(() => ({ recovery: localStorage.getItem("mosaic-recovery"), history: localStorage.getItem("mosaic-history") }))).toEqual(before);
+    expect({ recovery: await storedRecovery(page), history: await storedHistory(page) }).toEqual(before);
 
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);
@@ -34,13 +34,7 @@ test("Save downloads no empty selection record and Open restores an editable uns
 });
 
 test("local recovery failure stays visible and does not imply an mcw save", async ({ page }) => {
-    await page.addInitScript(() => {
-        const setItem = Storage.prototype.setItem;
-        Storage.prototype.setItem = function (key, value) {
-            if (key === "mosaic-recovery") throw new DOMException("full", "QuotaExceededError");
-            return setItem.call(this, key, value);
-        };
-    });
+    await failRecoveryWrites(page);
 
     await bootApp(page);
     const recoveryStatus = page.getByRole("status", { name: "Browser recovery" });
@@ -51,19 +45,9 @@ test("local recovery failure stays visible and does not imply an mcw save", asyn
 });
 
 test("continuous paint writes recovery once when the stroke completes", async ({ page }) => {
-    await page.addInitScript(() => {
-        const setItem = Storage.prototype.setItem;
-        let patternWrites = 0;
-        Storage.prototype.setItem = function (key, value) {
-            if (key === "mosaic-recovery") patternWrites++;
-            return setItem.call(this, key, value);
-        };
-        Object.defineProperty(window, "__patternWriteCount", { get: () => patternWrites });
-    });
+    const recoveryWrites = await countRecoveryWrites(page);
     await bootApp(page);
-    const writesBefore = await page.evaluate(() =>
-        (window as typeof window & { __patternWriteCount: number }).__patternWriteCount,
-    );
+    const writesBefore = await recoveryWrites();
     const start = await cellCoord(page, 0, 1);
     const end = await cellCoord(page, 3, 1);
 
@@ -72,14 +56,10 @@ test("continuous paint writes recovery once when the stroke completes", async ({
     await page.mouse.move(end.cx, end.cy, { steps: 10 });
 
     expect(await pixelRGB(page, end.cx, end.cy)).toEqual(A);
-    expect(await page.evaluate(() =>
-        (window as typeof window & { __patternWriteCount: number }).__patternWriteCount,
-    )).toBe(writesBefore);
+    expect(await recoveryWrites()).toBe(writesBefore);
 
     await page.mouse.up();
-    expect(await page.evaluate(() =>
-        (window as typeof window & { __patternWriteCount: number }).__patternWriteCount,
-    )).toBe(writesBefore + 1);
+    expect(await recoveryWrites()).toBe(writesBefore + 1);
 
     await page.reload();
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
