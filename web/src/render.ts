@@ -111,6 +111,9 @@ export interface RendererState {
     selectionHandlesVisible: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
+    // What the favicon was last drawn from: drawing it walks every cell, so it
+    // is redrawn only when these change.
+    faviconDrawn: { pixels: Uint8Array; width: number; height: number; colorA: string | null; colorB: string | null } | null;
     // Null when the browser cannot provide one; the overlay still renders.
     chart:         ChartLayer | null;
     // Repacked only when the plan or the instruction guidance changes: every
@@ -143,6 +146,7 @@ export function makeRendererState(preferences: AppPreferences, chart: ChartLayer
         selectionHandlesVisible: false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
+        faviconDrawn:   null,
         chart,
         chartCells:     null,
         instructionSeam: null,
@@ -353,11 +357,13 @@ function writeRgb(data: Uint8ClampedArray, index: number, [r, g, b]: [number, nu
     data[index] = r; data[index + 1] = g; data[index + 2] = b; data[index + 3] = 255;
 }
 
-function updateFavicon(
-    faviconCanvas: HTMLCanvasElement, faviconCtx: CanvasRenderingContext2D,
-    colors: (string | null)[], pattern: PatternState, pixels: Uint8Array,
-) {
+function updateFavicon(rs: RendererState, pattern: PatternState, pixels: Uint8Array) {
+    const { faviconCanvas, faviconCtx, colors } = rs;
     const { canvasWidth: W, canvasHeight: H } = pattern;
+    const drawn = rs.faviconDrawn;
+    if (drawn && drawn.pixels === pixels && drawn.width === W && drawn.height === H
+        && drawn.colorA === colors[1] && drawn.colorB === colors[2]) return;
+    rs.faviconDrawn = { pixels, width: W, height: H, colorA: colors[1], colorB: colors[2] };
     const scale = Math.min(FAVICON_SIZE / W, FAVICON_SIZE / H);
     const px    = Math.max(1, Math.floor(scale));
     const offX  = Math.floor((FAVICON_SIZE - W * scale) / 2);
@@ -486,7 +492,7 @@ export function render(vp: Viewport, ctx: CanvasRenderingContext2D, rs: Renderer
     const antsVisible = rs.dragRect !== null
         || (!rs.hideCommittedSelection && store.state.float !== null);
     if (antsVisible && !reducedMotion()) startRaf(rs, vp, ctx);
-    updateFavicon(rs.faviconCanvas, rs.faviconCtx, rs.colors, store.state.pattern, store.state.pixels);
+    updateFavicon(rs, store.state.pattern, store.state.pixels);
     rerender(vp, ctx, rs, store);
 }
 
