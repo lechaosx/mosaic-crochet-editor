@@ -38,11 +38,13 @@ State is classified by meaning, not by whichever storage mechanism currently hol
 |---|---|---|
 | Project document | Pattern geometry and cells, yarn definitions, global mirror centres and their selected types, saved repeat definitions, and project-specific display overrides travel in `.mcw`. | **your decision** |
 | Editor workspace | Active tools, live selection, current repeat source, and other resume-editing context may be recovered locally but are not part of the portable project. | **your decision** |
-| Undo and redo | Reversible authored edits and relevant editing context have their own browser-local history, including yarns and project Danger/Accent overrides; camera navigation, browser preferences, and crochet progress are excluded. | **your decision**; project-palette distinction: **Agent's choice** |
+| Undo and redo | Each project has its own browser-local history of reversible authored edits and relevant editing context, including yarns and project Danger/Accent overrides, kept across reloads; camera navigation, browser preferences, and crochet progress are excluded. The history marks the step that matches the last saved file, so undoing back to it leaves the project unmodified. | **your decision**; project-palette distinction: **Agent's choice** |
 | Preferences | App-wide display defaults are browser-local and remain separate from both project documents and recovery snapshots. | **your decision** |
 | Crochet progress | Progress is browser-local, keyed to compatible pattern geometry, and is neither project content nor an authored edit. | **your decision** |
 
 File formats and browser records are versioned and validated before replacing live state. Supported older project data is migrated at the boundary rather than leaking compatibility cases through editor logic. — **joint**
+
+Each open project's recovery record and undo history live in IndexedDB under the project's id, one record per undo snapshot so an edit writes only what it adds; a small localStorage index lists the open projects. The in-memory session is authoritative and records are written behind it, so a storage failure is reported but never limits editing or undo depth. — **Agent's choice**
 
 ## Editor and presentation boundaries
 

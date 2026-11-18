@@ -30,7 +30,6 @@ describe("app preferences", () => {
             dangerColor: contrastingProjectColors("#000000", "#ffffff").danger,
             accentColor: contrastingProjectColors("#000000", "#ffffff").accent,
         });
-        expect(localStorage.getItem("mosaic-recovery")).toBeNull();
     });
 
     test("stored legacy palette defaults cannot redefine the application palette", () => {

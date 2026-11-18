@@ -1,13 +1,24 @@
 // @vitest-environment jsdom
-import { beforeEach, expect, test } from "vitest";
+import { expect, test } from "vitest";
 import { decodeMcw, decodeMcwWithMigration, encodeMcw } from "@mosaic/logic/mcw";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { packPixels } from "@mosaic/logic/storage";
-import { loadFromLocalStorage, saveToLocalStorage } from "../src/storage-io";
-import { historyFrom, loadHistory, writeHistory } from "../src/history";
+import { recoveryRecord, sessionFromRecovery } from "../src/storage-io";
+import { historyChanges, historyFrom, historyFromStored } from "../src/history";
 import { rowSession } from "./_helpers";
+import type { SessionState } from "@mosaic/logic/store";
 
-beforeEach(() => localStorage.clear());
+// Recovery and history records of `session`, read back after `edit` changed their stored recipes.
+function recoveredWith(session: SessionState, edit: (recipes: any[]) => void) {
+    const record = structuredClone(recoveryRecord(session));
+    edit(record.workspace.recipes);
+    return sessionFromRecovery(record);
+}
+function historyWith(session: SessionState, edit: (recipes: any[]) => void) {
+    const { meta, put } = structuredClone(historyChanges(null, historyFrom(session)));
+    edit(put[0].transforms.recipes);
+    return historyFromStored(meta, put);
+}
 const legacyCases = [
     { name: "Grid with dormant centre settings", oldMode: "grid", turns: [90], horizontal: true, vertical: true, mode: "grid", types: ["V", "H"], changed: false },
     { name: "chosen turns", oldMode: "rotation", turns: [90, 270], horizontal: false, vertical: false, mode: "circle", types: [], changed: false },
@@ -73,16 +84,8 @@ test("current marked project, recovery, and history reject incomplete legacy-loo
     const file = JSON.parse(encodeMcw(session));
     file.recipes[0] = { ...legacy, source: file.recipes[0].source };
     expect(() => decodeMcwWithMigration(JSON.stringify(file))).toThrow();
-    saveToLocalStorage(session);
-    const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-    recovery.workspace.recipes = [legacy];
-    localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
-    expect(loadFromLocalStorage()).toBeNull();
-    writeHistory(historyFrom(session));
-    const history = JSON.parse(localStorage.getItem("mosaic-history")!);
-    history.snapshots[0].transforms.recipes = [legacy];
-    localStorage.setItem("mosaic-history", JSON.stringify(history));
-    expect(loadHistory()).toBeNull();
+    expect(recoveredWith(session, recipes => { recipes[0] = legacy; })).toBeNull();
+    expect(historyWith(session, recipes => { recipes[0] = legacy; })).toBeNull();
 });
 
 test.each(["mode", "rotationCentreX", "mirrorCentreY", "rotationTurns", "mirrorTypes"])(
@@ -91,16 +94,8 @@ test.each(["mode", "rotationCentreX", "mirrorCentreY", "rotationTurns", "mirrorT
         const file = JSON.parse(encodeMcw(session));
         delete file.recipes[0][field];
         expect(() => decodeMcwWithMigration(JSON.stringify(file))).toThrow();
-        saveToLocalStorage(session);
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        delete recovery.workspace.recipes[0][field];
-        localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
-        expect(loadFromLocalStorage()).toBeNull();
-        writeHistory(historyFrom(session));
-        const history = JSON.parse(localStorage.getItem("mosaic-history")!);
-        delete history.snapshots[0].transforms.recipes[0][field];
-        localStorage.setItem("mosaic-history", JSON.stringify(history));
-        expect(loadHistory()).toBeNull();
+        expect(recoveredWith(session, recipes => { delete recipes[0][field]; })).toBeNull();
+        expect(historyWith(session, recipes => { delete recipes[0][field]; })).toBeNull();
     });
 
 const malformedCategories = [
@@ -116,16 +111,8 @@ test.each(malformedCategories.flatMap(value => ["project", "recovery", "history"
             file.recipes[0][field] = value;
             expect(() => decodeMcwWithMigration(JSON.stringify(file))).toThrow();
         } else if (boundary === "recovery") {
-            saveToLocalStorage(session);
-            const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-            recovery.workspace.recipes[0][field] = value;
-            localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
-            expect(loadFromLocalStorage()).toBeNull();
+            expect(recoveredWith(session, recipes => { recipes[0][field] = value; })).toBeNull();
         } else {
-            writeHistory(historyFrom(session));
-            const history = JSON.parse(localStorage.getItem("mosaic-history")!);
-            history.snapshots[0].transforms.recipes[0][field] = value;
-            localStorage.setItem("mosaic-history", JSON.stringify(history));
-            expect(loadHistory()).toBeNull();
+            expect(historyWith(session, recipes => { recipes[0][field] = value; })).toBeNull();
         }
     });

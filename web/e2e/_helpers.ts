@@ -193,60 +193,194 @@ export async function bootApp(page: Page) {
 }
 
 // The helpers below keep the storage layout of the recovery, undo history and
-// Crochet progress records out of the specs that observe them.
+// Crochet progress records out of the specs that observe them. Project records
+// live in IndexedDB under the active project's id from the localStorage index.
 
-// Persisted record, parsed, or null when absent.
-function storedRecord(page: Page, key: string): Promise<any> {
+// Records in the project database: by project id for "recovery" and "history",
+// and by [project id, snapshot id] for "snapshots". Null when the app hasn't
+// created the database. A read transaction runs after every write transaction
+// created before it, so this sees each write the app has already issued.
+function projectDatabase(page: Page): Promise<any> {
+    return page.evaluate(async () => {
+        if (!(await indexedDB.databases()).some(database => database.name === "mosaic-projects")) return null;
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open("mosaic-projects");
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        try {
+            return await new Promise((resolve, reject) => {
+                const transaction = database.transaction(["recovery", "history", "snapshots"], "readonly");
+                const requests = ["recovery", "history", "snapshots"].map(name => {
+                    const store = transaction.objectStore(name);
+                    return [name, store.getAllKeys(), store.getAll()] as const;
+                });
+                transaction.oncomplete = () => resolve(Object.fromEntries(requests.map(([name, keys, values]) =>
+                    [name, keys.result.map((key, i) => ({ key, value: values.result[i] }))])));
+                transaction.onerror = () => reject(transaction.error);
+            });
+        } finally {
+            database.close();
+        }
+    });
+}
+
+function activeProject(page: Page): Promise<string> {
+    return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-projects")!).active);
+}
+
+async function storedProject(page: Page) {
+    const [records, project] = await Promise.all([projectDatabase(page), activeProject(page)]);
+    const value = (name: string) => records?.[name].find((record: any) => record.key === project)?.value ?? null;
+    const snapshots = new Map((records?.snapshots ?? [])
+        .filter((record: any) => record.key[0] === project)
+        .map((record: any) => [record.key[1], record.value]));
+    return { recovery: value("recovery"), history: value("history"), snapshots };
+}
+
+export async function storedRecovery(page: Page) {
+    return (await storedProject(page)).recovery;
+}
+
+// The stored undo snapshots in order and the current index, or null.
+export async function storedHistory(page: Page) {
+    const { history, snapshots } = await storedProject(page);
+    return history && { snapshots: history.ids.map((id: number) => snapshots.get(id)), index: history.index };
+}
+
+// Number of stored snapshot records, including any the history no longer lists.
+export async function storedHistoryLength(page: Page): Promise<number> {
+    return (await storedProject(page)).snapshots.size;
+}
+
+// Whether the stored history's current snapshot is the one last saved, or that
+// a new, opened or example project started from.
+export async function storedHistoryIsClean(page: Page): Promise<boolean> {
+    const { history } = await storedProject(page);
+    return history.cleanId === history.ids[history.index];
+}
+
+// Ids of every project with records in the project database.
+export async function storedProjectIds(page: Page): Promise<string[]> {
+    const records = await projectDatabase(page);
+    return [...new Set(["recovery", "history", "snapshots"].flatMap(name =>
+        records[name].map(({ key }: { key: IDBValidKey }) => Array.isArray(key) ? key[0] : key)))].sort();
+}
+
+// Stores records of a project the index doesn't list, as a closed project leaves.
+export function addUnlistedProject(page: Page, id: string) {
+    return page.evaluate(async id => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open("mosaic-projects");
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        await new Promise((resolve, reject) => {
+            const transaction = database.transaction(["recovery", "history", "snapshots"], "readwrite");
+            transaction.objectStore("recovery").put({}, id);
+            transaction.objectStore("history").put({}, id);
+            transaction.objectStore("snapshots").put({}, [id, 0]);
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+        });
+        database.close();
+    }, id);
+}
+
+export async function storedLiveProgress(page: Page) {
+    const project = await activeProject(page);
     return page.evaluate(key => {
         const raw = localStorage.getItem(key);
         return raw === null ? null : JSON.parse(raw);
-    }, key);
+    }, `mosaic-live-progress:${project}`);
 }
 
-export function storedRecovery(page: Page) {
-    return storedRecord(page, "mosaic-recovery");
-}
-
-export function storedHistory(page: Page) {
-    return storedRecord(page, "mosaic-history");
-}
-
-export async function storedHistoryLength(page: Page): Promise<number> {
-    return (await storedHistory(page)).snapshots.length;
-}
-
-export function storedLiveProgress(page: Page) {
-    return storedRecord(page, "mosaic-live-progress");
-}
-
-// From the next navigation on, writing the record throws as when storage is full.
-function failWrites(page: Page, key: string) {
-    return page.addInitScript(key => {
-        const setItem = Storage.prototype.setItem;
-        Storage.prototype.setItem = function (itemKey, value) {
-            if (itemKey === key) throw new DOMException("full", "QuotaExceededError");
-            return setItem.call(this, itemKey, value);
+// From the next navigation on, every write to the project database store
+// `name` fails as when storage is full.
+function failStoreWrites(page: Page, name: string) {
+    return page.addInitScript(name => {
+        const put = IDBObjectStore.prototype.put;
+        IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore["put"]>) {
+            const request = put.apply(this, args);
+            if (this.name === name) this.transaction.abort();
+            return request;
         };
-    }, key);
+    }, name);
 }
 
 export function failRecoveryWrites(page: Page) {
-    return failWrites(page, "mosaic-recovery");
+    return failStoreWrites(page, "recovery");
 }
 
+// From the next navigation on, the returned function makes the next write of
+// undo history metadata fail as when storage is full.
+export async function failNextHistoryWrite(page: Page): Promise<() => Promise<void>> {
+    await page.addInitScript(() => {
+        const put = IDBObjectStore.prototype.put;
+        IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore["put"]>) {
+            const request = put.apply(this, args);
+            const target = window as typeof window & { __failNextHistoryWrite?: boolean };
+            if (this.name === "history" && target.__failNextHistoryWrite) {
+                target.__failNextHistoryWrite = false;
+                this.transaction.abort();
+            }
+            return request;
+        };
+    });
+    return () => page.evaluate(() => { (window as typeof window & { __failNextHistoryWrite?: boolean }).__failNextHistoryWrite = true; });
+}
+
+// From the next navigation on, the project index is missing and can't be stored.
+export function loseProjectIndex(page: Page) {
+    return page.addInitScript(() => {
+        localStorage.removeItem("mosaic-projects");
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key === "mosaic-projects") throw new DOMException("full", "QuotaExceededError");
+            return setItem.call(this, key, value);
+        };
+    });
+}
+
+// Opens the project database at a newer version, as a newer build of the app
+// in another tab would. Resolves to whether the open proceeded rather than
+// being blocked by this page's connection.
+export function upgradeProjectDatabase(page: Page): Promise<boolean> {
+    return page.evaluate(() => new Promise<boolean>(resolve => {
+        const request = indexedDB.open("mosaic-projects", 2);
+        request.onblocked = () => resolve(false);
+        request.onsuccess = () => { request.result.close(); resolve(true); };
+    }));
+}
+
+// From the next navigation on, the project database can't be opened, as in
+// browsers that deny IndexedDB.
+export function blockProjectDatabase(page: Page) {
+    return page.addInitScript(() => {
+        IDBFactory.prototype.open = () => { throw new DOMException("denied", "SecurityError"); };
+    });
+}
+
+// From the next navigation on, writing Crochet progress throws as when storage is full.
 export function failLiveProgressWrites(page: Page) {
-    return failWrites(page, "mosaic-live-progress");
+    return page.addInitScript(() => {
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+            if (key.startsWith("mosaic-live-progress:")) throw new DOMException("full", "QuotaExceededError");
+            return setItem.call(this, key, value);
+        };
+    });
 }
 
 // From the next navigation on, counts recovery writes since that page load.
 // Returns a reader for the current count.
 export async function countRecoveryWrites(page: Page): Promise<() => Promise<number>> {
     await page.addInitScript(() => {
-        const setItem = Storage.prototype.setItem;
+        const put = IDBObjectStore.prototype.put;
         let writes = 0;
-        Storage.prototype.setItem = function (key, value) {
-            if (key === "mosaic-recovery") writes++;
-            return setItem.call(this, key, value);
+        IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore["put"]>) {
+            if (this.name === "recovery") writes++;
+            return put.apply(this, args);
         };
         Object.defineProperty(window, "__recoveryWriteCount", { get: () => writes });
     });

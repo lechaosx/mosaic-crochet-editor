@@ -6,12 +6,11 @@ import { mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
 import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 
-const RECOVERY_KEY     = "mosaic-recovery";
 const RECOVERY_VERSION = 9;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 function recoveryColorOverride(value: unknown): string | null {
-    if (value === undefined || value === null) return null;
+    if (value === null) return null;
     if (typeof value !== "string" || !HEX_COLOR.test(value)) throw new TypeError("Invalid recovery colour.");
     return value;
 }
@@ -21,15 +20,16 @@ function recoveryYarnColor(value: unknown): string {
     return value;
 }
 
-interface Recovery {
+// The project's resume-editing record: its document and editor workspace.
+export interface Recovery {
     version: 9;
     document: {
         state:  PatternState;
         pixels: string;
         colorA: string;
         colorB: string;
-        dangerColorOverride?: string | null;
-        accentColorOverride?: string | null;
+        dangerColorOverride: string | null;
+        accentColorOverride: string | null;
     };
     workspace: {
         activeTool:     string;
@@ -43,7 +43,7 @@ interface Recovery {
     };
 }
 
-function recoveryFromSession(s: Readonly<SessionState>): Recovery {
+export function recoveryRecord(s: Readonly<SessionState>): Recovery {
     return {
         version: RECOVERY_VERSION,
         document: {
@@ -63,32 +63,21 @@ function recoveryFromSession(s: Readonly<SessionState>): Recovery {
     };
 }
 
-export function saveToLocalStorage(s: Readonly<SessionState>): boolean {
+// Null when `value` is not a valid recovery record.
+export function sessionFromRecovery(value: unknown): SessionState | null {
+    if (typeof value !== "object" || value === null) return null;
+    const recovery = value as Recovery;
+    if (recovery.version !== RECOVERY_VERSION
+        || typeof recovery.document !== "object" || recovery.document === null
+        || typeof recovery.workspace !== "object" || recovery.workspace === null) return null;
     try {
-        localStorage.setItem(RECOVERY_KEY, JSON.stringify(recoveryFromSession(s)));
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-export function loadFromLocalStorage(): SessionState | null {
-    const saved = localStorage.getItem(RECOVERY_KEY);
-    if (!saved) return null;
-    try {
-        const parsed: unknown = JSON.parse(saved);
-        if (typeof parsed !== "object" || parsed === null) return null;
-        const recovery = parsed as Recovery;
-        if (recovery.version !== RECOVERY_VERSION
-            || typeof recovery.document !== "object" || recovery.document === null
-            || typeof recovery.workspace !== "object" || recovery.workspace === null) return null;
         const { document, workspace } = recovery;
         assertPatternDimensions(document.state);
         const mirrors = readMirrorRecords(workspace.mirrors);
-        if (!mirrors) return null;
+        if (!mirrors || typeof workspace.rotation !== "number") return null;
         const recipes = restoreGridRecipes(workspace.recipes, false);
         if (!Array.isArray(workspace.recipes)
-            || (workspace.recipes.length > 0 && recipes.length !== workspace.recipes.length)) throw new TypeError("Invalid recovered selections.");
+            || (workspace.recipes.length > 0 && recipes.length !== workspace.recipes.length)) return null;
         const float = workspace.float ? unpackFloat(workspace.float) : null;
         return {
             pattern:          document.state,
@@ -109,9 +98,9 @@ export function loadFromLocalStorage(): SessionState | null {
             ),
             liveMirrors:      true,
             float,
-            rotation:         workspace.rotation ?? 0,
+            rotation:         workspace.rotation,
         };
-    } catch { localStorage.removeItem(RECOVERY_KEY); return null; }
+    } catch { return null; }
 }
 
 function recoveryToolVariants(value: unknown): ToolVariants {

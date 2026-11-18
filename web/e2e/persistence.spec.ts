@@ -1,9 +1,28 @@
 // Persistence + boot-time consistency checks.
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { bootApp, clickCell, cellCoord, countRecoveryWrites, dragCells, failRecoveryWrites, pixelRGB, storedHistory, storedRecovery } from "./_helpers";
+import { addUnlistedProject, blockProjectDatabase, bootApp, clickCell, cellCoord, countRecoveryWrites, dragCells, failNextHistoryWrite,
+         failRecoveryWrites, loseProjectIndex, pixelRGB, upgradeProjectDatabase, storedHistory, storedHistoryIsClean, storedHistoryLength, storedProjectIds, storedRecovery } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
+const B: [number, number, number] = [255, 255, 255];
+
+async function cellRGB(page: Page, x: number, y: number) {
+    const { cx, cy } = await cellCoord(page, x, y);
+    return pixelRGB(page, cx, cy);
+}
+
+async function reloadApp(page: Page) {
+    await page.reload();
+    await page.waitForFunction(() => !!window.__test_matrix__);
+}
+
+async function saveDownload(page: Page) {
+    await page.evaluate(() => { delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker; });
+    const downloading = page.waitForEvent("download");
+    await page.getByRole("button", { name: "Save", exact: true }).click();
+    await downloading;
+}
 
 test("Save downloads no empty selection record and Open restores an editable unselected project", async ({ page }) => {
     await bootApp(page);
@@ -81,7 +100,7 @@ test("a paint stroke that changes nothing in a selection writes no recovery", as
     expect(await recoveryWrites()).toBe(writesBefore);
 });
 
-test("paint, reload, content survives via localStorage", async ({ page }) => {
+test("paint, reload, content survives via browser recovery", async ({ page }) => {
     await bootApp(page);
     // Paint a recognisable cell (0, 1) = primary A (cell baseline is B).
     await page.keyboard.press("p");
@@ -163,4 +182,128 @@ test("rapid state changes during marching-ants animation don't tear: final state
     // last-known cell still has the painted colour.
     const c = await cellCoord(page, 0, 1);
     expect((await pixelRGB(page, c.cx, c.cy))).toEqual(A);
+});
+
+test("reload restores the document with its undo history", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    await clickCell(page, 1, 1);
+    await reloadApp(page);
+
+    expect(await cellRGB(page, 1, 1)).toEqual(A);
+    await page.keyboard.press("Control+z");
+    expect(await cellRGB(page, 1, 1)).toEqual(B);
+    expect(await cellRGB(page, 0, 1)).toEqual(A);
+    await page.keyboard.press("Control+y");
+    expect(await cellRGB(page, 1, 1)).toEqual(A);
+});
+
+test("an edit after undo deletes the stored snapshots it discards from redo", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    for (let x = 0; x < 3; x++) await clickCell(page, x, 1);
+    expect(await storedHistoryLength(page)).toBe(4);
+    await page.keyboard.press("Control+z");
+    await page.keyboard.press("Control+z");
+    await clickCell(page, 4, 1);
+    expect(await storedHistoryLength(page)).toBe(3);
+});
+
+test("the project is clean at its start, after Save, and after undoing back to the save, across reloads", async ({ page }) => {
+    await bootApp(page);
+    expect(await storedHistoryIsClean(page)).toBe(true);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    expect(await storedHistoryIsClean(page)).toBe(false);
+    await saveDownload(page);
+    await expect.poll(() => storedHistoryIsClean(page)).toBe(true);
+
+    await clickCell(page, 1, 1);
+    expect(await storedHistoryIsClean(page)).toBe(false);
+    await page.keyboard.press("Control+z");
+    expect(await storedHistoryIsClean(page)).toBe(true);
+    await reloadApp(page);
+    expect(await storedHistoryIsClean(page)).toBe(true);
+
+    await page.keyboard.press("Control+z");
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    expect(await cellRGB(page, 0, 1)).toEqual(A);
+    expect(await storedHistoryIsClean(page)).toBe(false);
+});
+
+test("without IndexedDB the failure stays visible and the whole undo history still works", async ({ page }) => {
+    await blockProjectDatabase(page);
+    await bootApp(page);
+    const recoveryStatus = page.getByRole("status", { name: "Browser recovery" });
+    await expect(recoveryStatus).toHaveText("Recovery failed");
+    await page.keyboard.press("p");
+    for (let x = 0; x < 4; x++) await clickCell(page, x, 1);
+    await expect(recoveryStatus).toHaveText("Recovery failed");
+
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Control+z");
+    for (let x = 0; x < 4; x++) expect(await cellRGB(page, x, 1)).toEqual(B);
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+    await page.keyboard.press("Control+y");
+    expect(await cellRGB(page, 0, 1)).toEqual(A);
+});
+
+test("boot removes the single-session browser records", async ({ page }) => {
+    const retired = ["mosaic-recovery", "mosaic-pattern-v4", "mosaic-history", "mosaic-history-v4", "mosaic-live-progress"];
+    await page.addInitScript(keys => { for (const key of keys) localStorage.setItem(key, "{}"); }, retired);
+    await bootApp(page);
+    expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), retired)).toEqual(retired.map(() => null));
+});
+
+test("boot deletes the records of projects that are no longer open", async ({ page }) => {
+    await bootApp(page);
+    const open = await storedProjectIds(page);
+    await addUnlistedProject(page, "closed");
+    expect(await storedProjectIds(page)).toEqual([...open, "closed"].sort());
+    await reloadApp(page);
+    expect(await storedProjectIds(page)).toEqual(open);
+});
+
+test("a failed undo history write stays reported until a later write stores the whole history", async ({ page }) => {
+    const failNextWrite = await failNextHistoryWrite(page);
+    await bootApp(page);
+    const recoveryStatus = page.getByRole("status", { name: "Browser recovery" });
+    await failNextWrite();
+    // Both yarn edits are issued before the first one's failure is known.
+    await page.evaluate(() => {
+        const yarn = document.getElementById("color-a") as HTMLInputElement;
+        for (const value of ["#111111", "#222222"]) {
+            yarn.value = value;
+            yarn.dispatchEvent(new Event("input"));
+            yarn.dispatchEvent(new Event("change"));
+        }
+    });
+    await storedHistory(page);
+    await expect(recoveryStatus).toHaveText("Recovery failed");
+
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    await expect(recoveryStatus).toBeHidden();
+    await reloadApp(page);
+    for (let i = 0; i < 3; i++) await page.keyboard.press("Control+z");
+    await expect(page.locator("#color-a")).toHaveValue("#000000");
+    await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
+});
+
+test("a newer app version can upgrade the project database while this one runs", async ({ page }) => {
+    await bootApp(page);
+    expect(await upgradeProjectDatabase(page)).toBe(true);
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    await expect(page.getByRole("status", { name: "Browser recovery" })).toHaveText("Recovery failed");
+});
+
+test("when the project index can't be stored, the failure shows and other projects' records are kept", async ({ page }) => {
+    await bootApp(page);
+    const projects = await storedProjectIds(page);
+    await loseProjectIndex(page);
+    await reloadApp(page);
+    await expect(page.getByRole("status", { name: "Browser recovery" })).toHaveText("Recovery failed");
+    expect(await storedProjectIds(page)).toEqual(projects);
 });

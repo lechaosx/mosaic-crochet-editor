@@ -1,40 +1,31 @@
 // @vitest-environment jsdom
-// localStorage IO tests — pure pack/unpack tests live in logic/tests/storage.test.ts.
+// Recovery record and file IO tests — pure pack/unpack tests live in logic/tests/storage.test.ts.
 
-import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
-import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile } from "../src/storage-io";
+import { describe, test, expect, afterEach, vi } from "vitest";
+import { recoveryRecord, sessionFromRecovery, saveToFile, loadFromFile } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addMirror } from "@mosaic/logic/symmetry";
 import { encodeMcw } from "@mosaic/logic/mcw";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { contrastingProjectColors } from "../src/contrast-colors";
+import type { SessionState } from "@mosaic/logic/store";
 
-beforeEach(() => { localStorage.clear(); });
+// The session as read back from its stored recovery record, with `edit`
+// applied to the stored record first.
+function recovered(s: SessionState, edit: (record: any) => void = () => {}) {
+    const record = structuredClone(recoveryRecord(s));
+    edit(record);
+    return sessionFromRecovery(record);
+}
 
-describe("saveToLocalStorage / loadFromLocalStorage", () => {
+describe("recoveryRecord / sessionFromRecovery", () => {
     test("chosen tool variants are recovered independently of authored content", () => {
         const toolVariants = { select: "add", wand: "remove", move: "duplicate", overlay: "clear" } as const;
         const session = rowSession(3, 3, { toolVariants });
-        expect(saveToLocalStorage(session)).toBe(true);
-        expect(loadFromLocalStorage()).toMatchObject({ toolVariants });
-        const recovered = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        expect(recovered.version).toBe(9);
-        expect(recovered.workspace.toolVariants).toEqual(toolVariants);
-        expect(recovered.document.toolVariants).toBeUndefined();
-    });
-
-    test("reports a failed recovery write without throwing", () => {
-        const originalSetItem = Storage.prototype.setItem;
-        const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
-            if (key === "mosaic-recovery") throw new DOMException("full", "QuotaExceededError");
-            return originalSetItem.call(this, key, value);
-        });
-
-        try {
-            expect(saveToLocalStorage(rowSession(3, 3))).toBe(false);
-        } finally {
-            setItem.mockRestore();
-        }
+        expect(recovered(session)).toMatchObject({ toolVariants });
+        const record = recoveryRecord(session);
+        expect(record.workspace.toolVariants).toEqual(toolVariants);
+        expect(record.document).not.toHaveProperty("toolVariants");
     });
 
     test("round-trip preserves all serialised session fields", () => {
@@ -51,8 +42,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
             dangerColorOverride: "#123456",
             accentColorOverride: "#abcdef",
         });
-        saveToLocalStorage(s);
-        const loaded = loadFromLocalStorage();
+        const loaded = recovered(s);
         expect(loaded).not.toBeNull();
         expect(loaded!.colorA).toBe("#11ff22");
         expect(loaded!.activeTool).toBe("fill");
@@ -72,61 +62,43 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         expect(() => contrastingProjectColors(loaded!.colorA, loaded!.colorB)).not.toThrow();
     });
 
-    test("recovery without contrast overrides uses app defaults", () => {
-        saveToLocalStorage(rowSession(3, 3));
-        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        delete raw.document.dangerColorOverride;
-        delete raw.document.accentColorOverride;
-        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
-
-        expect(loadFromLocalStorage()).toMatchObject({
+    test("default contrast overrides round-trip as app defaults", () => {
+        expect(recovered(rowSession(3, 3))).toMatchObject({
             dangerColorOverride: null,
             accentColorOverride: null,
         });
     });
 
-    test("malformed project contrast overrides invalidate recovery", () => {
-        saveToLocalStorage(rowSession(3, 3));
-        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        raw.document.dangerColorOverride = "red";
-        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
-
-        expect(loadFromLocalStorage()).toBeNull();
+    test.each(["dangerColorOverride", "accentColorOverride"])("recovery without %s → null", field => {
+        expect(recovered(rowSession(3, 3), record => { delete record.document[field]; })).toBeNull();
     });
 
-    test.each(["colorA", "colorB"] as const)(
-        "malformed recovered yarn %s invalidates and clears recovery",
-        field => {
-            saveToLocalStorage(rowSession(3, 3));
-            const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-            raw.document[field] = "red";
-            localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
+    test("malformed project contrast overrides invalidate recovery", () => {
+        expect(recovered(rowSession(3, 3), record => { record.document.dangerColorOverride = "red"; })).toBeNull();
+    });
 
-            expect(loadFromLocalStorage()).toBeNull();
-            expect(localStorage.getItem("mosaic-recovery")).toBeNull();
-        },
-    );
+    test.each(["colorA", "colorB"] as const)("malformed recovered yarn %s invalidates recovery", field => {
+        expect(recovered(rowSession(3, 3), record => { record.document[field] = "red"; })).toBeNull();
+    });
 
-    test("nothing in localStorage → null", () => {
-        expect(loadFromLocalStorage()).toBeNull();
+    test.each([undefined, "90"])("recovery with rotation %s → null", rotation => {
+        expect(recovered(rowSession(3, 3), record => { record.workspace.rotation = rotation; })).toBeNull();
+    });
+
+    test("nothing stored → null", () => {
+        expect(sessionFromRecovery(undefined)).toBeNull();
     });
 
     test("wrong version → null even with otherwise-valid payload", () => {
-        const valid = rowSession(3, 3);
-        saveToLocalStorage(valid);
-        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        raw.version = 999;
-        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
-        expect(loadFromLocalStorage()).toBeNull();
+        expect(recovered(rowSession(3, 3), record => { record.version = 999; })).toBeNull();
     });
 
     test("recovery retains alternate gaps in current records", () => {
         const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
         recipe.columnSpacingAlternate = 7;
         recipe.rowSpacingAlternate = 8;
-        saveToLocalStorage(rowSession(3, 3, { recipes: [recipe] }));
 
-        expect(loadFromLocalStorage()!.recipes[0]).toMatchObject({
+        expect(recovered(rowSession(3, 3, { recipes: [recipe] }))!.recipes[0]).toMatchObject({
             columnSpacingAlternate: 7,
             rowSpacingAlternate: 8,
         });
@@ -135,59 +107,41 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
     test("recovery clears an active recipe whose float does not match its source", () => {
         const source = makeFloat([{ x: 0, y: 0, v: 1 }]);
         const recipe = gridRecipeFromFloat(source);
-        saveToLocalStorage(rowSession(3, 3, {
+
+        expect(recovered(rowSession(3, 3, {
             recipes: [recipe],
             activeRecipeId: recipe.id,
             float: makeFloat([{ x: 1, y: 0, v: 1 }]),
-        }));
-
-        expect(loadFromLocalStorage()!.activeRecipeId).toBeNull();
+        }))!.activeRecipeId).toBeNull();
     });
 
     test("paused global mirror mode is recovered on", () => {
-        saveToLocalStorage(rowSession(3, 3, { liveMirrors: false }));
-
-        expect(loadFromLocalStorage()!.liveMirrors).toBe(true);
+        expect(recovered(rowSession(3, 3, { liveMirrors: false }))!.liveMirrors).toBe(true);
     });
 
     test("current recovery drops stale mirrors before the restored project can save", () => {
         const valid = { id: "valid", types: ["V" as const], enabled: false, x: 1, y: 1 };
         const stale = { id: "stale", types: ["H" as const], enabled: true, x: 1, y: 0 };
-        saveToLocalStorage(rowSession(3, 3, { mirrors: [valid, stale] }));
 
-        const restored = loadFromLocalStorage()!;
+        const restored = recovered(rowSession(3, 3, { mirrors: [valid, stale] }))!;
         expect(restored.mirrors).toEqual([valid]);
         expect(() => encodeMcw(restored)).not.toThrow();
     });
 
     test("missing state → null", () => {
-        localStorage.setItem("mosaic-recovery", JSON.stringify({ version: 9 }));
-        expect(loadFromLocalStorage()).toBeNull();
-    });
-
-    test("malformed JSON → null and clears the bad blob", () => {
-        localStorage.setItem("mosaic-recovery", "{not json");
-        expect(loadFromLocalStorage()).toBeNull();
-        expect(localStorage.getItem("mosaic-recovery")).toBeNull();
+        expect(sessionFromRecovery({ version: 9 })).toBeNull();
     });
 
     test("oversized saved dimensions are rejected before pixel allocation", () => {
-        const valid = rowSession(3, 3);
-        saveToLocalStorage(valid);
-        const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        raw.document.state.canvasWidth = 32_768;
-        raw.document.state.canvasHeight = 1;
-        localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
-
-        expect(loadFromLocalStorage()).toBeNull();
-        expect(localStorage.getItem("mosaic-recovery")).toBeNull();
+        expect(recovered(rowSession(3, 3), record => {
+            record.document.state.canvasWidth = 32_768;
+            record.document.state.canvasHeight = 1;
+        })).toBeNull();
     });
 
     test("non-square canvas with float round-trips correctly", () => {
         const f = makeFloat([{ x: 3, y: 1, v: 2 }]);
-        const s = rowSession(4, 2, { pixels: filledPixels(4, 2, 1), float: f });
-        saveToLocalStorage(s);
-        const loaded = loadFromLocalStorage();
+        const loaded = recovered(rowSession(4, 2, { pixels: filledPixels(4, 2, 1), float: f }));
         expect(loaded).not.toBeNull();
         expect(loaded!.float!.x).toBe(3);
         expect(loaded!.float!.y).toBe(1);

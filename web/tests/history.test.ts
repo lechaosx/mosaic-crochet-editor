@@ -1,17 +1,28 @@
-// @vitest-environment jsdom
-// History (undo/redo) tests. Load / write are localStorage-backed, so jsdom env.
+// History (undo/redo) tests.
 
-import { describe, test, expect, beforeEach, vi } from "vitest";
+import { describe, test, expect } from "vitest";
 import {
-    historyFrom, historySave, historyReplaceCurrent, loadHistory, writeHistory,
-    historyUndo, historyRedo, canUndo, canRedo, historyPeek,
+    historyFrom, historySave, historyReplaceCurrent, historyChanges, historyFromStored,
+    historyUndo, historyRedo, canUndo, canRedo, historyPeek, historyHeadId, historyMarkClean, isClean,
+    UndoHistory,
 } from "../src/history";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addMirror } from "@mosaic/logic/symmetry";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { encodeMcw } from "@mosaic/logic/mcw";
 
-beforeEach(() => { localStorage.clear(); });
+// The history as read back from its stored records.
+function reloaded(h: UndoHistory): UndoHistory | null {
+    const { meta, put } = historyChanges(null, h);
+    return historyFromStored(structuredClone(meta), structuredClone(put));
+}
+
+// Stored records of `h` with `edit` applied to its first snapshot.
+function storedWith(h: UndoHistory, edit: (snapshot: any) => void) {
+    const { meta, put } = structuredClone(historyChanges(null, h));
+    edit(put[0]);
+    return historyFromStored(meta, put);
+}
 
 describe("historyFrom / historySave", () => {
     test("chosen tool variants do not create an authored history action", () => {
@@ -87,21 +98,6 @@ describe("historyFrom / historySave", () => {
         expect(historyPeek(h)).toMatchObject({ dangerColorOverride: null, accentColorOverride: null });
     });
 
-    test("missing overrides remain unknown while explicit null remains a default", () => {
-        writeHistory(historyFrom(rowSession(3, 3)));
-        const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
-        delete raw.snapshots[0].document.dangerColorOverride;
-        delete raw.snapshots[0].document.accentColorOverride;
-        localStorage.setItem("mosaic-history", JSON.stringify(raw));
-        let h = historySave(loadHistory()!, rowSession(3, 3, { dangerColorOverride: "#123456", accentColorOverride: null }));
-        h = historyUndo(h)!;
-        expect(h).not.toBeNull();
-        expect(historyPeek(h).dangerColorOverride).toBeUndefined();
-        expect(historyPeek(h).accentColorOverride).toBeUndefined();
-        h = historyRedo(h)!;
-        expect(historyPeek(h)).toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: null });
-    });
-
     test("saved recipes are part of history and survive undo", () => {
         const s = rowSession(3, 3);
         const float = makeFloat([{ x: 0, y: 0, v: 1 }]);
@@ -136,9 +132,7 @@ describe("historyFrom / historySave", () => {
         const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
         recipe.columnSpacingAlternate = 7;
         recipe.rowSpacingAlternate = 8;
-        writeHistory(historyFrom(rowSession(3, 3, { recipes: [recipe] })));
-
-        expect(historyPeek(loadHistory()!).recipes[0]).toMatchObject({
+        expect(historyPeek(reloaded(historyFrom(rowSession(3, 3, { recipes: [recipe] })))!).recipes[0]).toMatchObject({
             columnSpacingAlternate: 7,
             rowSpacingAlternate: 8,
         });
@@ -210,47 +204,140 @@ describe("historyPeek", () => {
     });
 });
 
-describe("loadHistory / writeHistory", () => {
-    test("null when nothing is stored", () => {
-        expect(loadHistory()).toBeNull();
+describe("save point", () => {
+    const base = rowSession(3, 3);
+    const edited = rowSession(3, 3, { colorA: "#123456" });
+    const other = rowSession(3, 3, { colorA: "#abcdef" });
+
+    test("a new history is unsaved until marked clean", () => {
+        expect(isClean(historyFrom(base))).toBe(false);
+        expect(isClean(historyMarkClean(historyFrom(base)))).toBe(true);
     });
 
-    test("null for a future history schema", () => {
-        localStorage.setItem("mosaic-history", JSON.stringify({ version: 999 }));
-        expect(loadHistory()).toBeNull();
+    test("an edit makes the project dirty and undoing back to the save point makes it clean", () => {
+        let h = historySave(historyMarkClean(historyFrom(base)), edited);
+        expect(isClean(h)).toBe(false);
+        h = historyUndo(h)!;
+        expect(isClean(h)).toBe(true);
+        h = historyRedo(h)!;
+        expect(isClean(h)).toBe(false);
     });
 
-    test("null when the stored history has no snapshots", () => {
-        localStorage.setItem("mosaic-history", JSON.stringify({ version: 8, snapshots: [], index: -1 }));
-        expect(loadHistory()).toBeNull();
+    test("editing after undoing past the save point stays dirty, even back at the saved content", () => {
+        let h = historyMarkClean(historySave(historyFrom(base), edited));
+        h = historySave(historyUndo(h)!, edited);
+        expect(isClean(h)).toBe(false);
+        h = historyRedo(historyUndo(h)!)!;
+        expect(isClean(h)).toBe(false);
     });
 
-    test("round-trips the written history", () => {
-        const s = rowSession(3, 3, { colorA: "#000000" });
-        writeHistory(historySave(historyFrom(s), rowSession(3, 3, { colorA: "#ffffff" })));
-        const h = loadHistory()!;
-        // Still able to undo the colour change we pushed.
-        expect(canUndo(h)).toBe(true);
-        expect(historyPeek(h).colorA).toBe("#ffffff");
+    test("replacing the saved snapshot makes the project dirty", () => {
+        const h = historyMarkClean(historySave(historyFrom(base), edited));
+        const { history, replaced } = historyReplaceCurrent(h, other);
+        expect(replaced).toBe(true);
+        expect(isClean(history)).toBe(false);
     });
-    test("over quota, drops the oldest snapshots and returns what was stored", () => {
-        let h = historyFrom(rowSession(3, 3, { colorA: "#000001" }));
-        h = historySave(h, rowSession(3, 3, { colorA: "#000002" }));
-        h = historySave(h, rowSession(3, 3, { colorA: "#000003" }));
-        const originalSetItem = Storage.prototype.setItem;
-        const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (key, value) {
-            if (key === "mosaic-history" && JSON.parse(value).snapshots.length > 1) throw new DOMException("full", "QuotaExceededError");
-            return originalSetItem.call(this, key, value);
-        });
 
-        try {
-            const stored = writeHistory(h);
-            expect(stored.snapshots).toHaveLength(1);
-            expect(stored.index).toBe(0);
-            expect(historyPeek(stored).colorA).toBe("#000003");
-            expect(loadHistory()).toMatchObject(stored);
-        } finally {
-            setItem.mockRestore();
-        }
+    test("a replaced edit that returns to the saved baseline is clean", () => {
+        const h = historySave(historyMarkClean(historyFrom(base)), edited);
+        expect(isClean(historyReplaceCurrent(h, base).history)).toBe(true);
+    });
+
+    test("marking a snapshot that is no longer current leaves the current one dirty", () => {
+        const saving = historySave(historyFrom(base), edited);
+        let h = historySave(saving, other);
+        h = historyMarkClean(h, historyHeadId(saving));
+        expect(isClean(h)).toBe(false);
+        expect(isClean(historyUndo(h)!)).toBe(true);
+    });
+});
+
+describe("stored history", () => {
+    test("round-trips undo, redo and the save point", () => {
+        let h = historyMarkClean(historyFrom(rowSession(3, 3, { colorA: "#000000" })));
+        h = historyUndo(historySave(h, rowSession(3, 3, { colorA: "#ffffff" })))!;
+        const restored = reloaded(h)!;
+        expect(isClean(restored)).toBe(true);
+        expect(canRedo(restored)).toBe(true);
+        expect(historyPeek(historyRedo(restored)!).colorA).toBe("#ffffff");
+    });
+
+    test("snapshots added after a reload never match an earlier save point", () => {
+        let h = historyMarkClean(historySave(historyFrom(rowSession(3, 3)), rowSession(3, 3, { colorA: "#ffffff" })));
+        h = historyReplaceCurrent(h, rowSession(3, 3)).history;
+        h = historySave(reloaded(h)!, rowSession(3, 3, { colorA: "#ffffff" }));
+        expect(isClean(h)).toBe(false);
+    });
+
+    test("a change stores only its new snapshots", () => {
+        const before = historySave(historyFrom(rowSession(3, 3)), rowSession(3, 3, { colorA: "#111111" }));
+        const after = historySave(before, rowSession(3, 3, { colorA: "#222222" }));
+        const { meta, put } = historyChanges(before, after);
+        expect(put).toEqual([after.snapshots[2]]);
+        expect(meta.ids).toEqual(after.snapshots.map(snapshot => snapshot.id));
+        expect(historyChanges(after, historyUndo(after)!).put).toEqual([]);
+    });
+
+    test("a restarted history stores its snapshot again", () => {
+        const before = historySave(historyFrom(rowSession(3, 3)), rowSession(3, 3, { colorA: "#111111" }));
+        const after = historyFrom(rowSession(4, 4));
+        expect(historyChanges(before, after).put).toEqual([after.snapshots[0]]);
+    });
+
+    test("nothing stored → null", () => {
+        expect(historyFromStored(undefined, [])).toBeNull();
+    });
+
+    test("a future history schema → null", () => {
+        const { meta, put } = historyChanges(null, historyFrom(rowSession(3, 3)));
+        expect(historyFromStored({ ...meta, version: 999 }, put)).toBeNull();
+    });
+
+    test("a listed snapshot that is missing → null", () => {
+        const h = historySave(historyFrom(rowSession(3, 3)), rowSession(3, 3, { colorA: "#111111" }));
+        const { meta, put } = historyChanges(null, h);
+        expect(historyFromStored(meta, put.slice(1))).toBeNull();
+    });
+
+    test("snapshot ids listed out of order → null", () => {
+        const h = historySave(historyFrom(rowSession(3, 3)), rowSession(3, 3, { colorA: "#111111" }));
+        const { meta, put } = historyChanges(null, h);
+        expect(historyFromStored({ ...meta, ids: [...meta.ids].reverse() }, put)).toBeNull();
+    });
+
+    test("an unlisted stored snapshot is ignored", () => {
+        const h = historyFrom(rowSession(3, 3));
+        const { meta, put } = historyChanges(null, h);
+        const unlisted = historyChanges(null, historyFrom(rowSession(5, 5))).put.map(snapshot => ({ ...snapshot, id: 7 }));
+        expect(historyFromStored(meta, [...put, ...unlisted])!.snapshots).toHaveLength(1);
+    });
+
+    test("a snapshot beyond the pattern dimension limit → null", () => {
+        expect(storedWith(historyFrom(rowSession(3, 3)), snapshot => {
+            snapshot.document.state.canvasWidth = 32_768;
+            snapshot.document.state.canvasHeight = 1;
+        })).toBeNull();
+    });
+
+    test("a snapshot whose packed cells do not fit its pattern → null", () => {
+        expect(storedWith(historyFrom(rowSession(3, 3)), snapshot => { snapshot.document.state.canvasWidth = 30; })).toBeNull();
+    });
+
+    test("a snapshot whose selection cells do not fit its size → null", () => {
+        const h = historyFrom(rowSession(3, 3, { float: makeFloat([{ x: 0, y: 0, v: 1 }, { x: 1, y: 1, v: 2 }]) }));
+        expect(storedWith(h, snapshot => { snapshot.selection.w = 30; })).toBeNull();
+    });
+
+    test.each([
+        ["colorA", "red"],
+        ["dangerColorOverride", "red"],
+        ["dangerColorOverride", undefined],
+        ["accentColorOverride", undefined],
+    ])("a snapshot with %s = %s → null", (field, value) => {
+        expect(storedWith(historyFrom(rowSession(3, 3)), snapshot => { snapshot.document[field] = value; })).toBeNull();
+    });
+
+    test("a snapshot with malformed mirrors → null", () => {
+        expect(storedWith(historyFrom(rowSession(3, 3)), snapshot => { snapshot.transforms.mirrors = [{ id: 1 }]; })).toBeNull();
     });
 });

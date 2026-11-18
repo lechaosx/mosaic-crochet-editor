@@ -124,7 +124,7 @@ export function mountToolbar(
             ? "Recovery failed"
             : state === "recovered" ? "Recovered" : "";
         status.title = state === "failed"
-            ? "Browser recovery could not be updated; recent changes may be lost if this tab closes."
+            ? "Browser recovery or undo history could not be updated; recent changes may be lost if this tab closes."
             : "Browser recovery is current. Save creates a separate editable pattern file.";
     }
 
