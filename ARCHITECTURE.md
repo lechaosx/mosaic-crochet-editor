@@ -46,6 +46,8 @@ File formats and browser records are versioned and validated before replacing li
 
 Each open project's recovery record and undo history live in IndexedDB under the project's id, one record per undo snapshot so an edit writes only what it adds; a small localStorage index lists the open projects. The in-memory session is authoritative and records are written behind it, so a storage failure is reported but never limits editing or undo depth. — **Agent's choice**
 
+Only the editing window writes or deletes browser records, and it reads them only after becoming the editor. A window that takes over reads every write the previous editor issued before the take-over; the previous editor stops writing as soon as it learns of the take-over and reloads its session from storage before editing again. Without Web Locks, every window edits. — **Agent's choice**
+
 ## Editor and presentation boundaries
 
 - The UI uses ordinary DOM controls around a chart drawn in two layers: a WebGL2 layer for the cells, grid and highlight glyphs under a Canvas 2D overlay for selections, guides, seams and labels. The GPU draws only the output of the Rust highlight plan and never decides which cells get ✕ or !. Without WebGL2 the chart area explains that the chart can't be shown; there is no fallback renderer. Design and Crochet share one persistent chart and view, while mode-specific controls and inspectors overlay the workspace without changing the chart's screen geometry. — **your decision**

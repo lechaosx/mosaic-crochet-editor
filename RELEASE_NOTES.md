@@ -6,6 +6,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Editing, panning and zooming large charts respond much faster, and pattern sides are now limited to 32,767 stitches; the chart needs WebGL 2 and shows a message in browsers without it.
 - Browser recovery and undo history now also work for large patterns; the recovered session, undo history and Crochet progress from before this update are not carried over.
+- Only one window edits at a time: opening the app in another window offers to continue editing there, and the previous window stops editing.
 
 ## 9 October 2026
 

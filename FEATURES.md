@@ -56,6 +56,7 @@ The intended end-to-end story is:
 
 - `.mcw` is the editable project format. It carries authored crochet content and reusable project transforms, but not transient tool state, a live selection, app-wide preferences, undo history, or Crochet progress. — **your decision**
 - Browser recovery is automatic and separate from Save. It restores the local editing session but never implies that an external project file was updated. — **your decision**
+- One window of the app per browser profile edits at a time. Opening it in another window offers to take over, which continues the recovered work and undo history there and stops editing in the previous window. — **Agent's choice**
 - Danger and Accent defaults follow the yarn colours; explicit project colour choices remain fixed when the yarns change. — **your decision**
 - App-wide display preferences belong to the browser; project-specific visual choices travel with the project. Opening a project must not silently replace the user's global defaults. — **your decision**
 - Invalid or unsupported files leave the active session unchanged and explain the failure without blocking the workspace. — **Agent's choice**

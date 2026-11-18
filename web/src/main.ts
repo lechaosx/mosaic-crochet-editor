@@ -20,6 +20,7 @@ import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual,
 import { sessionFromRecovery, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { deleteProjectsExcept, loadProjectIndex, openProjectDatabase, readProject, removeRetiredRecords,
          writeHistory, writeRecovery } from "./project-store";
+import { becomeEditor } from "./editor-lock";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
 import { invalidPlanCellCount, packInstructionCoordinates, planOutwardCoordinate } from "./instruction-coordinates";
@@ -141,6 +142,31 @@ function editableMirrorTolerance(): number {
     return 22 / viewport.view.zoom;
 }
 const ctx      = viewport.canvas.getContext("2d")!;
+function offerTakeOver(takeOver: () => void) {
+    const offer = document.getElementById("take-over-offer") as HTMLDialogElement;
+    // Chromium closes a modal dialog on a repeated Escape even when its cancel
+    // event is prevented, so the offer also reopens when it closes.
+    const reopen = () => offer.showModal();
+    offer.addEventListener("cancel", event => event.preventDefault());
+    offer.addEventListener("close", reopen);
+    document.getElementById("take-over")!.addEventListener("click", () => {
+        offer.removeEventListener("close", reopen);
+        offer.close();
+        takeOver();
+    }, { once: true });
+    offer.showModal();
+}
+// False once another window takes over editing. This window then writes no
+// browser records and reloads into the offer to take editing back.
+let editing = true;
+await becomeEditor(offerTakeOver, () => {
+    editing = false;
+    location.reload();
+});
+// A page restored from the back-forward cache reloads, so it never edits without the lock.
+addEventListener("pageshow", event => {
+    if (event.persisted) location.reload();
+});
 removeRetiredRecords();
 const projects = loadProjectIndex();
 const projectId = projects.active;
@@ -149,8 +175,8 @@ const projectId = projects.active;
 let database = projects.stored ? await openProjectDatabase() : null;
 const stored = database && await readProject(database, projectId);
 if (!stored) database = null;
-if (database) deleteProjectsExcept(database, projects.open);
-if (projects.stored) deleteLiveProgressExcept(projects.open);
+if (database && editing) deleteProjectsExcept(database, projects.open);
+if (projects.stored && editing) deleteLiveProgressExcept(projects.open);
 const saved    = sessionFromRecovery(stored?.recovery);
 let preferences: AppPreferences = loadAppPreferences();
 const chartUnavailable = document.getElementById("chart-unavailable")!;
@@ -181,7 +207,7 @@ function commitHistory(next: UndoHistory) {
     persistHistory();
 }
 function persistHistory() {
-    if (!database) return;
+    if (!database || !editing) return;
     const history = undoHistory, failures = historyFailures;
     const changes = historyChanges(historyWritten, history);
     historyWritten = history;
@@ -197,7 +223,7 @@ function persistHistory() {
     });
 }
 function persistRecovery(s: Readonly<SessionState>) {
-    if (database) writeRecovery(database, projectId, s, written => reportStorage("recovery", written));
+    if (database && editing) writeRecovery(database, projectId, s, written => reportStorage("recovery", written));
 }
 // Whether each kind of record's latest write failed.
 const storageFailed = { recovery: false, history: false };
@@ -1337,7 +1363,7 @@ async function onInstructions() {
             }
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
                 completedUnits = nextCompleted;
-                const saved = saveLiveProgress(projectId, progressFingerprint, completedUnits);
+                const saved = editing && saveLiveProgress(projectId, progressFingerprint, completedUnits);
                 if (saved) ui.setCrochetProgress(hasLiveProgress(projectId, progressFingerprint, totalUnits));
                 return saved;
             }, unrepresentedWarnings.size > 0);
@@ -1496,7 +1522,7 @@ function syncCrochetProgressControl() {
 }
 
 function clearCrochetProgress() {
-    clearLiveProgress(projectId);
+    if (editing) clearLiveProgress(projectId);
     ui.setCrochetProgress(false);
 }
 

@@ -553,6 +553,40 @@ input[type="checkbox"] { accent-color: var(--accent); }
   gap: var(--space-1);
 }
 
+.take-over-offer {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  padding: var(--space-3);
+  background: transparent;
+  border: 0;
+}
+
+.take-over-offer[open] { display: grid; place-items: center; }
+
+.take-over-offer::backdrop { background: var(--bg-0); }
+
+.take-over-card {
+  width: min(28rem, 100%);
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  padding: clamp(var(--space-3), 4vw, var(--space-5));
+  color: var(--fg-1);
+  background: var(--bg-2);
+  border: var(--border);
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-2);
+}
+
+.take-over-card h1 {
+  color: var(--fg-0);
+  font-size: clamp(var(--font-lg), 5vw, 1.5rem);
+}
+
 .about-dialog {
   position: fixed;
   inset: 0;
