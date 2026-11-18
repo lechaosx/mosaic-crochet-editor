@@ -264,7 +264,7 @@ describe("saveToLocalStorage / loadFromLocalStorage", () => {
         const valid = rowSession(3, 3);
         saveToLocalStorage(valid);
         const raw = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        raw.document.state.canvasWidth = 1_048_577;
+        raw.document.state.canvasWidth = 32_768;
         raw.document.state.canvasHeight = 1;
         localStorage.setItem("mosaic-recovery", JSON.stringify(raw));
 

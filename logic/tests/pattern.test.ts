@@ -37,10 +37,13 @@ describe("applyEditSettings (row mode)", () => {
         expect(pixels[0]).toBe(1);
     });
 
-    test("rejects dimensions beyond the per-axis safety ceiling before allocation", () => {
-        expect(() => applyEditSettings({
-            mode: "row", width: 1_048_577, height: 1, wipe: true,
-        })).toThrow(/1,048,576/);
+    test("limits either side to 32,767 cells", () => {
+        for (const [width, height] of [[32_767, 2], [2, 32_767]]) {
+            expect(() => applyEditSettings({ mode: "row", width, height, wipe: true })).not.toThrow();
+        }
+        for (const [width, height] of [[32_768, 2], [2, 32_768]]) {
+            expect(() => applyEditSettings({ mode: "row", width, height, wipe: true })).toThrow(/32,767/);
+        }
     });
 
     test("rejects a canvas above the total cell ceiling before allocation", () => {
@@ -146,7 +149,7 @@ describe("patternDimensionError", () => {
             mode: "row", canvasWidth: 4_096, canvasHeight: 4_096,
         })).toBeNull();
         expect(patternDimensionError({
-            mode: "row", canvasWidth: 1_048_576, canvasHeight: 16,
+            mode: "row", canvasWidth: 16_384, canvasHeight: 1_024,
         })).toBeNull();
     });
 

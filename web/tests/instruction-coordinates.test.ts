@@ -14,20 +14,20 @@ describe("instruction coordinates", () => {
             .toEqual([[4, 4], [4, 6], [3, 5], [5, 5]]);
     });
     it("indexes outward coordinates compactly, including the chart gutter", () => {
-        const coords = new Int32Array([-1, 0, 0, 0, 1, 0, 1, 0, 1_048_576, 0]);
-        const packed = packInstructionCoordinates(coords, 1_048_576);
+        const coords = new Int32Array([-1, 0, 0, 0, 1, 0, 1, 0, 32_767, 0]);
+        const packed = packInstructionCoordinates(coords, 32_767);
 
         expect(packed.has(-1, 0)).toBe(true);
         expect(packed.has(0, 0)).toBe(true);
         expect(packed.has(1, 0)).toBe(true);
-        expect(packed.has(1_048_576, 0)).toBe(true);
+        expect(packed.has(32_767, 0)).toBe(true);
         expect(packed.has(2, 0)).toBe(false);
         expect(packed.values).toBeInstanceOf(Uint32Array);
         expect(packed.values.byteLength).toBeLessThanOrEqual(coords.byteLength / 2);
     });
 
     it("keeps a maximum-width row in one packed numeric word per stitch", () => {
-        const width = 1_048_576;
+        const width = 32_767;
         const coords = new Int32Array(width * 2);
         for (let x = 0; x < width; x++) {
             coords[x * 2] = x;

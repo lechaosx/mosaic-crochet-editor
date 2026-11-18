@@ -213,25 +213,26 @@ describe(".mcw codec", () => {
         expect(decodeMcw(JSON.stringify(encoded)).recipes[0].enabled).toBe(true);
     });
 
-    test("round-trips the largest valid saved-recipe mask without argument spreading", () => {
-        const mask = new Uint8Array(1_048_576);
+    test("round-trips a million-cell saved-recipe mask without argument spreading", () => {
+        const width = 16_384, height = 64;
+        const mask = new Uint8Array(width * height);
         mask[0] = 1;
         mask[mask.length - 1] = 1;
         const document = {
-            pattern: { mode: "row" as const, canvasWidth: mask.length, canvasHeight: 2 },
-            pixels: new Uint8Array(mask.length * 2).fill(1),
+            pattern: { mode: "row" as const, canvasWidth: width, canvasHeight: height },
+            pixels: new Uint8Array(mask.length).fill(1),
             colorA: "#000000", colorB: "#ffffff", mirrors: [],
             recipes: [{
                 id: "large-mask", enabled: true,
-                source: { x: 0, y: 0, w: mask.length, h: 1, mask },
+                source: { x: 0, y: 0, w: width, h: height, mask },
                 mode: "grid" as const,
                 left: 0, right: 0, up: 0, down: 0,
                 columnSpacing: 0, rowSpacing: 0, columnOffset: 0, rowOffset: 0,
                 columnSpacingAlternate: 0, rowSpacingAlternate: 0,
                 columnMirrorHorizontal: false, columnMirrorVertical: false,
                 rowMirrorHorizontal: false, rowMirrorVertical: false,
-                rotationCentreX: (mask.length - 1) / 2, rotationCentreY: 0, rotationTurns: [],
-                mirrorCentreX: (mask.length - 1) / 2, mirrorCentreY: 0, mirrorTypes: [],
+                rotationCentreX: (width - 1) / 2, rotationCentreY: (height - 1) / 2, rotationTurns: [],
+                mirrorCentreX: (width - 1) / 2, mirrorCentreY: (height - 1) / 2, mirrorTypes: [],
             }],
         };
 

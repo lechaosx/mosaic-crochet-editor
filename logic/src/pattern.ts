@@ -17,7 +17,10 @@ export interface PatternChangeSummary {
     removed: number;
 }
 
-export const MAX_CANVAS_DIMENSION = 1_048_576;
+// Highlight plans store cell coordinates as i16 (`push_entry` in core). The
+// limit also keeps a whole chart within browsers' canvas side limits at one
+// pixel per cell.
+export const MAX_CANVAS_DIMENSION = 32_767;
 export const MAX_CANVAS_CELLS = 16_777_216;
 
 export function hasDrawing(pattern: PatternState, pixels: Uint8Array): boolean {
@@ -42,7 +45,7 @@ export function patternDimensionError(pattern: PatternState): string | null {
         return "Canvas dimensions must be whole positive numbers.";
     }
     if ((width as number) > MAX_CANVAS_DIMENSION || (height as number) > MAX_CANVAS_DIMENSION) {
-        return "Canvas dimensions cannot exceed 1,048,576 cells on either axis.";
+        return `Canvas dimensions cannot exceed ${MAX_CANVAS_DIMENSION.toLocaleString("en-US")} cells on either axis.`;
     }
     if ((width as number) * (height as number) > MAX_CANVAS_CELLS) {
         return "Canvas cannot exceed 16,777,216 cells.";

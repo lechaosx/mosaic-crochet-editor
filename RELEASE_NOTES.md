@@ -2,6 +2,10 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 18 November 2026
+
+- Patterns are limited to 32,767 stitches per side.
+
 ## 9 October 2026
 
 - Mirrors identify centres by coordinates, group all five reflection types together, distinguish chosen types from implied types while keeping both visibly available, use familiar enable switches, and disable types unavailable at the current centre.

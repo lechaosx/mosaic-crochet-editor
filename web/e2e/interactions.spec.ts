@@ -136,7 +136,7 @@ test("invalid Pattern input retains the last valid preview", async ({ page }) =>
     const validPreview = await pixelRGB(page, lastCell.cx, lastCell.cy);
     const validOutside = await pixelRGB(page, outside.cx, outside.cy);
 
-    await width.fill("1048577");
+    await width.fill("32768");
     await width.dispatchEvent("input");
 
     await expect(page.locator("#edit-error")).toBeVisible();
