@@ -37,7 +37,10 @@ export interface SessionState {
 }
 
 export interface CommitOpts {
-    recompute?: boolean;   // rebuild highlight plan      (default: true)
+    // Rebuild highlight plan (default: true). Pass false only when the commit
+    // keeps pattern, pixels and float: renderers take an unchanged plan to mean
+    // unchanged visible pixels and keep drawing the chart they cached.
+    recompute?: boolean;
     render?:    boolean;   // call the registered renderer (default: true)
     history?:   boolean;   // push snapshot to undo stack  (default: false)
     persist?:   boolean;   // write to localStorage        (default: true)

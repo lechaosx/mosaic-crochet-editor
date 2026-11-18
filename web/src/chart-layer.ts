@@ -65,6 +65,8 @@ void main() {
     col = mix(col, vec3(128.0 / 255.0), 0.18 * grid);
 
 #ifdef GLYPHS
+    // renderHighlightSymbols in render.ts draws these glyphs for the colour
+    // preview; change both together.
     float stroke = 0.08 * uCellPx;
     if ((v & ${CELL_CROSS}u) != 0u) {
         // ✕ in pattern space, turning with the chart.
