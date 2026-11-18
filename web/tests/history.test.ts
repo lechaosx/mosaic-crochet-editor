@@ -87,10 +87,9 @@ describe("historyFrom / historySave", () => {
         expect(historyPeek(h)).toMatchObject({ dangerColorOverride: null, accentColorOverride: null });
     });
 
-    test("legacy missing overrides remain unknown while explicit null remains a default", () => {
+    test("missing overrides remain unknown while explicit null remains a default", () => {
         writeHistory(historyFrom(rowSession(3, 3)));
         const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
-        raw.version = 5;
         delete raw.snapshots[0].document.dangerColorOverride;
         delete raw.snapshots[0].document.accentColorOverride;
         localStorage.setItem("mosaic-history", JSON.stringify(raw));
@@ -101,7 +100,6 @@ describe("historyFrom / historySave", () => {
         expect(historyPeek(h).accentColorOverride).toBeUndefined();
         h = historyRedo(h)!;
         expect(historyPeek(h)).toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: null });
-        expect(JSON.parse(localStorage.getItem("mosaic-history")!).version).toBe(8);
     });
 
     test("saved recipes are part of history and survive undo", () => {
@@ -132,50 +130,6 @@ describe("historyFrom / historySave", () => {
         }));
 
         expect(historyPeek(h).activeRecipeId).toBeNull();
-    });
-
-    test("invalid persisted recipes are discarded", () => {
-        writeHistory(historyFrom(rowSession(3, 3)));
-        const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
-        raw.snapshots[0].transforms.recipes = [{ id: "bad" }];
-        raw.version = 7;
-        for (const recipe of raw.snapshots[0].transforms.recipes ?? []) {
-            delete recipe.mirrorCentreX; delete recipe.mirrorCentreY; delete recipe.mirrorTypes;
-        }
-        localStorage.setItem("mosaic-history", JSON.stringify(raw));
-
-        const h = loadHistory()!;
-        expect(historyPeek(h).recipes).toHaveLength(1);
-        expect(historyPeek(h).recipes[0].source.mask).toHaveLength(0);
-    });
-
-    test("history defaults optional v3 recipe extensions", () => {
-        const recipe = gridRecipeFromFloat(makeFloat([{ x: 1, y: 1, v: 1 }]));
-        recipe.columnSpacing = 2;
-        recipe.rowSpacing = 3;
-        writeHistory(historyFrom(rowSession(3, 3, { recipes: [recipe] })));
-        const raw = JSON.parse(localStorage.getItem("mosaic-history")!);
-        const stored = raw.snapshots[0].transforms.recipes[0];
-        delete stored.mode;
-        delete stored.columnSpacingAlternate;
-        delete stored.rowSpacingAlternate;
-        delete stored.rotationCentreX;
-        delete stored.rotationCentreY;
-        delete stored.rotationTurns;
-        raw.version = 7;
-        for (const recipe of raw.snapshots[0].transforms.recipes ?? []) {
-            delete recipe.mirrorCentreX; delete recipe.mirrorCentreY; delete recipe.mirrorTypes;
-        }
-        localStorage.setItem("mosaic-history", JSON.stringify(raw));
-
-        expect(historyPeek(loadHistory()!).recipes[0]).toMatchObject({
-            mode: "grid",
-            columnSpacingAlternate: 2,
-            rowSpacingAlternate: 3,
-            rotationCentreX: 1,
-            rotationCentreY: 1,
-            rotationTurns: [],
-        });
     });
 
     test("history retains alternate gaps in current records", () => {
@@ -258,6 +212,11 @@ describe("historyPeek", () => {
 
 describe("loadHistory / writeHistory", () => {
     test("null when nothing is stored", () => {
+        expect(loadHistory()).toBeNull();
+    });
+
+    test("null for a future history schema", () => {
+        localStorage.setItem("mosaic-history", JSON.stringify({ version: 999 }));
         expect(loadHistory()).toBeNull();
     });
 

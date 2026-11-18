@@ -76,7 +76,3 @@ export function saveAppPreferences(preferences: Readonly<AppPreferences>): boole
         return false;
     }
 }
-
-export function hasStoredAppPreferences(): boolean {
-    return localStorage.getItem(PREFERENCES_KEY) !== null;
-}

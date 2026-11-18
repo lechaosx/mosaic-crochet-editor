@@ -99,29 +99,6 @@ for (const tool of ["s", "w"]) test(`former Grid grip locations execute ${tool} 
     expect(await recipe(page)).toEqual(before);
 });
 
-test("legacy recovery conversion is an informational, dismissible notice without a history or camera edit", async ({ page }) => {
-    await selection(page);
-    await page.evaluate(() => {
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        recovery.version = 8;
-        const old = recovery.workspace.recipes[0];
-        old.mode = "rotation"; old.mirrorHorizontal = true; old.mirrorVertical = true;
-        delete old.mirrorCentreX; delete old.mirrorCentreY; delete old.mirrorTypes;
-        localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
-    });
-    await page.reload();
-    await page.waitForFunction(() => !!window.__test_matrix__);
-    const notice = page.getByRole("status").filter({ hasText: "Recovered selection transforms were converted" });
-    await expect(notice).toBeVisible();
-    const before = { history: await storedHistory(page),
-        matrix: await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array())) };
-    await page.getByRole("button", { name: "Dismiss document notice", exact: true }).click();
-    await expect(notice).not.toBeVisible();
-    expect({ history: await storedHistory(page),
-        matrix: await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array())) }).toEqual(before);
-    expect((await recipe(page)).mode).toBe("mirror");
-});
-
 test("paired Circle precision previews valid half-grid pairs and coalesces related edits", async ({ page }) => {
     await selection(page);
     await category(page, "Circle");

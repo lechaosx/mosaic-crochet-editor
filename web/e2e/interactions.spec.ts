@@ -189,7 +189,6 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
             mirrors: recovery.workspace.mirrors,
             recipes: recovery.workspace.recipes,
             activeRecipeId: recovery.workspace.activeRecipeId,
-            liveTransforms: recovery.workspace.liveTransforms,
             float: recovery.workspace.float,
         };
     });
@@ -209,7 +208,6 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
                 mirrors: recovery.workspace.mirrors,
                 recipes: recovery.workspace.recipes,
                 activeRecipeId: recovery.workspace.activeRecipeId,
-                liveTransforms: recovery.workspace.liveTransforms,
                 float: recovery.workspace.float,
             },
             activeTool: recovery.workspace.activeTool,

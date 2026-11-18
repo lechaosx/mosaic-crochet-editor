@@ -442,28 +442,6 @@ test("automatic project colour resets each undo in one step", async ({ page }) =
     }
 });
 
-test("undoing legacy snapshots preserves current unknown project overrides", async ({ page }) => {
-    await bootApp(page);
-    await clickCell(page, 1, 1);
-    await page.evaluate(() => {
-        const history = JSON.parse(localStorage.getItem("mosaic-history")!);
-        history.version = 5;
-        for (const snapshot of history.snapshots) {
-            delete snapshot.document.dangerColorOverride;
-            delete snapshot.document.accentColorOverride;
-        }
-        localStorage.setItem("mosaic-history", JSON.stringify(history));
-        const recovery = JSON.parse(localStorage.getItem("mosaic-recovery")!);
-        recovery.document.dangerColorOverride = "#123456";
-        recovery.document.accentColorOverride = "#abcdef";
-        localStorage.setItem("mosaic-recovery", JSON.stringify(recovery));
-    });
-    await page.reload();
-    await page.waitForFunction(() => !!window.__test_matrix__);
-    await page.keyboard.press("Control+z");
-    expect((await storedRecovery(page)).document).toMatchObject({ dangerColorOverride: "#123456", accentColorOverride: "#abcdef" });
-});
-
 for (const event of ["pointercancel", "lostpointercapture", "blur", "Escape"]) {
     test(`${event} during Move area restores a partially off-pattern selection`, async ({ page }) => {
         await bootApp(page);

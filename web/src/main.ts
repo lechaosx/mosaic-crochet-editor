@@ -139,8 +139,7 @@ function editableMirrorTolerance(): number {
     return 22 / viewport.view.zoom;
 }
 const ctx      = viewport.canvas.getContext("2d")!;
-let selectionMigrationNotice = false;
-const saved    = loadFromLocalStorage(() => { selectionMigrationNotice = true; });
+const saved    = loadFromLocalStorage();
 let preferences: AppPreferences = loadAppPreferences();
 const chartUnavailable = document.getElementById("chart-unavailable")!;
 const chartLayer = createChartLayer(document.getElementById("chart-gl") as HTMLCanvasElement,
@@ -151,7 +150,7 @@ let projectColorsSynced: string | null = null;
 const store    = new Store(saved ?? defaultSession());
 // Without a recovered session, boot replaces this once the default pattern is built.
 let undoHistory: UndoHistory = saved
-    ? loadHistory(() => { selectionMigrationNotice = true; }) ?? writeHistory(historyFrom(store.state))
+    ? loadHistory() ?? writeHistory(historyFrom(store.state))
     : historyFrom(store.state);
 function commitHistory(next: UndoHistory) {
     if (next !== undoHistory) undoHistory = writeHistory(next);
@@ -2105,7 +2104,6 @@ ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
 ui.setRecoveryStatus(saved ? "recovered" : "saved");
-if (selectionMigrationNotice) ui.setDocumentNotice("Recovered selection transforms were converted: Circle uses chosen turns; Mirror composes its types. Pattern stitches and colours are unchanged.");
 ui.setCrochetErrors(crochetErrorCount());
 
 if (saved) {

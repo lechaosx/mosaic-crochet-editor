@@ -1,20 +1,13 @@
-import { PatternState, Tool, ToolVariants, defaultToolVariants, Axis, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
+import { PatternState, Tool, ToolVariants, MirrorCenter } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { decodeMcwWithMigration, encodeMcw, ProjectDocument } from "@mosaic/logic/mcw";
-import { axisIsProjectValid, migrateAxes, mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
+import { mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
-import { legacySelectionBehaviorChanged, normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
-import {
-    AppPreferences,
-    DEFAULT_APP_PREFERENCES,
-    hasStoredAppPreferences,
-    saveAppPreferences,
-} from "./preferences";
+import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 
-const RECOVERY_KEY        = "mosaic-recovery";
-const LEGACY_RECOVERY_KEY = "mosaic-pattern-v4";
-const RECOVERY_VERSION    = 9;
+const RECOVERY_KEY     = "mosaic-recovery";
+const RECOVERY_VERSION = 9;
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 function recoveryColorOverride(value: unknown): string | null {
@@ -28,160 +21,29 @@ function recoveryYarnColor(value: unknown): string {
     return value;
 }
 
-interface LocalSaveV4 {
-    version:          4;
-    state:            PatternState;
-    pixels:           string;
-    colorA:           string;
-    colorB:           string;
-    activeTool:       string;
-    primaryColor:     number;
-    axes:             Axis[];
-    liveTransforms?:  boolean;
-    hlOpacity:        number;
-    invalidIntensity: number;
-    float:            PackedFloat | null;
-    labelsVisible:    boolean;
-    lockInvalid:      boolean;
-    canvasRotation:   number;
-}
-
-interface RecoveryV5 {
-    version: 5;
+interface Recovery {
+    version: 9;
     document: {
         state:  PatternState;
         pixels: string;
         colorA: string;
         colorB: string;
-    };
-    workspace: {
-        activeTool:      string;
-        primaryColor:    number;
-        axes:            Axis[];
-        recipes?:        unknown[];
-        activeRecipeId?: string | null;
-        liveTransforms?: boolean;
-        float:           PackedFloat | null;
-    };
-    preferences: {
-        hlOpacity:        number;
-        showGuidance?:     boolean;
-        invalidIntensity: number;
-        labelsVisible:    boolean;
-        lockInvalid:      boolean;
-        canvasRotation:   number;
-    };
-}
-
-interface RecoveryV6 {
-    version: 6;
-    document: RecoveryV5["document"] & {
         dangerColorOverride?: string | null;
         accentColorOverride?: string | null;
     };
-    workspace: RecoveryV5["workspace"] & { rotation: number };
-}
-
-interface RecoveryV7 {
-    version: 7;
-    document: RecoveryV6["document"];
-    workspace: RecoveryV6["workspace"] & { toolVariants: ToolVariants };
-}
-
-interface RecoveryV9 {
-    version: 9;
-    document: RecoveryV7["document"];
-    workspace: Omit<RecoveryV7["workspace"], "axes"> & { mirrors: MirrorCenter[] };
-}
-
-interface MigratedRecovery {
-    recovery: RecoveryV9;
-    preferences?: AppPreferences;
-}
-
-function preferencesFromLegacy(preferences: RecoveryV5["preferences"]): AppPreferences {
-    return {
-        guidanceOpacity: preferences.showGuidance === false ? 0 : preferences.hlOpacity,
-        dangerColor: DEFAULT_APP_PREFERENCES.dangerColor,
-        accentColor: DEFAULT_APP_PREFERENCES.accentColor,
-        labelsVisible: preferences.labelsVisible,
-        lockInvalid: preferences.lockInvalid,
+    workspace: {
+        activeTool:     string;
+        primaryColor:   number;
+        toolVariants:   ToolVariants;
+        mirrors:        MirrorCenter[];
+        recipes:        unknown[];
+        activeRecipeId: string | null;
+        float:          PackedFloat | null;
+        rotation:       number;
     };
 }
 
-function recoveryFromV4(data: LocalSaveV4): RecoveryV5 {
-    return {
-        version: 5,
-        document: {
-            state: data.state, pixels: data.pixels,
-            colorA: data.colorA, colorB: data.colorB,
-        },
-        workspace: {
-            activeTool: data.activeTool, primaryColor: data.primaryColor,
-            axes: data.axes,
-            liveTransforms: true, float: data.float,
-        },
-        preferences: {
-            hlOpacity: data.hlOpacity, invalidIntensity: data.invalidIntensity,
-            labelsVisible: data.labelsVisible, lockInvalid: data.lockInvalid,
-            canvasRotation: data.canvasRotation,
-        },
-    };
-}
-
-function recoveryFromV5(data: RecoveryV5): MigratedRecovery {
-    return {
-        recovery: migrateRecoveryAxes({
-            version: 7,
-            document: data.document,
-            workspace: {
-                ...data.workspace,
-                liveTransforms: true,
-                rotation: data.preferences.canvasRotation,
-                toolVariants: defaultToolVariants(),
-            },
-        }),
-        preferences: preferencesFromLegacy(data.preferences),
-    };
-}
-
-function migrateRecoveryAxes(recovery: RecoveryV7): RecoveryV9 {
-    const { axes = [], ...workspace } = recovery.workspace;
-    return { version: RECOVERY_VERSION, document: recovery.document,
-        workspace: { ...workspace, mirrors: migrateAxes(axes.filter(axis => axisIsProjectValid(axis, recovery.document.state)), recovery.document.state) },
-    };
-}
-
-function migrateRecovery(value: unknown): MigratedRecovery | null {
-    if (typeof value !== "object" || value === null) return null;
-    const data = value as Record<string, unknown>;
-    if (data.version === RECOVERY_VERSION || data.version === 8) {
-        if (typeof data.document !== "object" || data.document === null
-            || typeof data.workspace !== "object" || data.workspace === null) return null;
-        const recovery = data as unknown as RecoveryV9;
-        return { recovery: { ...recovery, version: RECOVERY_VERSION, workspace: { ...recovery.workspace, liveTransforms: true } } };
-    }
-    if (data.version === 7 || data.version === 6) {
-        if (typeof data.document !== "object" || data.document === null
-            || typeof data.workspace !== "object" || data.workspace === null) return null;
-        const recovery = data as unknown as RecoveryV7;
-        return { recovery: migrateRecoveryAxes({ ...recovery, version: 7,
-            workspace: { ...recovery.workspace, liveTransforms: true,
-                toolVariants: data.version === 7 ? recovery.workspace.toolVariants : defaultToolVariants() } }) };
-    }
-    if (data.version === 5) {
-        if (typeof data.document !== "object" || data.document === null
-            || typeof data.workspace !== "object" || data.workspace === null
-            || typeof data.preferences !== "object" || data.preferences === null) return null;
-        return recoveryFromV5(data as unknown as RecoveryV5);
-    }
-    if (data.version === 4 && data.state) {
-        return recoveryFromV5(recoveryFromV4(data as unknown as LocalSaveV4));
-    }
-    return null;
-}
-
-function recoveryFromSession(s: Readonly<SessionState>): RecoveryV9 {
+function recoveryFromSession(s: Readonly<SessionState>): Recovery {
     return {
         version: RECOVERY_VERSION,
         document: {
@@ -195,7 +57,6 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV9 {
             toolVariants: s.toolVariants,
             mirrors: s.mirrors,
             recipes: storedGridRecipes(s.recipes), activeRecipeId: s.activeRecipeId,
-            liveTransforms: true,
             float: s.float ? packFloat(s.float) : null,
             rotation: s.rotation,
         },
@@ -205,33 +66,31 @@ function recoveryFromSession(s: Readonly<SessionState>): RecoveryV9 {
 export function saveToLocalStorage(s: Readonly<SessionState>): boolean {
     try {
         localStorage.setItem(RECOVERY_KEY, JSON.stringify(recoveryFromSession(s)));
-        localStorage.removeItem(LEGACY_RECOVERY_KEY);
         return true;
     } catch {
         return false;
     }
 }
 
-export function loadFromLocalStorage(onMigration?: () => void): SessionState | null {
-    const current = localStorage.getItem(RECOVERY_KEY);
-    const sourceKey = current === null ? LEGACY_RECOVERY_KEY : RECOVERY_KEY;
-    const saved = current ?? localStorage.getItem(LEGACY_RECOVERY_KEY);
+export function loadFromLocalStorage(): SessionState | null {
+    const saved = localStorage.getItem(RECOVERY_KEY);
     if (!saved) return null;
     try {
         const parsed: unknown = JSON.parse(saved);
-        const migrated = migrateRecovery(parsed);
-        if (!migrated) return null;
-        const { recovery, preferences } = migrated;
+        if (typeof parsed !== "object" || parsed === null) return null;
+        const recovery = parsed as Recovery;
+        if (recovery.version !== RECOVERY_VERSION
+            || typeof recovery.document !== "object" || recovery.document === null
+            || typeof recovery.workspace !== "object" || recovery.workspace === null) return null;
         const { document, workspace } = recovery;
         assertPatternDimensions(document.state);
         const mirrors = readMirrorRecords(workspace.mirrors);
         if (!mirrors) return null;
-        const legacy = (parsed as { version: number }).version < RECOVERY_VERSION;
-        const recipes = restoreGridRecipes(workspace.recipes, legacy);
-        if (!legacy && (!Array.isArray(workspace.recipes)
-            || (workspace.recipes.length > 0 && recipes.length !== workspace.recipes.length))) throw new TypeError("Invalid recovered selections.");
+        const recipes = restoreGridRecipes(workspace.recipes, false);
+        if (!Array.isArray(workspace.recipes)
+            || (workspace.recipes.length > 0 && recipes.length !== workspace.recipes.length)) throw new TypeError("Invalid recovered selections.");
         const float = workspace.float ? unpackFloat(workspace.float) : null;
-        const restored: SessionState = {
+        return {
             pattern:          document.state,
             pixels:           unpackPixels(document.pixels, document.state),
             colorA:           recoveryYarnColor(document.colorA),
@@ -252,19 +111,7 @@ export function loadFromLocalStorage(onMigration?: () => void): SessionState | n
             float,
             rotation:         workspace.rotation ?? 0,
         };
-        if (legacy && legacySelectionBehaviorChanged(workspace.recipes)) onMigration?.();
-        if (preferences && !hasStoredAppPreferences()) saveAppPreferences(preferences);
-        if (sourceKey === LEGACY_RECOVERY_KEY
-            || recovery.version !== (parsed as { version?: number }).version) {
-            try {
-                localStorage.setItem(RECOVERY_KEY, JSON.stringify(recoveryFromSession(restored)));
-                localStorage.removeItem(LEGACY_RECOVERY_KEY);
-            } catch {
-                return restored;
-            }
-        }
-        return restored;
-    } catch { localStorage.removeItem(sourceKey); return null; }
+    } catch { localStorage.removeItem(RECOVERY_KEY); return null; }
 }
 
 function recoveryToolVariants(value: unknown): ToolVariants {

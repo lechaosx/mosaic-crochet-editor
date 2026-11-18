@@ -2,32 +2,23 @@
 // `PatternState` so undo crosses dimension / mode changes. `UndoHistory` values are
 // immutable; the owner persists each new value with `writeHistory`.
 
-import { PatternState, Float, Axis, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
+import { PatternState, Float, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
-import { axisIsProjectValid, migrateAxes, mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
-import { legacySelectionBehaviorChanged, normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
+import { mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
+import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 
-const HISTORY_KEY        = "mosaic-history";
-const LEGACY_HISTORY_KEY = "mosaic-history-v4";
-const HISTORY_VERSION    = 8;
-const MAX                = 64;
+const HISTORY_KEY     = "mosaic-history";
+const HISTORY_VERSION = 8;
+const MAX             = 64;
 
-interface SnapshotV4 {
-    state:   PatternState;
-    pixels:  string;             // 1-bit-packed, base64
-    float:   PackedFloat | null; // bbox-compact float (x/y/w/h + raw pixels)
-    axes?:   Axis[];             // Phase-4 axis positions; optional for pre-upgrade blobs
-    colorA:  string;
-    colorB:  string;
-}
 interface Snapshot {
     document: {
         state:  PatternState;
         pixels: string;
         colorA: string;
         colorB: string;
-        // Missing legacy values preserve the current override; null restores the app default.
+        // Missing values preserve the current override; null restores the app default.
         dangerColorOverride?: string | null;
         accentColorOverride?: string | null;
     };
@@ -48,66 +39,21 @@ interface HistoryBlob {
     index:     number;
 }
 
-interface LegacySnapshot extends Omit<Snapshot, "transforms"> {
-    transforms: { axes?: Axis[]; recipes?: unknown[]; activeRecipeId?: string | null };
-}
-
-function migrateSnapshot(snapshot: LegacySnapshot): Snapshot {
-    const { axes = [], ...transforms } = snapshot.transforms;
-    return { ...snapshot, transforms: { ...transforms,
-        mirrors: migrateAxes(axes.filter(axis => axisIsProjectValid(axis, snapshot.document.state)), snapshot.document.state),
-    } };
-}
-
-function migrateHistory(value: unknown): HistoryBlob | null {
-    if (typeof value !== "object" || value === null) return null;
-    const data = value as Record<string, unknown>;
-    if (!Array.isArray(data.snapshots) || typeof data.index !== "number") return null;
-    if (data.version === HISTORY_VERSION || data.version === 7 || data.version === 6 || data.version === 5) {
-        if (!data.snapshots.every(snapshot => typeof snapshot === "object" && snapshot !== null
-            && typeof (snapshot as Record<string, unknown>).document === "object")) return null;
-        const snapshots = data.version === HISTORY_VERSION || data.version === 7 ? data.snapshots as Snapshot[]
-            : (data.snapshots as LegacySnapshot[]).map(migrateSnapshot);
-        if (data.version === HISTORY_VERSION && snapshots.some(snapshot => !Array.isArray(snapshot.transforms.recipes)
-            || (snapshot.transforms.recipes.length > 0
-                && restoreGridRecipes(snapshot.transforms.recipes, false).length !== snapshot.transforms.recipes.length))) return null;
-        return { version: HISTORY_VERSION, index: data.index,
-            snapshots: data.version === HISTORY_VERSION ? snapshots : snapshots.map(snapshot => ({ ...snapshot,
-                transforms: { ...snapshot.transforms, recipes: storedGridRecipes(restoreGridRecipes(snapshot.transforms.recipes)) } })) };
-    }
-    if (data.version !== undefined) return null;
-    if (!data.snapshots.every(snapshot => typeof snapshot === "object" && snapshot !== null
-        && (snapshot as Record<string, unknown>).state)) return null;
-    return {
-        version: HISTORY_VERSION,
-        snapshots: (data.snapshots as SnapshotV4[]).map(snapshot => migrateSnapshot({
-            document: {
-                state: snapshot.state, pixels: snapshot.pixels,
-                colorA: snapshot.colorA, colorB: snapshot.colorB,
-            },
-            selection: snapshot.float,
-            transforms: { axes: snapshot.axes, recipes: storedGridRecipes(restoreGridRecipes(undefined)) },
-        })),
-        index: data.index,
-    };
-}
-
-// Null when nothing usable is stored. A migrated blob is written back in the
-// current format.
-export function loadHistory(onMigration?: () => void): UndoHistory | null {
-    const current = localStorage.getItem(HISTORY_KEY);
-    const sourceKey = current === null ? LEGACY_HISTORY_KEY : HISTORY_KEY;
-    const raw = current ?? localStorage.getItem(LEGACY_HISTORY_KEY);
+// Null when nothing usable is stored.
+export function loadHistory(): UndoHistory | null {
+    const raw = localStorage.getItem(HISTORY_KEY);
     if (!raw) return null;
     try {
-        const parsed = JSON.parse(raw);
-        const migrated = migrateHistory(parsed);
-        if (!migrated) return null;
-        if (parsed.version !== HISTORY_VERSION && parsed.snapshots.some((snapshot: Snapshot) =>
-            legacySelectionBehaviorChanged(snapshot.transforms?.recipes))) onMigration?.();
-        const history = sourceKey === LEGACY_HISTORY_KEY || parsed.version !== HISTORY_VERSION
-            ? writeHistory(migrated) : migrated;
-        return history.snapshots.length > 0 ? history : null;
+        const data = JSON.parse(raw);
+        if (typeof data !== "object" || data === null || data.version !== HISTORY_VERSION
+            || !Array.isArray(data.snapshots) || typeof data.index !== "number") return null;
+        const snapshots = data.snapshots as unknown[];
+        if (!snapshots.every(snapshot => typeof snapshot === "object" && snapshot !== null
+            && typeof (snapshot as Record<string, unknown>).document === "object")) return null;
+        if ((snapshots as Snapshot[]).some(snapshot => !Array.isArray(snapshot.transforms.recipes)
+            || (snapshot.transforms.recipes.length > 0
+                && restoreGridRecipes(snapshot.transforms.recipes, false).length !== snapshot.transforms.recipes.length))) return null;
+        return snapshots.length > 0 ? { snapshots: snapshots as Snapshot[], index: data.index } : null;
     } catch { return null; }
 }
 
@@ -119,7 +65,6 @@ export function writeHistory(h: UndoHistory): UndoHistory {
     while (true) {
         try {
             localStorage.setItem(HISTORY_KEY, JSON.stringify(blob));
-            localStorage.removeItem(LEGACY_HISTORY_KEY);
             break;
         } catch (e) {
             if (!(e instanceof DOMException) || e.name !== "QuotaExceededError") throw e;

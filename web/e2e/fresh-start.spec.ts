@@ -109,32 +109,6 @@ test("About reopens from Settings and light-dismisses", async ({ page }) => {
     await expect(page.locator("#about-dialog")).toBeHidden();
 });
 
-test("legacy browser recovery still shows About for unseen release notes", async ({ page }) => {
-    await page.addInitScript(() => {
-        localStorage.setItem("mosaic-pattern-v4", JSON.stringify({
-            version: 4,
-            state: { mode: "row", canvasWidth: 9, canvasHeight: 9 },
-            pixels: "AAAAAAAAAAAAAAA=",
-            colorA: "#000000",
-            colorB: "#ffffff",
-            activeTool: "pencil",
-            primaryColor: 1,
-            axes: [],
-            hlOpacity: 100,
-            invalidIntensity: 65,
-            float: null,
-            labelsVisible: true,
-            lockInvalid: true,
-            canvasRotation: 0,
-        }));
-    });
-    await bootFresh(page);
-
-    await expect(page.locator("#about-dialog")).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("mosaic-pattern-v4"))).toBeNull();
-    expect(await storedRecovery(page)).not.toBeNull();
-});
-
 test("example is editable and demonstrates overlay, global mirror, and Crochet", async ({ page }) => {
     await bootFresh(page);
     await page.getByRole("button", { name: "Example" }).click();
