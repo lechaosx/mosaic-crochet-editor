@@ -25,6 +25,36 @@ export function invalidPlanCellCount(plan: Int16Array, width: number, height: nu
     return count;
 }
 
+// Whether an invalid placement warns at an outward cell missing from every
+// list of worked coordinates (x, y pairs).
+export function hasUnrepresentedWarning(
+    plan: Int16Array, width: number, height: number, represented: readonly ArrayLike<number>[],
+): boolean {
+    let first = 0;
+    while (first < plan.length && plan[first] !== PlanType.Invalid) first += 4;
+    if (first === plan.length) return false;
+    // Outward cells, the chart gutter included: 1 = warning, 2 = represented warning.
+    const stride = width + 2;
+    const cells = new Uint8Array(stride * (height + 2));
+    let unrepresented = 0;
+    for (let i = first; i < plan.length; i += 4) {
+        if (plan[i] !== PlanType.Invalid) continue;
+        const [x, y] = planOutwardCoordinate(plan, i);
+        const index = (y + 1) * stride + x + 1;
+        unrepresented += cells[index] === 0 ? 1 : 0;
+        cells[index] = 1;
+    }
+    for (const coords of represented) {
+        for (let i = 0; i < coords.length; i += 2) {
+            const index = (coords[i + 1] + 1) * stride + coords[i] + 1;
+            if (cells[index] !== 1) continue;
+            cells[index] = 2;
+            unrepresented--;
+        }
+    }
+    return unrepresented > 0;
+}
+
 export interface PackedInstructionCoordinates {
     readonly values: Uint32Array;
     has(x: number, y: number): boolean;

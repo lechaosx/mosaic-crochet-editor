@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PlanDir, PlanType } from "@mosaic/wasm";
-import { invalidPlanCellCount, packInstructionCoordinates, planOutwardCoordinate } from "../src/instruction-coordinates";
+import { hasUnrepresentedWarning, invalidPlanCellCount, packInstructionCoordinates, planOutwardCoordinate } from "../src/instruction-coordinates";
 
 describe("instruction coordinates", () => {
     it("projects native plan records from supporting to outward worked positions", () => {
@@ -52,5 +52,18 @@ describe("instruction coordinates", () => {
             PlanType.Invalid, PlanDir.Right, 2, 1,
         ]);
         expect(invalidPlanCellCount(plan, 3, 3)).toBe(3);
+    });
+
+    it("finds a warning whose outward cell no instruction works", () => {
+        // A corner cell's two records warn at two outward cells, here both in the gutter.
+        const plan = new Int16Array([
+            PlanType.Invalid, PlanDir.Up, 0, 0,
+            PlanType.Invalid, PlanDir.Left, 0, 0,
+            PlanType.Valid, PlanDir.Down, 2, 1,
+            PlanType.Invalid, PlanDir.Right, 2, 1,
+        ]);
+        expect(hasUnrepresentedWarning(new Int16Array(), 3, 2, [])).toBe(false);
+        expect(hasUnrepresentedWarning(plan, 3, 2, [new Int32Array([0, -1, -1, 0]), new Int32Array([3, 1])])).toBe(false);
+        expect(hasUnrepresentedWarning(plan, 3, 2, [new Int32Array([0, -1, 3, 1]), new Int32Array([0, -1])])).toBe(true);
     });
 });

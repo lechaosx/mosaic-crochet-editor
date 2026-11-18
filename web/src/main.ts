@@ -1,4 +1,4 @@
-import { PlanType, lock_invalid_row, lock_invalid_round, transformed_target_indices,
+import { lock_invalid_row, lock_invalid_round, transformed_target_indices,
          overlay_target_available_row, overlay_target_available_round,
          overlay_inward_cell_row, overlay_inward_cell_round,
          initialize_row_pattern,
@@ -23,7 +23,7 @@ import { deleteProjectsExcept, loadProjectIndex, openProjectDatabase, readProjec
 import { becomeEditor } from "./editor-lock";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
-import { invalidPlanCellCount, packInstructionCoordinates, planOutwardCoordinate } from "./instruction-coordinates";
+import { hasUnrepresentedWarning, invalidPlanCellCount, packInstructionCoordinates } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
 import { createChartLayer } from "./chart-layer";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
@@ -1256,13 +1256,6 @@ async function onInstructions() {
         renderCanvas();
     });
     const plan = store.plan;
-    const warningCoordinates = new Set<string>();
-    for (let i = 0; i < plan.length; i += 4) {
-        if (plan[i] === PlanType.Invalid) {
-            const [x, y] = planOutwardCoordinate(plan, i);
-            warningCoordinates.add(`${x},${y}`);
-        }
-    }
 
     instructionsPreviewStore = new Store({
         ...store.state,
@@ -1359,18 +1352,14 @@ async function onInstructions() {
             dlg.appendLine(copiedInstruction(directional));
         });
         if (live) {
-            const unrepresentedWarnings = new Set(warningCoordinates);
-            for (const unit of units) {
-                for (let i = 0; i < unit.invalidWorkedCoords.length; i += 2) {
-                    unrepresentedWarnings.delete(`${unit.invalidWorkedCoords[i]},${unit.invalidWorkedCoords[i + 1]}`);
-                }
-            }
+            const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+            const wholeInvalid = hasUnrepresentedWarning(plan, W, H, units.map(unit => unit.invalidWorkedCoords));
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
                 completedUnits = nextCompleted;
                 const saved = editing && saveLiveProgress(projectId, progressFingerprint, completedUnits);
                 if (saved) ui.setCrochetProgress(hasLiveProgress(projectId, progressFingerprint, totalUnits));
                 return saved;
-            }, unrepresentedWarnings.size > 0);
+            }, wholeInvalid);
         }
     };
     const cached = instructionCache?.fingerprint === patternFingerprint
