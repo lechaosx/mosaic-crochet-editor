@@ -34,6 +34,36 @@ test("dimension changes leave unchanged global mirror metadata stable", async ({
     expect(await page.evaluate(() => (window as typeof window & { descriptions: string[] }).descriptions)).toEqual([]);
 });
 
+test("the favicon previews the pattern in its yarn colours", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
+    for (const [id, color] of [["color-a", "#123456"], ["color-b", "#abcdef"]]) {
+        await page.locator(`#${id}`).evaluate((input: HTMLInputElement, value) => {
+            input.value = value;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+        }, color);
+    }
+    await page.keyboard.press("Escape");
+    // The default 9×9 chart fills the 32 px icon: icon y 1 lies in chart row 0, y 5 in row 1.
+    const iconRGB = (x: number, y: number) => page.evaluate(async ({ x, y }) => {
+        const image = new Image();
+        image.src = (document.getElementById("favicon") as HTMLLinkElement).href;
+        await image.decode();
+        const canvas = document.createElement("canvas");
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(image, 0, 0);
+        return Array.from(ctx.getImageData(x, y, 1, 1).data);
+    }, { x, y });
+    expect(await iconRGB(1, 1)).toEqual([0x12, 0x34, 0x56, 255]);
+    expect(await iconRGB(1, 5)).toEqual([0xab, 0xcd, 0xef, 255]);
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await clickCell(page, 0, 1);
+    expect(await iconRGB(1, 5)).toEqual([0x12, 0x34, 0x56, 255]);
+});
+
 test("a pattern at the maximum side length draws its cells", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern", exact: true }).click();

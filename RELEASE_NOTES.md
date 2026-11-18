@@ -4,7 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 18 November 2026
 
-- Patterns are limited to 32,767 stitches per side.
+- Editing large charts responds much faster, and pattern sides are now limited to 32,767 stitches.
 
 ## 9 October 2026
 

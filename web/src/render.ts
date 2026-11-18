@@ -108,6 +108,8 @@ export interface RendererState {
     selectionHandlesVisible: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
+    cellCanvas:    HTMLCanvasElement;
+    cellCtx:       CanvasRenderingContext2D;
     instructionSeam: InstructionSeam | null;
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
 }
@@ -116,6 +118,7 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
     const faviconCanvas = document.createElement("canvas");
     faviconCanvas.width  = FAVICON_SIZE;
     faviconCanvas.height = FAVICON_SIZE;
+    const cellCanvas = document.createElement("canvas");
     return {
         visualRotation: 0,
         targetRotation: null,
@@ -135,6 +138,8 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         selectionHandlesVisible: false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
+        cellCanvas,
+        cellCtx:        cellCanvas.getContext("2d")!,
         instructionSeam: null,
         instructionGuidanceCoords: null,
     };
@@ -328,6 +333,40 @@ function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, n
     rs.rafId = active ? requestAnimationFrame(now2 => frame(rs, vp, ctx, now2)) : null;
 }
 
+// ── Cell images ────────────────────────────────────────────────────────────
+// Cells are written as ImageData: per-cell fillRect calls are too slow for
+// large charts.
+function yarnRgb(colors: (string | null)[]): ([number, number, number] | null)[] {
+    return colors.map(color => {
+        if (color === null) return null;
+        const value = parseInt(color.slice(1), 16);
+        return [value >> 16, (value >> 8) & 255, value & 255];
+    });
+}
+
+function writeRgb(data: Uint8ClampedArray, index: number, [r, g, b]: [number, number, number]) {
+    data[index] = r; data[index + 1] = g; data[index + 2] = b; data[index + 3] = 255;
+}
+
+// One image pixel per cell, holes transparent.
+function drawCells(
+    ctx: CanvasRenderingContext2D, rs: RendererState, W: number, H: number, pixels: Uint8Array,
+) {
+    const { cellCanvas, cellCtx } = rs;
+    if (cellCanvas.width !== W || cellCanvas.height !== H) {
+        cellCanvas.width  = W;
+        cellCanvas.height = H;
+    }
+    const image = cellCtx.createImageData(W, H);
+    const rgb = yarnRgb(rs.colors);
+    for (let i = 0; i < W * H; i++) {
+        if (pixels[i] !== 0) writeRgb(image.data, i * 4, rgb[pixels[i]]!);
+    }
+    cellCtx.putImageData(image, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(cellCanvas, 0, 0);
+}
+
 // ── Favicon ────────────────────────────────────────────────────────────────
 function updateFavicon(
     faviconCanvas: HTMLCanvasElement, faviconCtx: CanvasRenderingContext2D,
@@ -339,15 +378,22 @@ function updateFavicon(
     const offX  = Math.floor((FAVICON_SIZE - W * scale) / 2);
     const offY  = Math.floor((FAVICON_SIZE - H * scale) / 2);
 
-    faviconCtx.clearRect(0, 0, FAVICON_SIZE, FAVICON_SIZE);
+    const image = faviconCtx.createImageData(FAVICON_SIZE, FAVICON_SIZE);
+    const rgb = yarnRgb(colors);
     for (let y = 0; y < H; y++) {
+        const top = offY + Math.floor(y * scale);
         for (let x = 0; x < W; x++) {
             const p = pixels[y * W + x];
             if (p === 0) continue;
-            faviconCtx.fillStyle = colors[p] ?? "#333";
-            faviconCtx.fillRect(offX + Math.floor(x * scale), offY + Math.floor(y * scale), px, px);
+            const left = offX + Math.floor(x * scale);
+            for (let dy = 0; dy < px; dy++) {
+                for (let dx = 0; dx < px; dx++) {
+                    writeRgb(image.data, ((top + dy) * FAVICON_SIZE + left + dx) * 4, rgb[p]!);
+                }
+            }
         }
     }
+    faviconCtx.putImageData(image, 0, 0);
 
     const link = document.getElementById("favicon") as HTMLLinkElement | null;
     if (link) link.href = faviconCanvas.toDataURL("image/png");
@@ -481,21 +527,12 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 
     const m = buildMatrix(canvas, view, dpr, rs.visualRotation, pattern);
     ctx.setTransform(m);
-    ctx.imageSmoothingEnabled = false;
     // E2E test hook: latest canvas-pixel transform so Playwright can map
     // (cellX, cellY) → CSS click coords without coupling to view state.
     // No-op for users; one property write per render.
     (window as unknown as { __test_matrix__?: DOMMatrix }).__test_matrix__ = m;
 
-    for (let y = 0; y < H; y++) {
-        const row = y * W;
-        for (let x = 0; x < W; x++) {
-            const p = committedPixels[row + x];
-            if (p === 0) continue;
-            ctx.fillStyle = rs.colors[p] ?? "#333";
-            ctx.fillRect(x, y, 1, 1);
-        }
-    }
+    drawCells(ctx, rs, W, H, committedPixels);
     // Grid: 1 device pixel regardless of zoom.
     const px = 1 / (view.zoom * dpr);
     ctx.lineWidth = px;
@@ -860,6 +897,17 @@ function renderHighlightSymbols(
         { display: 2, glyph: A },
     ];
 
+    // Large charts can hold tens of thousands of glyphs; skip cells wholly
+    // outside the canvas.
+    const inverse = m.inverse();
+    const corners = [[0, 0], [ctx.canvas.width, 0], [0, ctx.canvas.height], [ctx.canvas.width, ctx.canvas.height]]
+        .map(([x, y]) => inverse.transformPoint({ x, y }));
+    const left   = Math.min(...corners.map(p => p.x)) - 1;
+    const right  = Math.max(...corners.map(p => p.x));
+    const top    = Math.min(...corners.map(p => p.y)) - 1;
+    const bottom = Math.max(...corners.map(p => p.y));
+    const onCanvas = (x: number, y: number) => x >= left && x <= right && y >= top && y <= bottom;
+
     ctx.save();
     ctx.globalAlpha = opacity;
 
@@ -875,6 +923,7 @@ function renderHighlightSymbols(
             if (plan[i] !== PlanType.Valid) continue;
             const wx = plan[i+2], wy = plan[i+3];
             const [ox, oy] = planOutwardCoordinate(plan, i);
+            if (!onCanvas(ox, oy)) continue;
             if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
             if (outwardPixel(ox, oy, wx, wy) !== display) continue;
             validGlyphCoords.push({ x: ox, y: oy });
@@ -894,12 +943,15 @@ function renderHighlightSymbols(
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    const invalidGlyphs: { x: number; y: number; point: DOMPoint }[] = [];
+    const invalidGlyphs: { x: number; y: number; point: { x: number; y: number } }[] = [];
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] !== PlanType.Invalid) continue;
         const [ox, oy] = planOutwardCoordinate(plan, i);
+        if (!onCanvas(ox, oy)) continue;
         if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
-        invalidGlyphs.push({ x: ox, y: oy, point: m.transformPoint({ x: ox + 0.5, y: oy + 0.5 }) });
+        // Inline affine maths: `transformPoint` allocates a DOMPoint per glyph.
+        const cx = ox + 0.5, cy = oy + 0.5;
+        invalidGlyphs.push({ x: ox, y: oy, point: { x: m.a * cx + m.c * cy + m.e, y: m.b * cx + m.d * cy + m.f } });
     }
 
     ctx.strokeStyle = dangerColor;
