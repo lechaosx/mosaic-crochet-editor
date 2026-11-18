@@ -1,5 +1,5 @@
 import { test, expect, Page } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB } from "./_helpers";
+import { bootApp, cellCoord, chartPixels, clickCell, pixelRGB } from "./_helpers";
 
 const TOOL_IDS = [
     "tool-pencil", "tool-fill", "tool-eraser", "tool-overlay",
@@ -60,23 +60,19 @@ for (const { width, height, textSize } of [
 }
 
 async function renderedBounds(page: Page) {
-    return page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
-        const { width, height } = canvas;
-        const pixels = canvas.getContext("2d", { willReadFrequently: true })!
-            .getImageData(0, 0, width, height).data;
-        let minX = width, minY = height, maxX = -1, maxY = -1;
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const i = (y * width + x) * 4;
-                if (pixels[i] === 22 && pixels[i + 1] === 22 && pixels[i + 2] === 24) continue;
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
-            }
+    const { width, height, data: pixels } = await chartPixels(page);
+    let minX = width, minY = height, maxX = -1, maxY = -1;
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            if (pixels[i] === 22 && pixels[i + 1] === 22 && pixels[i + 2] === 24) continue;
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
         }
-        return { minX, minY, maxX, maxY, width, height };
-    });
+    }
+    return { minX, minY, maxX, maxY, width, height };
 }
 
 test("Fit keeps row numbers inside constrained canvases", async ({ page }) => {

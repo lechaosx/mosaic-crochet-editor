@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addGlobalMirror, bootApp, cellCoord, clickCell, storedHistory, storedRecovery } from "./_helpers";
+import { addGlobalMirror, bootApp, cellCoord, chartPixels, clickCell, storedHistory, storedRecovery } from "./_helpers";
 
 interface DrawingStroke { paths: number[][]; dash: number[]; width: number; color: string; alpha: number; offset: number; scale: number }
 
@@ -7,10 +7,15 @@ async function traceDrawing(page: Page) {
     await page.evaluate(() => {
         const proto = CanvasRenderingContext2D.prototype;
         const paths = new WeakMap<CanvasRenderingContext2D, number[][]>();
-        const begin = proto.beginPath, move = proto.moveTo, line = proto.lineTo, stroke = proto.stroke, fill = proto.fillRect, arc = proto.arc;
+        const begin = proto.beginPath, move = proto.moveTo, line = proto.lineTo, stroke = proto.stroke, arc = proto.arc;
         const target = window as unknown as { drawing: DrawingStroke[] };
         target.drawing = [];
         const grips = window as unknown as { grips: { x: number; y: number }[] }; grips.grips = [];
+        // The renderer sets the test matrix once per frame, before drawing anything these tracers record.
+        let current = window.__test_matrix__;
+        Object.defineProperty(window, "__test_matrix__", { configurable: true, get: () => current, set(value) {
+            current = value; target.drawing = []; grips.grips = [];
+        } });
         proto.arc = function (x, y, radius, start, end, ccw) {
             const matrix = this.getTransform(), scale = Math.hypot(matrix.a, matrix.b) / devicePixelRatio;
             if (this.canvas.id === "canvas" && radius * scale >= 8) {
@@ -22,10 +27,6 @@ async function traceDrawing(page: Page) {
         proto.beginPath = function () { paths.set(this, []); begin.call(this); };
         proto.moveTo = function (x, y) { paths.get(this)?.push([x, y]); move.call(this, x, y); };
         proto.lineTo = function (x, y) { paths.get(this)?.at(-1)?.push(x, y); line.call(this, x, y); };
-        proto.fillRect = function (x, y, w, h) {
-            if (this.canvas.id === "canvas" && w === this.canvas.width && h === this.canvas.height) { target.drawing = []; grips.grips = []; }
-            fill.call(this, x, y, w, h);
-        };
         proto.stroke = function (...args: Parameters<typeof stroke>) {
             if (this.canvas.id === "canvas") target.drawing.push({ paths: structuredClone(paths.get(this) ?? []),
                 dash: this.getLineDash(), width: this.lineWidth, color: this.strokeStyle as string,
@@ -250,13 +251,18 @@ for (const reducedMotion of [false, true]) test(`source and copy marching ants $
     await page.getByRole("button", { name: "Close inspector", exact: true }).click();
     await page.keyboard.press("p");
     await page.waitForTimeout(200);
-    const frame = () => page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
-        const matrix = window.__test_matrix__!;
-        return [2, 3].map(x => {
-            const top = matrix.transformPoint({ x, y: 2 }), width = Math.floor(matrix.a) - 12;
-            return Array.from(canvas.getContext("2d")!.getImageData(Math.floor(top.x) + 6, Math.floor(top.y) - 2, width, 5).data);
+    const frame = async () => {
+        const rects = await page.evaluate(() => {
+            const matrix = window.__test_matrix__!;
+            return [2, 3].map(x => {
+                const top = matrix.transformPoint({ x, y: 2 });
+                return { x: Math.floor(top.x) + 6, y: Math.floor(top.y) - 2, width: Math.floor(matrix.a) - 12, height: 5 };
+            });
         });
-    });
+        const pixels: number[][] = [];
+        for (const rect of rects) pixels.push(Array.from((await chartPixels(page, rect)).data));
+        return pixels;
+    };
     const before = await frame();
     if (reducedMotion) {
         await page.waitForTimeout(250);
@@ -309,14 +315,13 @@ for (const dpr of [1, 3]) test.describe(`touching Grid copies at DPR ${dpr}`, ()
         }
         const frames: boolean[][] = [];
         for (let frame = 0; frame < 6; frame++) {
-            frames.push(await page.locator("#canvas").evaluate((canvas: HTMLCanvasElement) => {
-                const m = window.__test_matrix__!, ctx = canvas.getContext("2d")!;
+            const column = await page.evaluate(() => {
+                const m = window.__test_matrix__!;
                 const start = m.transformPoint({ x: 4, y: 3 }), end = m.transformPoint({ x: 4, y: 4 });
-                return Array.from({ length: Math.floor(end.y - start.y) - 4 }, (_, index) => {
-                    const pixel = ctx.getImageData(Math.floor(start.x), Math.floor(start.y) + index + 2, 1, 1).data;
-                    return pixel[0] - pixel[1] > 30;
-                });
-            }));
+                return { x: Math.floor(start.x), y: Math.floor(start.y) + 2, width: 1, height: Math.floor(end.y - start.y) - 4 };
+            });
+            const { data } = await chartPixels(page, column);
+            frames.push(Array.from({ length: column.height }, (_, index) => data[index * 4] - data[index * 4 + 1] > 30));
             await page.waitForTimeout(110);
         }
         const covered = frames[0].filter((_, index) => frames.some(frame => frame[index])).length;

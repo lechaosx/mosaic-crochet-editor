@@ -1,5 +1,11 @@
-import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, cellCoord, pixelRGB, chooseToolVariant, failLiveProgressWrites } from "./_helpers";
+import { test, expect, type Page } from "@playwright/test";
+import { bootApp, clickCell, cellCoord, chartPixel, chartPixels, pixelRGB, chooseToolVariant, failLiveProgressWrites } from "./_helpers";
+
+// [r, g, b, a] of the chart pixel showing pattern point (x, y).
+async function patternPixel(page: Page, x: number, y: number) {
+    const point = await page.evaluate(point => window.__test_matrix__!.transformPoint(point).toJSON(), { x, y });
+    return chartPixel(page, Math.round(point.x), Math.round(point.y));
+}
 
 test("a crocheter gets a focused workspace while the global document bar stays available", async ({ page }) => {
     await page.setViewportSize({ width: 2200, height: 900 });
@@ -196,13 +202,14 @@ test("Pattern palette edits refresh the open Crochet chart and yarn markers", as
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"] .instructions-unit-number'))
         .toHaveCSS("background-color", "rgb(18, 52, 86)");
     expect(await pixelRGB(page, chartCell.cx, chartCell.cy)).toEqual([18, 52, 86]);
-    const seamPixel = () => page.evaluate(() => {
-        const triangle = window.__test_instruction_seam_geometry__!.screenTriangle;
-        const x = triangle.reduce((sum, point) => sum + point[0], 0) / 3;
-        const y = triangle.reduce((sum, point) => sum + point[1], 0) / 3;
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        return Array.from(canvas.getContext("2d")!.getImageData(Math.round(x), Math.round(y), 1, 1).data).slice(0, 3);
-    });
+    const seamPixel = async () => {
+        const { x, y } = await page.evaluate(() => {
+            const triangle = window.__test_instruction_seam_geometry__!.screenTriangle;
+            return { x: triangle.reduce((sum, point) => sum + point[0], 0) / 3,
+                y: triangle.reduce((sum, point) => sum + point[1], 0) / 3 };
+        });
+        return (await chartPixel(page, Math.round(x), Math.round(y))).slice(0, 3);
+    };
     expect(await seamPixel()).toEqual([0, 255, 0]);
     await page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]').click();
     expect(await seamPixel()).toEqual([255, 0, 255]);
@@ -314,12 +321,7 @@ test("Crochet uses danger accents without warning prefixes or blocking progress"
     expect(invalidGlyphs.every(({ x, y }) => x >= 0 && x < 9 && y >= 0 && y < 9)).toBe(true);
     const warning = await cellCoord(page, 0, 0);
     expect(await pixelRGB(page, warning.cx, warning.cy)).toEqual([211, 47, 47]);
-    const plainCell = await page.evaluate(() => {
-        const point = window.__test_matrix__!.transformPoint({ x: 0.2, y: 0.2 });
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        return Array.from(canvas.getContext("2d")!.getImageData(Math.round(point.x), Math.round(point.y), 1, 1).data).slice(0, 3);
-    });
-    expect(plainCell).toEqual([0, 0, 0]);
+    expect((await patternPixel(page, 0.2, 0.2)).slice(0, 3)).toEqual([0, 0, 0]);
 });
 
 for (const mode of ["row", "round"] as const) {
@@ -678,16 +680,8 @@ test("long Crochet instructions wrap between stitch counts beside a yarn number 
 
 test("Crochet marks only the current row's beginning seam", async ({ page }) => {
     await bootApp(page);
-    const rowTopPixel = () => page.evaluate(() => {
-        const point = window.__test_matrix__!.transformPoint({ x: 4.5, y: 8 });
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        return Array.from(canvas.getContext("2d")!.getImageData(Math.round(point.x), Math.round(point.y), 1, 1).data);
-    });
-    const rowEndPixel = () => page.evaluate(() => {
-        const point = window.__test_matrix__!.transformPoint({ x: 9, y: 8.5 });
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        return Array.from(canvas.getContext("2d")!.getImageData(Math.round(point.x), Math.round(point.y), 1, 1).data).slice(0, 3);
-    });
+    const rowTopPixel = () => patternPixel(page, 4.5, 8);
+    const rowEndPixel = async () => (await patternPixel(page, 9, 8.5)).slice(0, 3);
     const plainEnd = await rowEndPixel();
     const grid = await rowTopPixel();
     await page.locator("#btn-export").click();
@@ -751,12 +745,8 @@ for (const extent of ["Half", "Quarter"]) {
         await page.locator("#edit-inner-width").fill("1");
         await page.locator("#edit-inner-height").fill("1");
         await page.locator("#edit-rounds").fill("3");
-        const endingPixel = () => page.evaluate((extent) => {
-            const point = window.__test_matrix__!.transformPoint(extent === "Half"
-                ? { x: 6.5, y: 0 } : { x: 4, y: 3.5 });
-            const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-            return Array.from(canvas.getContext("2d")!.getImageData(Math.round(point.x), Math.round(point.y), 1, 1).data).slice(0, 3);
-        }, extent);
+        const endingPixel = async () => (await (extent === "Half"
+            ? patternPixel(page, 6.5, 0) : patternPixel(page, 4, 3.5))).slice(0, 3);
         const plainEnd = await endingPixel();
         await page.locator("#btn-export").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
@@ -775,19 +765,20 @@ test("the seam triangle rotates with its cell and is painted in the accent colou
     await bootApp(page);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const geometry = () => page.evaluate(() => {
-        const seam = window.__test_instruction_seam_geometry__!;
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        const points = seam.screenTriangle;
-        const x = points.reduce((sum, p) => sum + p[0], 0) / 3;
-        const y = points.reduce((sum, p) => sum + p[1], 0) / 3;
-        const colour = Array.from(canvas.getContext("2d")!.getImageData(Math.round(x), Math.round(y), 1, 1).data);
-        const midX = (points[0][0] + points[1][0]) / 2;
-        const midY = (points[0][1] + points[1][1]) / 2;
-        return { colour, dx: points[2][0] - midX, dy: points[2][1] - midY, points,
-            width: canvas.width, height: canvas.height,
-            mappedBase: window.__test_matrix__!.transformPoint({ x: 0, y: 8.5 }).toJSON() };
-    });
+    const geometry = async () => {
+        const { x, y, ...shape } = await page.evaluate(() => {
+            const seam = window.__test_instruction_seam_geometry__!;
+            const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+            const points = seam.screenTriangle;
+            const midX = (points[0][0] + points[1][0]) / 2;
+            const midY = (points[0][1] + points[1][1]) / 2;
+            return { x: points.reduce((sum, p) => sum + p[0], 0) / 3, y: points.reduce((sum, p) => sum + p[1], 0) / 3,
+                dx: points[2][0] - midX, dy: points[2][1] - midY, points,
+                width: canvas.width, height: canvas.height,
+                mappedBase: window.__test_matrix__!.transformPoint({ x: 0, y: 8.5 }).toJSON() };
+        });
+        return { colour: await chartPixel(page, Math.round(x), Math.round(y)), ...shape };
+    };
     const before = await geometry();
     expect(before.colour.slice(0, 3)).toEqual([0, 131, 143]);
     expect(before.dx).toBeGreaterThan(0);
@@ -829,25 +820,26 @@ test("the triangle and seam have a continuous filled junction", async ({ page })
         const y = (points[0][1] + points[1][1]) / 2;
         const canvas = document.getElementById("canvas") as HTMLCanvasElement;
         if (x < 2 || x >= canvas.width || y < 0 || y >= canvas.height) throw new Error("junction is outside the chart viewport");
-        return Array.from(canvas.getContext("2d")!.getImageData(Math.floor(x) - 1, Math.round(y), 1, 1).data).slice(0, 3);
+        return { x: Math.floor(x) - 1, y: Math.round(y) };
     });
-    expect(junction).toEqual([0, 131, 143]);
+    expect((await chartPixel(page, junction.x, junction.y)).slice(0, 3)).toEqual([0, 131, 143]);
 });
 
 test("the joined seam triangle keeps its cell proportions through zoom", async ({ page }) => {
     await bootApp(page);
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    const shape = () => page.evaluate(() => {
-        const points = window.__test_instruction_seam_geometry__!.screenTriangle;
-        const matrix = window.__test_matrix__!;
-        const cell = Math.hypot(matrix.a, matrix.b);
-        const base = { x: (points[0][0] + points[1][0]) / 2, y: (points[0][1] + points[1][1]) / 2 };
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        const colour = Array.from(canvas.getContext("2d")!.getImageData(Math.round(base.x), Math.round(base.y), 1, 1).data).slice(0, 3);
-        return { depth: Math.hypot(points[2][0] - base.x, points[2][1] - base.y) / cell,
-            base: Math.hypot(points[0][0] - points[1][0], points[0][1] - points[1][1]) / cell, colour };
-    });
+    const shape = async () => {
+        const { x, y, ...proportions } = await page.evaluate(() => {
+            const points = window.__test_instruction_seam_geometry__!.screenTriangle;
+            const matrix = window.__test_matrix__!;
+            const cell = Math.hypot(matrix.a, matrix.b);
+            const base = { x: (points[0][0] + points[1][0]) / 2, y: (points[0][1] + points[1][1]) / 2 };
+            return { x: base.x, y: base.y, depth: Math.hypot(points[2][0] - base.x, points[2][1] - base.y) / cell,
+                base: Math.hypot(points[0][0] - points[1][0], points[0][1] - points[1][1]) / cell };
+        });
+        return { ...proportions, colour: (await chartPixel(page, Math.round(x), Math.round(y))).slice(0, 3) };
+    };
     const before = await shape();
     expect(before.depth).toBeCloseTo(0.32);
     expect(before.base).toBeCloseTo(0.44);
@@ -875,11 +867,7 @@ test("a single-cell Quarter has only its beginning seam and an inward triangle",
     await page.locator("#edit-inner-width").fill("0");
     await page.locator("#edit-inner-height").fill("0");
     await page.locator("#edit-rounds").fill("1");
-    const endingPixel = () => page.evaluate(() => {
-        const point = window.__test_matrix__!.transformPoint({ x: 1, y: 0.5 });
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        return Array.from(canvas.getContext("2d")!.getImageData(Math.round(point.x), Math.round(point.y), 1, 1).data).slice(0, 3);
-    });
+    const endingPixel = async () => (await patternPixel(page, 1, 0.5)).slice(0, 3);
     const plainEnd = await endingPixel();
     await page.locator("#btn-export").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
@@ -942,45 +930,42 @@ for (const extent of ["Full", "Half", "Quarter"]) {
                         await page.waitForTimeout(300);
                     }
                     await page.getByRole("button", { name: "Fit view" }).click();
-                    const { labels, viewUnchanged } = await page.evaluate(() => {
+                    const view = () => page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()));
+                    const matrix = await view();
+                    const samples = await page.evaluate(() => {
                         const m = window.__test_matrix__!;
                         const canvas = document.getElementById("canvas") as HTMLCanvasElement;
                         const geometry = (window as typeof window & { __test_instruction_label_geometry__?: Array<{
                             anchor: { x: number; y: number };
                             bounds: { left: number; top: number; right: number; bottom: number };
                         }> }).__test_instruction_label_geometry__!;
-                        const ctx = canvas.getContext("2d")!;
-                        const samples = geometry.map(({ anchor, bounds }) => {
+                        return geometry.map(({ anchor, bounds }) => {
                             const point = m.inverse().transformPoint(anchor);
                             const left = Math.max(0, Math.floor(bounds.left));
                             const top = Math.max(0, Math.floor(bounds.top));
                             const right = Math.min(canvas.width, Math.ceil(bounds.right));
                             const bottom = Math.min(canvas.height, Math.ceil(bounds.bottom));
-                            const pixels = ctx.getImageData(left, top, right - left, bottom - top).data;
-                            return { x: point.x, y: point.y, bounds, pixels, left, top, right, bottom };
+                            return { x: point.x, y: point.y, bounds, width: canvas.width, height: canvas.height,
+                                rect: { x: left, y: top, width: right - left, height: bottom - top } };
                         });
-                        const numbers = document.getElementById("labels-on") as HTMLInputElement;
-                        const matrix = m.toFloat64Array();
-                        // Compare the same view with numbers hidden; antialiasing depends on the system font.
-                        numbers.click();
-                        try {
-                            const viewUnchanged = Array.from(window.__test_matrix__!.toFloat64Array())
-                                .every((value, i) => value === matrix[i]);
-                            const labels = samples.map(({ x, y, bounds, pixels, left, top, right, bottom }) => {
-                                const hidden = ctx.getImageData(left, top, right - left, bottom - top).data;
-                                let inkPixels = 0;
-                                for (let i = 0; i < pixels.length; i += 4) {
-                                    if (pixels[i] !== hidden[i] || pixels[i + 1] !== hidden[i + 1]
-                                        || pixels[i + 2] !== hidden[i + 2]) inkPixels++;
-                                }
-                                return { x, y, bounds, inkPixels, width: canvas.width, height: canvas.height };
-                            });
-                            return { labels, viewUnchanged };
-                        } finally {
-                            numbers.click();
-                        }
                     });
-                    expect(viewUnchanged).toBe(true);
+                    const shown: Uint8Array[] = [];
+                    for (const { rect } of samples) shown.push((await chartPixels(page, rect)).data);
+                    // Compare the same view with numbers hidden; antialiasing depends on the system font.
+                    const toggleNumbers = () => page.locator("#labels-on").evaluate((numbers: HTMLInputElement) => numbers.click());
+                    await toggleNumbers();
+                    expect(await view()).toEqual(matrix);
+                    const labels = [];
+                    for (const [index, { x, y, bounds, width, height, rect }] of samples.entries()) {
+                        const pixels = shown[index], hidden = (await chartPixels(page, rect)).data;
+                        let inkPixels = 0;
+                        for (let i = 0; i < pixels.length; i += 4) {
+                            if (pixels[i] !== hidden[i] || pixels[i + 1] !== hidden[i + 1]
+                                || pixels[i + 2] !== hidden[i + 2]) inkPixels++;
+                        }
+                        labels.push({ x, y, bounds, inkPixels, width, height });
+                    }
+                    await toggleNumbers();
                     expect(labels).toHaveLength(3);
                     labels.forEach((label, i) => {
                         expect(label.x).toBeCloseTo(i + 0.5);
@@ -1008,23 +993,27 @@ test("partial-round beginning markers leave the historical number glyphs readabl
     await page.getByText("Quarter", { exact: true }).click();
     await page.locator("#edit-rounds").fill("3");
     await page.keyboard.press("Escape");
-    const labelInk = () => page.evaluate(() => {
-        const geometry = (window as typeof window & { __test_instruction_label_geometry__?: Array<{
-            bounds: { left: number; top: number; right: number; bottom: number };
-        }> }).__test_instruction_label_geometry__!;
-        const ctx = (document.getElementById("canvas") as HTMLCanvasElement).getContext("2d")!;
-        return geometry.map(({ bounds }) => {
-            const pixels = ctx.getImageData(Math.floor(bounds.left), Math.floor(bounds.top),
-                Math.ceil(bounds.right) - Math.floor(bounds.left), Math.ceil(bounds.bottom) - Math.floor(bounds.top)).data;
+    const labelInk = async () => {
+        const rects = await page.evaluate(() => {
+            const geometry = (window as typeof window & { __test_instruction_label_geometry__?: Array<{
+                bounds: { left: number; top: number; right: number; bottom: number };
+            }> }).__test_instruction_label_geometry__!;
+            return geometry.map(({ bounds }) => ({ x: Math.floor(bounds.left), y: Math.floor(bounds.top),
+                width: Math.ceil(bounds.right) - Math.floor(bounds.left), height: Math.ceil(bounds.bottom) - Math.floor(bounds.top) }));
+        });
+        const inks: number[][] = [];
+        for (const rect of rects) {
+            const pixels = (await chartPixels(page, rect)).data;
             const ink: number[] = [];
             for (let i = 0; i < pixels.length; i += 4) {
                 if (pixels[i] > 100 && pixels[i + 1] > 100 && pixels[i + 2] > 100
                     && Math.abs(pixels[i] - pixels[i + 1]) <= 2
                     && pixels[i + 2] - pixels[i] >= 3 && pixels[i + 2] - pixels[i] <= 15) ink.push(i);
             }
-            return ink;
-        });
-    });
+            inks.push(ink);
+        }
+        return inks;
+    };
     for (const rotated of [false, true]) {
         if (rotated) {
             await page.getByRole("button", { name: "Rotate view right" }).click();

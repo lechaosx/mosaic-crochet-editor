@@ -10,6 +10,11 @@ export default defineConfig({
     use: {
         baseURL: "http://localhost:4173",
         trace:   "on-first-retry",
+        // Headless Chromium has no WebGL2 when it inherits a desktop session's
+        // WAYLAND_DISPLAY: its GPU process fails to start.
+        launchOptions: {
+            env: Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "WAYLAND_DISPLAY")),
+        },
     },
     projects: [
         {

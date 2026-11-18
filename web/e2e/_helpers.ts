@@ -20,11 +20,12 @@ export async function selectionHandleCoords(page: Page): Promise<{ cx: number; c
         const target = window as unknown as { selectionGrips?: { cx: number; cy: number }[] };
         if (target.selectionGrips) return;
         target.selectionGrips = [];
-        const proto = CanvasRenderingContext2D.prototype, arc = proto.arc, fill = proto.fillRect;
-        proto.fillRect = function (x, y, w, h) {
-            if (this.canvas.id === "canvas" && w === this.canvas.width && h === this.canvas.height) target.selectionGrips = [];
-            fill.call(this, x, y, w, h);
-        };
+        // The renderer sets the test matrix once per frame, before drawing any grip.
+        let current = window.__test_matrix__;
+        Object.defineProperty(window, "__test_matrix__", { configurable: true, get: () => current, set(value) {
+            current = value; target.selectionGrips = [];
+        } });
+        const proto = CanvasRenderingContext2D.prototype, arc = proto.arc;
         proto.arc = function (x, y, radius, start, end, ccw) {
             const matrix = this.getTransform(), scale = Math.hypot(matrix.a, matrix.b) / devicePixelRatio;
             if (this.canvas.id === "canvas" && radius * scale >= 8) {
@@ -72,19 +73,36 @@ export async function cellCoord(page: Page, x: number, y: number): Promise<{ cx:
     }, { x, y });
 }
 
-// [r, g, b] of the canvas pixel at CSS-px (cx, cy). Renderer paints with
-// `alpha: false`, so we ignore the alpha channel.
-export async function pixelRGB(page: Page, cx: number, cy: number): Promise<[number, number, number]> {
-    return page.evaluate(({ cx, cy }) => {
+// The chart as displayed, as RGBA rows of `rect` (default: all of it) in
+// device pixels of `#canvas`. Every chart pixel assertion reads through these
+// helpers, so specs don't depend on how the chart's layers are drawn.
+export async function chartPixels(page: Page, rect?: { x: number; y: number; width: number; height: number }) {
+    const { width, height, base64 } = await page.evaluate(rect => {
         const canvas = document.getElementById("canvas") as HTMLCanvasElement;
+        const { x, y, width, height } = rect ?? { x: 0, y: 0, width: canvas.width, height: canvas.height };
+        const data = canvas.getContext("2d", { willReadFrequently: true })!.getImageData(x, y, width, height).data;
+        // Base64 crosses the protocol far faster than a whole-canvas array.
+        let binary = "";
+        for (let i = 0; i < data.length; i += 0x8000) binary += String.fromCharCode(...data.subarray(i, i + 0x8000));
+        return { width, height, base64: btoa(binary) };
+    }, rect);
+    return { width, height, data: Uint8Array.from(atob(base64), char => char.charCodeAt(0)) };
+}
+
+// [r, g, b, a] of the chart's device pixel (x, y).
+export async function chartPixel(page: Page, x: number, y: number): Promise<number[]> {
+    return Array.from((await chartPixels(page, { x, y, width: 1, height: 1 })).data);
+}
+
+// [r, g, b] of the chart pixel at CSS-px (cx, cy).
+export async function pixelRGB(page: Page, cx: number, cy: number): Promise<[number, number, number]> {
+    const { x, y } = await page.locator("#canvas").evaluate((canvas, { cx, cy }) => {
         const rect = canvas.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
-        const px = Math.round((cx - rect.left) * dpr);
-        const py = Math.round((cy - rect.top) * dpr);
-        const data = canvas.getContext("2d", { willReadFrequently: true })!
-            .getImageData(px, py, 1, 1).data;
-        return [data[0], data[1], data[2]];
+        return { x: Math.round((cx - rect.left) * dpr), y: Math.round((cy - rect.top) * dpr) };
     }, { cx, cy });
+    const [r, g, b] = await chartPixel(page, x, y);
+    return [r, g, b];
 }
 
 // `page.mouse.click` doesn't accept modifiers — we wrap with explicit

@@ -1,5 +1,5 @@
 // Painting flows: pencil paints, fill flood-fills, eraser restores
-// baseline. Pixel-level assertions go through `getImageData`.
+// baseline. Pixel-level assertions go through `pixelRGB`.
 
 import { test, expect } from "@playwright/test";
 import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
