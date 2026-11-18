@@ -233,6 +233,31 @@ test("adjacent repeat instances keep separate outlines and the source animates",
     }).__test_source_outline__.dashOffset)).not.toBe(phase);
 });
 
+test("marching ants follow repeat edits and selection moves", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Select", exact: true }).click();
+    await clickCell(page, 2, 1);
+    const outlines = () => page.evaluate(() => {
+        const target = window as unknown as {
+            __test_repeat_outlines__?: { paths: number[][][] };
+            __test_source_outline__?: { paths: number[][] };
+        };
+        return { repeats: target.__test_repeat_outlines__?.paths ?? [], source: target.__test_source_outline__?.paths ?? [] };
+    });
+    // x coordinates of each loop: its left and right edges.
+    const columns = (path: number[]) => [Math.min(...path.filter((_, i) => i % 2 === 0)), Math.max(...path.filter((_, i) => i % 2 === 0))];
+    for (const right of [1, 2]) {
+        await page.locator("#recipe-right").fill(String(right));
+        await page.locator("#recipe-right").dispatchEvent("change");
+        await expect.poll(async () => (await outlines()).repeats.length).toBe(right);
+    }
+    await page.getByRole("button", { name: "Close inspector", exact: true }).click();
+    await page.keyboard.press("m");
+    await dragCells(page, 2, 1, 3, 1);
+    await expect.poll(async () => (await outlines()).source.map(columns)).toEqual([[3, 4]]);
+    expect((await outlines()).repeats.map(instance => instance.map(columns))).toEqual([[[4, 5]], [[5, 6]]]);
+});
+
 test("source marching ants stop when reduced motion is requested", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);

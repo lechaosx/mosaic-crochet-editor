@@ -1,4 +1,4 @@
-import { PatternState, RowState, RoundState, MirrorCenter, SymKey } from "@mosaic/logic/types";
+import { PatternState, RowState, RoundState, MirrorCenter, SymKey, Float } from "@mosaic/logic/types";
 import { mirrorAxes, mirrorsToFlat } from "@mosaic/logic/symmetry";
 import { mirrorTypePresentation } from "./mirror-presentation";
 import { GridRecipe } from "@mosaic/logic/types";
@@ -106,6 +106,11 @@ export interface RendererState {
     // Marching-ants phase. Animated in `frame` while any float (committed
     // or drag preview) is on-screen; used as `lineDashOffset` for the outline.
     selectionDashOffset: number;
+    // Outlines and the inputs they were traced from: animation, pan and zoom
+    // frames reuse them. Null while not drawn, so they don't keep a replaced
+    // pixel array alive.
+    selectionOutline: { float: Float; pixels: Uint8Array; pattern: PatternState; paths: number[][] } | null;
+    recipeOutline: { recipe: GridRecipe; pixels: Uint8Array; pattern: PatternState; outline: RecipeOutline } | null;
     selectedMirrorId: string | null;
     previewRepeatGuides: boolean;
     selectionHandlesVisible: boolean;
@@ -141,6 +146,8 @@ export function makeRendererState(preferences: AppPreferences, chart: ChartLayer
         selectPreviewMask:      null,
         dragRect:               null,
         selectionDashOffset:    0,
+        selectionOutline:       null,
+        recipeOutline:          null,
         selectedMirrorId:       null,
         previewRepeatGuides:    false,
         selectionHandlesVisible: false,
@@ -530,9 +537,12 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     if (activeRecipe && float && !rs.hideCommittedSelection
         && float.x === activeRecipe.source.x && float.y === activeRecipe.source.y
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
-        renderRecipeInstances(ctx, view, dpr, pattern, pixels, activeRecipe, accentColor, dashOffsetSnapped);
+        if (rs.recipeOutline?.recipe !== activeRecipe || rs.recipeOutline.pixels !== pixels || rs.recipeOutline.pattern !== pattern) {
+            rs.recipeOutline = { recipe: activeRecipe, pixels, pattern, outline: recipeOutline(pattern, pixels, activeRecipe) };
+        }
+        renderRecipeOutline(ctx, view, dpr, rs.recipeOutline.outline, accentColor, dashOffsetSnapped);
         if (rs.selectionHandlesVisible) renderRecipeHandles(ctx, view, activeRecipe, accentColor, rs.visualRotation);
-    }
+    } else rs.recipeOutline = null;
     if (rs.selectionHandlesVisible) {
         if (activeRecipe?.mode === "mirror" && !rs.hideCommittedSelection) renderSymmetryGuides(ctx, view, dpr, pattern,
             [{ id: activeRecipe.id, enabled: true, x: activeRecipe.mirrorCentreX, y: activeRecipe.mirrorCentreY,
@@ -543,18 +553,11 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     // Snap the dash offset to discrete screen-pixel steps so dashes visibly
     // tick rather than glide.
     if (float && !rs.hideCommittedSelection) {
-        const shifted = new Uint8Array(W * H);
-        for (let ly = 0; ly < float.h; ly++) {
-            for (let lx = 0; lx < float.w; lx++) {
-                if (float.pixels[ly * float.w + lx] === 0) continue;
-                const cx = float.x + lx, cy = float.y + ly;
-                if (cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
-                if (pixels[cy * W + cx] === 0) continue;   // holes drop
-                shifted[cy * W + cx] = 1;
-            }
+        if (rs.selectionOutline?.float !== float || rs.selectionOutline.pixels !== pixels || rs.selectionOutline.pattern !== pattern) {
+            rs.selectionOutline = { float, pixels, pattern, paths: floatOutline(pattern, pixels, float) };
         }
-        renderSelection(ctx, view, dpr, pattern, shifted, accentColor, dashOffsetSnapped);
-    }
+        renderSelectionPaths(ctx, view, dpr, rs.selectionOutline.paths, accentColor, dashOffsetSnapped);
+    } else rs.selectionOutline = null;
     if (rs.selectPreviewMask) {
         renderSelection(ctx, view, dpr, pattern, rs.selectPreviewMask, accentColor, dashOffsetSnapped);
     }
@@ -594,12 +597,17 @@ function chartCells(rs: RendererState, store: Store): Uint8Array {
     return cells;
 }
 
-function renderRecipeInstances(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number, pattern: PatternState,
-    pixels: Uint8Array, recipe: GridRecipe, color: string, dashOffset: number,
-) {
-    const paths = recipeInstancePaths(pattern, pixels, recipe);
-    ctx.save();
+// The repeat's copies as dash runs: an edge the source or an earlier copy
+// already outlines is drawn once, and each run keeps the dash phase of its
+// place along its copy's perimeter.
+interface RecipeOutline {
+    instances: number[][][];
+    runs: { path: number[]; offset: number }[];
+}
+
+function recipeOutline(pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe): RecipeOutline {
+    const W = pattern.canvasWidth;
+    const instances = recipeInstancePaths(pattern, pixels, recipe);
     const source = recipe.source;
     const sourceMask = source.mask.slice();
     for (let y = 0; y < source.h; y++) for (let x = 0; x < source.w; x++) {
@@ -608,36 +616,46 @@ function renderRecipeInstances(
             || pixels[cy * pattern.canvasWidth + cx] === 0) sourceMask[y * source.w + x] = 0;
     }
     const occupied = new Set(tracedBoundary(sourceMask, source.w, source.h).flatMap(path => {
-        const keys: string[] = [];
+        const keys: number[] = [];
         for (let i = 2; i < path.length; i += 2) keys.push(boundaryEdgeKey(path[i - 2] + source.x, path[i - 1] + source.y,
-            path[i] + source.x, path[i + 1] + source.y));
+            path[i] + source.x, path[i + 1] + source.y, W));
         return keys;
     }));
-    for (const instance of paths) {
+    const runs: RecipeOutline["runs"] = [];
+    for (const instance of instances) {
         for (const path of instance) {
             let run: number[] = [];
-            let length = 0, runOffset = dashOffset;
+            let length = 0, runOffset = 0;
             for (let i = 2; i < path.length; i += 2) {
-                const key = boundaryEdgeKey(path[i - 2], path[i - 1], path[i], path[i + 1]);
+                const key = boundaryEdgeKey(path[i - 2], path[i - 1], path[i], path[i + 1], W);
                 if (occupied.has(key)) {
-                    if (run.length > 0) renderSelectionPaths(ctx, view, dpr, [run], color, runOffset, true);
+                    if (run.length > 0) runs.push({ path: run, offset: runOffset });
                     run = [];
                 } else {
                     occupied.add(key);
                     if (run.length === 0) {
                         run.push(path[i - 2], path[i - 1]);
-                        runOffset = dashOffset + length;
+                        runOffset = length;
                     }
                     run.push(path[i], path[i + 1]);
                 }
                 length += Math.hypot(path[i] - path[i - 2], path[i + 1] - path[i - 1]);
             }
-            if (run.length > 0) renderSelectionPaths(ctx, view, dpr, [run], color, runOffset, true);
+            if (run.length > 0) runs.push({ path: run, offset: runOffset });
         }
     }
+    return { instances, runs };
+}
+
+function renderRecipeOutline(
+    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
+    outline: RecipeOutline, color: string, dashOffset: number,
+) {
+    ctx.save();
+    for (const run of outline.runs) renderSelectionPaths(ctx, view, dpr, [run.path], color, dashOffset + run.offset, true);
     ctx.restore();
     (window as unknown as { __test_repeat_outlines__?: { paths: number[][][] } })
-        .__test_repeat_outlines__ = { paths };
+        .__test_repeat_outlines__ = { paths: outline.instances };
 }
 
 export interface SelectionTransformHandle {
@@ -675,49 +693,52 @@ export function recipeInstancePaths(
     pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe,
 ): number[][][] {
     const { canvasWidth: W, canvasHeight: H } = pattern;
-    const sourceCells = new Set<string>();
-    for (let y = 0; y < recipe.source.h; y++) {
-        for (let x = 0; x < recipe.source.w; x++) {
-            if (recipe.source.mask[y * recipe.source.w + x] !== 0) {
-                sourceCells.add(`${recipe.source.x + x},${recipe.source.y + y}`);
-            }
-        }
-    }
+    const { source } = recipe;
+    const inSource = (x: number, y: number) => x >= source.x && x < source.x + source.w && y >= source.y && y < source.y + source.h
+        && source.mask[(y - source.y) * source.w + x - source.x] !== 0;
     return evaluateGridRecipe(recipe).instances.flatMap(instance => {
-        const cells = new Set<string>();
+        // Cells as y * W + x.
+        const cells = new Set<number>();
         for (const cell of instance) {
             if (cell.x < 0 || cell.x >= W || cell.y < 0 || cell.y >= H) continue;
             if (pixels[cell.y * W + cell.x] === 0) continue;
-            if (sourceCells.has(`${cell.x},${cell.y}`)) continue;
-            cells.add(`${cell.x},${cell.y}`);
+            if (inSource(cell.x, cell.y)) continue;
+            cells.add(cell.y * W + cell.x);
         }
-        const paths = tracedSparseBoundary(cells);
+        const paths = tracedSparseBoundary(cells, W);
         return paths.length > 0 ? [paths] : [];
     });
 }
 
 type BoundaryEdge = [number, number, number, number] & { used?: boolean };
 
-function boundaryEdgeKey(x1: number, y1: number, x2: number, y2: number): string {
-    return x1 < x2 || x1 === x2 && y1 < y2 ? `${x1},${y1}|${x2},${y2}` : `${x2},${y2}|${x1},${y1}`;
+// Cell-corner vertices of a chart `width` cells wide, and the unit edges
+// between neighbouring vertices, as numbers.
+function vertexKey(x: number, y: number, width: number): number {
+    return y * (width + 1) + x;
 }
 
-function tracedSparseBoundary(selection: ReadonlySet<string>): number[][] {
+function boundaryEdgeKey(x1: number, y1: number, x2: number, y2: number, width: number): number {
+    return Math.min(vertexKey(x1, y1, width), vertexKey(x2, y2, width)) * 2 + (x1 === x2 ? 1 : 0);
+}
+
+// `selection` holds cells as y * width + x.
+function tracedSparseBoundary(selection: ReadonlySet<number>, width: number): number[][] {
     const edges: BoundaryEdge[] = [];
     for (const key of selection) {
-        const [x, y] = key.split(",").map(Number);
-        if (!selection.has(`${x},${y - 1}`)) edges.push([x, y, x + 1, y]);
-        if (!selection.has(`${x + 1},${y}`)) edges.push([x + 1, y, x + 1, y + 1]);
-        if (!selection.has(`${x},${y + 1}`)) edges.push([x + 1, y + 1, x, y + 1]);
-        if (!selection.has(`${x - 1},${y}`)) edges.push([x, y + 1, x, y]);
+        const x = key % width, y = (key - x) / width;
+        if (!selection.has(key - width)) edges.push([x, y, x + 1, y]);
+        if (x + 1 === width || !selection.has(key + 1)) edges.push([x + 1, y, x + 1, y + 1]);
+        if (!selection.has(key + width)) edges.push([x + 1, y + 1, x, y + 1]);
+        if (x === 0 || !selection.has(key - 1)) edges.push([x, y + 1, x, y]);
     }
-    return traceBoundaryEdges(edges);
+    return traceBoundaryEdges(edges, width);
 }
 
-function traceBoundaryEdges(edges: BoundaryEdge[]): number[][] {
-    const edgeFrom = new Map<string, BoundaryEdge[]>();
+function traceBoundaryEdges(edges: BoundaryEdge[], width: number): number[][] {
+    const edgeFrom = new Map<number, BoundaryEdge[]>();
     for (const edge of edges) {
-        const key = `${edge[0]},${edge[1]}`;
+        const key = vertexKey(edge[0], edge[1], width);
         const outgoing = edgeFrom.get(key);
         if (outgoing) outgoing.push(edge);
         else edgeFrom.set(key, [edge]);
@@ -732,14 +753,14 @@ function traceBoundaryEdges(edges: BoundaryEdge[]): number[][] {
     };
     for (const start of edges) {
         if (start.used) continue;
-        const startKey = `${start[0]},${start[1]}`;
+        const startKey = vertexKey(start[0], start[1], width);
         const path: number[] = [];
         let edge: BoundaryEdge | undefined = start;
         while (edge && !edge.used) {
             edge.used = true;
             if (path.length === 0) path.push(edge[0], edge[1]);
             path.push(edge[2], edge[3]);
-            const key: string = `${edge[2]},${edge[3]}`;
+            const key = vertexKey(edge[2], edge[3], width);
             if (key === startKey) break;
             const previousDirection = direction(edge);
             edge = edgeFrom.get(key)
@@ -819,7 +840,22 @@ function tracedBoundary(selection: Uint8Array, W: number, H: number): number[][]
         if (!sel(x, y + 1)) edges.push([x + 1, y + 1, x, y + 1]);
         if (!sel(x - 1, y)) edges.push([x, y + 1, x, y]);
     }
-    return traceBoundaryEdges(edges);
+    return traceBoundaryEdges(edges, W);
+}
+
+// The float's cells that land on chart cells, traced within its own bounds.
+function floatOutline(pattern: PatternState, pixels: Uint8Array, float: Float): number[][] {
+    const { canvasWidth: W, canvasHeight: H } = pattern;
+    const mask = new Uint8Array(float.w * float.h);
+    for (let ly = 0; ly < float.h; ly++) {
+        for (let lx = 0; lx < float.w; lx++) {
+            const cx = float.x + lx, cy = float.y + ly;
+            if (float.pixels[ly * float.w + lx] === 0 || cx < 0 || cx >= W || cy < 0 || cy >= H) continue;
+            if (pixels[cy * W + cx] === 0) continue;   // holes drop
+            mask[ly * float.w + lx] = 1;
+        }
+    }
+    return tracedBoundary(mask, float.w, float.h).map(path => path.map((value, i) => value + (i % 2 === 0 ? float.x : float.y)));
 }
 
 function renderSelection(
