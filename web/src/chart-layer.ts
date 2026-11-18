@@ -121,15 +121,16 @@ export interface ChartFrame {
     opacity: number;
 }
 
-// Null when the browser has no WebGL2. `onAvailability` reports when the
-// chart can no longer be shown (a lost context, or cells beyond the device's
-// texture limit) and when it can again.
+// Null when the browser has no WebGL2 or can't build the chart's shaders.
+// `onAvailability` reports when the chart can no longer be shown (a lost
+// context, or cells beyond the device's texture limit) and when it can again.
 export function createChartLayer(
     canvas: HTMLCanvasElement, onAvailability: (available: boolean) => void,
 ): ChartLayer | null {
     const gl = canvas.getContext("webgl2", { alpha: false, antialias: false, depth: false, stencil: false });
-    if (!gl) return null;
-    const layer: ChartLayer = { canvas, gl, onAvailability, available: true, resources: createResources(gl), frame: null };
+    const resources = gl && createResources(gl);
+    if (!gl || !resources) return null;
+    const layer: ChartLayer = { canvas, gl, onAvailability, available: true, resources, frame: null };
     canvas.addEventListener("webglcontextlost", event => {
         event.preventDefault();
         layer.resources = null;
@@ -137,7 +138,7 @@ export function createChartLayer(
     });
     canvas.addEventListener("webglcontextrestored", () => {
         layer.resources = createResources(gl);
-        setAvailable(layer, true);
+        setAvailable(layer, layer.resources !== null);
         if (layer.frame) drawChartLayer(layer, layer.frame);
     });
     // E2E test hook: repaints a device-pixel region of the frame on the canvas,
@@ -162,14 +163,15 @@ function setAvailable(layer: ChartLayer, available: boolean) {
     layer.onAvailability(available);
 }
 
-function createResources(gl: WebGL2RenderingContext): Resources {
+function createResources(gl: WebGL2RenderingContext): Resources | null {
     gl.bindVertexArray(gl.createVertexArray());
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    return { plain: createProgram(gl, false), glyphs: createProgram(gl, true),
-        texture: null, layout: null, uploaded: new Uint8Array(), cells: null, drawn: null };
+    const plain = createProgram(gl, false), glyphs = createProgram(gl, true);
+    return plain && glyphs && { plain, glyphs, texture: null, layout: null, uploaded: new Uint8Array(), cells: null, drawn: null };
 }
 
-function createProgram(gl: WebGL2RenderingContext, glyphs: boolean): Program {
+// Null when the program fails to link in a live context.
+function createProgram(gl: WebGL2RenderingContext, glyphs: boolean): Program | null {
     const program = gl.createProgram()!;
     for (const [type, source] of [[gl.VERTEX_SHADER, VERTEX], [gl.FRAGMENT_SHADER, fragment(glyphs)]] as const) {
         const shader = gl.createShader(type)!;
@@ -179,7 +181,8 @@ function createProgram(gl: WebGL2RenderingContext, glyphs: boolean): Program {
     }
     gl.linkProgram(program);
     if (!gl.getProgramParameter(program, gl.LINK_STATUS) && !gl.isContextLost()) {
-        throw new Error(`Chart shader failed to link: ${gl.getProgramInfoLog(program)}`);
+        console.error(`Chart shader failed to link: ${gl.getProgramInfoLog(program)}`);
+        return null;
     }
     const uniforms = Object.fromEntries(UNIFORMS.map(name => [name, gl.getUniformLocation(program, name)])) as Uniforms;
     return { program, uniforms };

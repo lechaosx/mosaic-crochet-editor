@@ -87,6 +87,17 @@ test("a chart beyond the device's texture limit shows the message instead", asyn
     await expect(page.getByRole("alert").filter({ hasText: "WebGL 2" })).toBeVisible();
 });
 
+test("a browser that can't build the chart's shaders shows the message instead", async ({ page }) => {
+    await page.addInitScript(() => {
+        const getProgramParameter = WebGL2RenderingContext.prototype.getProgramParameter;
+        WebGL2RenderingContext.prototype.getProgramParameter = function (this: WebGL2RenderingContext, program: WebGLProgram, name: number) {
+            return name === this.LINK_STATUS ? false : getProgramParameter.call(this, program, name);
+        };
+    });
+    await bootApp(page);
+    await expect(page.getByRole("alert").filter({ hasText: "WebGL 2" })).toBeVisible();
+});
+
 test("the chart returns when the browser restores its graphics context", async ({ page }) => {
     await bootApp(page);
     // The extension is unavailable from a lost context, so keep hold of it.
