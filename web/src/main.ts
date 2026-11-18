@@ -20,7 +20,7 @@ import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual,
 import { saveToLocalStorage, loadFromLocalStorage, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
-import { packInstructionCoordinates, planOutwardCoordinate } from "./instruction-coordinates";
+import { invalidPlanCellCount, packInstructionCoordinates, planOutwardCoordinate } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
 import { createChartLayer } from "./chart-layer";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
@@ -306,11 +306,8 @@ function renderCanvas() {
 }
 
 function crochetErrorCount() {
-    const errors = new Set<string>();
-    for (let i = 0; i < store.plan.length; i += 4) {
-        if (store.plan[i] === PlanType.Invalid) errors.add(`${store.plan[i + 2]},${store.plan[i + 3]}`);
-    }
-    return errors.size;
+    const { canvasWidth, canvasHeight } = store.state.pattern;
+    return invalidPlanCellCount(store.plan, canvasWidth, canvasHeight);
 }
 
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);

@@ -1,4 +1,4 @@
-import { PlanDir } from "@mosaic/wasm";
+import { PlanDir, PlanType } from "@mosaic/wasm";
 
 const DIR_VECTORS: Record<number, readonly [number, number]> = {
     [PlanDir.Up]: [0, -1],
@@ -10,6 +10,19 @@ const DIR_VECTORS: Record<number, readonly [number, number]> = {
 export function planOutwardCoordinate(plan: Int16Array, recordOffset: number): readonly [number, number] {
     const [dx, dy] = DIR_VECTORS[plan[recordOffset + 1]];
     return [plan[recordOffset + 2] + dx, plan[recordOffset + 3] + dy];
+}
+
+// A corner cell carries two plan records but counts as one invalid placement.
+export function invalidPlanCellCount(plan: Int16Array, width: number, height: number): number {
+    const counted = new Uint8Array(width * height);
+    let count = 0;
+    for (let i = 0; i < plan.length; i += 4) {
+        if (plan[i] !== PlanType.Invalid) continue;
+        const index = plan[i + 3] * width + plan[i + 2];
+        count += 1 - counted[index];
+        counted[index] = 1;
+    }
+    return count;
 }
 
 export interface PackedInstructionCoordinates {

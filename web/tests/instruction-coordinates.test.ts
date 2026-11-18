@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PlanDir, PlanType } from "@mosaic/wasm";
-import { packInstructionCoordinates, planOutwardCoordinate } from "../src/instruction-coordinates";
+import { invalidPlanCellCount, packInstructionCoordinates, planOutwardCoordinate } from "../src/instruction-coordinates";
 
 describe("instruction coordinates", () => {
     it("projects native plan records from supporting to outward worked positions", () => {
@@ -40,5 +40,17 @@ describe("instruction coordinates", () => {
         expect(packed.values.byteLength).toBe(width * Uint32Array.BYTES_PER_ELEMENT);
         expect(packed.has(width - 1, 0)).toBe(true);
         expect(packed.has(width, 0)).toBe(false);
+    });
+
+    it("counts each cell with invalid placements once", () => {
+        expect(invalidPlanCellCount(new Int16Array(), 3, 3)).toBe(0);
+        const plan = new Int16Array([
+            PlanType.Invalid, PlanDir.Up, 1, 0,
+            PlanType.Invalid, PlanDir.Left, 0, 1,     // a corner cell carries two records
+            PlanType.Invalid, PlanDir.Up, 0, 1,
+            PlanType.Valid, PlanDir.Up, 2, 2,
+            PlanType.Invalid, PlanDir.Right, 2, 1,
+        ]);
+        expect(invalidPlanCellCount(plan, 3, 3)).toBe(3);
     });
 });
