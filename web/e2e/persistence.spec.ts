@@ -1,7 +1,7 @@
 // Persistence + boot-time consistency checks.
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { bootApp, clickCell, cellCoord, countRecoveryWrites, failRecoveryWrites, pixelRGB, storedHistory, storedRecovery } from "./_helpers";
+import { bootApp, clickCell, cellCoord, countRecoveryWrites, dragCells, failRecoveryWrites, pixelRGB, storedHistory, storedRecovery } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
 
@@ -65,6 +65,20 @@ test("continuous paint writes recovery once when the stroke completes", async ({
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
     const restored = await cellCoord(page, 3, 1);
     expect(await pixelRGB(page, restored.cx, restored.cy)).toEqual(A);
+});
+
+test("a paint stroke that changes nothing in a selection writes no recovery", async ({ page }) => {
+    const recoveryWrites = await countRecoveryWrites(page);
+    await bootApp(page);
+    await page.keyboard.press("s");
+    await dragCells(page, 0, 0, 3, 1);
+    await page.keyboard.press("p");
+    const writesBefore = await recoveryWrites();
+
+    // Row 0 already holds the primary yarn A.
+    await dragCells(page, 0, 0, 3, 0);
+
+    expect(await recoveryWrites()).toBe(writesBefore);
 });
 
 test("paint, reload, content survives via localStorage", async ({ page }) => {

@@ -500,11 +500,14 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
     const yarnIndex = support?.length ? support[1] * pattern.canvasWidth + support[0] : y * pattern.canvasWidth + x;
     const yarn = outcome.after[yarnIndex];
     showExecutingAction(g.action, yarn === 1 || yarn === 2 ? yarn : null);
+    const s = store.state;
     if (outcome.floatPixels) {
         const pixels = outcome.floatPixels;
-        const base = outcome.canvasPixels;
-        store.commit(state => { state.float = { ...state.float!, pixels }; if (base) state.pixels = base; }, { persist: false });
-    } else {
+        const base = outcome.canvasPixels!;
+        if (!arraysEqual(pixels, s.float!.pixels) || !arraysEqual(base, s.pixels)) {
+            store.commit(state => { state.float = { ...state.float!, pixels }; state.pixels = base; }, { persist: false });
+        }
+    } else if (!arraysEqual(outcome.after, s.pixels)) {
         const pixels = outcome.after;
         store.commit(state => { state.pixels = pixels; }, { persist: false });
     }

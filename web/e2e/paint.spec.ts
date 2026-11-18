@@ -2,7 +2,7 @@
 // baseline. Pixel-level assertions go through `pixelRGB`.
 
 import { test, expect } from "@playwright/test";
-import { bootApp, clickCell, cellCoord, pixelRGB } from "./_helpers";
+import { bootApp, clickCell, cellCoord, dragCells, pixelRGB } from "./_helpers";
 
 const COLOR_A: [number, number, number] = [0, 0, 0];   // default colour A = #000
 const COLOR_B: [number, number, number] = [255, 255, 255]; // default colour B = #fff
@@ -53,4 +53,19 @@ test("undo reverts the last paint", async ({ page }) => {
     expect((await pixelRGB(page, c.cx, c.cy))).toEqual(COLOR_A);
     await page.keyboard.press("Control+z");
     expect((await pixelRGB(page, c.cx, c.cy))).toEqual(COLOR_B);
+});
+
+test("a stroke in a selection that starts on unchanged cells paints the rest as one undo step", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("s");
+    await dragCells(page, 0, 0, 3, 1);
+    await page.keyboard.press("p");
+
+    // From row 0, already yarn A, into row 1, yarn B, which separate moves paint at x 2 and 3.
+    await dragCells(page, 0, 0, 3, 1);
+    const painted = [await cellCoord(page, 2, 1), await cellCoord(page, 3, 1)];
+    for (const { cx, cy } of painted) expect(await pixelRGB(page, cx, cy)).toEqual(COLOR_A);
+
+    await page.keyboard.press("Control+z");
+    for (const { cx, cy } of painted) expect(await pixelRGB(page, cx, cy)).toEqual(COLOR_B);
 });
