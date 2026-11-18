@@ -953,6 +953,13 @@ function renderHighlightSymbols(
     ctx.restore();
 }
 
+// Labels are drawn upright at a screen-space anchor, with ink no farther than
+// `reach` from it; a frame draws only those that can touch the canvas.
+function labelReachesCanvas(canvas: HTMLCanvasElement, anchor: DOMPoint, reach: number): boolean {
+    return anchor.x > -reach && anchor.y > -reach
+        && anchor.x < canvas.width + reach && anchor.y < canvas.height + reach;
+}
+
 // Row labels in the left gutter — row 1 at the bottom (mosaic convention).
 function renderRowLabels(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
@@ -966,8 +973,10 @@ function renderRowLabels(
     ctx.fillStyle  = "rgba(210, 210, 220, 0.75)";
     ctx.textAlign  = "right";
     ctx.textBaseline = "middle";
+    const reach = ctx.measureText(String(H)).width + cell;
     for (let y = 0; y < H; y++) {
         const p = m.transformPoint({ x: -0.25, y: y + 0.5 });
+        if (!labelReachesCanvas(ctx.canvas, p, reach)) continue;
         ctx.fillText(String(H - y), p.x, p.y);
     }
     ctx.restore();
@@ -1000,6 +1009,7 @@ function renderRoundLabels(
     } else {
         ctx.fillStyle = "rgba(210, 210, 220, 0.75)";
     }
+    const reach = ctx.measureText(String(rounds)).width + cell + ctx.lineWidth;
     for (let i = 0; i < rounds; i++) {
         let cx: number, cy: number;
         if (isFull) {
@@ -1013,6 +1023,7 @@ function renderRoundLabels(
         }
         const label = String(rounds - i);
         const p = m.transformPoint({ x: cx, y: cy });
+        if (!labelReachesCanvas(ctx.canvas, p, reach)) continue;
         const width = ctx.measureText(label).width;
         const halfHeight = cell * (isFull ? 0.33 : 0.3);
         geometry.push({
