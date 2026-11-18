@@ -380,9 +380,13 @@ function renderCanvas() {
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
 
-function crochetErrorCount() {
+// Counted once per plan: a commit that keeps the plan keeps the count.
+let crochetErrorsPlan: Int16Array | null = null;
+function syncCrochetErrors() {
+    if (store.plan === crochetErrorsPlan) return;
+    crochetErrorsPlan = store.plan;
     const { canvasWidth, canvasHeight } = store.state.pattern;
-    return invalidPlanCellCount(store.plan, canvasWidth, canvasHeight);
+    ui.setCrochetErrors(invalidPlanCellCount(store.plan, canvasWidth, canvasHeight));
 }
 
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);
@@ -424,7 +428,7 @@ store.addObserver(s => ui.setViewState(
     s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
 store.addObserver(() => updateCoordinates(null, null));
-store.addObserver(() => ui.setCrochetErrors(crochetErrorCount()));
+store.addObserver(syncCrochetErrors);
 store.addObserver(s => syncProjectColorInputs(s.state));
 store.addObserver(() => {
     if (!document.getElementById("edit-pattern-widget")!.hidden) syncClearDrawingControl();
@@ -625,13 +629,13 @@ function deleteMirrorById(id: string) {
     finishAuthoredInput();
     const index = store.state.mirrors.findIndex(mirror => mirror.id === id);
     if (rs.selectedMirrorId === id) rs.selectedMirrorId = (store.state.mirrors[index + 1] ?? store.state.mirrors[index - 1])?.id ?? null;
-    store.commit(s => { s.mirrors = s.mirrors.filter(mirror => mirror.id !== id); }, { history: true });
+    store.commit(s => { s.mirrors = s.mirrors.filter(mirror => mirror.id !== id); }, { recompute: false, history: true });
     refreshSymmetryUi();
 }
 
 function toggleMirrorById(id: string) {
     finishAuthoredInput();
-    store.commit(s => { s.mirrors = s.mirrors.map(mirror => mirror.id === id ? { ...mirror, enabled: !mirror.enabled } : mirror); }, { history: true });
+    store.commit(s => { s.mirrors = s.mirrors.map(mirror => mirror.id === id ? { ...mirror, enabled: !mirror.enabled } : mirror); }, { recompute: false, history: true });
     refreshSymmetryUi();
 }
 
@@ -658,7 +662,7 @@ function commitMirrorChange(mirror: MirrorCenter, updated: MirrorCenter, preview
         if (preview && !mirrorEditBaseline) mirrorEditBaseline = store.state.mirrors;
         store.commit(s => {
             s.mirrors = s.mirrors.map(value => value.id === mirror.id ? updated : value);
-        }, { history: !preview, persist: !preview });
+        }, { recompute: false, history: !preview, persist: !preview });
     }
     refreshSymmetryUi();
     return updated;
@@ -845,14 +849,14 @@ function onColorCommit() {
 function onSwapYarns() {
     store.commit(s => {
         [s.colorA, s.colorB] = [s.colorB, s.colorA];
-    }, { history: true });
+    }, { recompute: false, history: true });
     ui.setColors(store.state.colorA, store.state.colorB);
 }
 function resetYarnColor(slot: 1 | 2) {
     store.commit(s => {
         if (slot === 1) s.colorA = DEFAULT_YARN_A;
         else s.colorB = DEFAULT_YARN_B;
-    }, { history: true });
+    }, { recompute: false, history: true });
     ui.setColors(store.state.colorA, store.state.colorB);
 }
 function onHlOpacityInput() {
@@ -1773,7 +1777,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             const mirror = store.state.mirrors.find(value => value.id === id)!;
             const updated = snapMirrorCenter(mirror, { x: frac.x - gesture.grabX - 0.5, y: frac.y - gesture.grabY - 0.5 }, store.state.pattern);
             if (updated && !mirrorsEqual([mirror], [updated])) {
-                store.commit(s => { s.mirrors = s.mirrors.map(value => value.id === id ? updated : value); }, { persist: false });
+                store.commit(s => { s.mirrors = s.mirrors.map(value => value.id === id ? updated : value); }, { recompute: false, persist: false });
                 refreshSymmetryUi();
             }
             return;
@@ -1929,7 +1933,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             const { preMirrors } = gesture;
             gesture = null;
             viewport.canvas.style.cursor = "";
-            store.commit(s => { s.mirrors = preMirrors; });
+            store.commit(s => { s.mirrors = preMirrors; }, { recompute: false });
             refreshSymmetryUi();
             return;
         }
@@ -2181,7 +2185,7 @@ ui.syncEditInputs(store.state.pattern);
 ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
 ui.setRecoveryStatus(!database ? "failed" : saved ? "recovered" : "saved");
 if (saved && undoHistory !== historyWritten) persistHistory();
-ui.setCrochetErrors(crochetErrorCount());
+syncCrochetErrors();
 
 if (saved) {
     fitToView(
