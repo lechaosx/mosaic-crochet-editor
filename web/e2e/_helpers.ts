@@ -74,13 +74,24 @@ export async function cellCoord(page: Page, x: number, y: number): Promise<{ cx:
 }
 
 // The chart as displayed, as RGBA rows of `rect` (default: all of it) in
-// device pixels of `#canvas`. Every chart pixel assertion reads through these
-// helpers, so specs don't depend on how the chart's layers are drawn.
+// device pixels of `#canvas`: the WebGL layer with the Canvas 2D overlay on
+// top. Every chart pixel assertion reads through these helpers, so specs
+// don't depend on how the chart's layers are drawn.
 export async function chartPixels(page: Page, rect?: { x: number; y: number; width: number; height: number }) {
     const { width, height, base64 } = await page.evaluate(rect => {
-        const canvas = document.getElementById("canvas") as HTMLCanvasElement;
-        const { x, y, width, height } = rect ?? { x: 0, y: 0, width: canvas.width, height: canvas.height };
-        const data = canvas.getContext("2d", { willReadFrequently: true })!.getImageData(x, y, width, height).data;
+        const overlay = document.getElementById("canvas") as HTMLCanvasElement;
+        const { x, y, width, height } = rect ?? { x: 0, y: 0, width: overlay.width, height: overlay.height };
+        const composite = document.createElement("canvas");
+        composite.width = width;
+        composite.height = height;
+        const context = composite.getContext("2d", { willReadFrequently: true })!;
+        // A presented WebGL frame is no longer readable; repaint it in this task.
+        (window as typeof window & { __test_repaint_chart__?: (x: number, y: number, width: number, height: number) => void })
+            .__test_repaint_chart__?.(x, y, width, height);
+        for (const layer of [document.getElementById("chart-gl") as HTMLCanvasElement, overlay]) {
+            context.drawImage(layer, x, y, width, height, 0, 0, width, height);
+        }
+        const data = context.getImageData(0, 0, width, height).data;
         // Base64 crosses the protocol far faster than a whole-canvas array.
         let binary = "";
         for (let i = 0; i < data.length; i += 0x8000) binary += String.fromCharCode(...data.subarray(i, i + 0x8000));

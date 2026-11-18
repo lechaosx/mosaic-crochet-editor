@@ -22,6 +22,7 @@ import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from ".
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
 import { packInstructionCoordinates, planOutwardCoordinate } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
+import { createChartLayer } from "./chart-layer";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          previewSelectRectMask,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
@@ -137,11 +138,15 @@ const viewport = makeViewport(document.getElementById("canvas") as HTMLCanvasEle
 function editableMirrorTolerance(): number {
     return 22 / viewport.view.zoom;
 }
-const ctx      = viewport.canvas.getContext("2d", { alpha: false })!;
+const ctx      = viewport.canvas.getContext("2d")!;
 let selectionMigrationNotice = false;
 const saved    = loadFromLocalStorage(() => { selectionMigrationNotice = true; });
 let preferences: AppPreferences = loadAppPreferences();
-const rs       = makeRendererState(preferences);
+const chartUnavailable = document.getElementById("chart-unavailable")!;
+const chartLayer = createChartLayer(document.getElementById("chart-gl") as HTMLCanvasElement,
+    available => { chartUnavailable.hidden = available; });
+chartUnavailable.hidden = chartLayer !== null;
+const rs       = makeRendererState(preferences, chartLayer);
 let projectColorsSynced: string | null = null;
 const store    = new Store(saved ?? defaultSession());
 // Without a recovered session, boot replaces this once the default pattern is built.

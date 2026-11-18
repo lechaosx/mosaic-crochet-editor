@@ -20,8 +20,8 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     await expect(page.getByText("Alternate direction", { exact: true })).toBeHidden();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeHidden();
     await page.evaluate(() => {
-        (window as typeof window & { __designCanvas?: HTMLCanvasElement }).__designCanvas =
-            document.getElementById("canvas") as HTMLCanvasElement;
+        (window as typeof window & { __designCanvases?: Element[] }).__designCanvases =
+            [...document.querySelectorAll("#chart-viewport canvas")];
     });
     const designViewport = await page.locator("#chart-viewport").boundingBox();
 
@@ -48,9 +48,11 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     await expect(page.getByRole("img", { name: "Crochet progress chart" })).toBeVisible();
     await expect(page.locator(".canvas-area > #chart-viewport > #canvas")).toHaveCount(1);
     expect(await page.locator("#chart-viewport").boundingBox()).toEqual(designViewport);
-    expect(await page.evaluate(() => document.getElementById("canvas") ===
-        (window as typeof window & { __designCanvas?: HTMLCanvasElement }).__designCanvas)).toBe(true);
-    await expect(page.locator("#chart-viewport canvas")).toHaveCount(1);
+    expect(await page.evaluate(() => {
+        const design = (window as typeof window & { __designCanvases?: Element[] }).__designCanvases!;
+        const crochet = [...document.querySelectorAll("#chart-viewport canvas")];
+        return crochet.length === design.length && crochet.every((canvas, index) => canvas === design[index]);
+    })).toBe(true);
     await expect(page.locator("#instructions-units .instructions-unit").first()).toHaveAttribute("aria-current", "step");
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("tab")).toHaveCount(0);
@@ -577,7 +579,8 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-height").fill("80");
     await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    // Generation takes an animation frame per row, and frames slow down under a loaded software GPU.
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled({ timeout: 15_000 });
     await page.locator("#btn-export").click();
     const before = await cellCoord(page, 0, 1);
     const beforePixel = await pixelRGB(page, before.cx, before.cy);

@@ -9,6 +9,8 @@ import { PlanType, transformed_target_indices,
 import { Store, visiblePixels } from "@mosaic/logic/store";
 import { AppPreferences } from "./preferences";
 import { planOutwardCoordinate, type PackedInstructionCoordinates } from "./instruction-coordinates";
+import { CELL_CROSS, CELL_WARNING, packChartCells } from "./chart-cells";
+import { drawChartLayer, type ChartLayer } from "./chart-layer";
 
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;
@@ -16,6 +18,7 @@ const ROT_DURATION = 250;
 const FAVICON_SIZE = 32;
 const LABEL_FONT   = `ui-monospace, "SF Mono", Menlo, monospace`;
 const PREVIEW_CELLS = 7;
+const BACKGROUND   = "#161618";
 // Marching-ants scroll speed in **screen pixels** per second. Converted to
 // pattern units per frame using current zoom/dpr so the perceived speed is
 // constant regardless of zoom level.
@@ -108,17 +111,19 @@ export interface RendererState {
     selectionHandlesVisible: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
-    cellCanvas:    HTMLCanvasElement;
-    cellCtx:       CanvasRenderingContext2D;
+    // Null when the browser cannot provide one; the overlay still renders.
+    chart:         ChartLayer | null;
+    // Repacked only when the plan or the instruction guidance changes: every
+    // commit that can change the visible pixels replaces the plan.
+    chartCells: { plan: Int16Array; guidance: PackedInstructionCoordinates | null; cells: Uint8Array } | null;
     instructionSeam: InstructionSeam | null;
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
 }
 
-export function makeRendererState(preferences: AppPreferences): RendererState {
+export function makeRendererState(preferences: AppPreferences, chart: ChartLayer | null): RendererState {
     const faviconCanvas = document.createElement("canvas");
     faviconCanvas.width  = FAVICON_SIZE;
     faviconCanvas.height = FAVICON_SIZE;
-    const cellCanvas = document.createElement("canvas");
     return {
         visualRotation: 0,
         targetRotation: null,
@@ -138,8 +143,8 @@ export function makeRendererState(preferences: AppPreferences): RendererState {
         selectionHandlesVisible: false,
         faviconCanvas,
         faviconCtx:     faviconCanvas.getContext("2d")!,
-        cellCanvas,
-        cellCtx:        cellCanvas.getContext("2d")!,
+        chart,
+        chartCells:     null,
         instructionSeam: null,
         instructionGuidanceCoords: null,
     };
@@ -333,7 +338,7 @@ function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, n
     rs.rafId = active ? requestAnimationFrame(now2 => frame(rs, vp, ctx, now2)) : null;
 }
 
-// ── Cell images ────────────────────────────────────────────────────────────
+// ── Favicon ────────────────────────────────────────────────────────────────
 // Cells are written as ImageData: per-cell fillRect calls are too slow for
 // large charts.
 function yarnRgb(colors: (string | null)[]): ([number, number, number] | null)[] {
@@ -348,26 +353,6 @@ function writeRgb(data: Uint8ClampedArray, index: number, [r, g, b]: [number, nu
     data[index] = r; data[index + 1] = g; data[index + 2] = b; data[index + 3] = 255;
 }
 
-// One image pixel per cell, holes transparent.
-function drawCells(
-    ctx: CanvasRenderingContext2D, rs: RendererState, W: number, H: number, pixels: Uint8Array,
-) {
-    const { cellCanvas, cellCtx } = rs;
-    if (cellCanvas.width !== W || cellCanvas.height !== H) {
-        cellCanvas.width  = W;
-        cellCanvas.height = H;
-    }
-    const image = cellCtx.createImageData(W, H);
-    const rgb = yarnRgb(rs.colors);
-    for (let i = 0; i < W * H; i++) {
-        if (pixels[i] !== 0) writeRgb(image.data, i * 4, rgb[pixels[i]]!);
-    }
-    cellCtx.putImageData(image, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(cellCanvas, 0, 0);
-}
-
-// ── Favicon ────────────────────────────────────────────────────────────────
 function updateFavicon(
     faviconCanvas: HTMLCanvasElement, faviconCtx: CanvasRenderingContext2D,
     colors: (string | null)[], pattern: PatternState, pixels: Uint8Array,
@@ -473,8 +458,7 @@ export function renderPatternColourPreview(
     for (let x = 0; x <= W; x++) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
     for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
     ctx.stroke();
-    renderHighlightSymbols(ctx, view, dpr,
-        [null, colorA, colorB], dangerColor, pattern, pixels, plan, matrix, opacity, null, false);
+    renderHighlightSymbols(ctx, view, dpr, colorA, colorB, dangerColor, pattern, pixels, plan, matrix, opacity);
     renderSymmetryGuides(ctx, view, dpr, pattern,
         [mirror], accentColor, null, true);
     const selection = new Uint8Array(W * H);
@@ -513,17 +497,8 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { canvas, view, dpr } = vp;
 
-    // `visiblePixels` = canvas pixels with the float stamped at offset
-    // (off-canvas / hole destinations dropped — same rules the commit applies).
-    // Used as the pixel source for both the cell render pass and the
-    // highlight-symbol pass. `store.plan` is already computed from this
-    // buffer (see `computePlan` in store.ts), so ✕ / ! markers track the
-    // float live without a per-frame WASM rebuild.
-    const committedPixels = visiblePixels(store.state);
-
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#161618";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const m = buildMatrix(canvas, view, dpr, rs.visualRotation, pattern);
     ctx.setTransform(m);
@@ -532,18 +507,16 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     // No-op for users; one property write per render.
     (window as unknown as { __test_matrix__?: DOMMatrix }).__test_matrix__ = m;
 
-    drawCells(ctx, rs, W, H, committedPixels);
-    // Grid: 1 device pixel regardless of zoom.
-    const px = 1 / (view.zoom * dpr);
-    ctx.lineWidth = px;
-    ctx.strokeStyle = "rgba(128, 128, 128, 0.18)";
-    ctx.beginPath();
-    for (let x = 0; x <= W; x++) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (let y = 0; y <= H; y++) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
-
-    renderHighlightSymbols(ctx, view, dpr, rs.colors, dangerColor, pattern, committedPixels, store.plan, m,
-        guidanceOpacity / 100, rs.instructionGuidanceCoords);
+    if (rs.chart) {
+        const { canvas: chartCanvas } = rs.chart;
+        if (chartCanvas.width !== canvas.width || chartCanvas.height !== canvas.height) {
+            chartCanvas.width  = canvas.width;
+            chartCanvas.height = canvas.height;
+        }
+        drawChartLayer(rs.chart, { cells: chartCells(rs, store), width: W, height: H,
+            hasGlyphs: store.plan.length > 0, matrix: m, opacity: guidanceOpacity / 100,
+            colors: { a: store.state.colorA, b: store.state.colorB, background: BACKGROUND, danger: dangerColor } });
+    }
     renderInstructionSeam(ctx, view, rs.instructionSeam, accentColor, dangerColor, m);
     const stepInPat = ANTS_STEP_PX / (view.zoom * dpr);
     const dashOffsetSnapped = Math.floor(rs.selectionDashOffset / stepInPat) * stepInPat;
@@ -589,6 +562,30 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         if (pattern.mode === "row") renderRowLabels(ctx, view, dpr, pattern, m);
         else                         renderRoundLabels(ctx, view, dpr, pattern, pixels, m);
     }
+}
+
+// The chart layer's cell bytes for the visible pixels: the float stamped over
+// the canvas, which is what `store.plan` was computed from.
+function chartCells(rs: RendererState, store: Store): Uint8Array {
+    const { plan } = store, guidance = rs.instructionGuidanceCoords;
+    if (rs.chartCells?.plan === plan && rs.chartCells.guidance === guidance) return rs.chartCells.cells;
+    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    const cells = packChartCells(visiblePixels(store.state), W, H, plan, guidance);
+    rs.chartCells = { plan, guidance, cells };
+    // E2E test hook: the cells showing each glyph, decoded only when read.
+    const glyphCoords = (flag: number) => {
+        const coords: { x: number; y: number }[] = [];
+        cells.forEach((cell, index) => {
+            if (cell & flag) coords.push({ x: index % (W + 2) - 1, y: Math.floor(index / (W + 2)) - 1 });
+        });
+        return coords;
+    };
+    (window as unknown as { __test_instruction_guidance__?: unknown }).__test_instruction_guidance__ = {
+        filtered: guidance !== null,
+        get validGlyphCoords() { return glyphCoords(CELL_CROSS); },
+        get invalidGlyphCoords() { return glyphCoords(CELL_WARNING); },
+    };
+    return cells;
 }
 
 function renderRecipeInstances(
@@ -866,6 +863,8 @@ function renderDragRect(
 }
 
 // ── Drawing helpers ────────────────────────────────────────────────────────
+// Plan glyphs for the colour preview; the chart layer's shader draws the same
+// geometry, so change both together.
 // ✕ for VALID overlay — pattern coords, auto-contrast (opposite of the cell
 //   colour the glyph lands on, so the glyph is readable against either
 //   palette).
@@ -876,14 +875,11 @@ function renderDragRect(
 // directions; each draws independently.
 function renderHighlightSymbols(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    colors: (string | null)[], dangerColor: string,
+    A: string, B: string, dangerColor: string,
     pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
-    m: DOMMatrix, opacity: number, guidanceCoords: PackedInstructionCoordinates | null,
-    recordTestHook = true,
+    m: DOMMatrix, opacity: number,
 ) {
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
-    const A = colors[1] ?? "#000";
-    const B = colors[2] ?? "#fff";
 
     // Glyph colour for ✕ is the opposite of the *outward* cell's colour where
     // the glyph actually lands. For gutter (out-of-canvas) outward cells, fall
@@ -897,17 +893,6 @@ function renderHighlightSymbols(
         { display: 2, glyph: A },
     ];
 
-    // Large charts can hold tens of thousands of glyphs; skip cells wholly
-    // outside the canvas.
-    const inverse = m.inverse();
-    const corners = [[0, 0], [ctx.canvas.width, 0], [0, ctx.canvas.height], [ctx.canvas.width, ctx.canvas.height]]
-        .map(([x, y]) => inverse.transformPoint({ x, y }));
-    const left   = Math.min(...corners.map(p => p.x)) - 1;
-    const right  = Math.max(...corners.map(p => p.x));
-    const top    = Math.min(...corners.map(p => p.y)) - 1;
-    const bottom = Math.max(...corners.map(p => p.y));
-    const onCanvas = (x: number, y: number) => x >= left && x <= right && y >= top && y <= bottom;
-
     ctx.save();
     ctx.globalAlpha = opacity;
 
@@ -915,18 +900,13 @@ function renderHighlightSymbols(
     ctx.lineCap  = "round";
     ctx.lineJoin = "round";
     ctx.lineWidth = 0.16;
-    const validGlyphCoords: { x: number; y: number }[] = [];
     for (const { display, glyph } of groups) {
         ctx.strokeStyle = glyph;
         ctx.beginPath();
         for (let i = 0; i < plan.length; i += 4) {
             if (plan[i] !== PlanType.Valid) continue;
-            const wx = plan[i+2], wy = plan[i+3];
             const [ox, oy] = planOutwardCoordinate(plan, i);
-            if (!onCanvas(ox, oy)) continue;
-            if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
-            if (outwardPixel(ox, oy, wx, wy) !== display) continue;
-            validGlyphCoords.push({ x: ox, y: oy });
+            if (outwardPixel(ox, oy, plan[i + 2], plan[i + 3]) !== display) continue;
             ctx.moveTo(ox + 0.24, oy + 0.24); ctx.lineTo(ox + 0.76, oy + 0.76);
             ctx.moveTo(ox + 0.76, oy + 0.24); ctx.lineTo(ox + 0.24, oy + 0.76);
         }
@@ -940,24 +920,18 @@ function renderHighlightSymbols(
     const dotR    = cellPx * 0.09;
     const dotY    = cellPx * 0.28;
 
-    ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-    const invalidGlyphs: { x: number; y: number; point: { x: number; y: number } }[] = [];
+    const points: { x: number; y: number }[] = [];
     for (let i = 0; i < plan.length; i += 4) {
         if (plan[i] !== PlanType.Invalid) continue;
         const [ox, oy] = planOutwardCoordinate(plan, i);
-        if (!onCanvas(ox, oy)) continue;
-        if (guidanceCoords && !guidanceCoords.has(ox, oy)) continue;
-        // Inline affine maths: `transformPoint` allocates a DOMPoint per glyph.
-        const cx = ox + 0.5, cy = oy + 0.5;
-        invalidGlyphs.push({ x: ox, y: oy, point: { x: m.a * cx + m.c * cy + m.e, y: m.b * cx + m.d * cy + m.f } });
+        points.push(m.transformPoint({ x: ox + 0.5, y: oy + 0.5 }));
     }
 
     ctx.strokeStyle = dangerColor;
     ctx.lineWidth   = cellPx * 0.16;
     ctx.beginPath();
-    for (const { point } of invalidGlyphs) {
+    for (const point of points) {
         ctx.moveTo(point.x, point.y - stemTop);
         ctx.lineTo(point.x, point.y + stemBot);
     }
@@ -965,23 +939,11 @@ function renderHighlightSymbols(
 
     ctx.fillStyle = dangerColor;
     ctx.beginPath();
-    for (const { point } of invalidGlyphs) {
+    for (const point of points) {
         ctx.moveTo(point.x + dotR, point.y + dotY);
         ctx.arc(point.x, point.y + dotY, dotR, 0, Math.PI * 2);
     }
     ctx.fill();
-    ctx.restore();
-
-    if (recordTestHook) (window as unknown as { __test_instruction_guidance__?: {
-        filtered: boolean;
-        validGlyphCoords: { x: number; y: number }[];
-        invalidGlyphCoords: { x: number; y: number }[];
-    } }).__test_instruction_guidance__ = {
-        filtered: guidanceCoords !== null,
-        validGlyphCoords,
-        invalidGlyphCoords: invalidGlyphs.map(({ x, y }) => ({ x, y })),
-    };
-
     ctx.restore();
 }
 

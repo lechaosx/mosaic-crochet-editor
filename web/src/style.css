@@ -501,6 +501,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   overflow: hidden;
 }
 
+#chart-gl,
 #canvas {
   position: absolute;
   inset: 0;
@@ -510,6 +511,22 @@ input[type="checkbox"] { accent-color: var(--accent); }
   touch-action: none;
   overscroll-behavior: none;
 }
+
+#chart-gl { pointer-events: none; }
+
+.chart-unavailable {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--fg-1);
+  background: var(--bg-0);
+  text-align: center;
+}
+
+.chart-unavailable[hidden] { display: none; }
 
 #canvas.canvas--navigate { cursor: grab; }
 #canvas.canvas--navigate:active { cursor: grabbing; }

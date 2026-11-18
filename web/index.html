@@ -141,7 +141,9 @@
 
     <main class="canvas-area">
       <div id="chart-viewport" class="chart-viewport">
+        <canvas id="chart-gl" aria-hidden="true"></canvas>
         <canvas id="canvas" role="img" aria-label="Editable pattern chart" tabindex="0">Editable pattern chart.</canvas>
+        <p id="chart-unavailable" class="chart-unavailable" role="alert" hidden>The chart can’t be shown because this browser’s WebGL 2 graphics are unavailable or can’t hold a pattern this large. Try turning on hardware acceleration or using a current browser.</p>
         <div class="canvas-controls" role="group" aria-label="Canvas view">
           <button class="btn btn--icon" id="view-navigate" type="button" aria-label="Navigate" aria-pressed="false" title="Navigate — drag to pan; hold Space for momentary Navigate" data-workspace="design"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-navigate"/></svg></button>
           <button class="btn" id="view-fit" type="button" aria-label="Fit view" title="Fit view">Fit</button>

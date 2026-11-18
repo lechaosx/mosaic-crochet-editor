@@ -4,7 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 18 November 2026
 
-- Editing large charts responds much faster, and pattern sides are now limited to 32,767 stitches.
+- Editing, panning and zooming large charts respond much faster, and pattern sides are now limited to 32,767 stitches; the chart needs WebGL 2 and shows a message in browsers without it.
 
 ## 9 October 2026
 

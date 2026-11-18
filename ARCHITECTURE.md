@@ -46,7 +46,7 @@ File formats and browser records are versioned and validated before replacing li
 
 ## Editor and presentation boundaries
 
-- The UI uses ordinary DOM controls around a Canvas 2D chart. Design and Crochet share one persistent canvas and view, while mode-specific controls and inspectors overlay the workspace without changing the chart's screen geometry. — **your decision**
+- The UI uses ordinary DOM controls around a chart drawn in two layers: a WebGL2 layer for the cells, grid and highlight glyphs under a Canvas 2D overlay for selections, guides, seams and labels. The GPU draws only the output of the Rust highlight plan and never decides which cells get ✕ or !. Without WebGL2 the chart area explains that the chart can't be shown; there is no fallback renderer. Design and Crochet share one persistent chart and view, while mode-specific controls and inspectors overlay the workspace without changing the chart's screen geometry. — **your decision**
 - A single state owner governs committed editor state; derived render data is recomputed from that state rather than maintained as an independently mutable model. — **your decision**
 - Pointer types share one interaction model. Mouse, touch, and pen may have different accelerators, but they do not have separate editing semantics. — **Agent's choice**
 - A floating selection is an editor layer over the chart. Saving and instruction generation consume a composed snapshot without mutating that live editing state. — **your decision**
