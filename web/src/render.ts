@@ -116,8 +116,9 @@ export interface RendererState {
     selectionHandlesVisible: boolean;
     faviconCanvas: HTMLCanvasElement;
     faviconCtx:    CanvasRenderingContext2D;
-    // What the favicon was last drawn from: drawing it walks every cell, so it
-    // is redrawn only when these change.
+    // What the favicon was last drawn from. `render` runs on every pan and
+    // zoom; the icon is re-encoded as a PNG and handed to the browser only
+    // when these change.
     faviconDrawn: { pixels: Uint8Array; width: number; height: number; colorA: string | null; colorB: string | null } | null;
     // Null when the browser cannot provide one; the overlay still renders.
     chart:         ChartLayer | null;
@@ -350,8 +351,6 @@ function frame(rs: RendererState, vp: Viewport, ctx: CanvasRenderingContext2D, n
 }
 
 // ── Favicon ────────────────────────────────────────────────────────────────
-// Cells are written as ImageData: per-cell fillRect calls are too slow for
-// large charts.
 function yarnRgb(colors: (string | null)[]): ([number, number, number] | null)[] {
     return colors.map(color => {
         if (color === null) return null;
@@ -371,30 +370,49 @@ function updateFavicon(rs: RendererState, pattern: PatternState, pixels: Uint8Ar
     if (drawn && drawn.pixels === pixels && drawn.width === W && drawn.height === H
         && drawn.colorA === colors[1] && drawn.colorB === colors[2]) return;
     rs.faviconDrawn = { pixels, width: W, height: H, colorA: colors[1], colorB: colors[2] };
-    const scale = Math.min(FAVICON_SIZE / W, FAVICON_SIZE / H);
-    const px    = Math.max(1, Math.floor(scale));
-    const offX  = Math.floor((FAVICON_SIZE - W * scale) / 2);
-    const offY  = Math.floor((FAVICON_SIZE - H * scale) / 2);
-
     const image = faviconCtx.createImageData(FAVICON_SIZE, FAVICON_SIZE);
-    const rgb = yarnRgb(colors);
-    for (let y = 0; y < H; y++) {
-        const top = offY + Math.floor(y * scale);
-        for (let x = 0; x < W; x++) {
-            const p = pixels[y * W + x];
-            if (p === 0) continue;
-            const left = offX + Math.floor(x * scale);
-            for (let dy = 0; dy < px; dy++) {
-                for (let dx = 0; dx < px; dx++) {
-                    writeRgb(image.data, ((top + dy) * FAVICON_SIZE + left + dx) * 4, rgb[p]!);
-                }
-            }
-        }
-    }
+    image.data.set(faviconImage(W, H, pixels, colors));
     faviconCtx.putImageData(image, 0, 0);
 
     const link = document.getElementById("favicon") as HTMLLinkElement | null;
     if (link) link.href = faviconCanvas.toDataURL("image/png");
+}
+
+// RGBA bytes of the FAVICON_SIZE² icon for a W×H chart. Each icon pixel
+// shows the cell at the middle of the block of cells it covers, transparent
+// for a hole, so the work follows the icon rather than the chart.
+export function faviconImage(W: number, H: number, pixels: Uint8Array, colors: (string | null)[]): Uint8ClampedArray {
+    const scale = Math.min(FAVICON_SIZE / W, FAVICON_SIZE / H);
+    const px    = Math.max(1, Math.floor(scale));
+    const offX  = Math.floor((FAVICON_SIZE - W * scale) / 2);
+    const offY  = Math.floor((FAVICON_SIZE - H * scale) / 2);
+    // Runs of rows (columns) that land on the same icon row (column), as their
+    // starts followed by the end of the last run.
+    const runs = (n: number) => {
+        const starts = [0];
+        for (let i = 1; i < n; i++) if (Math.floor(i * scale) !== Math.floor((i - 1) * scale)) starts.push(i);
+        starts.push(n);
+        return starts;
+    };
+    const rows = runs(H), columns = runs(W);
+
+    const data = new Uint8ClampedArray(FAVICON_SIZE * FAVICON_SIZE * 4);
+    const rgb = yarnRgb(colors);
+    for (let r = 0; r + 1 < rows.length; r++) {
+        const top = offY + Math.floor(rows[r] * scale);
+        const y = (rows[r] + rows[r + 1] - 1) >> 1;
+        for (let c = 0; c + 1 < columns.length; c++) {
+            const p = pixels[y * W + ((columns[c] + columns[c + 1] - 1) >> 1)];
+            if (p === 0) continue;
+            const left = offX + Math.floor(columns[c] * scale);
+            for (let dy = 0; dy < px; dy++) {
+                for (let dx = 0; dx < px; dx++) {
+                    writeRgb(data, ((top + dy) * FAVICON_SIZE + left + dx) * 4, rgb[p]!);
+                }
+            }
+        }
+    }
+    return data;
 }
 
 export function patternColourPreviewSample(mode: PatternState["mode"], subMode: "full" | "half" | "quarter") {
