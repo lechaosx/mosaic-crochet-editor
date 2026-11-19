@@ -83,22 +83,16 @@ export function evaluateCenteredMirrors(
     if (source.length > Math.floor(MAX_TRANSFORM_CLAIMS / placements.length)) {
         throw new RangeError("Selection cannot exceed 1,048,576 transform claims.");
     }
-    const claims = new Map<string, CellClaim>();
+    const claims = new CellClaims();
     const instances = placements.map(placement => source.map((cell, sourceIndex) => {
         const mapped = placement.map(cell);
-        addClaim(claims, mapped.x, mapped.y, sourceIndex);
+        claims.add(mapped.x, mapped.y, sourceIndex);
         return { ...mapped, sourceIndex };
     }));
-    const ordered = [...claims.values()].sort((a, b) => a.y - b.y || a.x - b.x);
     return { source, placements, instances,
         columnStep: { x: 0, y: 0 }, columnStepAlternate: { x: 0, y: 0 },
         rowStep: { x: 0, y: 0 }, rowStepAlternate: { x: 0, y: 0 },
-        cells: ordered.filter(claim => claim.sourceIndices.size === 1).map(claim => ({
-            x: claim.x, y: claim.y, sourceIndex: claim.sourceIndices.values().next().value!,
-        })),
-        conflicts: ordered.filter(claim => claim.sourceIndices.size > 1).map(claim => ({
-            x: claim.x, y: claim.y, sourceIndices: [...claim.sourceIndices].sort((a, b) => a - b),
-        })),
+        ...cellsAndConflicts(claims.rows()),
     };
 }
 
@@ -150,10 +144,11 @@ export function evaluatePackedGrid(
     }
 
     const input = expandAroundCentre(source, aroundCentre);
-    const columnPacked = packedDistance(input, "x", recipe.columnOffset,
+    const bounds = claimBounds(input);
+    const columnPacked = packedDistance(input, bounds, "x", recipe.columnOffset,
         recipe.columnMirrorHorizontal, recipe.columnMirrorVertical,
         recipe.rowMirrorHorizontal && rows > 1, recipe.rowMirrorVertical && rows > 1);
-    const rowPacked = packedDistance(input, "y", recipe.rowOffset,
+    const rowPacked = packedDistance(input, bounds, "y", recipe.rowOffset,
         recipe.rowMirrorHorizontal, recipe.rowMirrorVertical,
         recipe.columnMirrorHorizontal && columns > 1, recipe.columnMirrorVertical && columns > 1);
     const columnStep = {
@@ -172,8 +167,7 @@ export function evaluatePackedGrid(
         x: recipe.rowOffset,
         y: safeAdd(rowPacked, recipe.rowSpacingAlternate),
     };
-    const bounds = cellBounds(input);
-    const claims = new Map<string, CellClaim>();
+    const claims = new CellClaims();
     const instances: EvaluatedTransformCell[][] = [];
     const placements: TransformPlacement[] = [];
     const aroundPlacements = centrePlacements(aroundCentre);
@@ -203,26 +197,25 @@ export function evaluatePackedGrid(
                     }, bounds, mirrorX, mirrorY)),
                 });
             }
-            const instanceClaims = new Map<string, CellClaim>();
-            for (const cell of input) {
-                const oriented = orientCell(cell, bounds, mirrorX, mirrorY);
-                for (const sourceIndex of cell.sourceIndices) {
-                    addClaim(claims, safeAdd(oriented.x, dx), safeAdd(oriented.y, dy), sourceIndex);
-                    addClaim(instanceClaims, safeAdd(oriented.x, dx), safeAdd(oriented.y, dy), sourceIndex);
+            // Walking reflected axes backwards keeps the instance in row order.
+            const instance: EvaluatedTransformCell[] = [];
+            for (let r = 0; r < input.length; r++) {
+                const line = input[mirrorY ? input.length - 1 - r : r];
+                const y = safeAdd(mirrorY ? bounds.minY + (bounds.maxY - line.y) : line.y, dy);
+                for (let c = 0; c < line.xs.length; c++) {
+                    const i = mirrorX ? line.xs.length - 1 - c : c;
+                    const x = safeAdd(mirrorX ? bounds.minX + (bounds.maxX - line.xs[i]) : line.xs[i], dx);
+                    const claim = line.claims[i];
+                    if (typeof claim === "number") {
+                        claims.add(x, y, claim);
+                        instance.push({ x, y, sourceIndex: claim });
+                    } else for (const sourceIndex of claim) claims.add(x, y, sourceIndex);
                 }
             }
-            instances.push([...instanceClaims.values()]
-                .filter(claim => claim.sourceIndices.size === 1)
-                .sort((a, b) => a.y - b.y || a.x - b.x)
-                .map(claim => ({
-                    x: claim.x,
-                    y: claim.y,
-                    sourceIndex: claim.sourceIndices.values().next().value!,
-                })));
+            instances.push(instance);
         }
     }
 
-    const ordered = [...claims.values()].sort((a, b) => a.y - b.y || a.x - b.x);
     return {
         source,
         placements,
@@ -230,20 +223,7 @@ export function evaluatePackedGrid(
         columnStepAlternate,
         rowStep,
         rowStepAlternate,
-        cells: ordered
-            .filter(claim => claim.sourceIndices.size === 1)
-            .map(claim => ({
-                x: claim.x,
-                y: claim.y,
-                sourceIndex: claim.sourceIndices.values().next().value!,
-            })),
-        conflicts: ordered
-            .filter(claim => claim.sourceIndices.size > 1)
-            .map(claim => ({
-                x: claim.x,
-                y: claim.y,
-                sourceIndices: [...claim.sourceIndices].sort((a, b) => a - b),
-            })),
+        ...cellsAndConflicts(claims.rows()),
         instances,
     };
 }
@@ -269,12 +249,6 @@ function centrePlacements(centre: AroundCentreRecipe | undefined): TransformPlac
     return placements;
 }
 
-interface CellClaim {
-    x: number;
-    y: number;
-    sourceIndices: Set<number>;
-}
-
 interface CellBounds {
     minX: number;
     maxX: number;
@@ -282,31 +256,71 @@ interface CellBounds {
     maxY: number;
 }
 
-function coordKey(x: number, y: number): string {
-    return `${x},${y}`;
+// One source index per claimed cell, or the set of them once a second claims it.
+type CellClaim = number | Set<number>;
+
+// The claimed cells of one row, ordered by column.
+interface ClaimRow {
+    y: number;
+    xs: Float64Array;
+    claims: CellClaim[];
 }
 
-function addClaim(claims: Map<string, CellClaim>, x: number, y: number, sourceIndex: number): void {
-    const key = coordKey(x, y);
-    const claim = claims.get(key);
-    if (claim) claim.sourceIndices.add(sourceIndex);
-    else claims.set(key, { x, y, sourceIndices: new Set([sourceIndex]) });
+class CellClaims {
+    private readonly byRow = new Map<number, Map<number, CellClaim>>();
+    // Claims arrive along rows, so the last row is usually the next one too.
+    private lastY = NaN;
+    private lastRow = new Map<number, CellClaim>();
+
+    add(x: number, y: number, sourceIndex: number): void {
+        if (y !== this.lastY) {
+            let row = this.byRow.get(y);
+            if (!row) this.byRow.set(y, row = new Map());
+            this.lastY = y;
+            this.lastRow = row;
+        }
+        const claim = this.lastRow.get(x);
+        if (claim === undefined) this.lastRow.set(x, sourceIndex);
+        else if (typeof claim !== "number") claim.add(sourceIndex);
+        else if (claim !== sourceIndex) this.lastRow.set(x, new Set([claim, sourceIndex]));
+    }
+
+    rows(): ClaimRow[] {
+        return Array.from(Float64Array.from(this.byRow.keys()).sort(), y => {
+            const row = this.byRow.get(y)!;
+            const xs = Float64Array.from(row.keys()).sort();
+            return { y, xs, claims: Array.from(xs, x => row.get(x)!) };
+        });
+    }
+}
+
+function cellsAndConflicts(rows: ClaimRow[]): Pick<PackedGridEvaluation, "cells" | "conflicts"> {
+    const cells: EvaluatedTransformCell[] = [];
+    const conflicts: TransformConflict[] = [];
+    for (const { y, xs, claims } of rows) {
+        xs.forEach((x, i) => {
+            const claim = claims[i];
+            if (typeof claim === "number") cells.push({ x, y, sourceIndex: claim });
+            else conflicts.push({ x, y, sourceIndices: [...claim].sort((a, b) => a - b) });
+        });
+    }
+    return { cells, conflicts };
 }
 
 function expandAroundCentre(
     source: ReadonlyArray<TransformSourceCell>,
     aroundCentre: AroundCentreRecipe | undefined,
-): CellClaim[] {
-    const claims = new Map<string, CellClaim>();
-    source.forEach((cell, sourceIndex) => addClaim(claims, cell.x, cell.y, sourceIndex));
-    if (!aroundCentre) return [...claims.values()];
+): ClaimRow[] {
+    const claims = new CellClaims();
+    source.forEach((cell, sourceIndex) => claims.add(cell.x, cell.y, sourceIndex));
+    if (!aroundCentre) return claims.rows();
 
     const turns = [...new Set(aroundCentre.turns)];
     if (turns.some(turn => turn !== 90 && turn !== 180 && turn !== 270)) {
         throw new RangeError("Rotation supports only quarter turns.");
     }
     if (turns.length === 0 && !aroundCentre.mirrorHorizontal && !aroundCentre.mirrorVertical) {
-        return [...claims.values()];
+        return claims.rows();
     }
     if (!isSafeGridCoordinate(aroundCentre.x) || !isSafeGridCoordinate(aroundCentre.y)) {
         throw new RangeError("Rotation centre must be grid-compatible.");
@@ -322,10 +336,10 @@ function expandAroundCentre(
             if (!Number.isSafeInteger(mapped.x) || !Number.isSafeInteger(mapped.y)) {
                 throw new RangeError("Rotation centre is not grid-compatible with quarter turns.");
             }
-            addClaim(claims, mapped.x, mapped.y, sourceIndex);
+            claims.add(mapped.x, mapped.y, sourceIndex);
         });
     }
-    return [...claims.values()];
+    return claims.rows();
 }
 
 function rotateCell(
@@ -349,19 +363,14 @@ function rotateCell(
     };
 }
 
-function cellBounds(source: ReadonlyArray<TransformSourceCell>): CellBounds {
-    let minX = source[0].x;
-    let maxX = source[0].x;
-    let minY = source[0].y;
-    let maxY = source[0].y;
-    for (let i = 1; i < source.length; i++) {
-        const cell = source[i];
-        minX = Math.min(minX, cell.x);
-        maxX = Math.max(maxX, cell.x);
-        minY = Math.min(minY, cell.y);
-        maxY = Math.max(maxY, cell.y);
+function claimBounds(rows: ReadonlyArray<ClaimRow>): CellBounds {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    for (const row of rows) {
+        minX = Math.min(minX, row.xs[0]);
+        maxX = Math.max(maxX, row.xs[row.xs.length - 1]);
     }
-    return { minX, maxX, minY, maxY };
+    return { minX, maxX, minY: rows[0].y, maxY: rows[rows.length - 1].y };
 }
 
 function orientCell(
@@ -390,7 +399,8 @@ function repeatDistance(index: number, primary: number, alternate: number): numb
 }
 
 function packedDistance(
-    source: ReadonlyArray<TransformSourceCell>,
+    input: ReadonlyArray<ClaimRow>,
+    bounds: CellBounds,
     primary: "x" | "y",
     crossOffset: number,
     mirrorX: boolean,
@@ -398,7 +408,6 @@ function packedDistance(
     otherMirrorX: boolean,
     otherMirrorY: boolean,
 ): number {
-    const bounds = cellBounds(source);
     const [alongMin, alongMax, acrossMin, acrossMax] = primary === "x"
         ? [bounds.minX, bounds.maxX, bounds.minY, bounds.maxY]
         : [bounds.minY, bounds.maxY, bounds.minX, bounds.maxX];
@@ -406,14 +415,13 @@ function packedDistance(
 
     // Each line of cells across the step, as sorted runs [start, end, start, end, …] along it.
     const lines = new Map<number, number[]>();
-    for (const cell of source) {
-        const across = primary === "x" ? cell.y : cell.x;
+    for (const { y, xs } of input) for (const x of xs) {
+        const across = primary === "x" ? y : x;
         const line = lines.get(across);
-        if (line) line.push(primary === "x" ? cell.x : cell.y);
-        else lines.set(across, [primary === "x" ? cell.x : cell.y]);
+        if (line) line.push(primary === "x" ? x : y);
+        else lines.set(across, [primary === "x" ? x : y]);
     }
     for (const [across, along] of lines) {
-        along.sort((a, b) => a - b);
         const runs: number[] = [];
         for (const value of along) {
             if (runs.length > 0 && runs[runs.length - 1] === value - 1) runs[runs.length - 1] = value;

@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest";
 import fc from "fast-check";
-import { evaluatePackedGrid, PackedGridRecipe, TransformSourceCell } from "../src/transform-evaluator";
+import {
+    evaluateCenteredMirrors, evaluatePackedGrid, PackedGridRecipe, TransformPlacement, TransformSourceCell,
+} from "../src/transform-evaluator";
 
 const noGrid: PackedGridRecipe = {
     left: 0,
@@ -388,10 +390,30 @@ function definedPackedStep(
     return span;
 }
 
-describe("packed steps", () => {
-    const motif = fc.record({
+// Claims by definition: every source cell taken through each placement in turn.
+function claimsThroughPlacements(source: TransformSourceCell[], placements: TransformPlacement[]) {
+    const claims = new Map<string, { x: number; y: number; sourceIndices: Set<number> }>();
+    for (const placement of placements) source.forEach((cell, sourceIndex) => {
+        const { x, y } = placement.map(cell);
+        const claim = claims.get(`${x},${y}`);
+        if (claim) claim.sourceIndices.add(sourceIndex);
+        else claims.set(`${x},${y}`, { x, y, sourceIndices: new Set([sourceIndex]) });
+    });
+    const ordered = [...claims.values()].sort((a, b) => a.y - b.y || a.x - b.x);
+    return {
+        cells: ordered.filter(claim => claim.sourceIndices.size === 1)
+            .map(({ x, y, sourceIndices }) => ({ x, y, sourceIndex: [...sourceIndices][0] })),
+        conflicts: ordered.filter(claim => claim.sourceIndices.size > 1)
+            .map(({ x, y, sourceIndices }) => ({ x, y, sourceIndices: [...sourceIndices].sort((a, b) => a - b) })),
+    };
+}
+
+describe("packed steps and claims", () => {
+    const near = fc.integer({ min: -20, max: 20 });
+    const far = fc.oneof(near, fc.constantFrom(-(2 ** 50), 2 ** 50));
+    const motifAt = (position: fc.Arbitrary<number>) => fc.record({
         width: fc.integer({ min: 1, max: 12 }), height: fc.integer({ min: 1, max: 12 }),
-        x: fc.integer({ min: -20, max: 20 }), y: fc.integer({ min: -20, max: 20 }),
+        x: position, y: position,
         density: fc.constantFrom(0.15, 0.5, 0.9, 1),
         seed: fc.integer(),
     }).map(({ width, height, x, y, density, seed }) => {
@@ -403,6 +425,9 @@ describe("packed steps", () => {
         }
         return cells.length > 0 ? cells : [{ x, y }];
     });
+    const motif = motifAt(far);
+    const repeated = (cells: fc.Arbitrary<TransformSourceCell[]>) => fc.tuple(cells, fc.nat())
+        .map(([cells, pick]) => [...cells, cells[pick % cells.length]]);
     const recipe = fc.record({
         left: fc.integer({ min: 0, max: 1 }), right: fc.integer({ min: 0, max: 1 }),
         up: fc.integer({ min: 0, max: 1 }), down: fc.integer({ min: 0, max: 1 }),
@@ -430,6 +455,27 @@ describe("packed steps", () => {
                 [grid.rowMirrorHorizontal, grid.rowMirrorVertical],
                 [grid.columnMirrorHorizontal && columns, grid.columnMirrorVertical && columns]));
         }), { numRuns: 500 });
+    });
+
+    test("claim each cell once per placement, by position and in each grid instance", () => {
+        fc.assert(fc.property(fc.oneof(motif, repeated(motif)), recipe, around, (source, grid, centre) => {
+            const result = evaluatePackedGrid(source, grid, centre);
+            expect(result).toMatchObject(claimsThroughPlacements(source, result.placements));
+            const perInstance = result.placements.length / result.instances.length;
+            expect(result.instances).toEqual(result.instances.map((_, index) => claimsThroughPlacements(source,
+                result.placements.slice(index * perInstance, (index + 1) * perInstance)).cells));
+        }), { numRuns: 500 });
+    });
+
+    test("claim centred mirror copies like their placements", () => {
+        fc.assert(fc.property(fc.oneof(motifAt(near), repeated(motifAt(near))), fc.integer({ min: -16, max: 16 }), fc.integer({ min: -16, max: 16 }),
+            fc.subarray([0, 1, 2, 3, 4]), (source, doubleX, doubleY, kinds) => {
+                const x = doubleX / 2, y = ((doubleY - doubleX) % 2 === 0 ? doubleY : doubleY + 1) / 2;
+                const result = evaluateCenteredMirrors(source, x, y, new Uint8Array(kinds));
+                expect(result).toMatchObject(claimsThroughPlacements(source, result.placements));
+                expect(result.instances).toEqual(result.placements.map(placement =>
+                    source.map((cell, sourceIndex) => ({ ...placement.map(cell), sourceIndex }))));
+            }), { numRuns: 300 });
     });
 
     test("reject unsafe packing geometry even without copies", () => {
