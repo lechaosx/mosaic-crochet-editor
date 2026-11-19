@@ -10,7 +10,7 @@ import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction }
 import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, pickSelectionTransformHandle, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
-import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
+import { Store, SessionState, visiblePixels, outOfBounds, isChartCell } from "@mosaic/logic/store";
 import { UndoHistory, historyFrom, historySave, historyReplaceCurrent, historyUndo, historyRedo, historyPeek,
          historyChanges, historyFromStored, historyHeadId, historyMarkClean, canUndo, canRedo, Restored } from "./history";
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
@@ -742,9 +742,7 @@ function onRecipeChange(id: string, change: Partial<GridRecipe>, preview = false
     if (!recipe) return false;
     if (preview && !recipeEditBaseline) recipeEditBaseline = store.state.recipes;
     const updated = { ...recipe, ...change, enabled: true };
-    const visible = visiblePixels(store.state);
-    const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    const error = gridRecipeError(updated, (x, y) => !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0);
+    const error = gridRecipeError(updated, (x, y) => isChartCell(store.state, x, y));
     if (error) {
         if (/overlap|matching whole-cell/.test(error)) { if (preview) ui.setRecipeError(null); else refreshRecipeUi(); return false; }
         if (preview) ui.setRecipeError(error); else refreshRecipeUi(error);
@@ -1464,11 +1462,7 @@ const ui: UIHandle = mountUI({
         : (type === "D1" || type === "D2") && !Number.isInteger(mirror.x - mirror.y)
             ? "Diagonals need both centre coordinates to be whole or half numbers."
             : "Keep this mirror type where it can transform chart cells.",
-    recipeMirrorTypeError: recipe => {
-        const visible = visiblePixels(store.state);
-        const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-        return gridRecipeError(recipe, (x, y) => !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0);
-    },
+    recipeMirrorTypeError: recipe => gridRecipeError(recipe, (x, y) => isChartCell(store.state, x, y)),
     onMirrorPosition,
     onMirrorCommit,
     onMirrorRevert,

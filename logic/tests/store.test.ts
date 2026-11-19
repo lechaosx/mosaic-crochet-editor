@@ -4,7 +4,7 @@
 // onto pixels with off-canvas / hole / pixels=0 drops.
 
 import { describe, test, expect } from "vitest";
-import { Store, visiblePixels, outOfBounds, forEachCell } from "../src/store";
+import { Store, visiblePixels, outOfBounds, forEachCell, isChartCell } from "../src/store";
 import type { SessionState } from "../src/store";
 import type { PatternState } from "../src/types";
 import { initialize_round_pattern } from "@mosaic/wasm";
@@ -57,6 +57,25 @@ describe("visiblePixels", () => {
         });
         const out = visiblePixels(s);
         expect(out[0]).toBe(1);
+    });
+});
+
+describe("isChartCell", () => {
+    test("finds the visible chart's cells, around any float", () => {
+        const cells = (length: number) => fc.array(fc.constantFrom(0, 1, 2), { minLength: length, maxLength: length });
+        const session = fc.record({ W: fc.integer({ min: 1, max: 6 }), H: fc.integer({ min: 1, max: 6 }),
+            w: fc.integer({ min: 1, max: 4 }), h: fc.integer({ min: 1, max: 4 }),
+            x: fc.integer({ min: -3, max: 6 }), y: fc.integer({ min: -3, max: 6 }) })
+            .chain(({ W, H, w, h, x, y }) => fc.tuple(cells(W * H), cells(w * h), fc.boolean()).map(([pixels, float, floating]) =>
+                rowSession(W, H, { pixels: Uint8Array.from(pixels),
+                    float: floating ? { x, y, w, h, pixels: Uint8Array.from(float) } : null })));
+        fc.assert(fc.property(session, s => {
+            const { canvasWidth: W, canvasHeight: H } = s.pattern;
+            const visible = visiblePixels(s);
+            for (let y = -2; y < H + 2; y++) for (let x = -2; x < W + 2; x++) {
+                expect(isChartCell(s, x, y)).toBe(!outOfBounds(x, y, W, H) && visible[y * W + x] !== 0);
+            }
+        }), { numRuns: 300 });
     });
 });
 

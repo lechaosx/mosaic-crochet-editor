@@ -60,6 +60,13 @@ export function outOfBounds(x: number, y: number, W: number, H: number): boolean
     return x < 0 || x >= W || y < 0 || y >= H;
 }
 
+// Whether (x, y) is a cell of the visible chart. A float only recolours chart
+// cells, so they are where `pixels` is nonzero.
+export function isChartCell(s: Readonly<SessionState>, x: number, y: number): boolean {
+    const { canvasWidth: W, canvasHeight: H } = s.pattern;
+    return !outOfBounds(x, y, W, H) && s.pixels[y * W + x] !== 0;
+}
+
 // Calls fn(x, y) for every cell in a W×H grid.
 export function forEachCell(W: number, H: number, fn: (x: number, y: number) => void): void {
     for (let y = 0; y < H; y++)

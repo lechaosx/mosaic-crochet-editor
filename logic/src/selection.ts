@@ -5,7 +5,7 @@ import { wand_select,
          cut_to_natural_row, cut_to_natural_round,
          apply_transforms_to_selection, TransformApplicationStatus } from "@mosaic/wasm";
 import { PatternState, Float, GridRecipe } from "./types";
-import { Store, SessionState, visiblePixels, outOfBounds } from "./store";
+import { Store, SessionState, visiblePixels, outOfBounds, isChartCell } from "./store";
 import { mirrorsToFlat } from "./symmetry";
 import { devAssert, assertNever } from "./dev";
 import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, recipeHasSource, recipeSourceCells, withRecipeSource } from "./grid-recipes";
@@ -25,9 +25,7 @@ export function selectionSourceIsValid(s: Readonly<SessionState>, float: Float |
     if (!float || !float.pixels.some(value => value !== 0)) return true;
     const recipe = currentGridRecipe(s) ?? emptyGridRecipe();
     const updated = withRecipeSource(recipe, float, translation);
-    const visible = visiblePixels({ ...s, float });
-    const { canvasWidth: W, canvasHeight: H } = s.pattern;
-    return gridRecipeError(updated, (x, y) => !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0) === null;
+    return gridRecipeError(updated, (x, y) => isChartCell(s, x, y)) === null;
 }
 
 export function syncActiveGridRecipe(
@@ -36,11 +34,7 @@ export function syncActiveGridRecipe(
     if (!s.float) return;
     const active = currentGridRecipe(s) ?? emptyGridRecipe();
     const updated = withRecipeSource(active, s.float, translation);
-    const visible = visiblePixels(s);
-    const { canvasWidth: W, canvasHeight: H } = s.pattern;
-    if (gridRecipeError(updated, (x, y) =>
-        !outOfBounds(x, y, W, H) && visible[y * W + x] !== 0
-    ) !== null) return;
+    if (gridRecipeError(updated, (x, y) => isChartCell(s, x, y)) !== null) return;
     s.recipes = s.recipes.some(recipe => recipe.id === active.id)
         ? s.recipes.map(recipe => recipe.id === active.id ? updated : recipe) : [...s.recipes, updated];
     s.activeRecipeId = active.id;
