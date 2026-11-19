@@ -387,11 +387,32 @@ describe("recipes at every source position", () => {
         }), { numRuns: 300 });
     });
 
+    test("evaluate as without an evaluation cache", () => {
+        // Where each placement takes a probe cell and back; -0 and 0 name the same cell.
+        const outcome = (evaluate: () => ReturnType<typeof evaluateGridRecipe>) => {
+            try {
+                const { placements, ...result } = evaluate();
+                return { ...result, placed: placements.map(placement => [placement.map({ x: 3, y: -2 }), placement.unmap({ x: 3, y: -2 })]
+                    .map(({ x, y }) => ({ x: x + 0, y: y + 0 }))) };
+            } catch (error) {
+                return error;
+            }
+        };
+        fc.assert(fc.property(shape, fc.array(step, { maxLength: 12 }), (recipe, steps) => {
+            const evaluations = new RecipeEvaluations();
+            const recipes = walk(recipe, steps);
+            expect(recipes.map(step => outcome(() => evaluateGridRecipe(step, evaluations))))
+                .toEqual(recipes.map(step => outcome(() => evaluateGridRecipe(step))));
+        }), { numRuns: 200 });
+    });
+
     test("reject unsafe copies of a shape that is valid near the origin", () => {
         const evaluations = new RecipeEvaluations();
         const recipe = { ...gridRecipeFromFloat({ x: 0, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 1]) }), right: 1 };
         const centre = { rotationCentreX: 1 - 2 ** 52, rotationCentreY: 0, mirrorCentreX: 1 - 2 ** 52, mirrorCentreY: 0 };
         expect(gridRecipeError({ ...recipe, ...centre }, undefined, evaluations)).toBeNull();
         expect(gridRecipeError(moved({ ...recipe, ...centre }, 2 ** 53 - 3, 0), undefined, evaluations)).toMatch(/safe integer/i);
+        expect(() => evaluateGridRecipe({ ...recipe, ...centre }, evaluations)).not.toThrow();
+        expect(() => evaluateGridRecipe(moved({ ...recipe, ...centre }, 2 ** 53 - 3, 0), evaluations)).toThrow(/safe integer/i);
     });
 });

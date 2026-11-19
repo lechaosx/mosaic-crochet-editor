@@ -2,7 +2,7 @@ import { PatternState, RowState, RoundState, MirrorCenter, SymKey, Float } from 
 import { mirrorAxes, mirrorsToFlat } from "@mosaic/logic/symmetry";
 import { mirrorTypePresentation } from "./mirror-presentation";
 import { GridRecipe } from "@mosaic/logic/types";
-import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
+import { evaluateGridRecipe, RecipeEvaluations } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
 import { transformed_target_indices } from "@mosaic/wasm";
 import { Store } from "@mosaic/logic/store";
@@ -113,6 +113,7 @@ export interface RendererState {
     // pixel array alive.
     selectionOutline: { float: Float; pixels: Uint8Array; pattern: PatternState; paths: number[][] } | null;
     recipeOutline: { recipe: GridRecipe; pixels: Uint8Array; pattern: PatternState; outline: RecipeOutline } | null;
+    recipeEvaluations: RecipeEvaluations;
     selectedMirrorId: string | null;
     previewRepeatGuides: boolean;
     selectionHandlesVisible: boolean;
@@ -131,7 +132,9 @@ export interface RendererState {
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
 }
 
-export function makeRendererState(preferences: AppPreferences, chart: ChartLayer | null): RendererState {
+export function makeRendererState(
+    preferences: AppPreferences, chart: ChartLayer | null, recipeEvaluations: RecipeEvaluations,
+): RendererState {
     const faviconCanvas = document.createElement("canvas");
     faviconCanvas.width  = FAVICON_SIZE;
     faviconCanvas.height = FAVICON_SIZE;
@@ -151,6 +154,7 @@ export function makeRendererState(preferences: AppPreferences, chart: ChartLayer
         selectionDashOffset:    0,
         selectionOutline:       null,
         recipeOutline:          null,
+        recipeEvaluations,
         selectedMirrorId:       null,
         previewRepeatGuides:    false,
         selectionHandlesVisible: false,
@@ -554,7 +558,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         && float.x === activeRecipe.source.x && float.y === activeRecipe.source.y
         && float.w === activeRecipe.source.w && float.h === activeRecipe.source.h) {
         if (rs.recipeOutline?.recipe !== activeRecipe || rs.recipeOutline.pixels !== pixels || rs.recipeOutline.pattern !== pattern) {
-            rs.recipeOutline = { recipe: activeRecipe, pixels, pattern, outline: recipeOutline(pattern, pixels, activeRecipe) };
+            rs.recipeOutline = { recipe: activeRecipe, pixels, pattern, outline: recipeOutline(pattern, pixels, activeRecipe, rs.recipeEvaluations) };
         }
         renderRecipeOutline(ctx, view, dpr, rs.recipeOutline.outline, accentColor, dashOffsetSnapped);
         if (rs.selectionHandlesVisible) renderRecipeHandles(ctx, view, activeRecipe, accentColor, rs.visualRotation);
@@ -629,9 +633,11 @@ interface RecipeOutline {
     runs: { path: number[]; offset: number }[];
 }
 
-function recipeOutline(pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe): RecipeOutline {
+function recipeOutline(
+    pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe, evaluations: RecipeEvaluations,
+): RecipeOutline {
     const W = pattern.canvasWidth;
-    const instances = recipeInstancePaths(pattern, pixels, recipe);
+    const instances = recipeInstancePaths(pattern, pixels, recipe, evaluations);
     const source = recipe.source;
     const sourceMask = source.mask.slice();
     for (let y = 0; y < source.h; y++) for (let x = 0; x < source.w; x++) {
@@ -714,13 +720,13 @@ function renderRecipeHandles(ctx: CanvasRenderingContext2D, view: ViewState, rec
 }
 
 export function recipeInstancePaths(
-    pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe,
+    pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe, evaluations?: RecipeEvaluations,
 ): number[][][] {
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { source } = recipe;
     const inSource = (x: number, y: number) => x >= source.x && x < source.x + source.w && y >= source.y && y < source.y + source.h
         && source.mask[(y - source.y) * source.w + x - source.x] !== 0;
-    return evaluateGridRecipe(recipe).instances.flatMap(instance => {
+    return evaluateGridRecipe(recipe, evaluations).instances.flatMap(instance => {
         // Cells as y * W + x.
         const cells = new Set<number>();
         for (const cell of instance) {

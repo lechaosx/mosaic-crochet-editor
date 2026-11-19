@@ -1,6 +1,7 @@
 import { transfer_preserved_row, transfer_preserved_round } from "@mosaic/wasm";
 import { Float, GridRecipe, SymKey, PatternState } from "./types";
-import { evaluateCenteredMirrors, evaluatePackedGrid, PackedGridEvaluation, TransformSourceCell } from "./transform-evaluator";
+import { evaluateCenteredMirrors, evaluatePackedGrid, PackedGridEvaluation, TransformPlacement,
+    TransformSourceCell } from "./transform-evaluator";
 
 const noGrid = {
     left: 0, right: 0, up: 0, down: 0,
@@ -117,6 +118,8 @@ export class RecipeEvaluations {
     // shape does not accumulate them.
     private conflicts = new Map<string, Float64Array | { error: unknown }>();
     private held = 0;
+    // The latest shape evaluated in full, with its source at the origin.
+    private latest: { key: string; evaluation: PackedGridEvaluation } | null = null;
 
     constructor(private readonly budget = 2 ** 21) {}
 
@@ -126,6 +129,15 @@ export class RecipeEvaluations {
         this.mask = mask;
         this.conflicts = new Map();
         this.held = 0;
+        this.latest = null;
+    }
+
+    evaluate(recipe: GridRecipe): PackedGridEvaluation {
+        const shape = originShape(recipe);
+        if (!shape) return evaluateGridRecipe(recipe);
+        this.keepOnly(recipe.source.mask);
+        if (this.latest?.key !== shape.key) this.latest = { key: shape.key, evaluation: evaluateGridRecipe(shape.recipe) };
+        return movedEvaluation(this.latest.evaluation, recipe.source.x, recipe.source.y);
     }
 
     // Conflicting cells as [x, y, x, y, …], offset by `x` and `y`.
@@ -159,6 +171,25 @@ function heldNumbers(cells: Float64Array | { error: unknown }): number {
     return cells instanceof Float64Array ? cells.length + 64 : 64;
 }
 
+// The evaluation moved by (x, y). Each part is moved when it is read, so a
+// caller reads each part it needs once.
+function movedEvaluation(at: PackedGridEvaluation, x: number, y: number): PackedGridEvaluation {
+    const move = <T extends TransformSourceCell>(cell: T): T => ({ ...cell, x: cell.x + x, y: cell.y + y });
+    const back = (cell: TransformSourceCell) => ({ x: cell.x - x, y: cell.y - y });
+    return {
+        columnStep: at.columnStep, columnStepAlternate: at.columnStepAlternate,
+        rowStep: at.rowStep, rowStepAlternate: at.rowStepAlternate,
+        get source() { return at.source.map(move); },
+        get placements(): TransformPlacement[] {
+            return at.placements.map(({ map, unmap }) => ({
+                map: cell => move(map(back(cell))), unmap: cell => move(unmap(back(cell))) }));
+        },
+        get cells() { return at.cells.map(move); },
+        get conflicts() { return at.conflicts.map(move); },
+        get instances() { return at.instances.map(instance => instance.map(move)); },
+    };
+}
+
 function conflictNumbers(evaluation: PackedGridEvaluation): Float64Array {
     return Float64Array.from(evaluation.conflicts.flatMap(cell => [cell.x, cell.y]));
 }
@@ -179,7 +210,8 @@ function originShape(recipe: GridRecipe): { recipe: GridRecipe; key: string } | 
     return { recipe: relative, key: JSON.stringify([source.w, source.h, geometry]) };
 }
 
-export function evaluateGridRecipe(recipe: GridRecipe): PackedGridEvaluation {
+export function evaluateGridRecipe(recipe: GridRecipe, evaluations?: RecipeEvaluations): PackedGridEvaluation {
+    if (evaluations) return evaluations.evaluate(recipe);
     const source = recipeSourceCells(recipe);
     if (source.length === 0) return {
         source: [], placements: [],

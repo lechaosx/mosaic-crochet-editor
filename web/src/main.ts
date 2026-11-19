@@ -184,11 +184,11 @@ const chartUnavailable = document.getElementById("chart-unavailable")!;
 const chartLayer = createChartLayer(document.getElementById("chart-gl") as HTMLCanvasElement,
     available => { chartUnavailable.hidden = available; });
 chartUnavailable.hidden = chartLayer !== null;
-const rs       = makeRendererState(preferences, chartLayer);
-let projectColorsSynced: string | null = null;
-const store    = new Store(saved ?? defaultSession());
 // Evaluations of the selection's recipe shapes while it is edited and moved.
 const recipeEvaluations = new RecipeEvaluations();
+const rs       = makeRendererState(preferences, chartLayer, recipeEvaluations);
+let projectColorsSynced: string | null = null;
+const store    = new Store(saved ?? defaultSession());
 // What the history records hold once every issued write lands, and what they
 // are known to hold; null when unknown, so a write stores every snapshot.
 let historyWritten = saved && stored ? historyFromStored(stored.history, stored.snapshots) : null;
@@ -489,7 +489,8 @@ function evaluatePaintAt(action: PaintAction, x: number, y: number, invertVisite
     const shifted = s.float ? shiftedFloatMask(s) : null;
     const visible = visiblePixels(s);
     const recipe = activeGridRecipe(s);
-    const evaluatedRecipe = recipe ? evaluateGridRecipe(recipe) : null;
+    // Spread to move each part of the cached evaluation once; painting reads them repeatedly.
+    const evaluatedRecipe = recipe ? { ...evaluateGridRecipe(recipe, recipeEvaluations) } : null;
     const recipeCell = evaluatedRecipe
         ? evaluatedRecipe.cells.find(cell => cell.x === x && cell.y === y) ?? null
         : null;
