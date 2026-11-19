@@ -273,21 +273,45 @@ export function shiftedFloatMask(s: SessionState): Uint8Array {
     return out;
 }
 
-export function previewSelectRectMask(
+// A w×h mask of cells whose top-left cell is (x, y).
+export interface CellMask {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    mask: Uint8Array;
+}
+
+// The cells a Rectangle sweep would select, within the sweep and the current
+// selection that it adds to or removes from.
+export function previewSelectRect(
     state: SessionState,
     x1: number, y1: number, x2: number, y2: number,
     mode: SelectMode,
-): Uint8Array {
+): CellMask {
     const { canvasWidth: W, canvasHeight: H } = state.pattern;
-    const visible = visiblePixels(state);
-    const region = rectMask(visible, W, H, x1, y1, x2, y2);
-    if (mode === "replace") return region;
-    const current = shiftedFloatMask(state);
-    for (let i = 0; i < current.length; i++) {
-        if (visible[i] === 0) current[i] = 0;
-        else if (region[i]) current[i] = mode === "add" ? 1 : 0;
+    const rect = { minX: Math.min(x1, x2), minY: Math.min(y1, y2), maxX: Math.max(x1, x2), maxY: Math.max(y1, y2) };
+    const f = mode === "replace" ? null : state.float;
+    const span = mode === "remove" ? { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity } : { ...rect };
+    if (f) {
+        span.minX = Math.min(span.minX, f.x); span.maxX = Math.max(span.maxX, f.x + f.w - 1);
+        span.minY = Math.min(span.minY, f.y); span.maxY = Math.max(span.maxY, f.y + f.h - 1);
     }
-    return current;
+    const x = Math.max(0, span.minX), y = Math.max(0, span.minY);
+    const w = Math.min(W - 1, span.maxX) - x + 1, h = Math.min(H - 1, span.maxY) - y + 1;
+    if (w <= 0 || h <= 0) return { x: 0, y: 0, w: 0, h: 0, mask: new Uint8Array() };
+    const mask = new Uint8Array(w * h);
+    for (let ly = 0; ly < h; ly++) {
+        for (let lx = 0; lx < w; lx++) {
+            const cx = x + lx, cy = y + ly;
+            if (!isChartCell(state, cx, cy)) continue;
+            const swept = cx >= rect.minX && cx <= rect.maxX && cy >= rect.minY && cy <= rect.maxY;
+            const fx = f ? cx - f.x : -1, fy = f ? cy - f.y : -1;
+            const selected = f !== null && fx >= 0 && fx < f.w && fy >= 0 && fy < f.h && f.pixels[fy * f.w + fx] !== 0;
+            if (mode === "replace" ? swept : mode === "add" ? selected || swept : selected && !swept) mask[ly * w + lx] = 1;
+        }
+    }
+    return { x, y, w, h, mask };
 }
 
 // Bake the float into the canvas; return pixels with float stamped + float=null.

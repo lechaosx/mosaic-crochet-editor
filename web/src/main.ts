@@ -27,7 +27,7 @@ import { hasUnrepresentedWarning, packInstructionCoordinates } from "./instructi
 import { mountGestures } from "./gesture";
 import { createChartLayer } from "./chart-layer";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
-         previewSelectRectMask,
+         previewSelectRect,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection, createGridRecipe,
          activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe, gridRecipeStamp,
@@ -358,7 +358,7 @@ function syncSelectPreview() {
     if (!g || !g.rect) {
         rs.hideCommittedSelection = false;
         rs.dragRect               = null;
-        rs.selectPreviewMask      = null;
+        rs.selectPreview          = null;
         return;
     }
     rs.hideCommittedSelection = true;
@@ -366,11 +366,11 @@ function syncSelectPreview() {
         x1: g.rect.startX, y1: g.rect.startY,
         x2: g.rect.endX,   y2: g.rect.endY,
     };
-    rs.selectPreviewMask = previewSelectRectMask(
+    rs.selectPreview = { cells: previewSelectRect(
         store.state,
         g.rect.startX, g.rect.startY, g.rect.endX, g.rect.endY,
         g.mode,
-    );
+    ) };
 }
 
 function renderCanvas() {
@@ -789,8 +789,12 @@ function onApplyRecipe() {
     let result;
     if (gesture?.kind === "select" && gesture.rect) {
         const rect = gesture.rect;
-        const projected = { ...store.state, ...liftCells(visiblePixels(store.state), store.state.pattern,
-            previewSelectRectMask(store.state, rect.startX, rect.startY, rect.endX, rect.endY, gesture.mode)) };
+        const preview = previewSelectRect(store.state, rect.startX, rect.startY, rect.endX, rect.endY, gesture.mode);
+        const swept = new Uint8Array(store.state.pixels.length);
+        for (let y = 0; y < preview.h; y++) {
+            swept.set(preview.mask.subarray(y * preview.w, (y + 1) * preview.w), (preview.y + y) * store.state.pattern.canvasWidth + preview.x);
+        }
+        const projected = { ...store.state, ...liftCells(visiblePixels(store.state), store.state.pattern, swept) };
         const recipe = projected.recipes.find(recipe => recipe.id === projected.activeRecipeId)
             ?? projected.recipes.find(recipe => recipe.source.mask.length === 0) ?? emptyGridRecipe();
         if (projected.float) {

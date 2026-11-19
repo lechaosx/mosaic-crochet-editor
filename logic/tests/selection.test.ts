@@ -4,8 +4,9 @@
 // / deselect / anchor wrappers.
 
 import { describe, test, expect, vi } from "vitest";
+import fc from "fast-check";
 import {
-    liftCells, cutCells, rectMask, shiftedFloatMask, previewSelectRectMask, anchorIntoCanvas,
+    liftCells, cutCells, rectMask, shiftedFloatMask, previewSelectRect, anchorIntoCanvas, CellMask,
     applySelectionMod, commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
     deleteFloat, matchedCutMask, clipFloatToCanvas,
 } from "../src/selection";
@@ -82,7 +83,13 @@ describe("matchedCutMask", () => {
     });
 });
 
-describe("previewSelectRectMask", () => {
+describe("previewSelectRect", () => {
+    const chartMask = ({ x, y, w, h, mask }: CellMask, W: number, H: number) => {
+        const out = new Uint8Array(W * H);
+        for (let row = 0; row < h; row++) out.set(mask.subarray(row * w, (row + 1) * w), (y + row) * W + x);
+        return out;
+    };
+
     test("matches the resulting sparse membership for replace, add, and remove", () => {
         for (const [mode, x, expected] of [
             ["replace", 2, [0, 0, 1, 0]],
@@ -93,12 +100,40 @@ describe("previewSelectRectMask", () => {
                 pixels: new Uint8Array([1, 1, 1, 1]),
             }));
             commitSelectRect(selected, 0, 0, 0, 0, "replace");
-            const preview = previewSelectRectMask(selected.state, x, 0, x, 0, mode);
+            const preview = chartMask(previewSelectRect(selected.state, x, 0, x, 0, mode), 4, 1);
             const committed = new Store(structuredClone(selected.state));
             commitSelectRect(committed, x, 0, x, 0, mode);
             expect([...preview]).toEqual(expected);
             expect(preview).toEqual(shiftedFloatMask(committed.state));
         }
+    });
+
+    test("shows what a commit would select, spanning only the rectangle and the selection", () => {
+        const corner = (W: number, H: number) => fc.tuple(fc.integer({ min: -2, max: W + 1 }), fc.integer({ min: -2, max: H + 1 }));
+        const sweep = fc.record({ W: fc.integer({ min: 1, max: 7 }), H: fc.integer({ min: 1, max: 7 }) }).chain(({ W, H }) => fc.record({
+            W: fc.constant(W), H: fc.constant(H),
+            pixels: fc.array(fc.constantFrom(0, 1, 2), { minLength: W * H, maxLength: W * H }),
+            selected: fc.option(fc.tuple(corner(W, H), corner(W, H))),
+            from: corner(W, H), to: corner(W, H), mode: fc.constantFrom("replace", "add", "remove" as const),
+        }));
+        fc.assert(fc.property(sweep, ({ W, H, pixels, selected, from, to, mode }) => {
+            const store = new Store(rowSession(W, H, { pixels: Uint8Array.from(pixels) }));
+            if (selected) commitSelectRect(store, ...selected[0], ...selected[1], "replace");
+            const preview = previewSelectRect(store.state, ...from, ...to, mode);
+            const committed = new Store(structuredClone(store.state));
+            commitSelectRect(committed, ...from, ...to, mode);
+            expect(chartMask(preview, W, H)).toEqual(shiftedFloatMask(committed.state));
+            const float = mode === "replace" ? null : store.state.float;
+            const xs = [from[0], to[0], ...float ? [float.x, float.x + float.w - 1] : []];
+            const ys = [from[1], to[1], ...float ? [float.y, float.y + float.h - 1] : []];
+            expect(preview.mask).toHaveLength(preview.w * preview.h);
+            if (preview.w * preview.h > 0) {
+                expect(preview.x).toBeGreaterThanOrEqual(Math.min(...xs));
+                expect(preview.y).toBeGreaterThanOrEqual(Math.min(...ys));
+                expect(preview.x + preview.w - 1).toBeLessThanOrEqual(Math.max(...xs));
+                expect(preview.y + preview.h - 1).toBeLessThanOrEqual(Math.max(...ys));
+            }
+        }), { numRuns: 500 });
     });
 });
 

@@ -6,6 +6,7 @@ import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
 import { transformed_target_indices } from "@mosaic/wasm";
 import { Store } from "@mosaic/logic/store";
+import type { CellMask } from "@mosaic/logic/selection";
 import { computeHighlightPlan } from "@mosaic/logic/highlight-plan";
 import { AppPreferences } from "./preferences";
 import { forEachPlanGlyph, type PackedInstructionCoordinates } from "./instruction-coordinates";
@@ -99,7 +100,8 @@ export interface RendererState {
     projectColors: Pick<AppPreferences, "dangerColor" | "accentColor">;
     // A selection drag shows its resulting membership, not the old marquee.
     hideCommittedSelection: boolean;
-    selectPreviewMask: Uint8Array | null;
+    // The Rectangle preview's cells, and their outline once traced.
+    selectPreview: { cells: CellMask; paths?: number[][] } | null;
     // The unclamped gesture footprint remains visible beside the exact
     // membership preview, including when the drag crosses the canvas edge.
     dragRect: { x1: number; y1: number; x2: number; y2: number } | null;
@@ -144,7 +146,7 @@ export function makeRendererState(preferences: AppPreferences, chart: ChartLayer
         preferences,
         projectColors: { dangerColor: preferences.dangerColor, accentColor: preferences.accentColor },
         hideCommittedSelection: false,
-        selectPreviewMask:      null,
+        selectPreview:          null,
         dragRect:               null,
         selectionDashOffset:    0,
         selectionOutline:       null,
@@ -572,12 +574,13 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
         }
         renderSelectionPaths(ctx, view, dpr, rs.selectionOutline.paths, accentColor, dashOffsetSnapped);
     } else rs.selectionOutline = null;
-    if (rs.selectPreviewMask) {
-        renderSelection(ctx, view, dpr, pattern, rs.selectPreviewMask, accentColor, dashOffsetSnapped);
+    if (rs.selectPreview) {
+        rs.selectPreview.paths ??= maskOutline(rs.selectPreview.cells);
+        renderSelectionPaths(ctx, view, dpr, rs.selectPreview.paths, accentColor, dashOffsetSnapped);
     }
     if (rs.dragRect) {
         ctx.save();
-        ctx.globalAlpha = rs.selectPreviewMask ? 0.45 : 1;
+        ctx.globalAlpha = rs.selectPreview ? 0.45 : 1;
         renderDragRect(ctx, view, dpr, rs.dragRect, accentColor, dashOffsetSnapped);
         ctx.restore();
     }
@@ -876,7 +879,12 @@ function floatOutline(pattern: PatternState, pixels: Uint8Array, float: Float): 
             mask[ly * float.w + lx] = 1;
         }
     }
-    return tracedBoundary(mask, float.w, float.h).map(path => path.map((value, i) => value + (i % 2 === 0 ? float.x : float.y)));
+    return maskOutline({ x: float.x, y: float.y, w: float.w, h: float.h, mask });
+}
+
+// The outline of `mask` placed with its top-left cell at (x, y).
+function maskOutline({ x, y, w, h, mask }: CellMask): number[][] {
+    return tracedBoundary(mask, w, h).map(path => path.map((value, i) => value + (i % 2 === 0 ? x : y)));
 }
 
 function renderSelection(

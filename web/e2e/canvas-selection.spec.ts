@@ -218,6 +218,20 @@ test("Rectangle sweeps retain the original dimmed drag-preview marching ants", a
     await page.mouse.up();
 });
 
+test("Rectangle sweeps outline the cells they would select", async ({ page }) => {
+    await selectSource(page);
+    await traceDrawing(page);
+    const start = await cellCoord(page, 3, 2), end = await cellCoord(page, 4, 3);
+    await page.keyboard.down("Shift");
+    await page.mouse.move(start.cx, start.cy); await page.mouse.down(); await page.mouse.move(end.cx, end.cy);
+    const color = await page.locator("#accent-color").inputValue();
+    const strokes = await page.evaluate(color => (window as unknown as { drawing: DrawingStroke[] }).drawing
+        .filter(stroke => stroke.color.toLowerCase() === color.toLowerCase()), color);
+    await page.mouse.up(); await page.keyboard.up("Shift");
+    expect(strokes.map(stroke => stroke.alpha)).toEqual([1, 0.45]);
+    expect(strokes[0].paths).toEqual([[2, 2, 3, 2, 4, 2, 5, 2, 5, 3, 5, 4, 4, 4, 3, 4, 3, 3, 2, 3, 2, 2]]);
+});
+
 test("Grid renders no grips or labels while Circle and Mirror retain centre grips", async ({ page }) => {
     await selectSource(page);
     await page.locator("#tool-select").click();
