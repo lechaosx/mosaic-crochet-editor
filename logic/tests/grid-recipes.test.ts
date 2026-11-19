@@ -406,6 +406,22 @@ describe("recipes at every source position", () => {
         }), { numRuns: 200 });
     });
 
+    test("accept only whole-cell masks, however often they are checked", () => {
+        const evaluations = new RecipeEvaluations();
+        const recipe = gridRecipeFromFloat({ x: 0, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 1]) });
+        const withMask = (mask: Uint8Array, w = 2) => ({ ...recipe, source: { ...recipe.source, w, mask } });
+        const partial = new Uint8Array([1, 2]), empty = new Uint8Array([0, 0]);
+        for (const mask of [recipe.source.mask, partial, empty]) {
+            evaluateGridRecipe(withMask(mask), evaluations);
+            for (let check = 0; check < 2; check++) {
+                expect(gridRecipeError(withMask(mask), undefined, evaluations)).toBe(gridRecipeError(withMask(mask)));
+            }
+            expect(gridRecipeError(withMask(mask, 1), undefined, evaluations)).toMatch(/whole-cell selection/);
+        }
+        expect(gridRecipeError(withMask(partial))).toMatch(/whole-cell selection/);
+        expect(gridRecipeError(withMask(empty))).toMatch(/whole-cell selection/);
+    });
+
     test("reject unsafe copies of a shape that is valid near the origin", () => {
         const evaluations = new RecipeEvaluations();
         const recipe = { ...gridRecipeFromFloat({ x: 0, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 1]) }), right: 1 };

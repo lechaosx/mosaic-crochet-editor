@@ -75,8 +75,7 @@ export function gridRecipeError(
     if (!Number.isSafeInteger(source.x) || !Number.isSafeInteger(source.y)
         || !Number.isSafeInteger(source.w) || !Number.isSafeInteger(source.h)
         || (!emptySource && (source.w <= 0 || source.h <= 0)) || source.mask.length !== source.w * source.h
-        || source.mask.some(value => value !== 0 && value !== 1)
-        || (!emptySource && !source.mask.some(value => value !== 0))) return "Recipe source must be an empty slot or a whole-cell selection.";
+        || (!emptySource && !(evaluations?.isWholeCellMask(source.mask) ?? isWholeCellMask(source.mask)))) return "Recipe source must be an empty slot or a whole-cell selection.";
     if (!["none", "grid", "circle", "mirror"].includes(recipe.mode)) return "Selection mode is not supported.";
     if ([recipe.rotationCentreX, recipe.rotationCentreY, recipe.mirrorCentreX, recipe.mirrorCentreY]
         .some(value => typeof value !== "number" || !Number.isSafeInteger(value * 2))) return "Selection centre must use whole or half-cell coordinates.";
@@ -113,6 +112,7 @@ const unitMask = new Uint8Array([1]);
 // claim, so one evaluation of a shape serves each position the source moves to.
 export class RecipeEvaluations {
     private mask: Uint8Array | null = null;
+    private wholeCells = false;
     // Each shape's conflicting cells relative to its source, least recently
     // used first, within `budget` numbers so that a drag that never repeats a
     // shape does not accumulate them.
@@ -127,9 +127,19 @@ export class RecipeEvaluations {
     keepOnly(mask: Uint8Array | null): void {
         if (mask === this.mask) return;
         this.mask = mask;
+        this.wholeCells = false;
         this.conflicts = new Map();
         this.held = 0;
         this.latest = null;
+    }
+
+    // Scans a mask only until it passes.
+    isWholeCellMask(mask: Uint8Array): boolean {
+        if (mask === this.mask && this.wholeCells) return true;
+        if (!isWholeCellMask(mask)) return false;
+        this.keepOnly(mask);
+        this.wholeCells = true;
+        return true;
     }
 
     evaluate(recipe: GridRecipe): PackedGridEvaluation {
@@ -164,6 +174,10 @@ export class RecipeEvaluations {
         if (!(cells instanceof Float64Array)) throw cells.error;
         return { cells, x: recipe.source.x, y: recipe.source.y };
     }
+}
+
+function isWholeCellMask(mask: Uint8Array): boolean {
+    return !mask.some(value => value !== 0 && value !== 1) && mask.includes(1);
 }
 
 // An error counts as a shape's worth of bookkeeping.
