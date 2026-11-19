@@ -1,16 +1,16 @@
 import { PlanCell } from "@mosaic/wasm";
-import type { HighlightPlan } from "@mosaic/logic/highlight-plan";
+import type { CellRect, HighlightPlan } from "@mosaic/logic/highlight-plan";
 
-// Visits each glyph of a plan for a chart `width` cells wide: whether it is a
-// warning, the outward cell it lands on, and the wrong cell carrying it. A
-// round corner's cell carries two glyphs.
+// Visits each glyph of a plan for a chart `width` cells wide, or of its
+// cells within `rect`: whether it is a warning, the outward cell it lands on,
+// and the wrong cell carrying it. A round corner's cell carries two glyphs.
 export function forEachPlanGlyph(
     plan: Uint8Array, width: number,
     glyph: (invalid: boolean, x: number, y: number, wrongX: number, wrongY: number) => void,
+    rect: CellRect = { x: 0, y: 0, width, height: plan.length / width },
 ): void {
-    const height = plan.length / width;
-    for (let y = 0, index = 0; y < height; y++) {
-        for (let x = 0; x < width; x++, index++) {
+    for (let y = rect.y; y < rect.y + rect.height; y++) {
+        for (let x = rect.x, index = y * width + x; x < rect.x + rect.width; x++, index++) {
             const cell = plan[index];
             if (cell === 0) continue;
             const invalid = (cell & PlanCell.Invalid) !== 0;

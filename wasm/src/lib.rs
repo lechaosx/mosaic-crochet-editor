@@ -434,14 +434,43 @@ fn highlights_round(
 }
 
 #[wasm_bindgen]
-pub fn highlight_plan_row(pixels: &[u8], width: i32, height: i32) -> Vec<u8> {
-    let pattern = to_array2(pixels, width, height);
-    common::highlight_plan_row(IVec2::new(width, height), &pattern)
+pub fn highlight_plan_reach() -> i32 {
+    common::PLAN_REACH
+}
+
+// The plan bytes of the `width` × `height` cells at (`x`, `y`), from `pixels`:
+// the canvas cells of a `pixels_width`-wide rectangle at (`pixels_x`,
+// `pixels_y`) covering that region and every cell within
+// `highlight_plan_reach` of it.
+#[wasm_bindgen]
+pub fn highlight_plan_row(
+    pixels: &[u8],
+    pixels_x: i32,
+    pixels_y: i32,
+    pixels_width: i32,
+    canvas_width: i32,
+    canvas_height: i32,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+) -> Vec<u8> {
+    let window = to_array2(pixels, pixels_width, pixels.len() as i32 / pixels_width);
+    common::highlight_plan_row(
+        IVec2::new(canvas_width, canvas_height),
+        &window,
+        IVec2::new(pixels_x, pixels_y),
+        IVec2::new(x, y),
+        IVec2::new(width, height),
+    )
 }
 
 #[wasm_bindgen]
 pub fn highlight_plan_round(
     pixels: &[u8],
+    pixels_x: i32,
+    pixels_y: i32,
+    pixels_width: i32,
     canvas_width: i32,
     canvas_height: i32,
     virtual_width: i32,
@@ -449,14 +478,21 @@ pub fn highlight_plan_round(
     offset_x: i32,
     offset_y: i32,
     rounds: i32,
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
 ) -> Vec<u8> {
-    let pattern = to_array2(pixels, canvas_width, canvas_height);
+    let window = to_array2(pixels, pixels_width, pixels.len() as i32 / pixels_width);
     common::highlight_plan_round(
         IVec2::new(canvas_width, canvas_height),
         IVec2::new(virtual_width, virtual_height),
         IVec2::new(offset_x, offset_y),
         rounds,
-        &pattern,
+        &window,
+        IVec2::new(pixels_x, pixels_y),
+        IVec2::new(x, y),
+        IVec2::new(width, height),
     )
 }
 

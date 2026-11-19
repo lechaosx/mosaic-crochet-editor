@@ -30,6 +30,11 @@ pub const PLAN_DOWN: u8 = 4;
 pub const PLAN_LEFT: u8 = 8;
 pub const PLAN_RIGHT: u8 = 16;
 
+// How far from a cell its plan byte reads pixels: its own and its inward
+// neighbour's. An edit therefore changes plan bytes only within this
+// distance of the edited cells.
+pub const PLAN_REACH: i32 = 1;
+
 fn plan_cell(highlight: u8, directions: u8) -> u8 {
     if highlight == HIGHLIGHT_INVALID {
         PLAN_INVALID | directions
@@ -296,15 +301,16 @@ fn round_highlight(
     }
 }
 
-fn pixel_at(pixels: &Array2<u8>) -> impl Fn(IVec2) -> u8 {
-    |coord| pixels[[coord.y as usize, coord.x as usize]]
+// Reads canvas cells from `pixels`, which hold the canvas from `origin` on.
+fn pixel_at(pixels: &Array2<u8>, origin: IVec2) -> impl Fn(IVec2) -> u8 {
+    move |coord| pixels[[(coord.y - origin.y) as usize, (coord.x - origin.x) as usize]]
 }
 
 pub fn compute_row_highlights(size: IVec2, pixels: &Array2<u8>, highlights: &mut Array2<u8>) {
     for y in 0..size.y {
         for x in 0..size.x {
             highlights[[y as usize, x as usize]] =
-                row_highlight(size, pixel_at(pixels), IVec2::new(x, y));
+                row_highlight(size, pixel_at(pixels, IVec2::ZERO), IVec2::new(x, y));
         }
     }
 }
@@ -324,7 +330,7 @@ pub fn compute_round_highlights(
                 virtual_size,
                 offset,
                 rounds,
-                pixel_at(pixels),
+                pixel_at(pixels, IVec2::ZERO),
                 IVec2::new(x, y),
             );
         }
@@ -336,40 +342,44 @@ pub fn compute_round_highlights(
 // renderer doesn't need geometry: each plan cell fully describes what and
 // where to draw, leaving only colour / glyph choice (presentation) to the
 // caller.
-pub fn highlight_plan_row(canvas_size: IVec2, pixels: &Array2<u8>) -> Vec<u8> {
-    let mut plan = Vec::with_capacity((canvas_size.x * canvas_size.y) as usize);
-    for y in 0..canvas_size.y {
-        for x in 0..canvas_size.x {
-            plan.push(
-                match row_highlight(canvas_size, pixel_at(pixels), IVec2::new(x, y)) {
-                    0 => 0,
-                    highlight => plan_cell(highlight, PLAN_UP),
-                },
-            );
+pub fn highlight_plan_row(
+    canvas_size: IVec2,
+    pixels: &Array2<u8>,
+    pixels_origin: IVec2,
+    rect_min: IVec2,
+    rect_size: IVec2,
+) -> Vec<u8> {
+    let pixel = pixel_at(pixels, pixels_origin);
+    let mut plan = Vec::with_capacity((rect_size.x * rect_size.y) as usize);
+    for y in rect_min.y..rect_min.y + rect_size.y {
+        for x in rect_min.x..rect_min.x + rect_size.x {
+            plan.push(match row_highlight(canvas_size, &pixel, IVec2::new(x, y)) {
+                0 => 0,
+                highlight => plan_cell(highlight, PLAN_UP),
+            });
         }
     }
     plan
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn highlight_plan_round(
     canvas_size: IVec2,
     virtual_size: IVec2,
     offset: IVec2,
     rounds: i32,
     pixels: &Array2<u8>,
+    pixels_origin: IVec2,
+    rect_min: IVec2,
+    rect_size: IVec2,
 ) -> Vec<u8> {
-    let mut plan = Vec::with_capacity((canvas_size.x * canvas_size.y) as usize);
-    for y in 0..canvas_size.y {
-        for x in 0..canvas_size.x {
+    let pixel = pixel_at(pixels, pixels_origin);
+    let mut plan = Vec::with_capacity((rect_size.x * rect_size.y) as usize);
+    for y in rect_min.y..rect_min.y + rect_size.y {
+        for x in rect_min.x..rect_min.x + rect_size.x {
             let coord = IVec2::new(x, y);
-            let highlight = round_highlight(
-                canvas_size,
-                virtual_size,
-                offset,
-                rounds,
-                pixel_at(pixels),
-                coord,
-            );
+            let highlight =
+                round_highlight(canvas_size, virtual_size, offset, rounds, &pixel, coord);
             plan.push(match highlight {
                 0 => 0,
                 highlight => plan_cell(highlight, round_directions(virtual_size, coord + offset)),
@@ -846,6 +856,29 @@ mod tests {
 
     // ── highlight_plan_* ─────────────────────────────────────────────────────
 
+    fn whole_plan_row(size: IVec2, pixels: &Array2<u8>) -> Vec<u8> {
+        highlight_plan_row(size, pixels, IVec2::ZERO, IVec2::ZERO, size)
+    }
+
+    fn whole_plan_round(
+        size: IVec2,
+        virtual_size: IVec2,
+        offset: IVec2,
+        rounds: i32,
+        pixels: &Array2<u8>,
+    ) -> Vec<u8> {
+        highlight_plan_round(
+            size,
+            virtual_size,
+            offset,
+            rounds,
+            pixels,
+            IVec2::ZERO,
+            IVec2::ZERO,
+            size,
+        )
+    }
+
     /// The plan's marked cells as (x, y, cell).
     fn plan_marks(width: i32, plan: &[u8]) -> Vec<(i32, i32, u8)> {
         (0..plan.len() as i32)
@@ -857,7 +890,7 @@ mod tests {
     #[test]
     fn plan_row_empty_when_pattern_correct() {
         let pixels = make_row_grid(4, 4);
-        let plan = highlight_plan_row(v(4, 4), &pixels);
+        let plan = whole_plan_row(v(4, 4), &pixels);
         assert_eq!(plan.len(), 16);
         assert!(plan_marks(4, &plan).is_empty());
     }
@@ -865,7 +898,7 @@ mod tests {
     #[test]
     fn plan_row_ignores_temporarily_absent_cells() {
         let pixels = Array2::zeros((4, 4));
-        let plan = highlight_plan_row(v(4, 4), &pixels);
+        let plan = whole_plan_row(v(4, 4), &pixels);
         assert!(plan_marks(4, &plan).is_empty());
     }
 
@@ -874,7 +907,7 @@ mod tests {
         // y=0 wrong → INVALID at (2, 0), direction always UP in row mode.
         let mut pixels = make_row_grid(4, 4);
         pixels[[0, 2]] = COLOR_A; // y=0 expects COLOR_B
-        let plan = highlight_plan_row(v(4, 4), &pixels);
+        let plan = whole_plan_row(v(4, 4), &pixels);
         assert_eq!(plan_marks(4, &plan), vec![(2, 0, PLAN_INVALID | PLAN_UP)]);
     }
 
@@ -884,7 +917,7 @@ mod tests {
         // one row up; that's where the overlay would visually live).
         let mut pixels = make_row_grid(4, 4);
         pixels[[3, 2]] = COLOR_B; // y=3 expects COLOR_A
-        let plan = highlight_plan_row(v(4, 4), &pixels);
+        let plan = whole_plan_row(v(4, 4), &pixels);
         assert_eq!(plan_marks(4, &plan), vec![(2, 3, PLAN_UP)]);
     }
 
@@ -895,14 +928,14 @@ mod tests {
         // outward dir is LEFT.
         let mut pixels = make_round_grid(9, 9, 9, 9, 0, 0, 3);
         pixels[[4, 1]] = COLOR_A; // (1,4): rfe=1 expects COLOR_B
-        let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+        let plan = whole_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
         assert_eq!(plan_marks(9, &plan), vec![(1, 4, PLAN_LEFT)]);
     }
 
     #[test]
     fn plan_round_ignores_temporarily_absent_active_cells() {
         let pixels = Array2::zeros((9, 9));
-        let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+        let plan = whole_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
         assert!(plan_marks(9, &plan).is_empty());
     }
 
@@ -913,7 +946,7 @@ mod tests {
         // → outward dirs LEFT and UP. Always-invalid → INVALID.
         let mut pixels = make_round_grid(9, 9, 9, 9, 0, 0, 3);
         pixels[[1, 1]] = COLOR_A; // (1,1): rfe=1 expects COLOR_B
-        let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+        let plan = whole_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
         assert_eq!(
             plan_marks(9, &plan),
             vec![(1, 1, PLAN_INVALID | PLAN_LEFT | PLAN_UP)]
@@ -936,12 +969,148 @@ mod tests {
         for ((x, y), expected) in cases {
             let mut pixels = make_round_grid(9, 9, 9, 9, 0, 0, 3);
             pixels[[y, x]] = opposite_color(pixels[[y, x]]);
-            let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+            let plan = whole_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
             assert_eq!(
                 plan_marks(9, &plan),
                 vec![(x as i32, y as i32, expected)],
                 "cell ({x}, {y})"
             );
+        }
+    }
+
+    // ── highlight plan regions ───────────────────────────────────────────────
+
+    /// Reproducible pseudo-random numbers in `0..n`.
+    struct Lcg(u32);
+    impl Lcg {
+        fn below(&mut self, n: i32) -> i32 {
+            self.0 = self.0.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            (self.0 >> 8) as i32 % n
+        }
+    }
+
+    enum Geometry {
+        Row,
+        Round {
+            virtual_size: IVec2,
+            offset: IVec2,
+            rounds: i32,
+        },
+    }
+
+    /// A small row or round chart of random cells, holes included.
+    fn random_chart(rng: &mut Lcg, case: usize) -> (IVec2, Geometry, Array2<u8>) {
+        let size = v(1 + rng.below(9), 1 + rng.below(9));
+        let geometry = if case % 2 == 0 {
+            Geometry::Row
+        } else {
+            let virtual_size = size + v(rng.below(4), rng.below(4));
+            let offset = v(
+                rng.below(virtual_size.x - size.x + 1),
+                rng.below(virtual_size.y - size.y + 1),
+            );
+            Geometry::Round {
+                virtual_size,
+                offset,
+                rounds: 1 + rng.below(6),
+            }
+        };
+        let pixels =
+            Array2::from_shape_fn((size.y as usize, size.x as usize), |_| rng.below(3) as u8);
+        (size, geometry, pixels)
+    }
+
+    fn random_rect(rng: &mut Lcg, size: IVec2) -> (IVec2, IVec2) {
+        let min = v(rng.below(size.x), rng.below(size.y));
+        (
+            min,
+            v(1 + rng.below(size.x - min.x), 1 + rng.below(size.y - min.y)),
+        )
+    }
+
+    fn region_plan(
+        size: IVec2,
+        geometry: &Geometry,
+        pixels: &Array2<u8>,
+        origin: IVec2,
+        min: IVec2,
+        rect_size: IVec2,
+    ) -> Vec<u8> {
+        match *geometry {
+            Geometry::Row => highlight_plan_row(size, pixels, origin, min, rect_size),
+            Geometry::Round {
+                virtual_size,
+                offset,
+                rounds,
+            } => highlight_plan_round(
+                size,
+                virtual_size,
+                offset,
+                rounds,
+                pixels,
+                origin,
+                min,
+                rect_size,
+            ),
+        }
+    }
+
+    #[test]
+    fn plan_region_reads_only_its_cells_within_reach() {
+        let mut rng = Lcg(1);
+        for case in 0..4000 {
+            let (size, geometry, pixels) = random_chart(&mut rng, case);
+            let whole = region_plan(size, &geometry, &pixels, IVec2::ZERO, IVec2::ZERO, size);
+            let (min, rect_size) = random_rect(&mut rng, size);
+            let window_min = (min - IVec2::splat(PLAN_REACH)).max(IVec2::ZERO);
+            let window_max = (min + rect_size + IVec2::splat(PLAN_REACH)).min(size);
+            let window = pixels
+                .slice(ndarray::s![
+                    window_min.y as usize..window_max.y as usize,
+                    window_min.x as usize..window_max.x as usize
+                ])
+                .to_owned();
+            let region = region_plan(size, &geometry, &window, window_min, min, rect_size);
+            for y in 0..rect_size.y {
+                for x in 0..rect_size.x {
+                    let c = min + v(x, y);
+                    assert_eq!(
+                        region[(y * rect_size.x + x) as usize],
+                        whole[(c.y * size.x + c.x) as usize],
+                        "case {case}: cell {c} of region {min} + {rect_size}",
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_edit_changes_the_plan_only_within_reach() {
+        let mut rng = Lcg(2);
+        for case in 0..4000 {
+            let (size, geometry, mut pixels) = random_chart(&mut rng, case);
+            let before = region_plan(size, &geometry, &pixels, IVec2::ZERO, IVec2::ZERO, size);
+            let (min, rect_size) = random_rect(&mut rng, size);
+            for y in min.y..min.y + rect_size.y {
+                for x in min.x..min.x + rect_size.x {
+                    pixels[[y as usize, x as usize]] = rng.below(3) as u8;
+                }
+            }
+            let after = region_plan(size, &geometry, &pixels, IVec2::ZERO, IVec2::ZERO, size);
+            let reach_min = min - IVec2::splat(PLAN_REACH);
+            let reach_max = min + rect_size + IVec2::splat(PLAN_REACH);
+            for y in 0..size.y {
+                for x in 0..size.x {
+                    let c = v(x, y);
+                    let within = c.cmpge(reach_min).all() && c.cmplt(reach_max).all();
+                    assert!(
+                        within
+                            || before[(y * size.x + x) as usize]
+                                == after[(y * size.x + x) as usize],
+                        "case {case}: cell {c} changed outside the reach of edit {min} + {rect_size}",
+                    );
+                }
+            }
         }
     }
 

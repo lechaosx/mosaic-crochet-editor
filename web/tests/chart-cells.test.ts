@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { PlanCell } from "@mosaic/wasm";
-import { CELL_CROSS, CELL_CROSS_B, CELL_WARNING, packChartCells } from "../src/chart-cells";
+import fc from "fast-check";
+import { PlanCell, initialize_round_pattern } from "@mosaic/wasm";
+import { Store } from "@mosaic/logic/store";
+import type { PatternState } from "@mosaic/logic/types";
+import { CELL_CROSS, CELL_CROSS_B, CELL_WARNING, packChartCells, repackChartCells } from "../src/chart-cells";
 import { packInstructionCoordinates } from "../src/instruction-coordinates";
+import { rowSession } from "./_helpers";
 
 // 3×2 chart: row 0 = A B A, row 1 = B hole B.
 const W = 3, H = 2;
@@ -66,5 +70,44 @@ describe("packChartCells", () => {
         ]), packInstructionCoordinates([2, 0], W));
         expect(at(cells, 0, 0)).toBe(1);
         expect(at(cells, 2, 0)).toBe(1 | CELL_WARNING);
+    });
+});
+
+describe("repackChartCells", () => {
+    const chart = fc.oneof(
+        fc.record({ W: fc.integer({ min: 1, max: 8 }), H: fc.integer({ min: 1, max: 8 }) })
+            .map(({ W, H }): PatternState => ({ mode: "row", canvasWidth: W, canvasHeight: H })),
+        fc.record({ W: fc.integer({ min: 1, max: 8 }), H: fc.integer({ min: 1, max: 8 }), rounds: fc.integer({ min: 1, max: 5 }) })
+            .map(({ W, H, rounds }): PatternState => ({ mode: "round", canvasWidth: W, canvasHeight: H,
+                virtualWidth: W, virtualHeight: H, offsetX: 0, offsetY: 0, rounds })),
+    );
+    const edits = fc.array(fc.record({ x: fc.nat(), y: fc.nat(), yarn: fc.constantFrom<1 | 2>(1, 2) }), { minLength: 1, maxLength: 10 });
+
+    it("rewriting each change region in place keeps the cells of a full pack, within the bytes it reports", () => {
+        fc.assert(fc.property(chart, edits, (pattern, steps) => {
+            const { canvasWidth: W, canvasHeight: H } = pattern;
+            const pixels = pattern.mode === "row" ? undefined
+                : initialize_round_pattern(W, H, W, H, 0, 0, pattern.rounds);
+            const store = new Store(rowSession(W, H, { pattern, ...(pixels && { pixels }) }));
+            const cells = packChartCells(store.visible, W, H, store.plan.cells, null);
+            for (const { x, y, yarn } of steps) {
+                const version = store.planVersion;
+                store.commit(state => {
+                    const next = state.pixels.slice();
+                    if (next[(y % H) * W + x % W] !== 0) next[(y % H) * W + x % W] = yarn;
+                    state.pixels = next;
+                });
+                const change = store.planChangeSince(version);
+                if (change === "all") throw new Error("A pixel commit rebuilt the plan");
+                const before = cells.slice();
+                if (change) {
+                    const [start, end] = repackChartCells(cells, store.visible, W, H, store.plan.cells, null, change);
+                    cells.forEach((cell, index) => {
+                        if (cell !== before[index]) expect(index >= start && index < end).toBe(true);
+                    });
+                }
+                expect(cells).toEqual(packChartCells(store.visible, W, H, store.plan.cells, null));
+            }
+        }), { numRuns: 500 });
     });
 });

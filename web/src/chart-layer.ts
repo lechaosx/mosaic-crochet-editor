@@ -2,7 +2,8 @@
 // highlight plan's ✕ / ! glyphs, shaded per device pixel from the bytes of
 // `packChartCells`. It keeps the latest frame it was given, to redraw it after
 // a context restore, and a CPU copy of the cell texture, to upload only the
-// rows that change.
+// rows that change: those a frame reports rewritten in place, or for a new
+// cell array, those that differ from the copy.
 
 import { CELL_CROSS, CELL_CROSS_B, CELL_WARNING } from "./chart-cells";
 
@@ -115,6 +116,8 @@ export interface ChartLayer {
 
 export interface ChartFrame {
     cells: Uint8Array;
+    // The byte range of `cells` rewritten in place since the previous frame.
+    changed: readonly [start: number, end: number] | null;
     width: number;
     height: number;
     hasGlyphs: boolean;
@@ -200,12 +203,15 @@ export function cellTextureLayout(bytes: number, maxTextureSize: number): Textur
 
 // Brings the texture up to `cells`, uploading only the rows that differ.
 function uploadCells(
-    gl: WebGL2RenderingContext, resources: Resources, cells: Uint8Array, layout: TextureLayout,
+    gl: WebGL2RenderingContext, resources: Resources, { cells, changed }: ChartFrame, layout: TextureLayout,
 ) {
-    if (resources.cells === cells) return;
-    resources.cells = cells;
     const { rowShift, rows } = layout;
     const rowBytes = 4 << rowShift;
+    if (resources.cells === cells) {
+        if (changed) uploadRows(gl, resources, cells, rowBytes, changed[0], changed[1] - 1);
+        return;
+    }
+    resources.cells = cells;
     if (!resources.texture || resources.layout?.rowShift !== rowShift || resources.layout.rows !== rows) {
         if (resources.texture) gl.deleteTexture(resources.texture);
         resources.texture = gl.createTexture();
@@ -224,11 +230,18 @@ function uploadCells(
     while (first < cells.length && cells[first] === uploaded[first]) first++;
     if (first === cells.length) return;
     while (cells[last] === uploaded[last]) last--;
+    uploadRows(gl, resources, cells, rowBytes, first, last);
+}
+
+// Uploads the texture rows holding cell bytes `first` to `last`.
+function uploadRows(
+    gl: WebGL2RenderingContext, resources: Resources, cells: Uint8Array, rowBytes: number, first: number, last: number,
+) {
     const firstRow = Math.floor(first / rowBytes), lastRow = Math.floor(last / rowBytes);
-    uploaded.set(cells.subarray(firstRow * rowBytes, (lastRow + 1) * rowBytes), firstRow * rowBytes);
+    resources.uploaded.set(cells.subarray(firstRow * rowBytes, (lastRow + 1) * rowBytes), firstRow * rowBytes);
     gl.bindTexture(gl.TEXTURE_2D, resources.texture);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, firstRow, 1 << rowShift, lastRow - firstRow + 1,
-        gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, uploaded, firstRow * rowBytes);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, firstRow, rowBytes >> 2, lastRow - firstRow + 1,
+        gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, resources.uploaded, firstRow * rowBytes);
 }
 
 function rgb(hex: string): [number, number, number] {
@@ -245,12 +258,12 @@ export function drawChartLayer(layer: ChartLayer, frame: ChartFrame) {
     const { a, b, background, danger } = frame.colors;
     const inputs = [frame.cells, canvas.width, canvas.height, frame.hasGlyphs, frame.opacity,
         a, b, background, danger, ...frame.matrix.toFloat64Array()];
-    if (resources.drawn?.inputs.every((value, index) => value === inputs[index])) return;
+    if (!frame.changed && resources.drawn?.inputs.every((value, index) => value === inputs[index])) return;
     const layout = cellTextureLayout(frame.cells.length, gl.getParameter(gl.MAX_TEXTURE_SIZE) as number);
     setAvailable(layer, layout !== null);
     if (!layout) return;
     resources.drawn = { frame, inputs };
-    uploadCells(gl, resources, frame.cells, layout);
+    uploadCells(gl, resources, frame, layout);
     paint(layer, resources, frame);
 }
 

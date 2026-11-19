@@ -40,6 +40,21 @@ test("✕ and ! mark their outward cells in the contrasting yarn and Danger", as
     expect(await patternRGB(page, 4.5, 7.85)).toEqual(B);
 });
 
+test("an edit redraws the glyph its inward neighbour carries", async ({ page }) => {
+    await bootApp(page);
+    // Yarn B at (4, 6) over Yarn B at (4, 7) is a valid overlay: ✕ on (4, 5).
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 4, 6);
+    expect(await patternRGB(page, 4.3, 5.3)).toEqual(A);
+
+    // Yarn A at (4, 7) takes that support away two rows below the glyph: ! on (4, 5).
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await clickCell(page, 4, 7);
+    expect(await patternRGB(page, 4.5, 5.5)).toEqual(DANGER);
+    expect(await patternRGB(page, 4.3, 5.3)).toEqual(B);
+    expect(await patternRGB(page, 4.3, 6.3)).toEqual(A);
+});
+
 test("display-only changes repaint the chart", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();

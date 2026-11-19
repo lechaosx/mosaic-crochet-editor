@@ -8,6 +8,7 @@ import { Store, visiblePixels, outOfBounds, forEachCell } from "../src/store";
 import type { SessionState } from "../src/store";
 import type { PatternState } from "../src/types";
 import { initialize_round_pattern } from "@mosaic/wasm";
+import fc from "fast-check";
 import { filledPixels, makeFloat, rowSession } from "./_helpers";
 
 describe("visiblePixels", () => {
@@ -64,11 +65,12 @@ describe("Store commit chain", () => {
         return new Store(rowSession(3, 3));
     }
 
-    test("commit runs mutate then recomputes plan by default", () => {
+    test("commit runs mutate then updates the plan by default", () => {
         const s = newStore();
-        const planBefore = s.plan;
+        const version = s.planVersion;
         s.commit(state => { state.pixels = filledPixels(3, 3, 1); });
-        expect(s.plan).not.toBe(planBefore);
+        expect(s.planVersion).not.toBe(version);
+        expect(s.plan).toEqual(new Store(rowSession(3, 3, { pixels: filledPixels(3, 3, 1) })).plan);
     });
 
     test("the plan counts glyph cells and warnings, a round corner once", () => {
@@ -83,9 +85,9 @@ describe("Store commit chain", () => {
 
     test("recompute=false skips plan rebuild", () => {
         const s = newStore();
-        const planBefore = s.plan;
+        const version = s.planVersion;
         s.commit(state => { state.rotation = 45; }, { recompute: false });
-        expect(s.plan).toBe(planBefore);
+        expect(s.planChangeSince(version)).toBeNull();
     });
 
     test("history flag triggers historyFn", () => {
@@ -185,5 +187,104 @@ describe("forEachCell", () => {
         for (let y = 0; y < H; y++)
             for (let x = 0; x < W; x++)
                 expect(visited.has(`${x},${y}`)).toBe(true);
+    });
+});
+
+describe("Store plan changes", () => {
+    type Step =
+        | { kind: "paint"; x: number; y: number; yarn: 1 | 2 }
+        | { kind: "lift"; x: number; y: number; w: number; h: number; yarn: 1 | 2 }
+        | { kind: "move"; dx: number; dy: number }
+        | { kind: "drop" }
+        | { kind: "keep" }
+        | { kind: "pattern" };
+    const step: fc.Arbitrary<Step> = fc.oneof(
+        fc.record({ kind: fc.constant("paint" as const), x: fc.nat(), y: fc.nat(), yarn: fc.constantFrom<1 | 2>(1, 2) }),
+        fc.record({ kind: fc.constant("lift" as const), x: fc.nat(), y: fc.nat(),
+            w: fc.integer({ min: 1, max: 3 }), h: fc.integer({ min: 1, max: 3 }), yarn: fc.constantFrom<1 | 2>(1, 2) }),
+        fc.record({ kind: fc.constant("move" as const), dx: fc.integer({ min: -2, max: 2 }), dy: fc.integer({ min: -2, max: 2 }) }),
+        fc.constant({ kind: "drop" as const }),
+        fc.constant({ kind: "keep" as const }),
+        fc.constant({ kind: "pattern" as const }),
+    );
+
+    function apply(state: SessionState, next: Step): void {
+        const { canvasWidth: W, canvasHeight: H } = state.pattern;
+        switch (next.kind) {
+            case "paint": {
+                const pixels = state.pixels.slice();
+                pixels[(next.y % H) * W + next.x % W] = next.yarn;
+                state.pixels = pixels;
+                break;
+            }
+            case "lift":
+                state.float = { x: next.x % W, y: next.y % H, w: next.w, h: next.h,
+                    pixels: new Uint8Array(next.w * next.h).fill(next.yarn) };
+                break;
+            case "move":
+                if (state.float) state.float = { ...state.float, x: state.float.x + next.dx, y: state.float.y + next.dy };
+                break;
+            case "drop":
+                state.float = null;
+                break;
+            case "keep":
+                state.rotation += 90;
+                break;
+            case "pattern":
+                state.pattern = { ...state.pattern };
+                break;
+        }
+    }
+
+    test("each commit's change region holds every changed visible pixel and plan cell", () => {
+        fc.assert(fc.property(
+            fc.integer({ min: 1, max: 7 }), fc.integer({ min: 1, max: 7 }), fc.array(step, { minLength: 1, maxLength: 12 }),
+            (W, H, steps) => {
+                const s = new Store(rowSession(W, H));
+                for (const next of steps) {
+                    const version = s.planVersion;
+                    const visible = visiblePixels(s.state).slice(), cells = s.plan.cells.slice();
+                    s.commit(state => apply(state, next));
+                    expect(s.plan).toEqual(new Store({ ...s.state }).plan);
+                    const change = s.planChangeSince(version);
+                    if (next.kind === "pattern") expect(change).toBe("all");
+                    if (change === "all") continue;
+                    const after = visiblePixels(s.state);
+                    forEachCell(W, H, (x, y) => {
+                        const i = y * W + x;
+                        if (after[i] === visible[i] && s.plan.cells[i] === cells[i]) return;
+                        expect(change).not.toBeNull();
+                        expect(x >= change!.x && x < change!.x + change!.width
+                            && y >= change!.y && y < change!.y + change!.height).toBe(true);
+                    });
+                }
+            },
+        ), { numRuns: 300 });
+    });
+
+    test("a commit that keeps the visible pixels keeps the plan version", () => {
+        const s = new Store(rowSession(3, 3));
+        const version = s.planVersion;
+        s.commit(state => { state.rotation = 90; state.pixels = state.pixels.slice(); });
+        expect(s.planVersion).toBe(version);
+        expect(s.planChangeSince(version)).toBeNull();
+    });
+
+    test("a reader more than one change behind, or of another store, rebuilds", () => {
+        const s = new Store(rowSession(3, 3));
+        const version = s.planVersion;
+        s.commit(state => { state.pixels = filledPixels(3, 3, 1); });
+        expect(s.planChangeSince(version)).not.toBe("all");
+        s.commit(state => { state.pixels = filledPixels(3, 3, 2); });
+        expect(s.planChangeSince(version)).toBe("all");
+        expect(s.planChangeSince(new Store(rowSession(3, 3)).planVersion)).toBe("all");
+        expect(s.planChangeSince(null)).toBe("all");
+    });
+
+    test("replace rebuilds the plan", () => {
+        const s = new Store(rowSession(3, 3));
+        const version = s.planVersion;
+        s.replace({ ...s.state, pixels: filledPixels(3, 3, 1) });
+        expect(s.planChangeSince(version)).toBe("all");
     });
 });

@@ -11,7 +11,6 @@ import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, pickSelectionTransformHandle, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
-import type { HighlightPlan } from "@mosaic/logic/highlight-plan";
 import { UndoHistory, historyFrom, historySave, historyReplaceCurrent, historyUndo, historyRedo, historyPeek,
          historyChanges, historyFromStored, historyHeadId, historyMarkClean, canUndo, canRedo, Restored } from "./history";
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
@@ -381,11 +380,11 @@ function renderCanvas() {
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
 
-// Synced once per plan: a commit that keeps the plan keeps the count.
-let crochetErrorsPlan: HighlightPlan | null = null;
+// Synced once per plan version: a commit that keeps the plan keeps the count.
+let crochetErrorsVersion: object | null = null;
 function syncCrochetErrors() {
-    if (store.plan === crochetErrorsPlan) return;
-    crochetErrorsPlan = store.plan;
+    if (store.planVersion === crochetErrorsVersion) return;
+    crochetErrorsVersion = store.planVersion;
     ui.setCrochetErrors(store.plan.invalid);
 }
 

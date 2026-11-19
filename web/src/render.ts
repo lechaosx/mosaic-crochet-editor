@@ -5,12 +5,12 @@ import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
 import { transformed_target_indices } from "@mosaic/wasm";
-import { Store, visiblePixels } from "@mosaic/logic/store";
-import { computeHighlightPlan, type HighlightPlan } from "@mosaic/logic/highlight-plan";
+import { Store } from "@mosaic/logic/store";
+import { computeHighlightPlan } from "@mosaic/logic/highlight-plan";
 import { AppPreferences } from "./preferences";
 import { forEachPlanGlyph, type PackedInstructionCoordinates } from "./instruction-coordinates";
-import { CELL_CROSS, CELL_WARNING, packChartCells } from "./chart-cells";
-import { drawChartLayer, type ChartLayer } from "./chart-layer";
+import { CELL_CROSS, CELL_WARNING, packChartCells, repackChartCells } from "./chart-cells";
+import { drawChartLayer, type ChartFrame, type ChartLayer } from "./chart-layer";
 
 const ZOOM_MIN     = 2;
 const ZOOM_MAX     = 96;
@@ -122,9 +122,9 @@ export interface RendererState {
     faviconDrawn: { pixels: Uint8Array; width: number; height: number; colorA: string | null; colorB: string | null } | null;
     // Null when the browser cannot provide one; the overlay still renders.
     chart:         ChartLayer | null;
-    // Repacked only when the plan or the instruction guidance changes: every
-    // commit that can change the visible pixels replaces the plan.
-    chartCells: { plan: HighlightPlan; guidance: PackedInstructionCoordinates | null; cells: Uint8Array } | null;
+    // Repacked where the store's plan version reports a change, and whole for
+    // other guidance.
+    chartCells: { version: object; guidance: PackedInstructionCoordinates | null; cells: Uint8Array } | null;
     instructionSeam: InstructionSeam | null;
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
 }
@@ -540,7 +540,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
             chartCanvas.width  = canvas.width;
             chartCanvas.height = canvas.height;
         }
-        drawChartLayer(rs.chart, { cells: chartCells(rs, store), width: W, height: H,
+        drawChartLayer(rs.chart, { ...chartCells(rs, store), width: W, height: H,
             hasGlyphs: store.plan.marked > 0, matrix: m, opacity: guidanceOpacity / 100,
             colors: { a: store.state.colorA, b: store.state.colorB, background: BACKGROUND, danger: dangerColor } });
     }
@@ -587,14 +587,21 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
     }
 }
 
-// The chart layer's cell bytes for the visible pixels: the float stamped over
-// the canvas, which is what `store.plan` was computed from.
-function chartCells(rs: RendererState, store: Store): Uint8Array {
-    const { plan } = store, guidance = rs.instructionGuidanceCoords;
-    if (rs.chartCells?.plan === plan && rs.chartCells.guidance === guidance) return rs.chartCells.cells;
+// The chart layer's cell bytes for the visible pixels, with the bytes
+// rewritten in place since the previous call.
+function chartCells(rs: RendererState, store: Store): Pick<ChartFrame, "cells" | "changed"> {
+    const cached = rs.chartCells, guidance = rs.instructionGuidanceCoords;
+    const change = cached && cached.guidance === guidance ? store.planChangeSince(cached.version) : "all";
+    if (change === null) return { cells: cached!.cells, changed: null };
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    const cells = packChartCells(visiblePixels(store.state), W, H, plan.cells, guidance);
-    rs.chartCells = { plan, guidance, cells };
+    const { visible, plan } = store;
+    let cells: Uint8Array, changed: ChartFrame["changed"] = null;
+    if (change === "all") cells = packChartCells(visible, W, H, plan.cells, guidance);
+    else {
+        cells = cached!.cells;
+        changed = repackChartCells(cells, visible, W, H, plan.cells, guidance, change);
+    }
+    rs.chartCells = { version: store.planVersion, guidance, cells };
     // E2E test hook: the cells showing each glyph, decoded only when read.
     const glyphCoords = (flag: number) => {
         const coords: { x: number; y: number }[] = [];
@@ -608,7 +615,7 @@ function chartCells(rs: RendererState, store: Store): Uint8Array {
         get validGlyphCoords() { return glyphCoords(CELL_CROSS); },
         get invalidGlyphCoords() { return glyphCoords(CELL_WARNING); },
     };
-    return cells;
+    return { cells, changed };
 }
 
 // The repeat's copies as dash runs: an edge the source or an earlier copy

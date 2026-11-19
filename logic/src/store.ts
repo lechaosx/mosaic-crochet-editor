@@ -9,8 +9,15 @@
 
 import { Tool, ToolVariants, PatternState, Float, MirrorCenter, GridRecipe } from "./types";
 import { emptyGridRecipe, normalizeActiveRecipeId } from "./grid-recipes";
-import { computeHighlightPlan, type HighlightPlan } from "./highlight-plan";
+import {
+    changedCells, computeHighlightPlan, updateHighlightPlan,
+    type CellRect, type HighlightPlan, type MutableHighlightPlan,
+} from "./highlight-plan";
 
+// Commits assign new `pattern` and `pixels` values instead of writing into the
+// current ones: the plan update finds changed cells by comparing the visible
+// pixels with the previous ones, which without a float are `pixels` itself,
+// and rebuilds only when `pattern` is a different object.
 export interface SessionState {
     pattern:       PatternState;
     pixels:        Uint8Array;
@@ -34,9 +41,9 @@ export interface SessionState {
 }
 
 export interface CommitOpts {
-    // Rebuild highlight plan (default: true). Pass false only when the commit
-    // keeps pattern, pixels and float: renderers take an unchanged plan to mean
-    // unchanged visible pixels and keep drawing the chart they cached.
+    // Update the highlight plan (default: true). Pass false only when the
+    // commit keeps pattern, pixels and float: readers take an unchanged plan
+    // version to mean unchanged visible pixels and keep what they derived.
     recompute?: boolean;
     render?:    boolean;   // call the registered renderer (default: true)
     history?:   boolean;   // push snapshot to undo stack  (default: false)
@@ -80,13 +87,22 @@ export function visiblePixels(s: Readonly<SessionState>): Uint8Array {
     return out;
 }
 
-function computePlan(s: SessionState): HighlightPlan {
-    return computeHighlightPlan(s.pattern, visiblePixels(s));
-}
+// What changed in the visible pixels and the plan since a reader's version:
+// nothing, the cells of a rectangle, or anything.
+export type PlanChange = CellRect | "all" | null;
 
 export class Store {
     private _state: SessionState;
-    private _plan:  HighlightPlan;
+    // The plan, updated in place, and the pattern and visible pixels it was
+    // computed from.
+    private _plan!:        MutableHighlightPlan;
+    private _planPattern!: PatternState;
+    private _visible!:     Uint8Array;
+    // A new version object marks each change; `_change` is the region it
+    // covers since `_previousVersion`, or null for a rebuild.
+    private _version:         object = {};
+    private _previousVersion: object | null = null;
+    private _change:          CellRect | null = null;
     private _renderer:  RenderFn  | null = null;
     private _historyFn: HistoryFn | null = null;
     private _persistFn: PersistFn | null = null;
@@ -96,11 +112,19 @@ export class Store {
         if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
-        this._plan  = computePlan(state);
+        this.rebuildPlan();
     }
 
     get state(): Readonly<SessionState> { return this._state; }
     get plan():  HighlightPlan           { return this._plan; }
+    // `visiblePixels(state)`, as the plan was last computed from it.
+    get visible(): Uint8Array            { return this._visible; }
+    get planVersion(): object            { return this._version; }
+
+    planChangeSince(version: object | null): PlanChange {
+        if (version === this._version) return null;
+        return version === this._previousVersion && this._change ? this._change : "all";
+    }
 
     setRenderer (fn: RenderFn): void  { this._renderer  = fn; }
     setHistoryFn(fn: HistoryFn): void { this._historyFn = fn; }
@@ -112,7 +136,7 @@ export class Store {
         this._state.activeRecipeId = normalizeActiveRecipeId(
             this._state.recipes, this._state.activeRecipeId, this._state.float,
         );
-        if (opts?.recompute !== false) this._plan = computePlan(this._state);
+        if (opts?.recompute !== false) this.updatePlan();
         if (opts?.history)             this._historyFn?.(this._state);
         if (opts?.render   !== false)  this._renderer?.(this);
         if (opts?.persist  !== false)  this._persistFn?.(this._state);
@@ -126,10 +150,32 @@ export class Store {
         if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
-        this._plan  = computePlan(state);
+        this.rebuildPlan();
         if (opts?.history) this._historyFn?.(state);
         this._renderer?.(this);
         if (opts?.persist) this._persistFn?.(state);
         for (const fn of this._observers) fn(this);
+    }
+
+    private rebuildPlan(): void {
+        this._planPattern = this._state.pattern;
+        this._visible     = visiblePixels(this._state);
+        this._plan        = computeHighlightPlan(this._planPattern, this._visible);
+        this.advanceVersion(null);
+    }
+
+    private updatePlan(): void {
+        if (this._state.pattern !== this._planPattern) return this.rebuildPlan();
+        const visible = visiblePixels(this._state);
+        const changed = visible === this._visible
+            ? null : changedCells(this._visible, visible, this._planPattern.canvasWidth);
+        this._visible = visible;
+        if (changed) this.advanceVersion(updateHighlightPlan(this._plan, this._planPattern, visible, changed));
+    }
+
+    private advanceVersion(change: CellRect | null): void {
+        this._previousVersion = this._version;
+        this._version         = {};
+        this._change          = change;
     }
 }
