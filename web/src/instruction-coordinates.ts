@@ -1,49 +1,43 @@
-import { PlanDir, PlanType } from "@mosaic/wasm";
+import { PlanCell } from "@mosaic/wasm";
+import type { HighlightPlan } from "@mosaic/logic/highlight-plan";
 
-const DIR_VECTORS: Record<number, readonly [number, number]> = {
-    [PlanDir.Up]: [0, -1],
-    [PlanDir.Down]: [0, 1],
-    [PlanDir.Left]: [-1, 0],
-    [PlanDir.Right]: [1, 0],
-};
-
-export function planOutwardCoordinate(plan: Int16Array, recordOffset: number): readonly [number, number] {
-    const [dx, dy] = DIR_VECTORS[plan[recordOffset + 1]];
-    return [plan[recordOffset + 2] + dx, plan[recordOffset + 3] + dy];
-}
-
-// A corner cell carries two plan records but counts as one invalid placement.
-export function invalidPlanCellCount(plan: Int16Array, width: number, height: number): number {
-    const counted = new Uint8Array(width * height);
-    let count = 0;
-    for (let i = 0; i < plan.length; i += 4) {
-        if (plan[i] !== PlanType.Invalid) continue;
-        const index = plan[i + 3] * width + plan[i + 2];
-        count += 1 - counted[index];
-        counted[index] = 1;
+// Visits each glyph of a plan for a chart `width` cells wide: whether it is a
+// warning, the outward cell it lands on, and the wrong cell carrying it. A
+// round corner's cell carries two glyphs.
+export function forEachPlanGlyph(
+    plan: Uint8Array, width: number,
+    glyph: (invalid: boolean, x: number, y: number, wrongX: number, wrongY: number) => void,
+): void {
+    const height = plan.length / width;
+    for (let y = 0, index = 0; y < height; y++) {
+        for (let x = 0; x < width; x++, index++) {
+            const cell = plan[index];
+            if (cell === 0) continue;
+            const invalid = (cell & PlanCell.Invalid) !== 0;
+            if (cell & PlanCell.Up) glyph(invalid, x, y - 1, x, y);
+            if (cell & PlanCell.Down) glyph(invalid, x, y + 1, x, y);
+            if (cell & PlanCell.Left) glyph(invalid, x - 1, y, x, y);
+            if (cell & PlanCell.Right) glyph(invalid, x + 1, y, x, y);
+        }
     }
-    return count;
 }
 
 // Whether an invalid placement warns at an outward cell missing from every
 // list of worked coordinates (x, y pairs).
 export function hasUnrepresentedWarning(
-    plan: Int16Array, width: number, height: number, represented: readonly ArrayLike<number>[],
+    plan: HighlightPlan, width: number, height: number, represented: readonly ArrayLike<number>[],
 ): boolean {
-    let first = 0;
-    while (first < plan.length && plan[first] !== PlanType.Invalid) first += 4;
-    if (first === plan.length) return false;
+    if (plan.invalid === 0) return false;
     // Outward cells, the chart gutter included: 1 = warning, 2 = represented warning.
     const stride = width + 2;
     const cells = new Uint8Array(stride * (height + 2));
     let unrepresented = 0;
-    for (let i = first; i < plan.length; i += 4) {
-        if (plan[i] !== PlanType.Invalid) continue;
-        const [x, y] = planOutwardCoordinate(plan, i);
+    forEachPlanGlyph(plan.cells, width, (invalid, x, y) => {
+        if (!invalid) return;
         const index = (y + 1) * stride + x + 1;
         unrepresented += cells[index] === 0 ? 1 : 0;
         cells[index] = 1;
-    }
+    });
     for (const coords of represented) {
         for (let i = 0; i < coords.length; i += 2) {
             const index = (coords[i + 1] + 1) * stride + coords[i] + 1;

@@ -26,27 +26,20 @@ mod centered_placement_tests {
     }
 }
 
-// ─── Plan record format ───────────────────────────────────────────────────────
-// `build_highlight_plan_*` returns a flat `Int16Array` with stride 4:
-//   [type, dir, wrong_x, wrong_y, ...]
-// `type` is one of `PlanType`; `dir` is one of `PlanDir`. The discriminants
-// below MUST match the `PLAN_TYPE_*` / `PLAN_DIR_*` i16 constants in
+// ─── Plan cell format ─────────────────────────────────────────────────────────
+// `highlight_plan_*` returns a `Uint8Array` with one byte per canvas cell:
+// 0, or `Invalid` for a warning plus one direction bit per outward side.
+// The discriminants below MUST match the `PLAN_*` constants in
 // `core/src/common.rs` — enforced at compile time by the static asserts
-// further down. TS reads the values directly: `plan[i] === PlanType.Valid`
-// etc.
+// further down. TS tests the bits directly: `cell & PlanCell.Invalid` etc.
 
 #[wasm_bindgen]
-pub enum PlanType {
-    Valid = 0,
+pub enum PlanCell {
     Invalid = 1,
-}
-
-#[wasm_bindgen]
-pub enum PlanDir {
-    Up = 0,
-    Down = 1,
-    Left = 2,
-    Right = 3,
+    Up = 2,
+    Down = 4,
+    Left = 8,
+    Right = 16,
 }
 
 #[wasm_bindgen]
@@ -78,12 +71,11 @@ impl TransformApplication {
 // Compile-time guarantee that the wasm-exposed enum discriminants stay in
 // lockstep with the core constants used to build the plan.
 const _: () = {
-    assert!(PlanType::Valid as u8 == common::PLAN_TYPE_VALID);
-    assert!(PlanType::Invalid as u8 == common::PLAN_TYPE_INVALID);
-    assert!(PlanDir::Up as u8 == common::PLAN_DIR_UP);
-    assert!(PlanDir::Down as u8 == common::PLAN_DIR_DOWN);
-    assert!(PlanDir::Left as u8 == common::PLAN_DIR_LEFT);
-    assert!(PlanDir::Right as u8 == common::PLAN_DIR_RIGHT);
+    assert!(PlanCell::Invalid as u8 == common::PLAN_INVALID);
+    assert!(PlanCell::Up as u8 == common::PLAN_UP);
+    assert!(PlanCell::Down as u8 == common::PLAN_DOWN);
+    assert!(PlanCell::Left as u8 == common::PLAN_LEFT);
+    assert!(PlanCell::Right as u8 == common::PLAN_RIGHT);
 };
 
 enum InstructionMode {
@@ -442,13 +434,13 @@ fn highlights_round(
 }
 
 #[wasm_bindgen]
-pub fn build_highlight_plan_row(pixels: &[u8], width: i32, height: i32) -> Vec<i16> {
+pub fn highlight_plan_row(pixels: &[u8], width: i32, height: i32) -> Vec<u8> {
     let pattern = to_array2(pixels, width, height);
-    common::build_highlight_plan_row(IVec2::new(width, height), &pattern)
+    common::highlight_plan_row(IVec2::new(width, height), &pattern)
 }
 
 #[wasm_bindgen]
-pub fn build_highlight_plan_round(
+pub fn highlight_plan_round(
     pixels: &[u8],
     canvas_width: i32,
     canvas_height: i32,
@@ -457,9 +449,9 @@ pub fn build_highlight_plan_round(
     offset_x: i32,
     offset_y: i32,
     rounds: i32,
-) -> Vec<i16> {
+) -> Vec<u8> {
     let pattern = to_array2(pixels, canvas_width, canvas_height);
-    common::build_highlight_plan_round(
+    common::highlight_plan_round(
         IVec2::new(canvas_width, canvas_height),
         IVec2::new(virtual_width, virtual_height),
         IVec2::new(offset_x, offset_y),

@@ -11,6 +11,7 @@ import { makeViewport, makeRendererState, observeCanvasResize,
          render, fitToView, zoomAt, screenToPattern, screenToPatternFrac, pickSelectionTransformHandle, updateCoordinates } from "./render";
 import { applyEditSettings, readEditSettings } from "./pattern";
 import { Store, SessionState, visiblePixels, outOfBounds } from "@mosaic/logic/store";
+import type { HighlightPlan } from "@mosaic/logic/highlight-plan";
 import { UndoHistory, historyFrom, historySave, historyReplaceCurrent, historyUndo, historyRedo, historyPeek,
          historyChanges, historyFromStored, historyHeadId, historyMarkClean, canUndo, canRedo, Restored } from "./history";
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
@@ -23,7 +24,7 @@ import { deleteProjectsExcept, loadProjectIndex, openProjectDatabase, readProjec
 import { becomeEditor } from "./editor-lock";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
-import { hasUnrepresentedWarning, invalidPlanCellCount, packInstructionCoordinates } from "./instruction-coordinates";
+import { hasUnrepresentedWarning, packInstructionCoordinates } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
 import { createChartLayer } from "./chart-layer";
 import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
@@ -380,13 +381,12 @@ function renderCanvas() {
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
 
-// Counted once per plan: a commit that keeps the plan keeps the count.
-let crochetErrorsPlan: Int16Array | null = null;
+// Synced once per plan: a commit that keeps the plan keeps the count.
+let crochetErrorsPlan: HighlightPlan | null = null;
 function syncCrochetErrors() {
     if (store.plan === crochetErrorsPlan) return;
     crochetErrorsPlan = store.plan;
-    const { canvasWidth, canvasHeight } = store.state.pattern;
-    ui.setCrochetErrors(invalidPlanCellCount(store.plan, canvasWidth, canvasHeight));
+    ui.setCrochetErrors(store.plan.invalid);
 }
 
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);

@@ -4,11 +4,11 @@ import { mirrorTypePresentation } from "./mirror-presentation";
 import { GridRecipe } from "@mosaic/logic/types";
 import { evaluateGridRecipe } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
-import { PlanType, transformed_target_indices,
-    build_highlight_plan_row, build_highlight_plan_round } from "@mosaic/wasm";
+import { transformed_target_indices } from "@mosaic/wasm";
 import { Store, visiblePixels } from "@mosaic/logic/store";
+import { computeHighlightPlan, type HighlightPlan } from "@mosaic/logic/highlight-plan";
 import { AppPreferences } from "./preferences";
-import { planOutwardCoordinate, type PackedInstructionCoordinates } from "./instruction-coordinates";
+import { forEachPlanGlyph, type PackedInstructionCoordinates } from "./instruction-coordinates";
 import { CELL_CROSS, CELL_WARNING, packChartCells } from "./chart-cells";
 import { drawChartLayer, type ChartLayer } from "./chart-layer";
 
@@ -124,7 +124,7 @@ export interface RendererState {
     chart:         ChartLayer | null;
     // Repacked only when the plan or the instruction guidance changes: every
     // commit that can change the visible pixels replaces the plan.
-    chartCells: { plan: Int16Array; guidance: PackedInstructionCoordinates | null; cells: Uint8Array } | null;
+    chartCells: { plan: HighlightPlan; guidance: PackedInstructionCoordinates | null; cells: Uint8Array } | null;
     instructionSeam: InstructionSeam | null;
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
 }
@@ -443,11 +443,7 @@ export function patternColourPreviewSample(mode: PatternState["mode"], subMode: 
     const mirror: MirrorCenter = { id: "preview", enabled: true,
         x: (sample.pattern.canvasWidth - 1) / 2, y: (sample.pattern.canvasHeight - 1) / 2,
         types: mode === "row" || subMode === "half" ? ["V"] : subMode === "quarter" ? ["D2"] : ["V", "H", "D2"] };
-    const plan = sample.pattern.mode === "row"
-        ? build_highlight_plan_row(sample.pixels, sample.pattern.canvasWidth, sample.pattern.canvasHeight)
-        : build_highlight_plan_round(sample.pixels, sample.pattern.canvasWidth, sample.pattern.canvasHeight,
-            sample.pattern.virtualWidth, sample.pattern.virtualHeight, sample.pattern.offsetX, sample.pattern.offsetY, sample.pattern.rounds);
-    return { ...sample, plan, mirror };
+    return { ...sample, plan: computeHighlightPlan(sample.pattern, sample.pixels).cells, mirror };
 }
 
 export function renderPatternColourPreview(
@@ -545,7 +541,7 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
             chartCanvas.height = canvas.height;
         }
         drawChartLayer(rs.chart, { cells: chartCells(rs, store), width: W, height: H,
-            hasGlyphs: store.plan.length > 0, matrix: m, opacity: guidanceOpacity / 100,
+            hasGlyphs: store.plan.marked > 0, matrix: m, opacity: guidanceOpacity / 100,
             colors: { a: store.state.colorA, b: store.state.colorB, background: BACKGROUND, danger: dangerColor } });
     }
     renderInstructionSeam(ctx, view, rs.instructionSeam, accentColor, dangerColor, m);
@@ -597,7 +593,7 @@ function chartCells(rs: RendererState, store: Store): Uint8Array {
     const { plan } = store, guidance = rs.instructionGuidanceCoords;
     if (rs.chartCells?.plan === plan && rs.chartCells.guidance === guidance) return rs.chartCells.cells;
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-    const cells = packChartCells(visiblePixels(store.state), W, H, plan, guidance);
+    const cells = packChartCells(visiblePixels(store.state), W, H, plan.cells, guidance);
     rs.chartCells = { plan, guidance, cells };
     // E2E test hook: the cells showing each glyph, decoded only when read.
     const glyphCoords = (flag: number) => {
@@ -931,12 +927,11 @@ function renderDragRect(
 // ! for INVALID — screen coords (always points down regardless of canvas
 //   rotation, like axis labels). Drawn in the configured danger colour.
 // Both ✕ and ! are dimmable via the user's opacity slider. Round-mode corners
-// produce two plan records sharing the wrong cell with perpendicular
-// directions; each draws independently.
+// carry two perpendicular directions; each draws independently.
 function renderHighlightSymbols(
     ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
     A: string, B: string, dangerColor: string,
-    pattern: PatternState, pixels: Uint8Array, plan: Int16Array,
+    pattern: PatternState, pixels: Uint8Array, plan: Uint8Array,
     m: DOMMatrix, opacity: number,
 ) {
     const W = pattern.canvasWidth, H = pattern.canvasHeight;
@@ -963,13 +958,11 @@ function renderHighlightSymbols(
     for (const { display, glyph } of groups) {
         ctx.strokeStyle = glyph;
         ctx.beginPath();
-        for (let i = 0; i < plan.length; i += 4) {
-            if (plan[i] !== PlanType.Valid) continue;
-            const [ox, oy] = planOutwardCoordinate(plan, i);
-            if (outwardPixel(ox, oy, plan[i + 2], plan[i + 3]) !== display) continue;
+        forEachPlanGlyph(plan, W, (invalid, ox, oy, wx, wy) => {
+            if (invalid || outwardPixel(ox, oy, wx, wy) !== display) return;
             ctx.moveTo(ox + 0.24, oy + 0.24); ctx.lineTo(ox + 0.76, oy + 0.76);
             ctx.moveTo(ox + 0.76, oy + 0.24); ctx.lineTo(ox + 0.24, oy + 0.76);
-        }
+        });
         ctx.stroke();
     }
 
@@ -982,11 +975,9 @@ function renderHighlightSymbols(
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const points: { x: number; y: number }[] = [];
-    for (let i = 0; i < plan.length; i += 4) {
-        if (plan[i] !== PlanType.Invalid) continue;
-        const [ox, oy] = planOutwardCoordinate(plan, i);
-        points.push(m.transformPoint({ x: ox + 0.5, y: oy + 0.5 }));
-    }
+    forEachPlanGlyph(plan, W, (invalid, ox, oy) => {
+        if (invalid) points.push(m.transformPoint({ x: ox + 0.5, y: oy + 0.5 }));
+    });
 
     ctx.strokeStyle = dangerColor;
     ctx.lineWidth   = cellPx * 0.16;

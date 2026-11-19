@@ -7,12 +7,9 @@
 //   • view pan/zoom + animation state — render.ts (perf-sensitive)
 //   • stroke state (preStroke, invertVisited, strokeColor) — main.ts (per-stroke)
 
-import {
-    build_highlight_plan_row,
-    build_highlight_plan_round,
-} from "@mosaic/wasm";
 import { Tool, ToolVariants, PatternState, Float, MirrorCenter, GridRecipe } from "./types";
 import { emptyGridRecipe, normalizeActiveRecipeId } from "./grid-recipes";
+import { computeHighlightPlan, type HighlightPlan } from "./highlight-plan";
 
 export interface SessionState {
     pattern:       PatternState;
@@ -83,21 +80,13 @@ export function visiblePixels(s: Readonly<SessionState>): Uint8Array {
     return out;
 }
 
-function computePlan(s: SessionState): Int16Array {
-    const p   = s.pattern;
-    const vis = visiblePixels(s);
-    return p.mode === "row"
-        ? build_highlight_plan_row(vis, p.canvasWidth, p.canvasHeight).slice()
-        : build_highlight_plan_round(
-            vis, p.canvasWidth, p.canvasHeight,
-            p.virtualWidth, p.virtualHeight,
-            p.offsetX, p.offsetY, p.rounds,
-        ).slice();
+function computePlan(s: SessionState): HighlightPlan {
+    return computeHighlightPlan(s.pattern, visiblePixels(s));
 }
 
 export class Store {
     private _state: SessionState;
-    private _plan:  Int16Array;
+    private _plan:  HighlightPlan;
     private _renderer:  RenderFn  | null = null;
     private _historyFn: HistoryFn | null = null;
     private _persistFn: PersistFn | null = null;
@@ -111,7 +100,7 @@ export class Store {
     }
 
     get state(): Readonly<SessionState> { return this._state; }
-    get plan():  Int16Array              { return this._plan; }
+    get plan():  HighlightPlan           { return this._plan; }
 
     setRenderer (fn: RenderFn): void  { this._renderer  = fn; }
     setHistoryFn(fn: HistoryFn): void { this._historyFn = fn; }

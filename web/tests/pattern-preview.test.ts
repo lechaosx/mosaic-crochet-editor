@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { expect, test } from "vitest";
-import { PlanType } from "@mosaic/wasm";
+import { PlanCell } from "@mosaic/wasm";
 import { patternColourPreviewSample } from "../src/render";
 
 for (const [mode, extent, axis] of [["row", "full", "V"], ["round", "full", "D2"], ["round", "half", "V"], ["round", "quarter", "D2"]] as const) {
@@ -30,11 +30,12 @@ for (const extent of ["full", "half", "quarter"] as const) {
                 );
             }
         }
-        const entries = Array.from({ length: plan.length / 4 }, (_, index) => Array.from(plan.slice(index * 4, index * 4 + 4)));
-        expect(entries.some(([type]) => type === PlanType.Valid)).toBe(true);
-        const invalid = entries.filter(([type]) => type === PlanType.Invalid);
+        const marked = [...plan.keys()].filter(index => plan[index] !== 0)
+            .map(index => ({ x: index % pattern.canvasWidth, y: Math.floor(index / pattern.canvasWidth), cell: plan[index] }));
+        expect(marked.some(({ cell }) => !(cell & PlanCell.Invalid))).toBe(true);
+        const invalid = marked.filter(({ cell }) => cell & PlanCell.Invalid);
         expect(invalid.length).toBeGreaterThan(0);
-        for (const [, , x, y] of invalid) {
+        for (const { x, y } of invalid) {
             const virtualX = x + pattern.offsetX;
             const virtualY = y + pattern.offsetY;
             expect(Math.min(virtualX, 6 - virtualX)).not.toBe(Math.min(virtualY, 6 - virtualY));

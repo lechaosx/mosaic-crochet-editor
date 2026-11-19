@@ -14,33 +14,27 @@ pub const COLOR_B: u8 = 2;
 pub const HIGHLIGHT_VALID_OVERLAY: u8 = 3;
 pub const HIGHLIGHT_INVALID: u8 = 4;
 
-// Highlight render plan. `build_highlight_plan_*` emits a flat sequence of
-// stride-4 records: [type, direction, wrong_x, wrong_y, ...].
-//   • `type` is which kind of marker (VALID overlay or INVALID placement).
-//   • `direction` is which side of the wrong cell the marker visually
-//      attaches to. Corners emit two records sharing the same wrong cell
-//      with perpendicular directions.
-//   • `wrong_x` / `wrong_y` is the wrong cell itself (always in-canvas).
-// The renderer translates direction → visual position and picks colour /
-// glyph / opacity — those are presentation concerns, not geometry.
+// Highlight plan: one byte per canvas cell, row-major. 0 means the cell is
+// not wrong; otherwise the byte carries `PLAN_INVALID` when the overlay it
+// would create is structurally invalid, and one `PLAN_<DIR>` bit for each
+// side of the wrong cell the marker visually attaches to (two perpendicular
+// bits for round-mode corners). The renderer translates direction → visual
+// position and picks colour / glyph / opacity — those are presentation
+// concerns, not geometry.
 //
-// Values below MUST match the `PlanType` / `PlanDir` enums in
-// `wasm/src/lib.rs` — those enums are the names TS sees.
-pub const PLAN_STRIDE: usize = 4;
+// Values below MUST match the `PlanCell` enum in `wasm/src/lib.rs` — that
+// enum is the name TS sees.
+pub const PLAN_INVALID: u8 = 1;
+pub const PLAN_UP: u8 = 2;
+pub const PLAN_DOWN: u8 = 4;
+pub const PLAN_LEFT: u8 = 8;
+pub const PLAN_RIGHT: u8 = 16;
 
-pub const PLAN_TYPE_VALID: u8 = 0;
-pub const PLAN_TYPE_INVALID: u8 = 1;
-
-pub const PLAN_DIR_UP: u8 = 0;
-pub const PLAN_DIR_DOWN: u8 = 1;
-pub const PLAN_DIR_LEFT: u8 = 2;
-pub const PLAN_DIR_RIGHT: u8 = 3;
-
-fn plan_type_for(highlight: u8) -> u8 {
-    if highlight == HIGHLIGHT_VALID_OVERLAY {
-        PLAN_TYPE_VALID
+fn plan_cell(highlight: u8, directions: u8) -> u8 {
+    if highlight == HIGHLIGHT_INVALID {
+        PLAN_INVALID | directions
     } else {
-        PLAN_TYPE_INVALID
+        directions
     }
 }
 
@@ -229,33 +223,88 @@ pub fn overlay_target_available_round(
 // foundation — every wrong cell asks the same question ("is the overlay this
 // would create structurally valid?") and writes V/I at its own position. The
 // renderer's `outwardCell` does the visual displacement.
+fn row_highlight(size: IVec2, pixel: impl Fn(IVec2) -> u8, coord: IVec2) -> u8 {
+    let color_index = get_color_index(size.y - 1 - coord.y);
+    let value = pixel(coord);
+    if value == COLOR_TRANSPARENT || value == color_index {
+        return 0;
+    }
+    if coord.y == 0 {
+        // Top row: no row above to anchor an overlay against.
+        HIGHLIGHT_INVALID
+    } else if coord.y >= size.y - 1 {
+        // Foundation: no inner row to clash with → valid overlay.
+        HIGHLIGHT_VALID_OVERLAY
+    } else if pixel(coord + IVec2::Y) == color_index {
+        HIGHLIGHT_INVALID
+    } else {
+        HIGHLIGHT_VALID_OVERLAY
+    }
+}
+
+fn round_highlight(
+    canvas_size: IVec2,
+    virtual_size: IVec2,
+    offset: IVec2,
+    rounds: i32,
+    pixel: impl Fn(IVec2) -> u8,
+    physical_coord: IVec2,
+) -> u8 {
+    let virtual_coord = physical_coord + offset;
+    let min_dist = min_dist_axes(virtual_size, virtual_coord);
+    let round_from_edge = min_dist.x.min(min_dist.y);
+    if round_from_edge >= rounds {
+        return 0;
+    }
+
+    let color_index = get_color_index(rounds - 1 - round_from_edge);
+    let value = pixel(physical_coord);
+    if value == COLOR_TRANSPARENT || value == color_index {
+        return 0;
+    }
+
+    // Outermost ring or any diagonal corner: no well-defined outward
+    // target. Force INVALID at the wrong cell — renderer handles the
+    // visual position (gutter for outermost, two perpendicular
+    // outwards for interior corners via `outward_cells_round`).
+    if always_invalid_at(min_dist) {
+        return HIGHLIGHT_INVALID;
+    }
+    // Mid-ring non-corner: one well-defined inward direction.
+    let step_full = step_toward_center(virtual_size, virtual_coord);
+    let step = if min_dist.x < min_dist.y {
+        IVec2::new(step_full.x, 0)
+    } else {
+        IVec2::new(0, step_full.y)
+    };
+
+    let neighbor = physical_coord + step;
+    let neighbor_in_bounds = neighbor.x >= 0
+        && neighbor.x < canvas_size.x
+        && neighbor.y >= 0
+        && neighbor.y < canvas_size.y;
+
+    let is_seam = !neighbor_in_bounds || {
+        let neighbor_rfe = get_round_from_edge(virtual_size, neighbor + offset);
+        neighbor_rfe <= round_from_edge
+    };
+
+    if is_seam || color_index != pixel(neighbor) {
+        HIGHLIGHT_VALID_OVERLAY
+    } else {
+        HIGHLIGHT_INVALID
+    }
+}
+
+fn pixel_at(pixels: &Array2<u8>) -> impl Fn(IVec2) -> u8 {
+    |coord| pixels[[coord.y as usize, coord.x as usize]]
+}
+
 pub fn compute_row_highlights(size: IVec2, pixels: &Array2<u8>, highlights: &mut Array2<u8>) {
     for y in 0..size.y {
-        let color_index = get_color_index(size.y - 1 - y);
         for x in 0..size.x {
-            let [xi, yi] = [x as usize, y as usize];
-            if pixels[[yi, xi]] == COLOR_TRANSPARENT {
-                continue;
-            }
-            if color_index == pixels[[yi, xi]] {
-                continue;
-            }
-
-            let result = if y == 0 {
-                // Top row: no row above to anchor an overlay against.
-                HIGHLIGHT_INVALID
-            } else if y >= size.y - 1 {
-                // Foundation: no inner row to clash with → valid overlay.
-                HIGHLIGHT_VALID_OVERLAY
-            } else {
-                let inner_pixel = pixels[[y as usize + 1, xi]];
-                if color_index == inner_pixel {
-                    HIGHLIGHT_INVALID
-                } else {
-                    HIGHLIGHT_VALID_OVERLAY
-                }
-            };
-            highlights[[yi, xi]] = result;
+            highlights[[y as usize, x as usize]] =
+                row_highlight(size, pixel_at(pixels), IVec2::new(x, y));
         }
     }
 }
@@ -270,137 +319,81 @@ pub fn compute_round_highlights(
 ) {
     for y in 0..canvas_size.y {
         for x in 0..canvas_size.x {
-            let physical_coord = IVec2::new(x, y);
-            let virtual_coord = physical_coord + offset;
-            let min_dist = min_dist_axes(virtual_size, virtual_coord);
-            let round_from_edge = min_dist.x.min(min_dist.y);
-
-            if round_from_edge >= rounds {
-                continue;
-            }
-
-            let color_index = get_color_index(rounds - 1 - round_from_edge);
-            let [xi, yi] = [x as usize, y as usize];
-            if pixels[[yi, xi]] == COLOR_TRANSPARENT {
-                continue;
-            }
-            if color_index == pixels[[yi, xi]] {
-                continue;
-            }
-
-            // Outermost ring or any diagonal corner: no well-defined outward
-            // target. Force INVALID at the wrong cell — renderer handles the
-            // visual position (gutter for outermost, two perpendicular
-            // outwards for interior corners via `outward_cells_round`).
-            let result = if always_invalid_at(min_dist) {
-                HIGHLIGHT_INVALID
-            } else {
-                // Mid-ring non-corner: one well-defined inward direction.
-                let step_full = step_toward_center(virtual_size, virtual_coord);
-                let step = if min_dist.x < min_dist.y {
-                    IVec2::new(step_full.x, 0)
-                } else {
-                    IVec2::new(0, step_full.y)
-                };
-
-                let neighbor = physical_coord + step;
-                let neighbor_in_bounds = neighbor.x >= 0
-                    && neighbor.x < canvas_size.x
-                    && neighbor.y >= 0
-                    && neighbor.y < canvas_size.y;
-
-                let is_seam = !neighbor_in_bounds || {
-                    let neighbor_rfe = get_round_from_edge(virtual_size, neighbor + offset);
-                    neighbor_rfe <= round_from_edge
-                };
-
-                if is_seam || color_index != pixels[[neighbor.y as usize, neighbor.x as usize]] {
-                    HIGHLIGHT_VALID_OVERLAY
-                } else {
-                    HIGHLIGHT_INVALID
-                }
-            };
-            highlights[[yi, xi]] = result;
+            highlights[[y as usize, x as usize]] = round_highlight(
+                canvas_size,
+                virtual_size,
+                offset,
+                rounds,
+                pixel_at(pixels),
+                IVec2::new(x, y),
+            );
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Render plan builders. Combine `compute_*_highlights` + outward direction
-// emission into a single pass so the renderer doesn't need geometry: each
-// plan record fully describes what and where to draw, leaving only colour /
-// glyph choice (presentation) to the caller.
-fn push_entry(plan: &mut Vec<i16>, t: u8, d: u8, x: i32, y: i32) {
-    plan.extend_from_slice(&[t as i16, d as i16, x as i16, y as i16]);
-}
-
-pub fn build_highlight_plan_row(canvas_size: IVec2, pixels: &Array2<u8>) -> Vec<i16> {
-    let mut hl = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
-    compute_row_highlights(canvas_size, pixels, &mut hl);
-
-    let mut plan = Vec::new();
+// Highlight plan builders: the highlights plus their outward directions, so the
+// renderer doesn't need geometry: each plan cell fully describes what and
+// where to draw, leaving only colour / glyph choice (presentation) to the
+// caller.
+pub fn highlight_plan_row(canvas_size: IVec2, pixels: &Array2<u8>) -> Vec<u8> {
+    let mut plan = Vec::with_capacity((canvas_size.x * canvas_size.y) as usize);
     for y in 0..canvas_size.y {
         for x in 0..canvas_size.x {
-            let v = hl[[y as usize, x as usize]];
-            if v == 0 {
-                continue;
-            }
-            push_entry(&mut plan, plan_type_for(v), PLAN_DIR_UP, x, y);
+            plan.push(
+                match row_highlight(canvas_size, pixel_at(pixels), IVec2::new(x, y)) {
+                    0 => 0,
+                    highlight => plan_cell(highlight, PLAN_UP),
+                },
+            );
         }
     }
     plan
 }
 
-pub fn build_highlight_plan_round(
+pub fn highlight_plan_round(
     canvas_size: IVec2,
     virtual_size: IVec2,
     offset: IVec2,
     rounds: i32,
     pixels: &Array2<u8>,
-) -> Vec<i16> {
-    let mut hl = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
-    compute_round_highlights(canvas_size, virtual_size, offset, rounds, pixels, &mut hl);
-
-    let mut plan = Vec::new();
+) -> Vec<u8> {
+    let mut plan = Vec::with_capacity((canvas_size.x * canvas_size.y) as usize);
     for y in 0..canvas_size.y {
         for x in 0..canvas_size.x {
-            let v = hl[[y as usize, x as usize]];
-            if v == 0 {
-                continue;
-            }
-            let type_id = plan_type_for(v);
-            let virtual_coord = IVec2::new(x, y) + offset;
-            let min_dist = min_dist_axes(virtual_size, virtual_coord);
-            let step = step_toward_center(virtual_size, virtual_coord);
-            let dir_x = if step.x == 1 {
-                PLAN_DIR_LEFT
-            } else {
-                PLAN_DIR_RIGHT
-            };
-            let dir_y = if step.y == 1 {
-                PLAN_DIR_UP
-            } else {
-                PLAN_DIR_DOWN
-            };
-
-            // Outermost ring: outward direction is *outside* the canvas. We
-            // still emit it — the renderer chooses what to do (typically
-            // draws in the gutter). Corners (min_dist.x == min_dist.y) emit
-            // two perpendicular records sharing the same wrong cell.
-            if min_dist.x == min_dist.y {
-                push_entry(&mut plan, type_id, dir_x, x, y);
-                push_entry(&mut plan, type_id, dir_y, x, y);
-            } else {
-                let dir = if min_dist.x < min_dist.y {
-                    dir_x
-                } else {
-                    dir_y
-                };
-                push_entry(&mut plan, type_id, dir, x, y);
-            }
+            let coord = IVec2::new(x, y);
+            let highlight = round_highlight(
+                canvas_size,
+                virtual_size,
+                offset,
+                rounds,
+                pixel_at(pixels),
+                coord,
+            );
+            plan.push(match highlight {
+                0 => 0,
+                highlight => plan_cell(highlight, round_directions(virtual_size, coord + offset)),
+            });
         }
     }
     plan
+}
+
+// Outermost ring: outward direction is *outside* the canvas. It is still
+// emitted — the renderer chooses what to do (typically draws in the gutter).
+// Corners (min_dist.x == min_dist.y) carry two perpendicular directions.
+fn round_directions(virtual_size: IVec2, virtual_coord: IVec2) -> u8 {
+    let min_dist = min_dist_axes(virtual_size, virtual_coord);
+    let step = step_toward_center(virtual_size, virtual_coord);
+    let dir_x = if step.x == 1 { PLAN_LEFT } else { PLAN_RIGHT };
+    let dir_y = if step.y == 1 { PLAN_UP } else { PLAN_DOWN };
+    if min_dist.x == min_dist.y {
+        dir_x | dir_y
+    } else if min_dist.x < min_dist.y {
+        dir_x
+    } else {
+        dir_y
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -851,86 +844,105 @@ mod tests {
         assert_eq!(hl[[0, 8]], I);
     }
 
-    // ── build_highlight_plan_* ───────────────────────────────────────────────
+    // ── highlight_plan_* ─────────────────────────────────────────────────────
 
-    /// Iterate a plan as (type, dir, wrong_x, wrong_y) tuples.
-    fn plan_entries(plan: &[i16]) -> Vec<(u8, u8, i16, i16)> {
-        plan.chunks_exact(PLAN_STRIDE)
-            .map(|c| (c[0] as u8, c[1] as u8, c[2], c[3]))
+    /// The plan's marked cells as (x, y, cell).
+    fn plan_marks(width: i32, plan: &[u8]) -> Vec<(i32, i32, u8)> {
+        (0..plan.len() as i32)
+            .filter(|&i| plan[i as usize] != 0)
+            .map(|i| (i % width, i / width, plan[i as usize]))
             .collect()
     }
 
     #[test]
     fn plan_row_empty_when_pattern_correct() {
         let pixels = make_row_grid(4, 4);
-        let plan = build_highlight_plan_row(v(4, 4), &pixels);
-        assert!(plan.is_empty());
+        let plan = highlight_plan_row(v(4, 4), &pixels);
+        assert_eq!(plan.len(), 16);
+        assert!(plan_marks(4, &plan).is_empty());
     }
 
     #[test]
     fn plan_row_ignores_temporarily_absent_cells() {
         let pixels = Array2::zeros((4, 4));
-        let plan = build_highlight_plan_row(v(4, 4), &pixels);
-        assert!(plan.is_empty());
+        let plan = highlight_plan_row(v(4, 4), &pixels);
+        assert!(plan_marks(4, &plan).is_empty());
     }
 
     #[test]
-    fn plan_row_top_edge_emits_invalid_with_up_dir() {
+    fn plan_row_top_edge_marks_invalid_with_up_dir() {
         // y=0 wrong → INVALID at (2, 0), direction always UP in row mode.
         let mut pixels = make_row_grid(4, 4);
         pixels[[0, 2]] = COLOR_A; // y=0 expects COLOR_B
-        let plan = build_highlight_plan_row(v(4, 4), &pixels);
-        let entries = plan_entries(&plan);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0], (PLAN_TYPE_INVALID, PLAN_DIR_UP, 2, 0));
+        let plan = highlight_plan_row(v(4, 4), &pixels);
+        assert_eq!(plan_marks(4, &plan), vec![(2, 0, PLAN_INVALID | PLAN_UP)]);
     }
 
     #[test]
-    fn plan_row_foundation_emits_valid_with_up_dir() {
+    fn plan_row_foundation_marks_valid_with_up_dir() {
         // y=H-1 wrong → VALID at (2, 3), still pointing UP (renderer draws
         // one row up; that's where the overlay would visually live).
         let mut pixels = make_row_grid(4, 4);
         pixels[[3, 2]] = COLOR_B; // y=3 expects COLOR_A
-        let plan = build_highlight_plan_row(v(4, 4), &pixels);
-        let entries = plan_entries(&plan);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0], (PLAN_TYPE_VALID, PLAN_DIR_UP, 2, 3));
+        let plan = highlight_plan_row(v(4, 4), &pixels);
+        assert_eq!(plan_marks(4, &plan), vec![(2, 3, PLAN_UP)]);
     }
 
     #[test]
-    fn plan_round_non_corner_single_entry_with_correct_dir() {
+    fn plan_round_non_corner_single_dir() {
         // 9×9 r=3 full. Wrong cell (1, 4) is on the left edge of the second
         // ring (rfe=1, min_dist.x < min_dist.y) → step toward centre is +x →
         // outward dir is LEFT.
         let mut pixels = make_round_grid(9, 9, 9, 9, 0, 0, 3);
         pixels[[4, 1]] = COLOR_A; // (1,4): rfe=1 expects COLOR_B
-        let plan = build_highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
-        let entries = plan_entries(&plan);
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0], (PLAN_TYPE_VALID, PLAN_DIR_LEFT, 1, 4));
+        let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+        assert_eq!(plan_marks(9, &plan), vec![(1, 4, PLAN_LEFT)]);
     }
 
     #[test]
     fn plan_round_ignores_temporarily_absent_active_cells() {
         let pixels = Array2::zeros((9, 9));
-        let plan = build_highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
-        assert!(plan.is_empty());
+        let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+        assert!(plan_marks(9, &plan).is_empty());
     }
 
     #[test]
-    fn plan_round_corner_emits_two_perpendicular_entries() {
+    fn plan_round_corner_marks_two_perpendicular_dirs() {
         // 9×9 r=3 full. Wrong cell (1, 1) is a diagonal corner (rfe=1,
         // dx == dy == 1). step.x=+1 (centre right), step.y=+1 (centre below)
-        // → outward dirs LEFT and UP. Always-invalid → both records are
-        // INVALID type.
+        // → outward dirs LEFT and UP. Always-invalid → INVALID.
         let mut pixels = make_round_grid(9, 9, 9, 9, 0, 0, 3);
         pixels[[1, 1]] = COLOR_A; // (1,1): rfe=1 expects COLOR_B
-        let plan = build_highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
-        let mut entries = plan_entries(&plan);
-        entries.sort_by_key(|&(_, d, _, _)| d);
-        assert_eq!(entries.len(), 2);
-        assert_eq!(entries[0], (PLAN_TYPE_INVALID, PLAN_DIR_UP, 1, 1));
-        assert_eq!(entries[1], (PLAN_TYPE_INVALID, PLAN_DIR_LEFT, 1, 1));
+        let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+        assert_eq!(
+            plan_marks(9, &plan),
+            vec![(1, 1, PLAN_INVALID | PLAN_LEFT | PLAN_UP)]
+        );
+    }
+
+    #[test]
+    fn plan_round_points_each_side_and_corner_outward() {
+        // 9×9 r=3 full: one wrong cell on the second ring per side and corner.
+        let cases = [
+            ((1, 4), PLAN_LEFT),
+            ((7, 4), PLAN_RIGHT),
+            ((4, 1), PLAN_UP),
+            ((4, 7), PLAN_DOWN),
+            ((1, 1), PLAN_INVALID | PLAN_LEFT | PLAN_UP),
+            ((7, 1), PLAN_INVALID | PLAN_RIGHT | PLAN_UP),
+            ((1, 7), PLAN_INVALID | PLAN_LEFT | PLAN_DOWN),
+            ((7, 7), PLAN_INVALID | PLAN_RIGHT | PLAN_DOWN),
+        ];
+        for ((x, y), expected) in cases {
+            let mut pixels = make_round_grid(9, 9, 9, 9, 0, 0, 3);
+            pixels[[y, x]] = opposite_color(pixels[[y, x]]);
+            let plan = highlight_plan_round(v(9, 9), v(9, 9), v(0, 0), 3, &pixels);
+            assert_eq!(
+                plan_marks(9, &plan),
+                vec![(x as i32, y as i32, expected)],
+                "cell ({x}, {y})"
+            );
+        }
     }
 
     // ── colour helpers ───────────────────────────────────────────────────────

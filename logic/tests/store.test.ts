@@ -6,6 +6,8 @@
 import { describe, test, expect } from "vitest";
 import { Store, visiblePixels, outOfBounds, forEachCell } from "../src/store";
 import type { SessionState } from "../src/store";
+import type { PatternState } from "../src/types";
+import { initialize_round_pattern } from "@mosaic/wasm";
 import { filledPixels, makeFloat, rowSession } from "./_helpers";
 
 describe("visiblePixels", () => {
@@ -66,8 +68,17 @@ describe("Store commit chain", () => {
         const s = newStore();
         const planBefore = s.plan;
         s.commit(state => { state.pixels = filledPixels(3, 3, 1); });
-        // plan is recomputed (new Int16Array reference)
         expect(s.plan).not.toBe(planBefore);
+    });
+
+    test("the plan counts glyph cells and warnings, a round corner once", () => {
+        const pattern: PatternState = { mode: "round", canvasWidth: 9, canvasHeight: 9,
+            virtualWidth: 9, virtualHeight: 9, offsetX: 0, offsetY: 0, rounds: 3 };
+        const pixels = initialize_round_pattern(9, 9, 9, 9, 0, 0, 3);
+        for (const [x, y] of [[1, 1], [1, 4]]) pixels[y * 9 + x] = pixels[y * 9 + x] === 1 ? 2 : 1;
+        const s = new Store(rowSession(9, 9, { pattern, pixels }));
+        // (1, 1) is a corner whose warning has two outward cells; (1, 4) is a valid overlay.
+        expect([s.plan.marked, s.plan.invalid]).toEqual([2, 1]);
     });
 
     test("recompute=false skips plan rebuild", () => {
