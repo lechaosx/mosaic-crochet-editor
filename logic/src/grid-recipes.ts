@@ -447,13 +447,3 @@ export function legacySelectionBehaviorChanged(value: unknown): boolean {
                 || (recipe.mirrorHorizontal === true && recipe.mirrorVertical === true));
     });
 }
-
-export function withGridStep(recipe: GridRecipe, axis: "column" | "row", step: { x: number; y: number }): GridRecipe {
-    const candidate = axis === "column"
-        ? { ...recipe, columnOffset: Math.round(step.y), columnSpacing: 0, columnSpacingAlternate: 0 }
-        : { ...recipe, rowOffset: Math.round(step.x), rowSpacing: 0, rowSpacingAlternate: 0 };
-    const evaluated = evaluateGridRecipe(candidate);
-    const spacing = Math.max(0, Math.round(axis === "column" ? step.x - evaluated.columnStep.x : step.y - evaluated.rowStep.y));
-    return axis === "column" ? { ...candidate, columnSpacing: spacing, columnSpacingAlternate: spacing }
-        : { ...candidate, rowSpacing: spacing, rowSpacingAlternate: spacing };
-}

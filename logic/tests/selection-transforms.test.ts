@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { evaluateGridRecipe, gridRecipeError, gridRecipeFromFloat, gridRecipesEqual, restoreGridRecipes, storedGridRecipes, withGridStep, withRecipeSource } from "../src/grid-recipes";
+import { evaluateGridRecipe, gridRecipeError, gridRecipeFromFloat, gridRecipesEqual, restoreGridRecipes, storedGridRecipes, withRecipeSource } from "../src/grid-recipes";
 import type { GridRecipe } from "../src/types";
 import { initialize_round_pattern, instruction_start_round } from "@mosaic/wasm";
 import { paintOps } from "../src/paint";
@@ -83,19 +83,6 @@ describe("exclusive selection transforms", () => {
             expect(placement.unmap(placement.map({ x: 3, y: 4 }))).toEqual({ x: 3, y: 4 });
             expect(placement.unmap(placement.map({ x: 3, y: 5 }))).toEqual({ x: 3, y: 5 });
         }
-    });
-    test("Grid handle uses the packed sparse/reflected step after the new cross offset", () => {
-        const recipe = { ...gridRecipeFromFloat({ x: 1, y: 2, w: 3, h: 2,
-            pixels: new Uint8Array([1, 0, 1, 0, 1, 0]) }), right: 2, down: 1,
-            columnMirrorHorizontal: true, rowMirrorVertical: true };
-        const offsetRecipe = { ...recipe, columnOffset: 2 };
-        const packed = evaluateGridRecipe(offsetRecipe).columnStep.x;
-        const changed = withGridStep(recipe, "column", { x: packed + 3, y: 2 });
-        expect(changed).toMatchObject({ columnSpacing: 3, columnSpacingAlternate: 3, columnOffset: 2,
-            right: 2, down: 1, columnMirrorHorizontal: true, rowMirrorVertical: true });
-        expect(evaluateGridRecipe(changed).columnStep).toEqual({ x: packed + 3, y: 2 });
-        expect(withGridStep(recipe, "row", { x: -2, y: -10 })).toMatchObject({ rowOffset: -2,
-            rowSpacing: 0, rowSpacingAlternate: 0, columnMirrorHorizontal: true });
     });
     test("None retains only the source despite retained copies", () => {
         expect(destinations(transformed("none"))).toEqual([[3, 3]]);
