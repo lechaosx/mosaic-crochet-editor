@@ -1,7 +1,9 @@
 import { initialize_round_pattern } from "@mosaic/wasm";
 import { encodeMcw, decodeMcw } from "../src/mcw";
 import { describe, expect, test } from "vitest";
-import { emptyGridRecipe, evaluateGridRecipe, gridRecipeFromFloat, gridRecipeError, gridRecipesEqual, restoreGridRecipes, withRecipeSource, recipesForPattern, storedGridRecipes } from "../src/grid-recipes";
+import fc from "fast-check";
+import type { GridRecipe, SymKey } from "../src/types";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeFromFloat, gridRecipeError, gridRecipesEqual, restoreGridRecipes, withRecipeSource, recipesForPattern, storedGridRecipes, RecipeEvaluations } from "../src/grid-recipes";
 
 describe("saved grid recipes", () => {
     test("missing saved selections migrate to one editable empty slot", () => {
@@ -326,5 +328,70 @@ test("round preservation translates centres for distant source cells", () => {
     const recipe = gridRecipeFromFloat({ x: 19, y: 19, w: 1, h: 1, pixels: new Uint8Array([1]) });
     expect(recipesForPattern([recipe], next, initialize_round_pattern(22, 20, 22, 20, 0, 0, 2), old)[0]).toMatchObject({
         mode: "grid", source: { x: 21, y: 19, w: 1, h: 1 }, rotationCentreX: 21, rotationCentreY: 19, mirrorCentreX: 21, mirrorCentreY: 19,
+    });
+});
+
+
+test("a source takes the float's cells when only their membership changes", () => {
+    const recipe = gridRecipeFromFloat({ x: 0, y: 0, w: 2, h: 2, pixels: new Uint8Array([1, 1, 1, 0]) });
+    for (const pixels of [[1, 2, 0, 0], [0, 2, 1, 2], [1, 1, 1, 0]]) {
+        expect([...withRecipeSource(recipe, { x: 4, y: 1, w: 2, h: 2, pixels: new Uint8Array(pixels) }).source.mask])
+            .toEqual(pixels.map(value => value === 0 ? 0 : 1));
+    }
+});
+
+describe("recipes at every source position", () => {
+    const shape = fc.record({
+        w: fc.integer({ min: 1, max: 5 }), h: fc.integer({ min: 1, max: 5 }), seed: fc.integer(),
+        mode: fc.constantFrom("none", "grid", "circle", "mirror" as const),
+        down: fc.integer({ min: 0, max: 1 }), columnOffset: fc.integer({ min: -3, max: 3 }), rowMirrorVertical: fc.boolean(),
+        rotationTurns: fc.subarray([90, 180, 270] as const),
+    }).map(({ w, h, seed, ...settings }) => {
+        let state = seed >>> 0;
+        const mask = Uint8Array.from({ length: w * h }, () => (state = (Math.imul(state, 1103515245) + 12345) >>> 0) >>> 31);
+        mask[0] = 1;
+        return { ...emptyGridRecipe(), ...settings, id: "shape", source: { x: 0, y: 0, w, h, mask } };
+    });
+    const step = fc.record({
+        x: fc.integer({ min: -8, max: 12 }), y: fc.integer({ min: -8, max: 12 }),
+        centreX: fc.integer({ min: 0, max: 3 }), centreY: fc.integer({ min: 0, max: 1 }),
+        right: fc.integer({ min: 0, max: 1 }), mirrorTypes: fc.constantFrom<SymKey[]>(["V"], ["C"], ["D1", "H"]),
+        reshape: fc.nat(),
+    });
+    const moved = (recipe: GridRecipe, x: number, y: number, mask = recipe.source.mask) => ({
+        ...recipe, source: { ...recipe.source, x, y, mask },
+        rotationCentreX: recipe.rotationCentreX + x, rotationCentreY: recipe.rotationCentreY + y,
+        mirrorCentreX: recipe.mirrorCentreX + x, mirrorCentreY: recipe.mirrorCentreY + y,
+    });
+    // A shape moved and changed step by step, as dragging and editing a selection does.
+    const walk = (recipe: GridRecipe, steps: { x: number; y: number; centreX: number; centreY: number;
+        right: number; mirrorTypes: SymKey[]; reshape: number }[]) => {
+        let mask = recipe.source.mask;
+        return steps.map(({ x, y, centreX, centreY, right, mirrorTypes, reshape }) => {
+            // Reshaping inverts the mask's other cells.
+            if (reshape % 3 === 0) mask = mask.map((value, i) => i === 0 ? 1 : 1 - value);
+            // Whole or half cells alike on both axes, as quarter turns and diagonals need.
+            const centre = { x: centreX / 2, y: centreY + (centreX % 2 === 0 ? 0 : 0.5) };
+            return moved({ ...recipe, right, mirrorTypes, rotationCentreX: centre.x, rotationCentreY: centre.y,
+                mirrorCentreX: centre.x, mirrorCentreY: centre.y }, x, y, mask);
+        });
+    };
+    const chart = (x: number, y: number) => x >= 0 && x < 9 && y >= 0 && y < 9 && (x * 7 + y * 3) % 5 !== 0;
+
+    test.each([["a roomy", undefined], ["a tight", 300]])("report the same errors with %s evaluation cache", (_size, budget) => {
+        fc.assert(fc.property(shape, fc.array(step, { maxLength: 12 }), (recipe, steps) => {
+            const evaluations = new RecipeEvaluations(budget);
+            const recipes = walk(recipe, steps);
+            expect(recipes.map(step => gridRecipeError(step, chart, evaluations)))
+                .toEqual(recipes.map(step => gridRecipeError(step, chart)));
+        }), { numRuns: 300 });
+    });
+
+    test("reject unsafe copies of a shape that is valid near the origin", () => {
+        const evaluations = new RecipeEvaluations();
+        const recipe = { ...gridRecipeFromFloat({ x: 0, y: 0, w: 2, h: 1, pixels: new Uint8Array([1, 1]) }), right: 1 };
+        const centre = { rotationCentreX: 1 - 2 ** 52, rotationCentreY: 0, mirrorCentreX: 1 - 2 ** 52, mirrorCentreY: 0 };
+        expect(gridRecipeError({ ...recipe, ...centre }, undefined, evaluations)).toBeNull();
+        expect(gridRecipeError(moved({ ...recipe, ...centre }, 2 ** 53 - 3, 0), undefined, evaluations)).toMatch(/safe integer/i);
     });
 });

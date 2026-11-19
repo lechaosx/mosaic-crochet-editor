@@ -8,7 +8,8 @@ import { PatternState, Float, GridRecipe } from "./types";
 import { Store, SessionState, visiblePixels, outOfBounds, isChartCell } from "./store";
 import { mirrorsToFlat } from "./symmetry";
 import { devAssert, assertNever } from "./dev";
-import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, recipeHasSource, recipeSourceCells, withRecipeSource } from "./grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, recipeHasSource, recipeSourceCells, withRecipeSource,
+         RecipeEvaluations } from "./grid-recipes";
 
 export type SelectMode = "replace" | "add" | "remove";
 
@@ -21,20 +22,22 @@ function currentGridRecipe(s: Readonly<SessionState>): GridRecipe | null {
     return s.recipes.find(recipe => recipe.id === s.activeRecipeId) ?? s.recipes.find(recipe => !recipeHasSource(recipe)) ?? null;
 }
 
-export function selectionSourceIsValid(s: Readonly<SessionState>, float: Float | null, translation = { x: 0, y: 0 }): boolean {
+export function selectionSourceIsValid(
+    s: Readonly<SessionState>, float: Float | null, translation = { x: 0, y: 0 }, evaluations?: RecipeEvaluations,
+): boolean {
     if (!float || !float.pixels.some(value => value !== 0)) return true;
     const recipe = currentGridRecipe(s) ?? emptyGridRecipe();
     const updated = withRecipeSource(recipe, float, translation);
-    return gridRecipeError(updated, (x, y) => isChartCell(s, x, y)) === null;
+    return gridRecipeError(updated, (x, y) => isChartCell(s, x, y), evaluations) === null;
 }
 
 export function syncActiveGridRecipe(
-    s: SessionState, translation?: { x: number; y: number },
+    s: SessionState, translation?: { x: number; y: number }, evaluations?: RecipeEvaluations,
 ): void {
     if (!s.float) return;
     const active = currentGridRecipe(s) ?? emptyGridRecipe();
     const updated = withRecipeSource(active, s.float, translation);
-    if (gridRecipeError(updated, (x, y) => isChartCell(s, x, y)) !== null) return;
+    if (gridRecipeError(updated, (x, y) => isChartCell(s, x, y), evaluations) !== null) return;
     s.recipes = s.recipes.some(recipe => recipe.id === active.id)
         ? s.recipes.map(recipe => recipe.id === active.id ? updated : recipe) : [...s.recipes, updated];
     s.activeRecipeId = active.id;

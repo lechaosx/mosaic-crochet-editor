@@ -65,6 +65,7 @@ export function recipeSourceCells(recipe: GridRecipe): TransformSourceCell[] {
 export function gridRecipeError(
     recipe: GridRecipe,
     paintable?: (x: number, y: number) => boolean,
+    evaluations?: RecipeEvaluations,
 ): string | null {
     const { source } = recipe;
     if (typeof recipe.id !== "string" || recipe.id.length === 0) return "Recipe id is required.";
@@ -92,13 +93,90 @@ export function gridRecipeError(
             && !Number.isInteger(recipe.rotationCentreX - recipe.rotationCentreY)) return "Quarter turns need matching whole-cell or half-cell centre coordinates.";
         if (recipe.mode === "mirror" && recipe.mirrorTypes.some(type => type === "D1" || type === "D2")
             && !Number.isInteger(recipe.mirrorCentreX - recipe.mirrorCentreY)) return "Diagonal mirrors need matching whole-cell or half-cell centre coordinates.";
-        const evaluated = evaluateGridRecipe(emptySource ? { ...recipe,
-            source: { x: source.x, y: source.y, w: 1, h: 1, mask: new Uint8Array([1]) } } : recipe);
-        return !paintable || !evaluated.conflicts.some(cell => paintable(cell.x, cell.y))
-            ? null : "Selection instances overlap.";
+        const checked = emptySource ? { ...recipe, source: { x: source.x, y: source.y, w: 1, h: 1, mask: unitMask } } : recipe;
+        const conflicts = evaluations?.conflictCells(checked)
+            ?? { cells: conflictNumbers(evaluateGridRecipe(checked)), x: 0, y: 0 };
+        if (paintable) for (let i = 0; i < conflicts.cells.length; i += 2) {
+            if (paintable(conflicts.cells[i] + conflicts.x, conflicts.cells[i + 1] + conflicts.y)) return "Selection instances overlap.";
+        }
+        return null;
     } catch (error) {
         return error instanceof Error ? error.message : "Recipe is invalid.";
     }
+}
+
+const unitMask = new Uint8Array([1]);
+
+// Evaluations of one source mask's shapes, kept by their owner while that
+// mask is the selection's. Moving a source with its centres translates every
+// claim, so one evaluation of a shape serves each position the source moves to.
+export class RecipeEvaluations {
+    private mask: Uint8Array | null = null;
+    // Each shape's conflicting cells relative to its source, least recently
+    // used first, within `budget` numbers so that a drag that never repeats a
+    // shape does not accumulate them.
+    private conflicts = new Map<string, Float64Array | { error: unknown }>();
+    private held = 0;
+
+    constructor(private readonly budget = 2 ** 21) {}
+
+    // Drops the evaluations of any other mask.
+    keepOnly(mask: Uint8Array | null): void {
+        if (mask === this.mask) return;
+        this.mask = mask;
+        this.conflicts = new Map();
+        this.held = 0;
+    }
+
+    // Conflicting cells as [x, y, x, y, …], offset by `x` and `y`.
+    conflictCells(recipe: GridRecipe): { cells: ArrayLike<number>; x: number; y: number } {
+        const shape = originShape(recipe);
+        if (!shape) return { cells: conflictNumbers(evaluateGridRecipe(recipe)), x: 0, y: 0 };
+        this.keepOnly(recipe.source.mask);
+        let cells = this.conflicts.get(shape.key);
+        if (cells) this.conflicts.delete(shape.key);
+        else {
+            try {
+                cells = conflictNumbers(evaluateGridRecipe(shape.recipe));
+            } catch (error) {
+                cells = { error };
+            }
+            this.held += heldNumbers(cells);
+        }
+        this.conflicts.set(shape.key, cells);
+        for (const [key, old] of this.conflicts) {
+            if (this.held <= this.budget) break;
+            this.conflicts.delete(key);
+            this.held -= heldNumbers(old);
+        }
+        if (!(cells instanceof Float64Array)) throw cells.error;
+        return { cells, x: recipe.source.x, y: recipe.source.y };
+    }
+}
+
+// An error counts as a shape's worth of bookkeeping.
+function heldNumbers(cells: Float64Array | { error: unknown }): number {
+    return cells instanceof Float64Array ? cells.length + 64 : 64;
+}
+
+function conflictNumbers(evaluation: PackedGridEvaluation): Float64Array {
+    return Float64Array.from(evaluation.conflicts.flatMap(cell => [cell.x, cell.y]));
+}
+
+// The recipe with its source and centres moved to the origin, keyed by its
+// geometry. Near the safe integer limits a position can fail where its shape
+// does not, so such recipes have no shape.
+function originShape(recipe: GridRecipe): { recipe: GridRecipe; key: string } | null {
+    const { source } = recipe;
+    if (![source.x, source.y, source.w, source.h, recipe.columnSpacing, recipe.rowSpacing,
+        recipe.columnSpacingAlternate, recipe.rowSpacingAlternate, recipe.columnOffset, recipe.rowOffset,
+        recipe.rotationCentreX, recipe.rotationCentreY, recipe.mirrorCentreX, recipe.mirrorCentreY]
+        .every(value => Math.abs(value) <= 2 ** 32)) return null;
+    const relative = { ...recipe, source: { ...source, x: 0, y: 0 },
+        rotationCentreX: recipe.rotationCentreX - source.x, rotationCentreY: recipe.rotationCentreY - source.y,
+        mirrorCentreX: recipe.mirrorCentreX - source.x, mirrorCentreY: recipe.mirrorCentreY - source.y };
+    const { id: _id, enabled: _enabled, source: _source, ...geometry } = relative;
+    return { recipe: relative, key: JSON.stringify([source.w, source.h, geometry]) };
 }
 
 export function evaluateGridRecipe(recipe: GridRecipe): PackedGridEvaluation {
@@ -124,10 +202,13 @@ export function withRecipeSource(
     recipe: GridRecipe, float: Float, translation = { x: 0, y: 0 },
 ): GridRecipe {
     const wasEmpty = !recipeHasSource(recipe);
+    // An unchanged mask keeps its identity, and with it the evaluations kept for it.
+    const unchanged = recipe.source.w === float.w && recipe.source.h === float.h
+        && float.pixels.every((value, i) => (value !== 0) === (recipe.source.mask[i] !== 0));
     return {
         ...recipe,
         source: { x: float.x, y: float.y, w: float.w, h: float.h,
-            mask: Uint8Array.from(float.pixels, value => value === 0 ? 0 : 1) },
+            mask: unchanged ? recipe.source.mask : Uint8Array.from(float.pixels, value => value === 0 ? 0 : 1) },
         rotationCentreX: wasEmpty ? float.x + (float.w - 1) / 2 : recipe.rotationCentreX + translation.x,
         rotationCentreY: wasEmpty ? float.y + (float.h - 1) / 2 : recipe.rotationCentreY + translation.y,
         mirrorCentreX: wasEmpty ? float.x + (float.w - 1) / 2 : recipe.mirrorCentreX + translation.x,

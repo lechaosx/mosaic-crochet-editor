@@ -39,6 +39,7 @@ export interface GridRecipeSource {
     y:    number;
     w:    number;
     h:    number;
+    // Never written once made: recipes, undo snapshots and recipe evaluations share it.
     mask: Uint8Array;
 }
 

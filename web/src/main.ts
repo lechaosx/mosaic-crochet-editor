@@ -16,7 +16,8 @@ import { UndoHistory, historyFrom, historySave, historyReplaceCurrent, historyUn
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
          mirrorIsProjectValid, mirrorsForPattern } from "@mosaic/logic/symmetry";
 import { mirrorsToFlat } from "@mosaic/logic/symmetry";
-import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withRecipeSource, recipesForPattern } from "@mosaic/logic/grid-recipes";
+import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withRecipeSource, recipesForPattern,
+         RecipeEvaluations } from "@mosaic/logic/grid-recipes";
 import { sessionFromRecovery, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { deleteProjectsExcept, loadProjectIndex, openProjectDatabase, readProject, removeRetiredRecords,
          writeHistory, writeRecovery } from "./project-store";
@@ -186,6 +187,8 @@ chartUnavailable.hidden = chartLayer !== null;
 const rs       = makeRendererState(preferences, chartLayer);
 let projectColorsSynced: string | null = null;
 const store    = new Store(saved ?? defaultSession());
+// Evaluations of the selection's recipe shapes while it is edited and moved.
+const recipeEvaluations = new RecipeEvaluations();
 // What the history records hold once every issued write lands, and what they
 // are known to hold; null when unknown, so a write stores every snapshot.
 let historyWritten = saved && stored ? historyFromStored(stored.history, stored.snapshots) : null;
@@ -442,6 +445,7 @@ store.addObserver(s => {
     }
 });
 store.addObserver(s => {
+    recipeEvaluations.keepOnly(activeGridRecipe(s.state)?.source.mask ?? null);
     ui.setRecipes(s.state.recipes, s.state.activeRecipeId);
     ui.setTransformState(Boolean(s.state.float), hasConfiguredTransforms());
     ui.setTransformError(null);
@@ -742,7 +746,7 @@ function onRecipeChange(id: string, change: Partial<GridRecipe>, preview = false
     if (!recipe) return false;
     if (preview && !recipeEditBaseline) recipeEditBaseline = store.state.recipes;
     const updated = { ...recipe, ...change, enabled: true };
-    const error = gridRecipeError(updated, (x, y) => isChartCell(store.state, x, y));
+    const error = gridRecipeError(updated, (x, y) => isChartCell(store.state, x, y), recipeEvaluations);
     if (error) {
         if (/overlap|matching whole-cell/.test(error)) { if (preview) ui.setRecipeError(null); else refreshRecipeUi(); return false; }
         if (preview) ui.setRecipeError(error); else refreshRecipeUi(error);
@@ -1466,7 +1470,7 @@ const ui: UIHandle = mountUI({
         : (type === "D1" || type === "D2") && !Number.isInteger(mirror.x - mirror.y)
             ? "Diagonals need both centre coordinates to be whole or half numbers."
             : "Keep this mirror type where it can transform chart cells.",
-    recipeMirrorTypeError: recipe => gridRecipeError(recipe, (x, y) => isChartCell(store.state, x, y)),
+    recipeMirrorTypeError: recipe => gridRecipeError(recipe, (x, y) => isChartCell(store.state, x, y), recipeEvaluations),
     onMirrorPosition,
     onMirrorCommit,
     onMirrorRevert,
@@ -1724,11 +1728,11 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                                 newFP[ly * pf.w + lx] = store.state.pixels[cy * W + cx];
                         }
                     }
-                    if (!selectionSourceIsValid(store.state, { ...f, x: newX, y: newY, pixels: newFP }, { x: newX - f.x, y: newY - f.y })) return;
-                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }); } }, { persist: false });
+                    if (!selectionSourceIsValid(store.state, { ...f, x: newX, y: newY, pixels: newFP }, { x: newX - f.x, y: newY - f.y }, recipeEvaluations)) return;
+                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY, pixels: newFP }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }, recipeEvaluations); } }, { persist: false });
                 } else {
-                    if (!selectionSourceIsValid(store.state, { ...f, x: newX, y: newY }, { x: newX - f.x, y: newY - f.y })) return;
-                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }); } }, { persist: false });
+                    if (!selectionSourceIsValid(store.state, { ...f, x: newX, y: newY }, { x: newX - f.x, y: newY - f.y }, recipeEvaluations)) return;
+                    store.commit(s => { if (s.float) { s.float = { ...s.float, x: newX, y: newY }; syncActiveGridRecipe(s, { x: newX - f.x, y: newY - f.y }, recipeEvaluations); } }, { persist: false });
                 }
             }
             return;
@@ -2035,9 +2039,9 @@ function moveWithArrow(e: KeyboardEvent) {
                     pixels[ly * mask.w + lx] = s.pixels[(y + ly) * W + x + lx];
             }
         }
-        if (!selectionSourceIsValid(s, { ...f, x, y, pixels }, { x: x - f.x, y: y - f.y })) return;
+        if (!selectionSourceIsValid(s, { ...f, x, y, pixels }, { x: x - f.x, y: y - f.y }, recipeEvaluations)) return;
         s.float = { ...f, x, y, pixels };
-        syncActiveGridRecipe(s, { x: x - f.x, y: y - f.y });
+        syncActiveGridRecipe(s, { x: x - f.x, y: y - f.y }, recipeEvaluations);
     }, { persist: false });
 }
 
