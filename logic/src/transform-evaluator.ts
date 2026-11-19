@@ -399,37 +399,94 @@ function packedDistance(
     otherMirrorY: boolean,
 ): number {
     const bounds = cellBounds(source);
-    const span = primary === "x"
-        ? safeAdd(safeSubtract(bounds.maxX, bounds.minX), 1)
-        : safeAdd(safeSubtract(bounds.maxY, bounds.minY), 1);
-    const orientations = new Map<string, { occupied: Set<string>; neighbour: TransformSourceCell[] }>();
+    const [alongMin, alongMax, acrossMin, acrossMax] = primary === "x"
+        ? [bounds.minX, bounds.maxX, bounds.minY, bounds.maxY]
+        : [bounds.minY, bounds.maxY, bounds.minX, bounds.maxX];
+    const span = safeAdd(safeSubtract(alongMax, alongMin), 1);
+
+    // Each line of cells across the step, as sorted runs [start, end, start, end, …] along it.
+    const lines = new Map<number, number[]>();
+    for (const cell of source) {
+        const across = primary === "x" ? cell.y : cell.x;
+        const line = lines.get(across);
+        if (line) line.push(primary === "x" ? cell.x : cell.y);
+        else lines.set(across, [primary === "x" ? cell.x : cell.y]);
+    }
+    for (const [across, along] of lines) {
+        along.sort((a, b) => a - b);
+        const runs: number[] = [];
+        for (const value of along) {
+            if (runs.length > 0 && runs[runs.length - 1] === value - 1) runs[runs.length - 1] = value;
+            else runs.push(value, value);
+        }
+        lines.set(across, runs);
+    }
+    const oriented = new Map<string, Map<number, number[]>>();
+    const orient = (flipX: boolean, flipY: boolean) => {
+        const [flipAlong, flipAcross] = primary === "x" ? [flipX, flipY] : [flipY, flipX];
+        const key = `${flipAlong},${flipAcross}`;
+        let result = oriented.get(key);
+        if (result) return result;
+        result = new Map();
+        for (const [across, runs] of lines) {
+            const flipped: number[] = [];
+            if (flipAlong) for (let i = runs.length - 2; i >= 0; i -= 2) {
+                flipped.push(alongMin + (alongMax - runs[i + 1]), alongMin + (alongMax - runs[i]));
+            }
+            result.set(flipAcross ? acrossMin + (acrossMax - across) : across, flipAlong ? flipped : runs);
+        }
+        oriented.set(key, result);
+        return result;
+    };
+    // A reflected row or column also reverses the cross offset's relation to a sparse motif.
+    const pairs: { occupied: Map<number, number[]>; neighbour: Map<number, number[]> }[] = [];
     for (const primaryOdd of [false, true]) {
         for (const otherOdd of [false, true]) {
             const flipX = (mirrorX && primaryOdd) !== (otherMirrorX && otherOdd);
             const flipY = (mirrorY && primaryOdd) !== (otherMirrorY && otherOdd);
-            const key = `${flipX},${flipY}`;
-            if (orientations.has(key)) continue;
-            orientations.set(key, {
-                occupied: new Set(source.map(cell => {
-                    const oriented = orientCell(cell, bounds, flipX, flipY);
-                    return coordKey(oriented.x, oriented.y);
-                })),
-                neighbour: source.map(cell => orientCell(cell, bounds, flipX !== mirrorX, flipY !== mirrorY)),
-            });
+            const occupied = orient(flipX, flipY);
+            if (!pairs.some(pair => pair.occupied === occupied)) {
+                pairs.push({ occupied, neighbour: orient(flipX !== mirrorX, flipY !== mirrorY) });
+            }
         }
     }
 
-    // A reflected row or column also reverses the cross offset's relation to a sparse motif.
-    for (let distance = 1; distance <= span; distance++) {
-        const overlaps = [...orientations.values()].some(({ occupied, neighbour }) =>
-            [-1, 1].some(direction => neighbour.some(cell => {
-                const x = safeAdd(cell.x, safeMultiply(direction, primary === "x" ? distance : crossOffset));
-                const y = safeAdd(cell.y, safeMultiply(direction, primary === "y" ? distance : crossOffset));
-                return occupied.has(coordKey(x, y));
-            })));
-        if (!overlaps) return distance;
+    // Copies meet on both sides, but the other parity swaps which one is
+    // occupied, so testing the following copy of every pair covers both.
+    // Each pair of overlapping runs rules out a whole interval of distances, so
+    // the search jumps past the furthest one that covers the current distance.
+    let distance = 1;
+    while (distance <= span) {
+        let next = distance;
+        for (const { occupied, neighbour } of pairs) {
+            for (const [across, runs] of neighbour) {
+                const target = occupied.get(across + crossOffset);
+                if (!target) continue;
+                let i = 0, j = 0;
+                while (i < runs.length && j < target.length) {
+                    if (runs[i + 1] + distance < target[j]) i += 2;
+                    else if (target[j + 1] < runs[i] + distance) j += 2;
+                    else {
+                        next = Math.max(next, target[j + 1] - runs[i] + 1);
+                        if (runs[i + 1] + distance < target[j + 1]) i += 2;
+                        else j += 2;
+                    }
+                }
+            }
+        }
+        if (next === distance) break;
+        distance = next;
     }
-    return span;
+    const packed = Math.min(distance, span);
+    // Reject geometry whose neighbouring copies, at the packed distance and
+    // cross offset on either side, would leave safe coordinates.
+    safeSubtract(alongMin, packed);
+    safeAdd(alongMax, packed);
+    for (const across of [acrossMin, acrossMax]) {
+        safeSubtract(across, crossOffset);
+        safeAdd(across, crossOffset);
+    }
+    return packed;
 }
 
 function safeAdd(a: number, b: number): number {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { evaluatePackedGrid, PackedGridRecipe } from "../src/transform-evaluator";
+import fc from "fast-check";
+import { evaluatePackedGrid, PackedGridRecipe, TransformSourceCell } from "../src/transform-evaluator";
 
 const noGrid: PackedGridRecipe = {
     left: 0,
@@ -358,4 +359,85 @@ test("unused row mirrors do not change column packing with cross offsets", () =>
     const source = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }];
     expect(evaluatePackedGrid(source, { ...recipe, rowMirrorVertical: true }).columnStep)
         .toEqual(evaluatePackedGrid(source, recipe).columnStep);
+});
+
+
+// The packed step by definition: the smallest distance at which the neighbouring
+// copy, in every mirror parity it can meet, shares no cell with this copy on
+// either side.
+function definedPackedStep(
+    cells: TransformSourceCell[], axis: "x" | "y", cross: number,
+    own: [boolean, boolean], other: [boolean, boolean],
+): number {
+    const xs = cells.map(cell => cell.x), ys = cells.map(cell => cell.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const orient = (cell: TransformSourceCell, flipX: boolean, flipY: boolean, dx = 0, dy = 0) =>
+        `${(flipX ? minX + maxX - cell.x : cell.x) + dx},${(flipY ? minY + maxY - cell.y : cell.y) + dy}`;
+    const span = axis === "x" ? maxX - minX + 1 : maxY - minY + 1;
+    for (let distance = 1; distance < span; distance++) {
+        const overlaps = [false, true].some(odd => [false, true].some(otherOdd => {
+            const flipX = (own[0] && odd) !== (other[0] && otherOdd);
+            const flipY = (own[1] && odd) !== (other[1] && otherOdd);
+            const occupied = new Set(cells.map(cell => orient(cell, flipX, flipY)));
+            return [-1, 1].some(direction => cells.some(cell => occupied.has(axis === "x"
+                ? orient(cell, flipX !== own[0], flipY !== own[1], direction * distance, direction * cross)
+                : orient(cell, flipX !== own[0], flipY !== own[1], direction * cross, direction * distance))));
+        }));
+        if (!overlaps) return distance;
+    }
+    return span;
+}
+
+describe("packed steps", () => {
+    const motif = fc.record({
+        width: fc.integer({ min: 1, max: 12 }), height: fc.integer({ min: 1, max: 12 }),
+        x: fc.integer({ min: -20, max: 20 }), y: fc.integer({ min: -20, max: 20 }),
+        density: fc.constantFrom(0.15, 0.5, 0.9, 1),
+        seed: fc.integer(),
+    }).map(({ width, height, x, y, density, seed }) => {
+        let state = seed >>> 0;
+        const random = () => (state = (Math.imul(state, 1103515245) + 12345) >>> 0) / 2 ** 32;
+        const cells: TransformSourceCell[] = [];
+        for (let row = 0; row < height; row++) for (let column = 0; column < width; column++) {
+            if (random() < density) cells.push({ x: x + column, y: y + row });
+        }
+        return cells.length > 0 ? cells : [{ x, y }];
+    });
+    const recipe = fc.record({
+        left: fc.integer({ min: 0, max: 1 }), right: fc.integer({ min: 0, max: 1 }),
+        up: fc.integer({ min: 0, max: 1 }), down: fc.integer({ min: 0, max: 1 }),
+        columnSpacing: fc.integer({ min: 0, max: 2 }), rowSpacing: fc.integer({ min: 0, max: 2 }),
+        columnSpacingAlternate: fc.integer({ min: 0, max: 2 }), rowSpacingAlternate: fc.integer({ min: 0, max: 2 }),
+        columnOffset: fc.integer({ min: -14, max: 14 }), rowOffset: fc.integer({ min: -14, max: 14 }),
+        columnMirrorHorizontal: fc.boolean(), columnMirrorVertical: fc.boolean(),
+        rowMirrorHorizontal: fc.boolean(), rowMirrorVertical: fc.boolean(),
+    });
+    const around = fc.option(fc.record({
+        x: fc.integer({ min: -8, max: 8 }), y: fc.integer({ min: -8, max: 8 }),
+        turns: fc.subarray([90, 180, 270] as const), mirrorHorizontal: fc.boolean(), mirrorVertical: fc.boolean(),
+    }), { nil: undefined });
+
+    test("equal the defined packing of the complete motif, sparse or dense", () => {
+        fc.assert(fc.property(motif, recipe, around, (source, grid, centre) => {
+            const expanded = evaluatePackedGrid(source, noGrid, centre);
+            const cells = [...expanded.cells, ...expanded.conflicts];
+            const columns = grid.left + grid.right + 1 > 1, rows = grid.up + grid.down + 1 > 1;
+            const result = evaluatePackedGrid(source, grid, centre);
+            expect(result.columnStep.x).toBe(grid.columnSpacing + definedPackedStep(cells, "x", grid.columnOffset,
+                [grid.columnMirrorHorizontal, grid.columnMirrorVertical],
+                [grid.rowMirrorHorizontal && rows, grid.rowMirrorVertical && rows]));
+            expect(result.rowStep.y).toBe(grid.rowSpacing + definedPackedStep(cells, "y", grid.rowOffset,
+                [grid.rowMirrorHorizontal, grid.rowMirrorVertical],
+                [grid.columnMirrorHorizontal && columns, grid.columnMirrorVertical && columns]));
+        }), { numRuns: 500 });
+    });
+
+    test("reject unsafe packing geometry even without copies", () => {
+        const max = Number.MAX_SAFE_INTEGER;
+        expect(() => evaluatePackedGrid([{ x: max, y: 0 }], noGrid)).toThrow(/safe integer/i);
+        expect(() => evaluatePackedGrid([{ x: 0, y: -max }], noGrid)).toThrow(/safe integer/i);
+        expect(() => evaluatePackedGrid([{ x: 0, y: 1 }], { ...noGrid, columnOffset: max })).toThrow(/safe integer/i);
+        expect(() => evaluatePackedGrid([{ x: 1, y: 0 }], { ...noGrid, rowOffset: -max })).toThrow(/safe integer/i);
+        expect(evaluatePackedGrid([{ x: max - 1, y: 0 }, { x: max - 3, y: 0 }], noGrid).columnStep.x).toBe(1);
+    });
 });
