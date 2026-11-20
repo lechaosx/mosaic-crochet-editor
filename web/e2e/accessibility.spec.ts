@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { addGlobalMirror, bootApp, cellCoord, clickCell, pixelRGB, chooseToolVariant } from "./_helpers";
 
 test("active tool and yarn expose their selected state", async ({ page }) => {
@@ -348,3 +348,39 @@ test("explicit inspector opening moves focus to its first available control", as
     await page.getByRole("menuitem", { name: "Pattern" }).click();
     await expect(page.getByRole("radio", { name: "Rows" })).toBeFocused();
 });
+
+// WCAG contrast of the element's text against the first opaque background behind it.
+function textContrast(element: Locator) {
+    return element.evaluate(element => {
+        const context = Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).getContext("2d", { willReadFrequently: true })!;
+        const rgba = (color: string) => {
+            context.clearRect(0, 0, 1, 1);
+            context.fillStyle = color;
+            context.fillRect(0, 0, 1, 1);
+            return Array.from(context.getImageData(0, 0, 1, 1).data);
+        };
+        const luminance = ([r, g, b]: number[]) => [r, g, b]
+            .map(value => value / 255)
+            .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+            .reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i], 0);
+        let behind: Element | null = element;
+        while (behind && rgba(getComputedStyle(behind).backgroundColor)[3] < 255) behind = behind.parentElement;
+        const [text, background] = [rgba(getComputedStyle(element).color), rgba(getComputedStyle(behind!).backgroundColor)].map(luminance);
+        return (Math.max(text, background) + 0.05) / (Math.min(text, background) + 0.05);
+    });
+}
+
+for (const [shade, yarnA, yarnB] of [["light", "#ffffff", "#f2f2f2"], ["dark", "#000000", "#1a1a1a"]]) {
+    test(`destructive actions stay readable whatever Danger colour ${shade} yarns choose`, async ({ page }) => {
+        await bootApp(page);
+        await page.getByRole("button", { name: "Pattern", exact: true }).click();
+        const pattern = page.locator("#edit-pattern-widget");
+        await pattern.getByLabel("Yarn A", { exact: true }).fill(yarnA);
+        await pattern.getByLabel("Yarn B", { exact: true }).fill(yarnB);
+        await page.keyboard.press("Escape");
+        await page.keyboard.press("p");
+        await clickCell(page, 0, 1);
+        await page.getByRole("button", { name: "Close Untitled 1" }).click();
+        expect(await textContrast(page.getByRole("button", { name: "Close without saving" }))).toBeGreaterThanOrEqual(4.5);
+    });
+}

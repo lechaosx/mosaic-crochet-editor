@@ -336,9 +336,9 @@ test("labelled controls grow instead of clipping at doubled text size", async ({
     }
     expect(await page.locator("#swatch-a").evaluate(swatch => {
         const label = swatch.querySelector(".swatch-label")!.getBoundingClientRect();
-        const check = swatch.querySelector(".swatch-check")!.getBoundingClientRect();
-        return label.left >= check.right || label.top >= check.bottom;
-    }), "Yarn A label and check").toBe(true);
+        const bounds = swatch.getBoundingClientRect();
+        return label.left >= bounds.left && label.top >= bounds.top && label.right <= bounds.right && label.bottom <= bounds.bottom;
+    }), "Yarn A label").toBe(true);
 });
 
 test("short landscape keeps canvas and tools reachable at doubled text size", async ({ page }) => {

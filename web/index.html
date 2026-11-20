@@ -135,11 +135,9 @@
         <span class="dock-group-label" aria-hidden="true">Yarns</span>
         <div id="swatch-a" class="swatch swatch--active" tabindex="0" role="button" title="Select Yarn A (1)" aria-label="Yarn A" aria-pressed="true">
           <span class="swatch-label" aria-hidden="true">A</span>
-          <span class="swatch-check" aria-hidden="true">✓</span>
         </div>
         <div id="swatch-b" class="swatch" tabindex="0" role="button" title="Select Yarn B (2)" aria-label="Yarn B" aria-pressed="false">
           <span class="swatch-label" aria-hidden="true">B</span>
-          <span class="swatch-check" aria-hidden="true">✓</span>
         </div>
       </div>
     </nav>
@@ -175,7 +173,7 @@
       <h2 id="empty-workspace-title">No pattern open</h2>
       <p>Start a new pattern, open an .mcw file, or explore the example.</p>
       <div class="empty-workspace-actions">
-        <button class="btn" id="empty-new" type="button">New</button>
+        <button class="btn btn--primary" id="empty-new" type="button">New</button>
         <button class="btn" id="empty-open" type="button">Open</button>
         <button class="btn" id="empty-example" type="button">Example</button>
       </div>
@@ -202,7 +200,7 @@
           <span id="about-copyright"></span>
         </footer>
         <div class="about-actions" id="about-actions" aria-label="Pattern actions">
-          <button class="btn" id="about-new" type="button" autofocus>New</button>
+          <button class="btn btn--primary" id="about-new" type="button" autofocus>New</button>
           <button class="btn" id="about-open" type="button">Open</button>
           <button class="btn" id="about-example" type="button">Example</button>
         </div>
@@ -459,7 +457,7 @@
     <article class="take-over-card">
       <h1 id="take-over-title">Already open in another window</h1>
       <p id="take-over-message">Mosaic Crochet Editor is open in another window, and only one window can edit at a time. Edit here to continue your work in this window.</p>
-      <button class="btn" id="take-over" type="button" autofocus>Edit here</button>
+      <button class="btn btn--primary" id="take-over" type="button" autofocus>Edit here</button>
     </article>
   </dialog>
 
@@ -468,7 +466,7 @@
       <h1 id="close-tab-title"></h1>
       <p id="close-tab-message">Unsaved changes are lost unless you save them. Closing also discards this pattern’s undo history.</p>
       <div class="close-tab-actions">
-        <button class="btn" value="save" autofocus>Save…</button>
+        <button class="btn btn--primary" value="save" autofocus>Save…</button>
         <button class="btn btn--destructive" value="discard">Close without saving</button>
         <button class="btn" value="cancel">Cancel</button>
       </div>
