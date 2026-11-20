@@ -23,6 +23,10 @@ export interface PatternChangeSummary {
 export const MAX_CANVAS_DIMENSION = 32_767;
 export const MAX_CANVAS_CELLS = 16_777_216;
 
+export function samePatternGeometry(a: PatternState, b: PatternState): boolean {
+    return JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function hasDrawing(pattern: PatternState, pixels: Uint8Array): boolean {
     const natural = pattern.mode === "row"
         ? initialize_row_pattern(pattern.canvasWidth, pattern.canvasHeight)

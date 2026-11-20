@@ -9,6 +9,7 @@
 
 import { Tool, ToolVariants, PatternState, Float, MirrorCenter, GridRecipe } from "./types";
 import { emptyGridRecipe, normalizeActiveRecipeId } from "./grid-recipes";
+import { samePatternGeometry } from "./pattern";
 import {
     changedCells, computeHighlightPlan, updateHighlightPlan,
     type CellRect, type HighlightPlan, type MutableHighlightPlan,
@@ -17,7 +18,7 @@ import {
 // Changes assign new `pattern`, `pixels` and `float` values instead of writing
 // into the current ones: the plan update skips a change that keeps all three,
 // finds changed cells by comparing the visible pixels with the previous ones,
-// and rebuilds only when `pattern` is a different object.
+// and rebuilds when `pattern` describes another geometry.
 export interface SessionState {
     pattern:       PatternState;
     pixels:        Uint8Array;
@@ -170,7 +171,7 @@ export class Store {
 
     private updatePlan(): void {
         const { pattern, pixels, float } = this._state;
-        if (pattern !== this._planSource.pattern) return this.rebuildPlan();
+        if (!samePatternGeometry(pattern, this._planSource.pattern)) return this.rebuildPlan();
         if (pixels === this._planSource.pixels && float === this._planSource.float) return;
         this._planSource = { pattern, pixels, float };
         const visible = visiblePixels(this._state);

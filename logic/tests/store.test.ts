@@ -271,7 +271,7 @@ describe("Store plan changes", () => {
                     earlier.push({ pattern: s.state.pattern, pixels: s.state.pixels, float: s.state.float });
                     expect(s.plan).toEqual(new Store({ ...s.state }).plan);
                     const change = s.planChangeSince(version);
-                    if (next.kind === "pattern") expect(change).toBe("all");
+                    if (next.kind === "pattern") expect(change).toBeNull();
                     if (change === "all") continue;
                     const after = visiblePixels(s.state);
                     forEachCell(W, H, (x, y) => {

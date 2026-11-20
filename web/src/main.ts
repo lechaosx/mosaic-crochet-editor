@@ -35,7 +35,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          syncActiveGridRecipe, selectionSourceIsValid } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, paintOps } from "@mosaic/logic/paint";
-import { MAX_CANVAS_DIMENSION, patternChangeSummary, hasDrawing } from "@mosaic/logic/pattern";
+import { MAX_CANVAS_DIMENSION, patternChangeSummary, hasDrawing, samePatternGeometry } from "@mosaic/logic/pattern";
 import { fingerprintPattern, fingerprintPatternShape, loadLiveProgress, saveLiveProgress,
          clearLiveProgress, deleteLiveProgressExcept, hasLiveProgress } from "./live-progress";
 import { copyrightNotice, markAboutSeen, shouldShowAbout } from "./about";
@@ -990,10 +990,6 @@ function patternEditVisibleSource(snapshot: PatternEditSnapshot) {
             pixels: visiblePixels({ ...store.state, pattern: snapshot.pattern,
                 pixels: snapshot.pixels, float: snapshot.float }) }
         : { pattern: snapshot.pattern, pixels: snapshot.pixels };
-}
-
-function samePatternGeometry(a: PatternState, b: PatternState): boolean {
-    return JSON.stringify(a) === JSON.stringify(b);
 }
 
 function samePatternEditSnapshot(a: PatternEditSnapshot, b: PatternEditSnapshot): boolean {
