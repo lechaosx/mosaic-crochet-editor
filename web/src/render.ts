@@ -503,7 +503,7 @@ export function renderPatternColourPreview(
     const dashOffset = Math.floor(antsElapsedMs / 1000 * ANTS_SCREEN_PX_PER_SEC / ANTS_STEP_PX)
         * ANTS_STEP_PX / cell;
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
-    renderSelection(ctx, view, dpr, pattern, selection, accentColor, dashOffset);
+    renderSelectionPaths(ctx, view, dpr, tracedBoundary(selection, W, H), accentColor, dashOffset);
     ctx.restore();
 }
 
@@ -891,16 +891,6 @@ function floatOutline(pattern: PatternState, pixels: Uint8Array, float: Float): 
 // The outline of `mask` placed with its top-left cell at (x, y).
 function maskOutline({ x, y, w, h, mask }: CellMask): number[][] {
     return tracedBoundary(mask, w, h).map(path => path.map((value, i) => value + (i % 2 === 0 ? x : y)));
-}
-
-function renderSelection(
-    ctx: CanvasRenderingContext2D, view: ViewState, dpr: number,
-    pattern: PatternState, selection: Uint8Array | null,
-    color: string, dashOffset: number,
-) {
-    if (!selection) return;
-    const W = pattern.canvasWidth, H = pattern.canvasHeight;
-    renderSelectionPaths(ctx, view, dpr, tracedBoundary(selection, W, H), color, dashOffset);
 }
 
 function renderSelectionPaths(
