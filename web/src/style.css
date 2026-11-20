@@ -1161,6 +1161,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
   backdrop-filter: blur(0.5rem);
   -webkit-backdrop-filter: blur(0.5rem);
   text-align: center;
+  text-wrap: balance;
   pointer-events: auto;
 }
 .instructions-current code {

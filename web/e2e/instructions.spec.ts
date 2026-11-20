@@ -681,6 +681,33 @@ test("long Crochet instructions wrap between stitch counts beside a yarn number 
     }
 });
 
+test("a wrapped current Crochet instruction splits into lines of similar length", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-width").fill("50");
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    for (const x of [0, 2, 3, 6, 9, 10, 13, 15, 18, 19, 22, 25, 27, 28, 31, 34, 35, 38, 41, 43, 46, 49]) {
+        await clickCell(page, x, 8);
+    }
+    await page.locator("#btn-export").click();
+    await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
+    const text = page.locator("#instructions-current-text");
+    for (const [width, height] of [[1300, 800], [390, 844]]) {
+        await page.setViewportSize({ width, height });
+        const lines = await text.evaluate(code => {
+            const range = document.createRange();
+            range.selectNodeContents(code);
+            return Array.from(range.getClientRects(), rect => rect.width);
+        });
+        expect(lines.length).toBeGreaterThan(1);
+        expect(Math.min(...lines)).toBeGreaterThan(Math.max(...lines) * 0.5);
+    }
+});
+
 test("Crochet marks only the current row's beginning seam", async ({ page }) => {
     await bootApp(page);
     const rowTopPixel = () => patternPixel(page, 4.5, 8);
