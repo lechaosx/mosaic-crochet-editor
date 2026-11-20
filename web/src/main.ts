@@ -2229,7 +2229,6 @@ function syncProjectColorInputs(s: Readonly<SessionState>) {
     const accent = s.accentColorOverride ?? automatic.accent;
     rs.projectColors = { dangerColor: danger, accentColor: accent };
     document.documentElement.style.setProperty("--danger", danger);
-    document.documentElement.style.setProperty("--accent", accent);
     ui.setProjectColors(danger, accent, s.dangerColorOverride === null, s.accentColorOverride === null);
 }
 

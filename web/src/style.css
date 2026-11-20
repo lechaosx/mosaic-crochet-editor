@@ -30,6 +30,7 @@
   --fg-2: #888a92;
   --line: #353740;
 
+  /* One highlight for every control. A pattern's Accent colour marks only its chart. */
   --accent: #00838f;
   --accent-soft: color-mix(in srgb, var(--accent) 14%, var(--bg-2));
   --danger: #d32f2f;

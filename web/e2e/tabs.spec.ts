@@ -1,7 +1,7 @@
 // Open patterns as tabs: each keeps its own project, undo history, view and
 // mode, while tools are shared.
 import { test, expect, type Page } from "@playwright/test";
-import { activeProjectId, bootApp, cellCoord, clickCell, deleteStoredRecovery, pixelRGB, storedLiveProgress, storedProjectIds,
+import { activeProjectId, bootApp, cellCoord, chartPixels, clickCell, deleteStoredRecovery, pixelRGB, storedLiveProgress, storedProjectIds,
          storedRecovery } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
@@ -178,6 +178,46 @@ test("each tab shows only its own ✕ and ! across switches and edits", async ({
     await expect.poll(() => glyphs(page)).toEqual(second);
     await tab(page, "Untitled 1").click();
     await expect.poll(() => glyphs(page)).toEqual(edited);
+});
+
+async function chartShows(page: Page, hex: string) {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+    const { data } = await chartPixels(page);
+    for (let i = 0; i < data.length; i += 4) if (data[i] === r && data[i + 1] === g && data[i + 2] === b) return true;
+    return false;
+}
+
+async function controlAccents(page: Page) {
+    await page.getByRole("button", { name: "Settings" }).click();
+    const colours = {
+        slider: await page.getByRole("slider", { name: "Guidance opacity" }).evaluate(el => getComputedStyle(el).accentColor),
+        toggle: await page.getByLabel("Show numbers").evaluate(el => getComputedStyle(el.nextElementSibling!).backgroundColor),
+    };
+    await page.keyboard.press("Escape");
+    return colours;
+}
+
+test("controls keep one accent while each tab's chart marks its selection in that pattern's Accent", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 2);
+    const untitledAccent = await page.getByLabel("Accent", { exact: true }).inputValue();
+    const controls = await controlAccents(page);
+
+    const accent = "#ff0066";
+    expect(untitledAccent).not.toBe(accent);
+    await page.getByRole("button", { name: "New tab" }).click();
+    await page.getByLabel("Accent", { exact: true }).fill(accent);
+    await page.keyboard.press("Escape");
+    await clickCell(page, 2, 2);
+    expect(await chartShows(page, accent)).toBe(true);
+    expect(await chartShows(page, untitledAccent)).toBe(false);
+    expect(await controlAccents(page)).toEqual(controls);
+
+    await tab(page, "Untitled 1").click();
+    expect(await chartShows(page, untitledAccent)).toBe(true);
+    expect(await chartShows(page, accent)).toBe(false);
+    expect(await controlAccents(page)).toEqual(controls);
 });
 
 test("a selection alone marks its tab unsaved until undone", async ({ page }) => {
