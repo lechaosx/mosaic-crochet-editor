@@ -404,7 +404,7 @@ store.setRenderer(s => {
                 preview.dangerColorOverride = s.state.dangerColorOverride;
                 preview.accentColorOverride = s.state.accentColorOverride;
             },
-            { recompute: false, render: false, persist: false },
+            { render: false, persist: false },
         );
         instructionsView?.setYarnColors(s.state.colorA, s.state.colorB);
     }
@@ -625,7 +625,7 @@ function addMirrorOfKind(k: SymKey | null) {
     }
     finishAuthoredInput();
     rs.selectedMirrorId = mirrors[mirrors.length - 1].id;
-    store.commit(s => { s.mirrors = mirrors; }, { recompute: false, history: true });
+    store.commit(s => { s.mirrors = mirrors; }, { history: true });
     refreshSymmetryUi();
 }
 
@@ -633,13 +633,13 @@ function deleteMirrorById(id: string) {
     finishAuthoredInput();
     const index = store.state.mirrors.findIndex(mirror => mirror.id === id);
     if (rs.selectedMirrorId === id) rs.selectedMirrorId = (store.state.mirrors[index + 1] ?? store.state.mirrors[index - 1])?.id ?? null;
-    store.commit(s => { s.mirrors = s.mirrors.filter(mirror => mirror.id !== id); }, { recompute: false, history: true });
+    store.commit(s => { s.mirrors = s.mirrors.filter(mirror => mirror.id !== id); }, { history: true });
     refreshSymmetryUi();
 }
 
 function toggleMirrorById(id: string) {
     finishAuthoredInput();
-    store.commit(s => { s.mirrors = s.mirrors.map(mirror => mirror.id === id ? { ...mirror, enabled: !mirror.enabled } : mirror); }, { recompute: false, history: true });
+    store.commit(s => { s.mirrors = s.mirrors.map(mirror => mirror.id === id ? { ...mirror, enabled: !mirror.enabled } : mirror); }, { history: true });
     refreshSymmetryUi();
 }
 
@@ -666,7 +666,7 @@ function commitMirrorChange(mirror: MirrorCenter, updated: MirrorCenter, preview
         if (preview && !mirrorEditBaseline) mirrorEditBaseline = store.state.mirrors;
         store.commit(s => {
             s.mirrors = s.mirrors.map(value => value.id === mirror.id ? updated : value);
-        }, { recompute: false, history: !preview, persist: !preview });
+        }, { history: !preview, persist: !preview });
     }
     refreshSymmetryUi();
     return updated;
@@ -675,12 +675,12 @@ function commitMirrorChange(mirror: MirrorCenter, updated: MirrorCenter, preview
 function onMirrorCommit() {
     const baseline = mirrorEditBaseline;
     mirrorEditBaseline = null;
-    if (baseline && !mirrorsEqual(baseline, store.state.mirrors)) store.commit(() => {}, { recompute: false, history: true });
+    if (baseline && !mirrorsEqual(baseline, store.state.mirrors)) store.commit(() => {}, { history: true });
 }
 function onMirrorRevert() {
     const baseline = mirrorEditBaseline;
     mirrorEditBaseline = null;
-    if (baseline) store.commit(s => { s.mirrors = baseline; }, { recompute: false });
+    if (baseline) store.commit(s => { s.mirrors = baseline; });
     refreshSymmetryUi();
 }
 
@@ -755,7 +755,7 @@ function onRecipeChange(id: string, change: Partial<GridRecipe>, preview = false
     }
     if (!gridRecipesEqual([recipe], [updated])) store.commit(s => {
         s.recipes = s.recipes.map(candidate => candidate.id === id ? updated : candidate);
-    }, { recompute: false, history: !preview, persist: !preview });
+    }, { history: !preview, persist: !preview });
     refreshRecipeUi();
     return true;
 }
@@ -772,7 +772,7 @@ function onRecipeCommit() {
                 commitHistory(next);
                 recipeHistorySession = replaced;
             } else {
-                store.commit(() => {}, { recompute: false, render: false, history: true });
+                store.commit(() => {}, { render: false, history: true });
                 recipeHistorySession = true;
             }
             persistRecovery(store.state);
@@ -786,7 +786,7 @@ function onRecipeRevert() {
     if (gesture?.kind === "recipe-drag") { gestureInputs.cancel(); return; }
     const baseline = recipeEditBaseline;
     recipeEditBaseline = null;
-    if (baseline) store.commit(s => { s.recipes = baseline; }, { recompute: false });
+    if (baseline) store.commit(s => { s.recipes = baseline; });
     refreshRecipeUi();
 }
 
@@ -828,41 +828,41 @@ function setTool(t: Tool) {
         ui.setViewState(store.state.rotation, navigateMomentary);
     }
     ui.setCanvasFeedback(null);
-    store.commit(s => { s.activeTool = t; }, { recompute: false, render: false });
+    store.commit(s => { s.activeTool = t; }, { render: false });
     ui.setTool(t);
     renderCanvas();
 }
 function setToolVariant<K extends keyof ToolVariants>(tool: K, variant: ToolVariants[K]) {
-    store.commit(s => { s.toolVariants = { ...s.toolVariants, [tool]: variant }; }, { recompute: false, render: false });
+    store.commit(s => { s.toolVariants = { ...s.toolVariants, [tool]: variant }; }, { render: false });
     setTool(tool);
 }
 function setOverlayAction(action: OverlayAction) {
     setToolVariant("overlay", action);
 }
 function setPrimary(slot: 1 | 2) {
-    store.commit(s => { s.primaryColor = slot; }, { recompute: false, render: false });
+    store.commit(s => { s.primaryColor = slot; }, { render: false });
     ui.setPrimary(slot);
 }
 function onColorInput() {
     const a = (document.getElementById("color-a") as HTMLInputElement).value;
     const b = (document.getElementById("color-b") as HTMLInputElement).value;
-    store.commit(s => { s.colorA = a; s.colorB = b; }, { recompute: false });
+    store.commit(s => { s.colorA = a; s.colorB = b; });
     ui.setColors(a, b);
 }
 function onColorCommit() {
-    store.commit(() => {}, { recompute: false, render: false, history: true });
+    store.commit(() => {}, { render: false, history: true });
 }
 function onSwapYarns() {
     store.commit(s => {
         [s.colorA, s.colorB] = [s.colorB, s.colorA];
-    }, { recompute: false, history: true });
+    }, { history: true });
     ui.setColors(store.state.colorA, store.state.colorB);
 }
 function resetYarnColor(slot: 1 | 2) {
     store.commit(s => {
         if (slot === 1) s.colorA = DEFAULT_YARN_A;
         else s.colorB = DEFAULT_YARN_B;
-    }, { recompute: false, history: true });
+    }, { history: true });
     ui.setColors(store.state.colorA, store.state.colorB);
 }
 function onHlOpacityInput() {
@@ -873,17 +873,17 @@ function onHlOpacityInput() {
 }
 function onDangerColorInput() {
     const value = (document.getElementById("danger-color") as HTMLInputElement).value;
-    store.commit(s => { s.dangerColorOverride = value; }, { recompute: false });
+    store.commit(s => { s.dangerColorOverride = value; });
 }
 function onAccentColorInput() {
     const value = (document.getElementById("accent-color") as HTMLInputElement).value;
-    store.commit(s => { s.accentColorOverride = value; }, { recompute: false });
+    store.commit(s => { s.accentColorOverride = value; });
 }
 function resetProjectColor(kind: "danger" | "accent") {
     store.commit(s => {
         if (kind === "danger") s.dangerColorOverride = null;
         else s.accentColorOverride = null;
-    }, { recompute: false, history: true });
+    }, { history: true });
 }
 function onLabelsToggle() {
     const v = (document.getElementById("labels-on") as HTMLInputElement).checked;
@@ -898,10 +898,10 @@ function onLockInvalidToggle() {
     saveAppPreferences(preferences);
 }
 function rotate(delta: number) {
-    store.commit(s => { s.rotation += delta; }, { recompute: false });
+    store.commit(s => { s.rotation += delta; });
 }
 function resetRotation() {
-    store.commit(s => { s.rotation = 0; }, { recompute: false });
+    store.commit(s => { s.rotation = 0; });
 }
 function fitPattern() {
     fitToView(
@@ -1094,7 +1094,7 @@ function onEditCommit(clearDesign = false) {
     if (changed && patternHistorySession) {
         applyingPatternPreview = true;
         try {
-            store.commit(() => {}, { recompute: false, render: false });
+            store.commit(() => {}, { render: false });
         } finally {
             applyingPatternPreview = false;
         }
@@ -1106,7 +1106,7 @@ function onEditCommit(clearDesign = false) {
         savingPatternHistory = true;
         try {
             applyingPatternPreview = true;
-            store.commit(() => {}, { recompute: false, render: false, history: true });
+            store.commit(() => {}, { render: false, history: true });
         } finally {
             applyingPatternPreview = false;
             savingPatternHistory = false;
@@ -1768,7 +1768,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             const mirror = store.state.mirrors.find(value => value.id === id)!;
             const updated = snapMirrorCenter(mirror, { x: frac.x - gesture.grabX - 0.5, y: frac.y - gesture.grabY - 0.5 }, store.state.pattern);
             if (updated && !mirrorsEqual([mirror], [updated])) {
-                store.commit(s => { s.mirrors = s.mirrors.map(value => value.id === id ? updated : value); }, { recompute: false, persist: false });
+                store.commit(s => { s.mirrors = s.mirrors.map(value => value.id === id ? updated : value); }, { persist: false });
                 refreshSymmetryUi();
             }
             return;
@@ -1823,7 +1823,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 // Move and duplicate converge here: the duplicate's pre-stamp
                 // already happened at paintdown, so release just records the
                 // final dx/dy.
-                store.commit(() => {}, { recompute: false, render: false, history: true });
+                store.commit(() => {}, { render: false, history: true });
             }
             refreshSymmetryUi();
             gesture = null;
@@ -1846,7 +1846,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         }
         if (gesture.kind === "wand") {
             if (gesture.lastCell !== null) {
-                store.commit(() => {}, { recompute: false, render: false, history: true });
+                store.commit(() => {}, { render: false, history: true });
             }
             gesture = null;
             ui.setCanvasFeedback(null);
@@ -1862,7 +1862,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             const g = gesture;
             const moved = !mirrorsEqual(g.preMirrors, store.state.mirrors);
             if (moved) {
-                store.commit(() => {}, { recompute: false, render: false, history: true });
+                store.commit(() => {}, { render: false, history: true });
             }
             if (moved) refreshSymmetryUi();
             viewport.canvas.style.cursor = "";
@@ -1872,7 +1872,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         // gesture.kind === "paint" — dedupe-push if state actually changed.
         const changed = !arraysEqual(gesture.prePixels, store.state.pixels)
                      || gesture.preFloat !== store.state.float;
-        if (changed) store.commit(() => {}, { recompute: false, render: false, history: true });
+        if (changed) store.commit(() => {}, { render: false, history: true });
         gesture = null;
     },
     onPaintCancel: () => {
@@ -1916,7 +1916,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
         if (gesture.kind === "recipe-drag") {
             const { preRecipes } = gesture;
             gesture = null; recipeEditBaseline = null;
-            store.commit(s => { s.recipes = preRecipes; }, { recompute: false });
+            store.commit(s => { s.recipes = preRecipes; });
             refreshRecipeUi(); viewport.canvas.style.cursor = "";
             return;
         }
@@ -1924,7 +1924,7 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
             const { preMirrors } = gesture;
             gesture = null;
             viewport.canvas.style.cursor = "";
-            store.commit(s => { s.mirrors = preMirrors; }, { recompute: false });
+            store.commit(s => { s.mirrors = preMirrors; });
             refreshSymmetryUi();
             return;
         }
@@ -1974,7 +1974,7 @@ function finishKeyboardMove() {
     if (move.mode === "mask-only" && store.state.float) {
         const lifted = liftCells(store.state.pixels, store.state.pattern, shiftedFloatMask(store.state));
         store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; syncActiveGridRecipe(s); }, { history: true });
-    } else store.commit(() => {}, { recompute: false, render: false, history: true });
+    } else store.commit(() => {}, { render: false, history: true });
 }
 
 function cancelKeyboardMove() {

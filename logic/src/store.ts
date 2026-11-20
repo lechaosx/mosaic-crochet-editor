@@ -14,9 +14,9 @@ import {
     type CellRect, type HighlightPlan, type MutableHighlightPlan,
 } from "./highlight-plan";
 
-// Commits assign new `pattern` and `pixels` values instead of writing into the
-// current ones: the plan update finds changed cells by comparing the visible
-// pixels with the previous ones, which without a float are `pixels` itself,
+// Commits assign new `pattern`, `pixels` and `float` values instead of writing
+// into the current ones: the plan update skips a commit that keeps all three,
+// finds changed cells by comparing the visible pixels with the previous ones,
 // and rebuilds only when `pattern` is a different object.
 export interface SessionState {
     pattern:       PatternState;
@@ -41,10 +41,6 @@ export interface SessionState {
 }
 
 export interface CommitOpts {
-    // Update the highlight plan (default: true). Pass false only when the
-    // commit keeps pattern, pixels and float: readers take an unchanged plan
-    // version to mean unchanged visible pixels and keep what they derived.
-    recompute?: boolean;
     render?:    boolean;   // call the registered renderer (default: true)
     history?:   boolean;   // push snapshot to undo stack  (default: false)
     persist?:   boolean;   // write to localStorage        (default: true)
@@ -100,11 +96,11 @@ export type PlanChange = CellRect | "all" | null;
 
 export class Store {
     private _state: SessionState;
-    // The plan, updated in place, and the pattern and visible pixels it was
+    // The plan, updated in place, and the state and visible pixels it was
     // computed from.
-    private _plan!:        MutableHighlightPlan;
-    private _planPattern!: PatternState;
-    private _visible!:     Uint8Array;
+    private _plan!:       MutableHighlightPlan;
+    private _planSource!: Pick<SessionState, "pattern" | "pixels" | "float">;
+    private _visible!:    Uint8Array;
     // A new version object marks each change; `_change` is the region it
     // covers since `_previousVersion`, or null for a rebuild.
     private _version:         object = {};
@@ -143,10 +139,10 @@ export class Store {
         this._state.activeRecipeId = normalizeActiveRecipeId(
             this._state.recipes, this._state.activeRecipeId, this._state.float,
         );
-        if (opts?.recompute !== false) this.updatePlan();
-        if (opts?.history)             this._historyFn?.(this._state);
-        if (opts?.render   !== false)  this._renderer?.(this);
-        if (opts?.persist  !== false)  this._persistFn?.(this._state);
+        this.updatePlan();
+        if (opts?.history)            this._historyFn?.(this._state);
+        if (opts?.render  !== false)  this._renderer?.(this);
+        if (opts?.persist !== false)  this._persistFn?.(this._state);
         for (const fn of this._observers) fn(this);
     }
 
@@ -165,19 +161,22 @@ export class Store {
     }
 
     private rebuildPlan(): void {
-        this._planPattern = this._state.pattern;
-        this._visible     = visiblePixels(this._state);
-        this._plan        = computeHighlightPlan(this._planPattern, this._visible);
+        const { pattern, pixels, float } = this._state;
+        this._planSource = { pattern, pixels, float };
+        this._visible    = visiblePixels(this._state);
+        this._plan       = computeHighlightPlan(pattern, this._visible);
         this.advanceVersion(null);
     }
 
     private updatePlan(): void {
-        if (this._state.pattern !== this._planPattern) return this.rebuildPlan();
+        const { pattern, pixels, float } = this._state;
+        if (pattern !== this._planSource.pattern) return this.rebuildPlan();
+        if (pixels === this._planSource.pixels && float === this._planSource.float) return;
+        this._planSource = { pattern, pixels, float };
         const visible = visiblePixels(this._state);
-        const changed = visible === this._visible
-            ? null : changedCells(this._visible, visible, this._planPattern.canvasWidth);
+        const changed = changedCells(this._visible, visible, pattern.canvasWidth);
         this._visible = visible;
-        if (changed) this.advanceVersion(updateHighlightPlan(this._plan, this._planPattern, visible, changed));
+        if (changed) this.advanceVersion(updateHighlightPlan(this._plan, pattern, visible, changed));
     }
 
     private advanceVersion(change: CellRect | null): void {

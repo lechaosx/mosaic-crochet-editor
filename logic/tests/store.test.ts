@@ -102,10 +102,10 @@ describe("Store commit chain", () => {
         expect([s.plan.marked, s.plan.invalid]).toEqual([2, 1]);
     });
 
-    test("recompute=false skips plan rebuild", () => {
-        const s = newStore();
+    test("a commit that keeps pattern, pixels and float keeps the plan", () => {
+        const s = new Store(rowSession(3, 3, { float: makeFloat([{ x: 1, y: 1, v: 2 }]) }));
         const version = s.planVersion;
-        s.commit(state => { state.rotation = 45; }, { recompute: false });
+        s.commit(state => { state.rotation = 45; });
         expect(s.planChangeSince(version)).toBeNull();
     });
 
