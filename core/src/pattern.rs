@@ -39,7 +39,8 @@ impl SequenceItem {
     }
 }
 
-/// Longest repeat body, in items, that compression searches for. It bounds
+/// Longest repeat body, in items, that compression searches for inside a
+/// sequence; a repeat of the whole sequence may be longer. It bounds
 /// compression to O(n·P²) time and O(n + P²) memory.
 const MAX_REPEAT_PERIOD: usize = 64;
 
@@ -50,7 +51,8 @@ pub fn compress(items: &[SequenceItem]) -> Vec<SequenceItem> {
     compress_capped(items, MAX_REPEAT_PERIOD)
 }
 
-/// Searches only repeats whose body has at most `max_period` items.
+/// Searches only repeats whose body has at most `max_period` items, except
+/// that a repeat spanning all of `items` is always used.
 ///
 /// One right-to-left pass computes `best[a]`, the cost of `items[a..]`, from
 /// its first block: a single item, or `c ≥ 2` copies of a primitive body of
@@ -62,6 +64,16 @@ pub fn compress(items: &[SequenceItem]) -> Vec<SequenceItem> {
 fn compress_capped(items: &[SequenceItem], max_period: usize) -> Vec<SequenceItem> {
     let n = items.len();
     let cap = max_period.min(n / 2);
+    // A round of identical sides reads as one side × count however long the
+    // side is.
+    if let Some(period) = (1..=n / 2)
+        .find(|&q| n.is_multiple_of(q) && items[..n - q] == items[q..])
+        .filter(|&q| q > cap)
+    {
+        let body = compress_capped(&items[..period], max_period);
+        return vec![SequenceItem::repeat(body, n / period)];
+    }
+
     let divisors: Vec<Vec<usize>> = (0..=cap)
         .map(|len| (1..=len / 2).filter(|&q| len.is_multiple_of(q)).collect())
         .collect();
@@ -595,6 +607,16 @@ mod tests {
                 sc(),
                 rep(vec![oc()], p - 1),
             ],
+        );
+    }
+
+    #[test]
+    fn compress_keeps_whole_sequence_repeat_beyond_period_cap() {
+        let p = MAX_REPEAT_PERIOD + 1;
+        let row = [sc_then_oc(p), sc_then_oc(p), sc_then_oc(p), sc_then_oc(p)].concat();
+        eq(
+            &compress(&row),
+            &[rep(vec![sc(), rep(vec![oc()], p - 1)], 4)],
         );
     }
 

@@ -23,7 +23,7 @@ Row and round identities survive clipping to an authored extent. Crochet identif
 - An ordinary worked position emits `sc` unless the chart derives a visible overlay there, in which case it emits `oc` and retains the inward supporting coordinate.
 - A diagonal Centre-out corner pixel emits `ch`. The two adjacent worked positions share its inward parent, forming the complete `(sc, ch, sc)` corner group when all three positions are in the authored extent.
 - A corner pixel cannot itself emit `oc`. Neighbouring positions keep normal overlay behavior, including beside a compressed corner group.
-- Compression groups repeated tokens and repeated subsequences of up to 64 tokens, counting a parenthesized group as one token. A group has no implied domain meaning such as a side, motif, or authored repeat.
+- Compression groups repeated tokens and repeated subsequences of up to 64 tokens, counting a parenthesized group as one token; a longer subsequence is grouped only when it repeats across the whole row or round. A group has no implied domain meaning such as a side, motif, or authored repeat.
 
 ## Authored extent
 
