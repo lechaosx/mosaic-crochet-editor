@@ -197,8 +197,8 @@ function mountToolbarLayout() {
         e.preventDefault();
         if (morePopover.matches(":popover-open")) morePopover.hidePopover();
         else {
-            positionPopover(morePopover, moreButton, "left");
             morePopover.showPopover();
+            positionPopover(morePopover, moreButton, "left");
             compactActions.find(button => !button.disabled)?.focus();
         }
     });
@@ -269,8 +269,8 @@ function mountToolbarLayout() {
         measure();
         applyLayout();
         if (menuOpen && compact) {
-            positionPopover(morePopover, moreButton, "left");
             morePopover.showPopover();
+            positionPopover(morePopover, moreButton, "left");
         }
         if (focused) (focused.getClientRects().length > 0 ? focused : moreButton).focus();
     }
@@ -286,14 +286,15 @@ function mountToolbarLayout() {
     }
 }
 
-// Position a popover under its anchor button using fixed coords.
+// Position an open popover under its anchor button using fixed coords,
+// shifted left where needed to stay inside the viewport.
 // (anchor-positioning CSS is still rolling out; this works everywhere.)
 function positionPopover(pop: HTMLElement, anchor: HTMLElement, align: "left" | "right") {
     const r = anchor.getBoundingClientRect();
     pop.style.position = "fixed";
     pop.style.top      = `${r.bottom + 4}px`;
     if (align === "left") {
-        pop.style.left  = `${r.left}px`;
+        pop.style.left  = `${Math.max(0, Math.min(r.left, window.innerWidth - pop.offsetWidth - 4))}px`;
         pop.style.right = "auto";
     } else {
         pop.style.right = `${window.innerWidth - r.right}px`;

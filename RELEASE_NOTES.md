@@ -8,6 +8,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Browser recovery and undo history now also work for large patterns; the recovered session, undo history and Crochet progress from before this update are not carried over.
 - Only one window edits at a time: opening the app in another window offers to continue editing there, and the previous window stops editing.
 - Several patterns can be open at once as tabs, each with its own undo history, view, and Crochet progress; New, Open, and Example open new tabs, closing a tab with unsaved changes asks whether to save it first, and with no tab open the workspace shows how to start a pattern.
+- On phones, the Menu no longer runs past the right edge of the screen.
 
 ## 9 October 2026
 

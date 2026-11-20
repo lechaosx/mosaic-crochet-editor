@@ -459,3 +459,12 @@ test("inspector controls keep their state while the same host recomposes", async
     await page.locator("#btn-edit").click();
     await expect(page.locator("#edit-width")).toHaveValue("20");
 });
+
+test("phone Menu stays inside the viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Menu" }).click();
+    const menu = (await page.getByRole("menu", { name: "Menu" }).boundingBox())!;
+    expect(menu.x).toBeGreaterThanOrEqual(0);
+    expect(menu.x + menu.width).toBeLessThanOrEqual(390);
+});
