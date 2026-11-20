@@ -211,7 +211,7 @@ if (database && editing) {
 // default one at boot, and the favicon still draws it. It carries the shared
 // tools into the next opened project; replacing it would notify store
 // observers, which need an open project.
-const store    = new Store(project?.session ?? defaultSession());
+const store    = new Store(project?.session ?? defaultSession(), project?.id ?? null);
 function commitHistory(next: UndoHistory, p = project!) {
     if (next === p.history) return;
     const wasClean = isClean(p.history);
@@ -1570,7 +1570,7 @@ function showProject() {
     rs.rotAnim = null;
     if (shown.view) Object.assign(viewport.view, shown.view);
     else fitToView(viewport.canvas, viewport.view, session.pattern, session.rotation, ui.getCanvasWorkspace());
-    store.replace(session, { persist: true });
+    store.replace(session, { persist: true, session: shown.id });
     syncDomInputs(session);
     ui.setColors(session.colorA, session.colorB);
     ui.syncEditInputs(session.pattern);
@@ -1622,6 +1622,7 @@ async function closeProject(id: string) {
         }
     }
     projects.splice(at, 1);
+    store.forgetSession(id);
     persistIndex();
     syncTabs();
     if (database && editing) {

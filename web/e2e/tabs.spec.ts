@@ -148,6 +148,38 @@ test("each tab undoes only its own edits", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeEnabled();
 });
 
+// The cells showing ✕ and ! on the chart.
+async function glyphs(page: Page) {
+    return page.evaluate(() => {
+        const guidance = (window as typeof window & { __test_instruction_guidance__?: {
+            validGlyphCoords: { x: number; y: number }[]; invalidGlyphCoords: { x: number; y: number }[];
+        } }).__test_instruction_guidance__!;
+        return { cross: guidance.validGlyphCoords, warning: guidance.invalidGlyphCoords };
+    });
+}
+
+test("each tab shows only its own ✕ and ! across switches and edits", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 2, 1);
+    await expect.poll(async () => (await glyphs(page)).cross.length).toBeGreaterThan(0);
+    const first = await glyphs(page);
+    await newTab(page);
+    await clickCell(page, 4, 3);
+    await expect.poll(() => glyphs(page)).not.toEqual(first);
+    const second = await glyphs(page);
+
+    await tab(page, "Untitled 1").click();
+    await expect.poll(() => glyphs(page)).toEqual(first);
+    await clickCell(page, 6, 5);
+    await expect.poll(() => glyphs(page)).not.toEqual(first);
+    const edited = await glyphs(page);
+    await tab(page, "Untitled 2").click();
+    await expect.poll(() => glyphs(page)).toEqual(second);
+    await tab(page, "Untitled 1").click();
+    await expect.poll(() => glyphs(page)).toEqual(edited);
+});
+
 test("a selection alone marks its tab unsaved until undone", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("s");

@@ -18,7 +18,8 @@ import {
 // Changes assign new `pattern`, `pixels` and `float` values instead of writing
 // into the current ones: the plan update skips a change that keeps all three,
 // finds changed cells by comparing the visible pixels with the previous ones,
-// and rebuilds when `pattern` describes another geometry.
+// and rebuilds when `pattern` describes another geometry. A session shown
+// again reuses its kept plan while it keeps all three.
 export interface SessionState {
     pattern:       PatternState;
     pixels:        Uint8Array;
@@ -95,6 +96,14 @@ export function visiblePixels(s: Readonly<SessionState>): Uint8Array {
 // nothing, the cells of a rectangle, or anything.
 export type PlanChange = CellRect | "all" | null;
 
+// The plan of a session's visible pixels and what it was computed from.
+interface DerivedData {
+    source:  Pick<SessionState, "pattern" | "pixels" | "float">;
+    visible: Uint8Array;
+    plan:    MutableHighlightPlan;
+    version: object;
+}
+
 export class Store {
     private _state: SessionState;
     // The plan, updated in place, and the state and visible pixels it was
@@ -103,19 +112,26 @@ export class Store {
     private _planSource!: Pick<SessionState, "pattern" | "pixels" | "float">;
     private _visible!:    Uint8Array;
     // A new version object marks each change; `_change` is the region it
-    // covers since `_previousVersion`, or null for a rebuild.
+    // covers since `_previousVersion`. Both are null after a rebuild, so the
+    // Store holds no version of a plan it no longer has.
     private _version:         object = {};
     private _previousVersion: object | null = null;
     private _change:          CellRect | null = null;
+    // The session shown, and the derived data of others by session id, kept
+    // to show them again without a rebuild. Kept data is never updated: the
+    // plan is updated in place, so a session takes its data back out.
+    private _session: string | null;
+    private _kept = new Map<string, DerivedData>();
     private _renderer:  RenderFn  | null = null;
     private _historyFn: HistoryFn | null = null;
     private _persistFn: PersistFn | null = null;
     private _observers: ObserverFn[] = [];
 
-    constructor(state: SessionState) {
+    constructor(state: SessionState, session: string | null = null) {
         if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
+        this._session = session;
         this.rebuildPlan();
     }
 
@@ -147,18 +163,48 @@ export class Store {
         for (const fn of this._observers) fn(this);
     }
 
-    // Bulk replace — used for file load, undo/redo. Updates the plan as
-    // `commit` does and always renders. `history`/`persist` default off
-    // because the typical caller (undo/redo) is itself navigating history.
-    replace(state: SessionState, opts?: { history?: boolean; persist?: boolean }): void {
+    // Bulk replace — used for file load, undo/redo, and with `session` for
+    // showing another session. Updates the plan as `commit` does and always
+    // renders. `history`/`persist` default off because the typical caller
+    // (undo/redo) is itself navigating history.
+    replace(state: SessionState, opts?: { history?: boolean; persist?: boolean; session?: string }): void {
         if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
-        this.updatePlan();
+        if (opts?.session !== undefined && opts.session !== this._session) this.switchSession(opts.session);
+        else this.updatePlan();
         if (opts?.history) this._historyFn?.(state);
         this._renderer?.(this);
         if (opts?.persist) this._persistFn?.(state);
         for (const fn of this._observers) fn(this);
+    }
+
+    // Drops the derived data kept for a session that will not be shown again,
+    // and stops keeping it if it is the one shown.
+    forgetSession(session: string): void {
+        this._kept.delete(session);
+        if (session === this._session) this._session = null;
+    }
+
+    private switchSession(session: string): void {
+        if (this._session !== null) {
+            this._kept.set(this._session, {
+                source: this._planSource, visible: this._visible, plan: this._plan, version: this._version,
+            });
+        }
+        this._session = session;
+        const kept = this._kept.get(session);
+        this._kept.delete(session);
+        const { pattern, pixels, float } = this._state;
+        if (!kept || kept.source.pattern !== pattern || kept.source.pixels !== pixels || kept.source.float !== float) {
+            return this.rebuildPlan();
+        }
+        this._planSource = kept.source;
+        this._visible    = kept.visible;
+        this._plan       = kept.plan;
+        this._previousVersion = null;
+        this._version         = kept.version;
+        this._change          = null;
     }
 
     private rebuildPlan(): void {
@@ -181,7 +227,7 @@ export class Store {
     }
 
     private advanceVersion(change: CellRect | null): void {
-        this._previousVersion = this._version;
+        this._previousVersion = change ? this._version : null;
         this._version         = {};
         this._change          = change;
     }

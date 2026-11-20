@@ -127,9 +127,19 @@ export interface RendererState {
     chart:         ChartLayer | null;
     // Repacked where the store's plan version reports a change, and whole for
     // other guidance.
-    chartCells: { version: object; guidance: PackedInstructionCoordinates | null; cells: Uint8Array } | null;
+    chartCells: ChartCells | null;
+    // Cells replaced whole, by plan version, for when the store shows that
+    // version again, as it does another session's. Never repacked: they go
+    // back to `chartCells` first, and are dropped with the store's version.
+    keptChartCells: WeakMap<object, ChartCells>;
     instructionSeam: InstructionSeam | null;
     instructionGuidanceCoords: PackedInstructionCoordinates | null;
+}
+
+interface ChartCells {
+    version:  object;
+    guidance: PackedInstructionCoordinates | null;
+    cells:    Uint8Array;
 }
 
 export function makeRendererState(
@@ -163,6 +173,7 @@ export function makeRendererState(
         faviconDrawn:   null,
         chart,
         chartCells:     null,
+        keptChartCells: new WeakMap(),
         instructionSeam: null,
         instructionGuidanceCoords: null,
     };
@@ -603,8 +614,12 @@ function chartCells(rs: RendererState, store: Store): Pick<ChartFrame, "cells" |
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
     const { visible, plan } = store;
     let cells: Uint8Array, changed: ChartFrame["changed"] = null;
-    if (change === "all") cells = packChartCells(visible, W, H, plan.cells, guidance);
-    else {
+    if (change === "all") {
+        if (cached) rs.keptChartCells.set(cached.version, cached);
+        const kept = rs.keptChartCells.get(store.planVersion);
+        rs.keptChartCells.delete(store.planVersion);
+        cells = kept?.guidance === guidance ? kept.cells : packChartCells(visible, W, H, plan.cells, guidance);
+    } else {
         cells = cached!.cells;
         changed = repackChartCells(cells, visible, W, H, plan.cells, guidance, change);
     }

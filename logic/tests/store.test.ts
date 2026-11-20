@@ -325,3 +325,57 @@ describe("Store plan changes", () => {
         expect(s.planChangeSince(version)).toBe("all");
     });
 });
+
+describe("Store sessions", () => {
+    // Sessions of one geometry, so a plan update could carry from one to another.
+    const flipped = (state: SessionState, x: number, y: number): SessionState => {
+        const pixels = state.pixels.slice();
+        pixels[y * state.pattern.canvasWidth + x] = 3 - pixels[y * state.pattern.canvasWidth + x];
+        return { ...state, pixels };
+    };
+
+    test("a session shown again with the same pattern, pixels and float keeps its plan", () => {
+        const a = flipped(rowSession(9, 9), 4, 4);
+        const s = new Store(a, "a");
+        const { plan, planVersion } = s;
+        s.replace(flipped(rowSession(9, 9), 2, 2), { session: "b" });
+        s.replace({ ...a, rotation: 90 }, { session: "a" });
+        expect(s.plan).toBe(plan);
+        expect(s.planChangeSince(planVersion)).toBeNull();
+    });
+
+    test("a session shown again with other pixels gets their plan", () => {
+        const a = rowSession(9, 9);
+        const s = new Store(a, "a");
+        const version = s.planVersion;
+        s.replace(rowSession(9, 9), { session: "b" });
+        const edited = flipped(a, 4, 4);
+        s.replace(edited, { session: "a" });
+        expect(s.planChangeSince(version)).toBe("all");
+        expect(s.plan).toEqual(new Store({ ...edited }).plan);
+    });
+
+    test("edits in one session never reach the plan kept for another", () => {
+        const s = new Store(rowSession(9, 9), "a");
+        s.commit(state => { state.pixels = flipped(state, 1, 1).pixels; });
+        const a = s.state;
+        s.replace(rowSession(9, 9), { session: "b" });
+        s.commit(state => { state.pixels = flipped(state, 5, 5).pixels; });
+        const b = s.state;
+        s.replace(a, { session: "a" });
+        expect(s.plan).toEqual(new Store({ ...a }).plan);
+        s.commit(state => { state.pixels = flipped(state, 7, 3).pixels; });
+        s.replace(b, { session: "b" });
+        expect(s.plan).toEqual(new Store({ ...b }).plan);
+    });
+
+    test("a forgotten session's plan is rebuilt when it is shown again", () => {
+        const a = rowSession(9, 9);
+        const s = new Store(a, "a");
+        const version = s.planVersion;
+        s.replace(rowSession(9, 9), { session: "b" });
+        s.forgetSession("a");
+        s.replace(a, { session: "a" });
+        expect(s.planChangeSince(version)).toBe("all");
+    });
+});
