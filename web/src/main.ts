@@ -417,6 +417,12 @@ let recipeEditBaseline: GridRecipe[] | null = null;
 let mirrorEditBaseline: MirrorCenter[] | null = null;
 let recipeHistorySession = false;
 let savingRecipeHistory = false;
+// A new history continues no earlier Pattern or selection edit.
+function startHistory(next: UndoHistory) {
+    patternHistorySession = false;
+    recipeHistorySession = false;
+    commitHistory(next);
+}
 store.setHistoryFn(s => {
     if (!savingPatternHistory) patternHistorySession = false;
     if (!savingRecipeHistory) recipeHistorySession = false;
@@ -1551,8 +1557,7 @@ function beginFreshPattern() {
         fresh.pattern.canvasWidth, fresh.pattern.canvasHeight,
     ).slice();
     if (!sameAuthoredPattern(fresh.pattern, fresh.pixels)) clearCrochetProgress();
-    commitHistory(historyMarkClean(historyFrom(fresh)));
-    patternHistorySession = false;
+    startHistory(historyMarkClean(historyFrom(fresh)));
     showSession(fresh);
     ui.setTool(fresh.activeTool);
     ui.setPrimary(fresh.primaryColor);
@@ -1563,7 +1568,7 @@ function beginFreshPattern() {
 function useExample() {
     endSessionInteractions();
     const example = exampleSession();
-    commitHistory(historyMarkClean(historyFrom(example)));
+    startHistory(historyMarkClean(historyFrom(example)));
     showSession(example);
     ui.setTool(example.activeTool);
     ui.setPrimary(example.primaryColor);

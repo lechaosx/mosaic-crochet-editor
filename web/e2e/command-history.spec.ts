@@ -585,6 +585,25 @@ for (const action of ["New", "Example"]) {
     });
 }
 
+test("a Pattern change right after Example is its own undoable step", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-width").fill("5");
+    await page.locator("#edit-width").press("Tab");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("#settings-about").click();
+    await page.locator("#about-example").click();
+
+    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.locator("#edit-width").fill("7");
+    await page.locator("#edit-width").press("Tab");
+    await page.getByRole("button", { name: "Close inspector" }).click();
+    await page.getByRole("button", { name: "Undo", exact: true }).click();
+    const example = await storedRecovery(page);
+    expect(example.document.state.canvasWidth).toBe(9);
+    expect(example.document.colorA).toBe("#264653");
+});
+
 test("invalid and cancelled Open preserve the chart view", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Rotate view right" }).click();
