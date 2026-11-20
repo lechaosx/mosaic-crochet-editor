@@ -16,4 +16,11 @@ describe("project index", () => {
         localStorage.setItem("mosaic-projects", JSON.stringify({ version: 1, open: ["a"], active: "a" }));
         expect(loadProjectIndex()).toBeNull();
     });
+
+    test("lists no projects when an entry's id or title isn't a string", () => {
+        for (const entry of [{ id: "a", title: 7 }, { id: "a" }, { id: 7, title: "x" }]) {
+            localStorage.setItem("mosaic-projects", JSON.stringify({ version: 2, open: [entry], active: entry.id }));
+            expect(loadProjectIndex()).toBeNull();
+        }
+    });
 });
