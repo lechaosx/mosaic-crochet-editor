@@ -414,7 +414,7 @@ test("Navigate and Crochet right-click do not edit; middle-click remains navigat
     await page.locator("#view-navigate").click();
     await clickCell(page, 1, 1, { button: "right" });
     await clickCell(page, 1, 1, { button: "middle" });
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await clickCell(page, 1, 1, { button: "right" });
     await clickCell(page, 1, 1, { button: "middle" });
     expect((await storedRecovery(page)).document).toEqual(before);

@@ -305,6 +305,6 @@ test("when the project index can't be stored, the session starts with no tab, th
     await loseProjectIndex(page);
     await reloadApp(page);
     await expect(page.getByRole("status", { name: "Browser recovery" })).toHaveText("Recovery failed");
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Open patterns" }).getByRole("tab")).toHaveCount(0);
     expect(await storedProjectIds(page)).toEqual(projects);
 });

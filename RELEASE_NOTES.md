@@ -10,6 +10,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Crochet instructions for long rows and rounds generate without freezing the app, grouping repeated sections of at most 64 stitches or stitch groups unless a whole row or round repeats; a long current instruction wraps into lines of similar length instead of leaving a few stitches alone on the last line.
 - Controls have a refreshed, more consistent look and keep one highlight colour instead of taking on the active pattern's Accent colour, which now marks only the chart.
 - The active tab joins a sheet holding that pattern's own commands, while Open, Settings and the tools sit outside it for every pattern; the phone Menu groups its commands the same way and no longer runs past the screen's edge.
+- Design and Crochet are view tabs at the start of each pattern's sheet, and invalid placements are now marked only on the chart and in the Crochet list.
 
 ## 9 October 2026
 

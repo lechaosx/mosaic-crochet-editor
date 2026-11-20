@@ -179,9 +179,9 @@ export function mountToolbar(
     return { setTool, setToolVariants, setExecutingAction, setCanvasFeedback, setHistory, setRecoveryStatus, setDocumentError, setDocumentNotice, setViewState };
 }
 // ─── Toolbar layout ──────────────────────────────────────────────────────────
-// When the pattern's header cannot keep Crochet centred beside its commands,
-// Pattern, Save, Open and Settings move into Menu, grouped by what they act on.
-// If Undo and Redo still do not fit beside Crochet, they stack below it.
+// When the pattern's header cannot fit its commands beside the Design and
+// Crochet views, Pattern, Save, Open and Settings move into Menu, grouped by
+// what they act on. When the views alone do not fit, they drop their icons.
 function mountToolbarLayout() {
     const documentBar = el("document-bar");
     const modeGroup = document.querySelector(".g-mode") as HTMLElement;
@@ -194,7 +194,7 @@ function mountToolbarLayout() {
     const compactActions = [...patternActions, ...appActions];
     let compact = false;
     let compactBelow = 0;
-    let stackBelow = 0;
+    let narrowBelow = 0;
 
     moreButton.addEventListener("click", e => {
         e.preventDefault();
@@ -252,26 +252,20 @@ function mountToolbarLayout() {
         }
     }
 
-    // Crochet stays centred, so the commands beside it need their width on both sides.
-    function centredWidth() {
+    function measure() {
+        documentBar.classList.remove("document-bar--narrow");
         const cs = getComputedStyle(documentBar);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-        const gap     = parseFloat(cs.columnGap) || 0;
-        return padding + gap * 2 + modeGroup.offsetWidth + 2 * fileGroup.offsetWidth;
-    }
-
-    function measure() {
-        documentBar.classList.remove("document-bar--stacked");
         setCompact(true);
-        stackBelow = centredWidth();
+        narrowBelow = padding + modeGroup.offsetWidth;
         setCompact(false);
-        compactBelow = centredWidth();
+        compactBelow = padding + (parseFloat(cs.columnGap) || 0) + modeGroup.offsetWidth + fileGroup.offsetWidth;
     }
 
     function applyLayout() {
-        const width = documentBar.offsetWidth;
+        const width = documentBar.clientWidth;
         setCompact(width < compactBelow);
-        documentBar.classList.toggle("document-bar--stacked", width < stackBelow);
+        documentBar.classList.toggle("document-bar--narrow", width < narrowBelow);
     }
 
     function update() {

@@ -78,23 +78,23 @@ test("each tab keeps its own document, selection, view, mode and progress, while
     expect(selection).not.toBeNull();
     await page.getByRole("button", { name: "Zoom in" }).click();
     const zoomed = await camera(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Forward one row" }).click();
     await expect(page.locator("#instructions-live-progress")).toHaveText("2 / 9");
 
     await newTab(page);
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
-    await expect(page.locator("#btn-export")).toHaveText("Begin Crocheting");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
     expect(await camera(page)).not.toEqual(zoomed);
     expect(await cellRGB(page, 0, 1)).toEqual(B);
     expect((await storedRecovery(page)).workspace.float).toBeNull();
     await page.keyboard.press("m");
 
     await tab(page, "Untitled 1").click();
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#instructions-live-progress")).toHaveText("2 / 9");
     expect(await camera(page)).toEqual(zoomed);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
     expect(await cellRGB(page, 0, 1)).toEqual(A);
     expect((await storedRecovery(page)).workspace.float).toEqual(selection);
     await expect(page.locator("#tool-move")).toHaveAttribute("aria-pressed", "true");
@@ -289,9 +289,10 @@ test("closing the last tab leaves the empty workspace, where nothing needs a pat
     await expect(page.getByRole("button", { name: "New tab" })).toBeFocused();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
     await expect(page.getByRole("img", { name: "Editable pattern chart" })).toBeHidden();
-    for (const name of ["Pattern", "Save", "Undo", "Redo", "Begin Crocheting"]) {
+    for (const name of ["Pattern", "Save", "Undo", "Redo"]) {
         await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
     }
+    for (const name of ["Design", "Crochet"]) await expect(page.getByRole("tab", { name, exact: true })).toBeDisabled();
     await expect(page.locator("#btn-load")).toBeEnabled();
     await expect(page.getByRole("button", { name: "Settings" })).toBeEnabled();
     for (const key of ["p", "s", "v", "r", "Control+a", "Control+z", "Control+v"]) await page.keyboard.press(key);
@@ -349,7 +350,7 @@ test.describe("closing an unsaved tab", () => {
         await bootApp(page);
         await page.keyboard.press("p");
         await clickCell(page, 0, 1);
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await page.getByRole("button", { name: "Forward one row" }).click();
         await expect.poll(() => storedLiveProgress(page)).not.toBeNull();
         const id = await activeProjectId(page);
@@ -370,7 +371,7 @@ test.describe("closing an unsaved tab", () => {
         await expect(tabs(page)).toHaveText([/^Untitled 1/, "Untitled 2", "Untitled 3"]);
         await expect(tab(page, "Untitled 3")).toHaveAttribute("aria-selected", "true");
         await tab(page, "Untitled 1").click();
-        await page.locator("#btn-export").click();
+        await page.locator("#view-design").click();
         expect(await cellRGB(page, 0, 1)).toEqual(A);
     });
 

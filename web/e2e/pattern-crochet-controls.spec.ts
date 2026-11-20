@@ -2,45 +2,12 @@ import { expect, test } from "@playwright/test";
 import { bootApp, clickCell, cellCoord, storedHistory, storedLiveProgress } from "./_helpers";
 import { contrastingProjectColors } from "../src/contrast-colors";
 
-for (const width of [1440, 390]) {
-    test(`Crochet mode button shares ordinary document button states at ${width}px`, async ({ page }) => {
-        await page.setViewportSize({ width, height: 900 });
-        await bootApp(page);
-        const mode = page.locator("#btn-export");
-        const ordinary = page.getByRole("button", { name: width === 1440 ? "Pattern" : "Menu", exact: true });
-        const appearance = async (button: typeof mode) => button.evaluate(element => {
-            const style = getComputedStyle(element);
-            return { background: style.backgroundColor, border: style.borderColor, color: style.color };
-        });
-        for (const label of ["Begin Crocheting", "Back to Design"]) {
-            await expect(mode).toHaveAccessibleName(label);
-            await page.mouse.move(width - 1, 899);
-            await expect.poll(async () => appearance(mode)).toEqual(await appearance(ordinary));
-            await ordinary.hover();
-            await page.waitForTimeout(200);
-            const hovered = await appearance(ordinary);
-            await page.mouse.down();
-            await page.waitForTimeout(200);
-            const pressed = await appearance(ordinary);
-            await page.mouse.move(width - 1, 899);
-            await page.mouse.up();
-            await mode.hover();
-            await expect.poll(async () => appearance(mode)).toEqual(hovered);
-            await page.mouse.down();
-            await expect.poll(async () => appearance(mode)).toEqual(pressed);
-            await page.mouse.move(width - 1, 899);
-            await page.mouse.up();
-            if (label === "Begin Crocheting") await mode.click();
-        }
-    });
-}
-
 for (const commit of [false, true]) {
     test(`returning Pattern dimensions to their starting values preserves history and Crochet progress (${commit ? "Enter" : "preview"})`, async ({ page }) => {
         await bootApp(page);
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await page.getByRole("button", { name: "Forward one row" }).click();
-        await page.locator("#btn-export").click();
+        await page.locator("#view-design").click();
         const progress = await storedLiveProgress(page);
         const history = await storedHistory(page);
         await page.getByRole("button", { name: "Pattern", exact: true }).click();
@@ -48,7 +15,7 @@ for (const commit of [false, true]) {
         const originalWidth = await width.inputValue(), originalHeight = await height.inputValue();
         await height.fill("2");
         if (commit) await height.press("Enter");
-        await expect(page.locator("#crochet-mode-label")).toHaveText("Begin Crocheting");
+        await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
         expect(await storedLiveProgress(page)).toEqual(progress);
         await height.fill(originalHeight);
         if (commit) await height.press("Enter");
@@ -58,8 +25,8 @@ for (const commit of [false, true]) {
         if (commit) await width.press("Enter");
         await page.keyboard.press("Escape");
         expect(await storedHistory(page)).toEqual(history);
-        await expect(page.locator("#crochet-mode-label")).toHaveText("Continue Crocheting");
-        await page.locator("#btn-export").click();
+        await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Resume crochet progress");
+        await page.locator("#view-crochet").click();
         await expect(page.locator(".instructions-unit[aria-current='step']")).toHaveAccessibleName("Row 2, Yarn B");
     });
 }
@@ -147,7 +114,7 @@ test("Crochet copy stays beside Alternate direction and overview warns by colour
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 0, 0);
     await page.setViewportSize({ width: 360, height: 740 });
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     const copy = page.locator("#export-copy"), toggle = page.locator("label:has(#alternate)");
     const boxes = await Promise.all([copy.boundingBox(), toggle.boundingBox()]);
     expect(Math.abs(boxes[0]!.y + boxes[0]!.height / 2 - boxes[1]!.y - boxes[1]!.height / 2)).toBeLessThan(1);
@@ -156,9 +123,8 @@ test("Crochet copy stays beside Alternate direction and overview warns by colour
     await expect(whole).toHaveClass(/instructions-unit--invalid/);
     expect(await whole.evaluate(el => getComputedStyle(el, "::before").content)).not.toContain("!");
     await expect(whole).toHaveText("Pattern overview");
-    await page.locator("#btn-export").click();
-    await expect(page.locator("#btn-export")).toHaveClass(/btn--danger/);
-    await expect(page.locator("#crochet-mode-label")).toHaveText("Begin Crocheting");
+    await page.locator("#view-design").click();
+    await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
 });
 
 for (const [width, textSize, round] of [[360, "100%", false], [320, "200%", false], [320, "200%", true], [700, "200%", true]] as const) {
@@ -177,7 +143,7 @@ for (const [width, textSize, round] of [[360, "100%", false], [320, "200%", fals
         await page.evaluate(size => { document.documentElement.style.fontSize = size; }, textSize);
         await cellCoord(page, 0, 0);
         const matrix = await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()));
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await expect(page.locator("#export-copy")).toBeEnabled();
         expect(await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()))).toEqual(matrix);
         const workspace = await page.locator("#instructions-workspace").boundingBox();
@@ -215,7 +181,7 @@ for (const [width, height, textSize] of [[568, 320, "100%"], [760, 360, "100%"],
         await page.evaluate(size => { document.documentElement.style.fontSize = size; }, textSize);
         await cellCoord(page, 0, 0);
         const matrix = await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()));
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await expect(page.locator("#export-copy")).toBeEnabled();
         const panel = await page.locator("#instructions-workspace").boundingBox();
         const canvas = await page.locator("#canvas").boundingBox();
@@ -249,7 +215,7 @@ for (const [width, height, textSize] of [[568, 320, "100%"], [760, 360, "100%"],
 test("focused canvas controls retain focus and camera state when the Crochet layout changes", async ({ page }) => {
     await page.setViewportSize({ width: 568, height: 320 });
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator("#export-copy")).toBeEnabled();
     const fit = page.getByRole("button", { name: "Fit view", exact: true });
     await fit.focus();
@@ -277,7 +243,7 @@ test("enlarged desktop round instructions leave navigation unobstructed", async 
     await page.evaluate(() => { document.documentElement.style.fontSize = "200%"; });
     await cellCoord(page, 0, 0);
     const before = await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()));
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator("#export-copy")).toBeEnabled();
     expect(await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()))).toEqual(before);
     const forward = await page.locator("#instructions-live-forward").boundingBox();
@@ -286,4 +252,76 @@ test("enlarged desktop round instructions leave navigation unobstructed", async 
         .toBe("instructions-live-forward");
     await page.mouse.click(centre.x, centre.y);
     await expect(page.locator("#instructions-live-progress")).toHaveText("2 / 5");
+});
+
+for (const width of [1280, 390]) {
+    test(`Design and Crochet view tabs switch the pattern's view by mouse and keyboard at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 844 });
+        await bootApp(page);
+        const views = page.getByRole("tablist", { name: "View" });
+        const design = views.getByRole("tab", { name: "Design", exact: true });
+        const crochet = views.getByRole("tab", { name: "Crochet", exact: true });
+        const panel = page.getByRole("complementary", { name: "Crochet" });
+        const expectView = async (view: "Design" | "Crochet") => {
+            await expect(design).toHaveAttribute("aria-selected", String(view === "Design"));
+            await expect(crochet).toHaveAttribute("aria-selected", String(view === "Crochet"));
+            await expect(view === "Design" ? design : crochet).toHaveAttribute("tabindex", "0");
+            await expect(view === "Design" ? crochet : design).toHaveAttribute("tabindex", "-1");
+            await expect(panel).toBeVisible({ visible: view === "Crochet" });
+        };
+        await expectView("Design");
+        if (width === 390) {
+            const tabs = (await views.boundingBox())!, undo = (await page.getByRole("button", { name: "Undo" }).boundingBox())!;
+            expect(tabs.x).toBeLessThan(undo.x);
+            expect(tabs.y + tabs.height).toBeGreaterThan(undo.y + undo.height / 2);
+            expect(tabs.y).toBeLessThan(undo.y + undo.height / 2);
+        }
+
+        await crochet.click();
+        await expectView("Crochet");
+        await design.click();
+        await expectView("Design");
+        await expect(design).toBeFocused();
+
+        await page.keyboard.press("ArrowRight");
+        await expect(crochet).toBeFocused();
+        await expectView("Crochet");
+        await page.keyboard.press("ArrowLeft");
+        await expect(design).toBeFocused();
+        await expectView("Design");
+        await page.keyboard.press("End");
+        await expectView("Crochet");
+        await page.keyboard.press("Home");
+        await expectView("Design");
+    });
+}
+
+test("view tabs look and read the same whether or not the pattern has warnings", async ({ page }) => {
+    await bootApp(page);
+    const tabs = page.getByRole("tablist", { name: "View" }).getByRole("tab");
+    const presentation = () => tabs.evaluateAll(elements => elements.map(tab => {
+        const style = getComputedStyle(tab);
+        return {
+            label: tab.getAttribute("aria-label"), description: tab.getAttribute("aria-description"), title: tab.title,
+            className: tab.className, text: tab.textContent,
+            color: style.color, background: style.backgroundColor, border: style.borderColor, shadow: style.boxShadow,
+        };
+    }));
+    await page.mouse.move(1, 700);
+    const clean = await presentation();
+    expect(clean).toHaveLength(2);
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 0, 2);
+    await page.getByRole("button", { name: "Yarn A", exact: true }).click();
+    await clickCell(page, 0, 1);
+    await page.mouse.move(1, 700);
+    expect(await presentation()).toEqual(clean);
+    await expect(tabs.filter({ hasText: "Crochet" })).toHaveAccessibleName("Crochet");
+
+    await tabs.filter({ hasText: "Crochet" }).click();
+    await expect(page.locator(".instructions-unit--invalid")).not.toHaveCount(0);
 });

@@ -84,7 +84,6 @@ export interface UIHandle {
     setTransformError:  (message: string | null) => void;
     setHistory:         (undo: boolean, redo: boolean) => void;
     setCrochetProgress: (hasProgress: boolean) => void;
-    setCrochetErrors:   (count: number) => void;
     setRecoveryStatus:  (state: "saved" | "recovered" | "failed") => void;
     setDocumentError:   (message: string | null, returnTo?: "load" | "save") => void;
     setDocumentNotice:  (message: string) => void;

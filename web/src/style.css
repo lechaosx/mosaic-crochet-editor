@@ -131,13 +131,12 @@ input  { font: inherit; color: inherit; }
 
 .document-bar {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  row-gap: var(--space-2);
   column-gap: var(--space-2);
   margin-left: var(--dock-width);
-  padding: var(--space-1);
+  padding: 0 var(--space-1);
   background: var(--sheet);
   border-bottom: var(--border);
   border-radius: var(--radius-2) var(--radius-2) 0 0;
@@ -152,13 +151,27 @@ input  { font: inherit; color: inherit; }
   gap: var(--space-1);
 }
 
-.g-file { justify-self: start; }
-.g-mode { grid-column: 2; }
-.g-mode .btn { display: grid; position: relative; }
-.g-mode .btn > span { grid-area: 1 / 1; }
-.g-mode .btn.btn--danger { border-color: var(--danger); }
-/* Reserve the longest mode label to keep the chart fixed across workspace changes. */
-.g-mode .btn::after { content: "Continue Crocheting"; visibility: hidden; grid-area: 1 / 1; }
+.g-file { padding-block: var(--space-1); }
+
+/* Design and Crochet lead the header as two views of the pattern. */
+.g-mode {
+  align-self: stretch;
+  align-items: stretch;
+  gap: 0;
+  padding-inline-end: var(--space-2);
+  border-inline-end: var(--border);
+}
+.view-tab {
+  gap: var(--space-2);
+  min-height: calc(var(--hit) + 2 * var(--space-1));
+  padding-inline: var(--space-3);
+  color: var(--fg-2);
+  border-radius: 0;
+  font-weight: 600;
+}
+.document-bar .view-tab:hover:not(:disabled) { background: transparent; color: var(--fg-0); }
+.view-tab[aria-selected="true"] { color: var(--fg-0); box-shadow: inset 0 -2px var(--accent); }
+.view-tab:focus-visible { outline-offset: -2px; }
 
 .document-status {
   display: inline-flex;
@@ -295,23 +308,11 @@ input  { font: inherit; color: inherit; }
 
 .dock-group-label { display: none; }
 
-.document-bar--compact .g-file {
-  grid-column: 3;
-  grid-row: 1;
-  justify-self: end;
-}
+.document-bar--compact .g-mode { padding-inline-end: 0; border-inline-end: 0; }
+.document-bar--compact .g-file { margin-inline-start: auto; }
+.document-bar--narrow .view-tab .tool-icon { display: none; }
 .document-bar--compact .btn { padding-inline: var(--space-2); }
 .document-bar--compact .document-status { padding-inline: 0; }
-.document-bar--stacked .g-file {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  flex-wrap: wrap;
-}
-.document-bar--stacked .g-mode {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  justify-self: center;
-}
 
 .inspector-host {
   position: fixed;
@@ -1354,7 +1355,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
    Narrow viewport tweaks
    ────────────────────────────────────────────────────────────────────────── */
 @media (max-width: 30rem) {
-  .document-bar { padding: var(--space-1) var(--space-2); }
+  .document-bar { padding-inline: var(--space-2); }
   .authoring-dock { gap: var(--space-1); padding-inline: var(--space-2); }
   .instructions-workspace {
     padding: var(--space-2);
@@ -1416,4 +1417,5 @@ input[type="checkbox"] { accent-color: var(--accent); }
   .swatch, .instructions-unit-number { forced-color-adjust: none; }
   .swatch--active, .swatch--active:hover { box-shadow: 0 0 0 2px Highlight, inset 0 0 0 2px Canvas; }
   .project-tab-unsaved { forced-color-adjust: none; background: CanvasText; }
+  .view-tab[aria-selected="true"] { border-bottom: 2px solid Highlight; }
 }

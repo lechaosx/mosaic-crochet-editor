@@ -14,7 +14,7 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
     const workspace = el("workspace");
     const editor = [el("authoring-dock"), workspace.querySelector<HTMLElement>(".canvas-area")!];
     const empty = el("empty-workspace");
-    const patternCommands = ["btn-edit", "btn-save", "btn-export"].map(id => el<HTMLButtonElement>(id));
+    const patternCommands = ["btn-edit", "btn-save", "view-design", "view-crochet"].map(id => el<HTMLButtonElement>(id));
     const closePrompt = el<HTMLDialogElement>("close-tab-prompt");
     let answer: ((value: CloseAnswer) => void) | null = null;
 

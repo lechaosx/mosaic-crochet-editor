@@ -127,11 +127,11 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     await clickCell(page, 1, 1);
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").press("Tab");
-    await page.getByRole("button", { name: "Begin Crocheting" }).click();
+    await page.getByRole("tab", { name: "Crochet", exact: true }).click();
     await page.locator(".instructions-unit").nth(2).click();
     const progress = await storedLiveProgress(page);
     expect(progress.completedUnits).toBeGreaterThan(0);
-    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.getByRole("tab", { name: "Design", exact: true }).click();
     await page.getByRole("button", { name: "Pattern" }).click();
 
     await page.locator("#edit-reset").click();
@@ -141,7 +141,7 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     expect(cleared.workspace.float).toBeNull();
     expect(cleared.workspace.recipes[0].source.mask).toEqual([]);
     expect(await storedLiveProgress(page)).toEqual(progress);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator(".instructions-unit").nth(2)).toHaveAttribute("aria-current", "step");
 });
 

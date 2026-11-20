@@ -241,7 +241,7 @@ test("Tab leaves and closes the compact Menu menu", async ({ page }) => {
     await more.click();
     await page.keyboard.press("Tab");
     await expect(page.locator("#more-popover")).toBeHidden();
-    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeFocused();
+    await expect(page.locator("#view-design")).toBeFocused();
 
     await more.click();
     await page.keyboard.press("Shift+Tab");
@@ -319,7 +319,7 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await expectHoverLabels("Transform inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expectHoverLabels("Crochet");
 });
 

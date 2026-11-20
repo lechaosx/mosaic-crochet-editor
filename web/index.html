@@ -14,6 +14,8 @@
     <symbol id="icon-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
     <symbol id="icon-open" viewBox="0 0 24 24"><path d="M4 19V6a1 1 0 0 1 1-1h4l2 2h7a1 1 0 0 1 1 1v2"/><path d="M4 19l2.6-7.2a1 1 0 0 1 .9-.7H20a.6.6 0 0 1 .6.8L18 19H4Z"/></symbol>
     <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M5 7h8m4 0h2M5 17h2m4 0h8"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="15" rx="1.5"/><path d="M4.5 9.5h15M4.5 14.5h15M9.5 4.5v15M14.5 4.5v15"/></symbol>
+    <symbol id="icon-hook" viewBox="0 0 24 24"><path d="M4.5 19.5 15 9"/><path d="M15 9c.6-.6.4-2 1.4-3a2.1 2.1 0 0 1 3 3c-.8.8-1.9.9-2.6.4"/><path d="m8 14 2 2"/></symbol>
     <symbol id="icon-save" viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5"/><path d="M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
     <symbol id="icon-pencil" viewBox="0 0 24 24">
       <path d="M4 20l4.5-1.1L19 8.4a2 2 0 0 0-2.8-2.8L5.7 16.1 4 20Z"/><path d="m14.8 7 2.8 2.8"/>
@@ -95,15 +97,16 @@
     </div>
   </div>
   <header class="document-bar" id="document-bar">
+      <div class="document-actions g-mode" role="tablist" aria-label="View">
+        <button class="btn view-tab" id="view-design" type="button" role="tab" aria-selected="true" title="Edit the pattern chart"><svg class="tool-icon" aria-hidden="true"><use href="#icon-chart"/></svg>Design</button>
+        <button class="btn view-tab" id="view-crochet" type="button" role="tab" aria-selected="false" tabindex="-1" aria-controls="instructions-workspace" title="Start crochet instructions"><svg class="tool-icon" aria-hidden="true"><use href="#icon-hook"/></svg>Crochet</button>
+      </div>
       <div class="document-actions g-file">
         <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions"><svg class="tool-icon" aria-hidden="true"><use href="#icon-sliders"/></svg>Pattern</button>
         <button class="btn" id="btn-save" title="Save editable pattern as an .mcw file"><svg class="tool-icon" aria-hidden="true"><use href="#icon-save"/></svg>Save</button>
         <button class="btn btn--icon" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="tool-icon" aria-hidden="true"><use href="#icon-undo"/></svg></button>
         <button class="btn btn--icon" id="btn-redo" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" aria-label="Redo"><svg class="tool-icon" aria-hidden="true"><use href="#icon-redo"/></svg></button>
         <span id="recovery-status" class="document-status" role="status" aria-label="Browser recovery" aria-live="polite" hidden></span>
-      </div>
-      <div class="document-actions g-mode" role="group" aria-label="Crochet workspace">
-        <button class="btn" id="btn-export" type="button" aria-pressed="false" title="Start crochet instructions" aria-controls="instructions-workspace"><span id="crochet-mode-label">Begin Crocheting</span></button>
       </div>
       <div id="document-error" class="document-error" role="alert" hidden>
         <span id="document-error-message"></span>

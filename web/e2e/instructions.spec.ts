@@ -25,11 +25,12 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     });
     const designViewport = await page.locator("#chart-viewport").boundingBox();
 
-    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeVisible();
-    await page.getByRole("button", { name: "Begin Crocheting" }).click();
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
+    await page.getByRole("tab", { name: "Crochet", exact: true }).click();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeFocused();
-    await expect(page.getByRole("button", { name: "Back to Design" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("button", { name: "Pattern", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
@@ -59,10 +60,10 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     await expect(page.getByRole("textbox", { name: "Compressed instructions" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Download text" })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.getByRole("tab", { name: "Design", exact: true }).click();
     await expect(page.locator(".canvas-area")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeFocused();
+    await expect(page.locator("#view-design")).toBeFocused();
     await expect(page.getByRole("button", { name: "Pattern", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Navigate" })).toBeVisible();
     await expect(page.getByLabel("Canvas context")).toBeHidden();
@@ -78,7 +79,7 @@ test("Crochet preserves and controls the shared chart viewport", async ({ page }
     const designCell = await cellCoord(page, 1, 1);
     const designPixel = await pixelRGB(page, designCell.cx, designCell.cy);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator(".canvas-area #canvas")).toBeVisible();
     expect(await page.evaluate(() => window.__test_matrix__!.a)).toBeCloseTo(designZoom, 4);
     await page.getByRole("button", { name: "Zoom in" }).click();
@@ -86,7 +87,7 @@ test("Crochet preserves and controls the shared chart viewport", async ({ page }
     expect(crochetZoom).toBeGreaterThan(designZoom);
     await clickCell(page, 1, 1);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
 
     await expect(page.locator(".canvas-area > #chart-viewport > #canvas")).toBeVisible();
     expect(await page.evaluate(() => window.__test_matrix__!.a)).toBeCloseTo(crochetZoom, 4);
@@ -96,7 +97,7 @@ test("Crochet preserves and controls the shared chart viewport", async ({ page }
 
 test("Crochet keeps the orientation reset control operable", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Rotate view right" }).click();
     await page.waitForTimeout(300);
 
@@ -113,11 +114,11 @@ test("workspace switch remains direct in the compact toolbar", async ({ page }) 
     await bootApp(page);
     await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
     const canvasBefore = await page.locator(".canvas-area").boundingBox();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
     expect(await page.locator(".canvas-area").boundingBox()).toEqual(canvasBefore);
-    await page.locator("#btn-export").click();
-    await expect(page.locator("#btn-export")).toBeFocused();
+    await page.locator("#view-design").click();
+    await expect(page.locator("#view-design")).toBeFocused();
 });
 
 test("only document-changing commands leave Crochet", async ({ page }) => {
@@ -125,31 +126,31 @@ test("only document-changing commands leave Crochet", async ({ page }) => {
     await clickCell(page, 1, 1);
     const edited = await cellCoord(page, 1, 1);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     expect(await pixelRGB(page, edited.cx, edited.cy)).toEqual([255, 255, 255]);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Redo" }).click();
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     expect(await pixelRGB(page, edited.cx, edited.cy)).toEqual([0, 0, 0]);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Settings" }).click();
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();
     await expect(page.locator("#hl-popover")).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
 
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Pattern", exact: true }).click();
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 
     await page.getByRole("spinbutton", { name: "Width", exact: true }).fill("10");
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 });
@@ -162,10 +163,10 @@ test("Crochet retains Pattern and Settings inspectors across the mode switch", a
         await page.getByRole("button", { name }).click();
         const inspector = page.getByRole("complementary", { name });
         await expect(inspector).toBeVisible();
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await expect(inspector).toBeVisible();
-        await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
-        await page.locator("#btn-export").click();
+        await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
+        await page.locator("#view-design").click();
         await expect(inspector).toBeVisible();
         await page.keyboard.press("Escape");
     }
@@ -181,7 +182,7 @@ test("Pattern palette edits refresh the open Crochet chart and yarn markers", as
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
     await clickCell(page, 0, 1);
     await clickCell(page, 0, 8);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
 
     const chartCell = await cellCoord(page, 0, 8);
@@ -256,8 +257,8 @@ test("switching workspaces does not move selected Design content", async ({ page
     await clickCell(page, 0, 1);
     await page.keyboard.press("Control+a");
 
-    await page.locator("#btn-export").click();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
+    await page.locator("#view-design").click();
     await page.keyboard.press("Escape");
 
     const original = await cellCoord(page, 0, 1);
@@ -270,10 +271,10 @@ test("Design shortcuts are inert while Crochet is open", async ({ page }) => {
     await page.keyboard.press("s");
     await clickCell(page, 0, 1);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.keyboard.press("p");
     await page.keyboard.press("Escape");
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
 
     await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("#status-selection")).toBeVisible();
@@ -281,10 +282,10 @@ test("Design shortcuts are inert while Crochet is open", async ({ page }) => {
 
 test("reselecting Crochet preserves its current line", async ({ page }) => {
     await bootApp(page);
-    const crochet = page.locator("#btn-export");
-    await crochet.click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Forward one row" }).click();
-    await crochet.click();
+    await page.locator("#view-design").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 });
 
@@ -298,10 +299,7 @@ test("Crochet uses danger accents without warning prefixes or blocking progress"
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
     await clickCell(page, 0, 1);
 
-    const crochet = page.getByRole("button", { name: "Begin Crocheting — 1 invalid placement" });
-    await expect(crochet).toHaveText("Begin Crocheting");
-    await expect(crochet).toHaveClass(/btn--danger/);
-    await page.locator("#btn-export").click();
+    await page.getByRole("tab", { name: "Crochet", exact: true }).click();
     await expect(page.getByRole("status", { name: "Crochet errors" })).toHaveCount(0);
     await expect(page.locator('.instructions-unit[aria-label="Row 8, Yarn B"]')).toContainText("oc");
     const invalidUnit = page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]');
@@ -355,7 +353,10 @@ for (const mode of ["row", "round"] as const) {
                 pixels, colorA: "#000000", colorB: "#ffffff",
             })),
         });
-        await expect(page.getByRole("button", { name: "Begin Crocheting — 1 invalid placement" })).toBeVisible();
+        await expect.poll(async () => {
+            const warning = await cellCoord(page, x, -1);
+            return pixelRGB(page, warning.cx, warning.cy);
+        }).toEqual([211, 47, 47]);
         if (mode === "round") {
             await page.keyboard.press("r");
             await page.keyboard.press("r");
@@ -376,9 +377,8 @@ for (const mode of ["row", "round"] as const) {
 
         await chooseToolVariant(page, "Overlay", "Clear");
         await clickCell(page, x, -1);
-        await expect(page.getByRole("button", { name: "Begin Crocheting", exact: true })).toBeVisible();
+        await expect.poll(() => pixelRGB(page, outward.cx, outward.cy)).not.toEqual([211, 47, 47]);
         expect(await pixelRGB(page, support.cx, support.cy)).toEqual([0, 0, 0]);
-        expect(await pixelRGB(page, outward.cx, outward.cy)).not.toEqual([211, 47, 47]);
     });
 }
 
@@ -386,7 +386,7 @@ test("Crochet advances by whole rows and resumes the exact instruction plan", as
     await bootApp(page);
     await clickCell(page, 0, 1);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("img", { name: "Crochet progress chart" })).toBeVisible();
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
     await expect(page.getByRole("button", { name: "Back one row" })).toBeEnabled();
@@ -395,26 +395,27 @@ test("Crochet advances by whole rows and resumes the exact instruction plan", as
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
     await expect(page.getByRole("button", { name: "Back one row" })).toBeEnabled();
 
-    await page.locator("#btn-export").click();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
     await clickCell(page, 1, 1);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("10");
-    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeVisible();
-    await page.locator("#btn-export").click();
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
+    await page.locator("#view-crochet").click();
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toContainText("sc × 10");
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
     await page.locator("#edit-width").fill("9");
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 });
 
@@ -431,7 +432,7 @@ test("Crochet lines are compact progress controls", async ({ page }) => {
         input.dispatchEvent(new Event("input", { bubbles: true }));
         input.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
 
     const first = page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]');
@@ -488,7 +489,7 @@ test("Crochet lines are compact progress controls", async ({ page }) => {
 
 test("alternate direction switches cached instructions without regenerating", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     const copy = page.getByRole("button", { name: "Copy instructions" });
     await expect(copy).toBeEnabled();
 
@@ -502,7 +503,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     test(`Crochet options leave no empty feedback space above the list at ${viewport.width}px`, async ({ page }) => {
         await page.setViewportSize(viewport);
         await bootApp(page);
-        await page.getByRole("button", { name: "Begin Crocheting" }).click();
+        await page.getByRole("tab", { name: "Crochet", exact: true }).click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await expect(page.locator("#export-progress")).toBeHidden();
         await expect(page.getByRole("status", { name: "Copy instructions status", includeHidden: true })).toBeEmpty();
@@ -517,9 +518,10 @@ test("generation feedback occupies space only while generation is active", async
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-height").fill("80");
-    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeVisible();
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator("#export-progress")).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
     await expect(page.locator("#export-progress")).toHaveText(/^Generating… \d+ \/ 80$/);
@@ -537,13 +539,14 @@ test("Crochet can return to Design during a long generation", async ({ page }) =
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-height").fill("80");
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator("#export-progress")).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
-    await expect(page.getByRole("button", { name: "Begin Crocheting" })).toBeVisible();
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
 });
 
 test("a loaded empty round remains a single progress unit", async ({ page }) => {
@@ -564,7 +567,7 @@ test("a loaded empty round remains a single progress unit", async ({ page }) => 
         })),
     });
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.locator('.instructions-unit[aria-label="Round 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
     await expect(page.locator('.instructions-unit[aria-label^="Round"]')).toHaveCount(1);
@@ -578,10 +581,10 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-height").fill("80");
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     // Generation takes an animation frame per row, and frames slow down under a loaded software GPU.
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled({ timeout: 15_000 });
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
     const before = await cellCoord(page, 0, 1);
     const beforePixel = await pixelRGB(page, before.cx, before.cy);
     await page.getByRole("button", {
@@ -595,12 +598,12 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
         window.__test_instruction_yields__ = [];
         window.__test_on_instruction_yield__ = yielded => {
             if (yielded.index === 63 && !yielded.recomputed) {
-                document.getElementById("btn-export")!.click();
+                document.getElementById("view-design")!.click();
             }
         };
     });
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect.poll(() => page.evaluate(() => window.__test_instruction_yields__))
         .toContainEqual({ index: 63, recomputed: false });
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
@@ -618,7 +621,7 @@ test("long Crochet instructions wrap between stitch counts beside a yarn number 
     for (const x of [0, 2, 3, 6, 9, 10, 13, 15, 18, 19, 22, 25, 27, 28, 31, 34, 35, 38, 41, 43, 46, 49]) {
         await clickCell(page, x, 8);
     }
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const row = page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]');
     await row.click();
@@ -693,7 +696,7 @@ test("a wrapped current Crochet instruction splits into lines of similar length"
     for (const x of [0, 2, 3, 6, 9, 10, 13, 15, 18, 19, 22, 25, 27, 28, 31, 34, 35, 38, 41, 43, 46, 49]) {
         await clickCell(page, x, 8);
     }
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
     const text = page.locator("#instructions-current-text");
     for (const [width, height] of [[1300, 800], [390, 844]]) {
@@ -714,7 +717,7 @@ test("Crochet marks only the current row's beginning seam", async ({ page }) => 
     const rowEndPixel = async () => (await patternPixel(page, 9, 8.5)).slice(0, 3);
     const plainEnd = await rowEndPixel();
     const grid = await rowTopPixel();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const crochetGrid = await rowTopPixel();
     for (let channel = 0; channel < 3; channel++) {
@@ -736,7 +739,7 @@ test("Crochet marks only the current row's beginning seam", async ({ page }) => 
     expect(alternate!.triangle[0][0]).toBe(9);
     expect(alternate!.triangle[1][0]).toBe(9);
     expect(alternate!.triangle[2][0]).toBeLessThan(9);
-    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.getByRole("tab", { name: "Design", exact: true }).click();
     expect(await page.evaluate(() => window.__test_instruction_seam_geometry__)).toBeNull();
 });
 
@@ -747,7 +750,7 @@ test("a complete round marks the shared seam and points into its first stitch", 
     await page.locator("#edit-inner-width").fill("1");
     await page.locator("#edit-inner-height").fill("1");
     await page.locator("#edit-rounds").fill("3");
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await page.locator('.instructions-unit[aria-label^="Round 3,"]').click();
     const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
@@ -778,7 +781,7 @@ for (const extent of ["Half", "Quarter"]) {
         const endingPixel = async () => (await (extent === "Half"
             ? patternPixel(page, 6.5, 0) : patternPixel(page, 4, 3.5))).slice(0, 3);
         const plainEnd = await endingPixel();
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await page.locator('.instructions-unit[aria-label^="Round 3,"]').click();
         const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
@@ -793,7 +796,7 @@ for (const extent of ["Half", "Quarter"]) {
 
 test("the seam triangle rotates with its cell and is painted in the accent colour", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const geometry = async () => {
         const { x, y, ...shape } = await page.evaluate(() => {
@@ -833,7 +836,7 @@ test("the seam triangle rotates with its cell and is painted in the accent colou
 
 test("the triangle and seam have a continuous filled junction", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const anchor = await page.evaluate(() => {
         const points = window.__test_instruction_seam_geometry__!.screenTriangle;
@@ -857,7 +860,7 @@ test("the triangle and seam have a continuous filled junction", async ({ page })
 
 test("the joined seam triangle keeps its cell proportions through zoom", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const shape = async () => {
         const { x, y, ...proportions } = await page.evaluate(() => {
@@ -899,7 +902,7 @@ test("a single-cell Quarter has only its beginning seam and an inward triangle",
     await page.locator("#edit-rounds").fill("1");
     const endingPixel = async () => (await patternPixel(page, 1, 0.5)).slice(0, 3);
     const plainEnd = await endingPixel();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     expect(await endingPixel()).toEqual(plainEnd);
     const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
@@ -916,17 +919,17 @@ test("an adjacent first and last stitch share a seam only in a Full round", asyn
     await page.locator("#edit-width").fill("2");
     await page.locator("#edit-height").fill("2");
     await page.keyboard.press("Escape");
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     expect((await page.evaluate(() => window.__test_instruction_seam_geometry__))!.edges)
         .toEqual([[0, 1, 0, 2]]);
-    await page.getByRole("button", { name: "Back to Design" }).click();
+    await page.getByRole("tab", { name: "Design", exact: true }).click();
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.locator("#edit-inner-width").fill("0");
     await page.locator("#edit-inner-height").fill("0");
     await page.locator("#edit-rounds").fill("1");
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
     expect(seam!.edges).toEqual([[1, 1, 2, 1]]);
@@ -949,7 +952,7 @@ for (const extent of ["Full", "Half", "Quarter"]) {
             await page.setViewportSize({ width, height });
             for (const crochet of [false, true]) {
                 if (crochet) {
-                    await page.locator("#btn-export").click();
+                    await page.locator("#view-crochet").click();
                     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
                     const finalRound = page.locator('.instructions-unit[aria-label^="Round 3,"]');
                     if (await finalRound.getAttribute("aria-current") !== "step") await finalRound.click();
@@ -1010,7 +1013,7 @@ for (const extent of ["Full", "Half", "Quarter"]) {
                 }
                 await page.getByRole("button", { name: /Reset view orientation/ }).click();
                 await page.waitForTimeout(300);
-                if (crochet) await page.locator("#btn-export").click();
+                if (crochet) await page.locator("#view-design").click();
             }
         }
     });
@@ -1054,13 +1057,13 @@ test("partial-round beginning markers leave the historical number glyphs readabl
         await page.getByRole("button", { name: "Fit view" }).click();
         const plain = await labelInk();
         plain.forEach(ink => expect(ink.length).toBeGreaterThan(0));
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
         expect(await labelInk()).toEqual(plain);
         await page.getByText("Alternate direction", { exact: true }).click();
         expect(await labelInk()).toEqual(plain);
-        await page.locator("#btn-export").click();
+        await page.locator("#view-design").click();
     }
 });
 
@@ -1068,7 +1071,7 @@ test("Crochet renders through the current row and no future rows", async ({ page
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 4, 8);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     expect(await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
@@ -1112,7 +1115,7 @@ test("Crochet shows current-round guidance before the final round", async ({ pag
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 2, 4);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await page.getByRole("button", { name: "Forward one round" }).click();
 
@@ -1134,7 +1137,7 @@ test("Crochet progress remains available when the chart has errors", async ({ pa
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 0, 0);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
     await expect(page.getByText(/resolve chart/i)).toHaveCount(0);
@@ -1144,13 +1147,13 @@ test("Crochet reports when its progress cannot be saved locally", async ({ page 
     await failLiveProgressWrites(page);
     await bootApp(page);
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Forward one row" }).click();
 
     await expect(page.getByRole("alert"))
         .toHaveText("Progress not saved");
-    await page.locator("#btn-export").click();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator('.instructions-unit[aria-label="Row 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
 });
 
@@ -1160,7 +1163,7 @@ test("Crochet wraps through Whole around a single Centre-out round", async ({ pa
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByLabel("Rounds").fill("1");
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator('.instructions-unit[aria-label="Round 1, Yarn A"]')).toHaveAttribute("aria-current", "step");
     const back = page.getByRole("button", { name: "Back one round" });
     await expect(back).toBeEnabled();
@@ -1187,7 +1190,7 @@ test("Crochet reports copy completion", async ({ page }) => {
         });
     });
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     const status = page.getByRole("status", { name: "Copy instructions status" });
     await expect(page.getByRole("button", { name: "Copy instructions" })).toHaveText("");
 
@@ -1213,7 +1216,7 @@ test("Crochet reports clipboard failure", async ({ page }) => {
         });
     });
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
 
     await page.getByRole("button", { name: "Copy instructions" }).click();
     await expect(page.getByRole("status", { name: "Copy instructions status" }))

@@ -18,26 +18,35 @@ export function mountInstructions(
     const liveBack       = el<HTMLButtonElement>("instructions-live-back");
     const liveForward    = el<HTMLButtonElement>("instructions-live-forward");
     const exportActionStatus = el("export-action-status");
-    const crochetMode    = el<HTMLButtonElement>("btn-export");
+    const designView     = el<HTMLButtonElement>("view-design");
+    const crochetView    = el<HTMLButtonElement>("view-crochet");
     let hasCrochetProgress = false;
-    let crochetErrors = 0;
     const setCrochetMode = (open: boolean) => {
-        const label = open
-            ? "Back to Design"
-            : hasCrochetProgress ? "Continue Crocheting" : "Begin Crocheting";
-        const errors = crochetErrors === 1 ? "1 invalid placement" : `${crochetErrors} invalid placements`;
-        el("crochet-mode-label").textContent = label;
-        crochetMode.title = (open
-            ? "Return to pattern design"
-            : hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions")
-            + (!open && crochetErrors ? ` — ${errors}` : "");
-        crochetMode.setAttribute("aria-label", `${label}${!open && crochetErrors ? ` — ${errors}` : ""}`);
-        crochetMode.setAttribute("aria-pressed", String(open));
-        crochetMode.classList.toggle("btn--danger", !open && crochetErrors > 0);
+        crochetView.title = hasCrochetProgress ? "Resume crochet progress" : "Start crochet instructions";
+        for (const [view, selected] of [[designView, !open], [crochetView, open]] as const) {
+            view.setAttribute("aria-selected", String(selected));
+            view.tabIndex = selected ? 0 : -1;
+        }
     };
-    crochetMode.addEventListener("click", () => {
-        if (closeInstructionsWorkspace) closeInstructionsWorkspace(true);
-        else cb.onInstructions();
+    const openCrochet = () => {
+        if (!closeInstructionsWorkspace) cb.onInstructions();
+    };
+    designView.addEventListener("click", () => closeInstructionsWorkspace?.(true));
+    crochetView.addEventListener("click", () => {
+        openCrochet();
+        if (closeInstructionsWorkspace) instructions.focus();
+    });
+    // Automatic activation: arrow keys, Home and End select a view and keep focus on its tab.
+    designView.parentElement!.addEventListener("keydown", event => {
+        const target = event.key === "Home" ? designView : event.key === "End" ? crochetView
+            : event.key === "ArrowLeft" || event.key === "ArrowRight"
+                ? event.target === designView ? crochetView : designView
+                : null;
+        if (!target) return;
+        event.preventDefault();
+        target.focus();
+        if (target === crochetView) openCrochet();
+        else closeInstructionsWorkspace?.(false);
     });
     let instructionText = "";
     el("export-copy").addEventListener("click", async () => {
@@ -77,7 +86,6 @@ export function mountInstructions(
         setCrochetMode(true);
         syncCanvasChromeInsets();
         queueCanvasChromeSync();
-        instructions.focus();
 
         const workKind = () => liveUnits[0]?.label.startsWith("Round") ? "round" : "row";
         const renderCrochet = () => {
@@ -157,7 +165,7 @@ export function mountInstructions(
             syncCanvasChromeInsets();
             queueCanvasChromeSync();
             closeListeners.forEach(f => f());
-            if (restoreFocus) crochetMode.focus();
+            if (restoreFocus) designView.focus();
         };
         closeInstructionsWorkspace = close;
 
@@ -263,9 +271,6 @@ export function mountInstructions(
     return { openInstructions, close: (restoreFocus: boolean) => closeInstructionsWorkspace?.(restoreFocus),
         setCrochetProgress: (hasProgress: boolean) => {
             hasCrochetProgress = hasProgress;
-            if (!closeInstructionsWorkspace) setCrochetMode(false);
-        }, setCrochetErrors: (count: number) => {
-            crochetErrors = count;
             if (!closeInstructionsWorkspace) setCrochetMode(false);
         } };
 }

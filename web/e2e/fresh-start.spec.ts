@@ -10,7 +10,7 @@ test("first launch shows About over the empty workspace and stores no pattern", 
     await bootFresh(page);
 
     await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Open patterns" }).getByRole("tab")).toHaveCount(0);
     await expect(page.locator("#empty-workspace")).toBeVisible();
     expect(await storedProjectIds(page)).toEqual([]);
 });
@@ -40,7 +40,7 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
     await about.getByRole("button", { name: "New" }).click();
 
     await expect(about).toBeHidden();
-    await expect(page.getByRole("tab")).toHaveText(["Untitled 1"]);
+    await expect(page.getByRole("tablist", { name: "Open patterns" }).getByRole("tab")).toHaveText(["Untitled 1"]);
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await storedRecovery(page)).not.toBeNull();
     expect((await storedRecovery(page)).workspace.mirrors).toEqual([]);
@@ -65,7 +65,7 @@ test("canceling the About file picker keeps the dialog available", async ({ page
         .getByRole("button", { name: "Open", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByRole("tablist", { name: "Open patterns" }).getByRole("tab")).toHaveCount(0);
 });
 
 test("opening an mcw file from About enters the editor", async ({ page }) => {
@@ -127,7 +127,7 @@ test("example is editable and demonstrates overlay, global mirror, and Crochet",
     expect(recovery.workspace.recipes).toHaveLength(1);
     expect(recovery.workspace.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: [] });
 
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();
     await expect(page.locator("#instructions-units")).toContainText("oc");
 });

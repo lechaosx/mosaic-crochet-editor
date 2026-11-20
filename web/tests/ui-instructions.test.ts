@@ -14,7 +14,7 @@ const units: InstructionOverviewUnit[] = [1, 2].map(number => ({
 beforeEach(() => {
     document.body.innerHTML = `<canvas id="canvas"></canvas>
         <aside id="instructions-workspace" tabindex="-1"><ol id="instructions-units"></ol></aside>
-        <input id="alternate" type="checkbox"><button id="btn-export"><span id="crochet-mode-label"></span></button>
+        <input id="alternate" type="checkbox"><div><button id="view-design"></button><button id="view-crochet"></button></div>
         <button id="export-copy"></button><button id="instructions-live-back"></button>
         <button id="instructions-live-forward"></button>`
         + ["export-progress", "instructions-live-unavailable", "instructions-live-progress",

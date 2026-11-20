@@ -224,7 +224,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         setPrimary: pattern.setPrimary, setColors: pattern.setColors, setProjectColors: pattern.setProjectColors,
         setEditError: pattern.setEditError, setEditSummary: pattern.setEditSummary, syncEditInputs: pattern.syncEditInputs,
         openInstructions: instructions.openInstructions,
-        setCrochetProgress: instructions.setCrochetProgress, setCrochetErrors: instructions.setCrochetErrors,
+        setCrochetProgress: instructions.setCrochetProgress,
         getCanvasWorkspace: () => {
             syncCanvasChromeInsets();
             return canvasWorkspace;

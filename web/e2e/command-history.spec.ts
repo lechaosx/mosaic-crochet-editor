@@ -22,24 +22,24 @@ async function selectForMove(page: Page, mode = "Move content") {
 test("Crochet Undo and Redo shortcuts execute the same commands as buttons", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 1, 1);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.keyboard.press("Control+z");
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     const cell = await cellCoord(page, 1, 1);
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual([255, 255, 255]);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.keyboard.press("Control+y");
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual([0, 0, 0]);
 });
 
 test("unavailable Undo and Redo leave Crochet open", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeDisabled();
     await page.keyboard.press("Control+z");
     await page.keyboard.press("Control+y");
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
 });
 
 test("About shields document shortcuts and Escape preserves the underlying Settings", async ({ page }) => {
@@ -516,7 +516,7 @@ for (const outcome of ["invalid", "cancelled"]) {
         await page.emulateMedia({ reducedMotion: "reduce" });
         await bootApp(page);
         await clickCell(page, 1, 1);
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await page.getByRole("button", { name: "Forward one row" }).click();
         await page.getByRole("button", { name: "Rotate view right" }).click();
@@ -539,7 +539,7 @@ for (const outcome of ["invalid", "cancelled"]) {
             await (await chooser).setFiles({ name: "pattern.mcw", mimeType: "application/json", buffer: Buffer.from("invalid") });
             await expect(page.locator("#document-error")).toBeVisible();
         }
-        await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
+        await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
         expect(await storedRecovery(page)).toEqual(before);
         expect(await camera(page)).toEqual(matrix);
     });
@@ -547,7 +547,7 @@ for (const outcome of ["invalid", "cancelled"]) {
 
 test("opening a different project from Crochet returns to Design and renders the new chart", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Open", exact: true }).click();
@@ -557,7 +557,7 @@ test("opening a different project from Crochet returns to Design and renders the
         colorA: "#123456", colorB: "#ffffff",
     })) });
     await expect.poll(async () => (await storedRecovery(page)).document.colorA).toBe("#123456");
-    await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     const cell = await cellCoord(page, 1, 0);
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual([18, 52, 86]);
 });
@@ -566,14 +566,14 @@ for (const action of ["New", "Example"]) {
     test(`${action} resets orientation and fits its pattern immediately`, async ({ page }) => {
         await page.emulateMedia({ reducedMotion: "reduce" });
         await bootApp(page);
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await page.getByRole("button", { name: "Rotate view right" }).click();
         await page.getByRole("button", { name: "Zoom in" }).click();
         await page.getByRole("button", { name: "Settings" }).click();
         await page.locator("#settings-about").click();
         await page.locator(action === "New" ? "#about-new" : "#about-example").click();
-        await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "false");
+        await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
         expect((await storedRecovery(page)).workspace.rotation).toBe(0);
         expect(await page.evaluate(() => window.__test_matrix__!.b)).toBe(0);
         const fitted = await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()));

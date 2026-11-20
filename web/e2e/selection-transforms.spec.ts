@@ -340,12 +340,12 @@ test("Circle handles are inactive during painting and Crochet while the chosen t
     expect((await recipe(page)).rotationCentreX).toBe(3);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     const before = await recipe(page);
-    await page.getByRole("button", { name: "Begin Crocheting", exact: true }).click();
+    await page.getByRole("tab", { name: "Crochet", exact: true }).click();
     const start = await cellCoord(page, 3, 3), end = await cellCoord(page, 4, 4);
     await page.mouse.move(start.cx, start.cy); await page.mouse.down();
     await page.mouse.move(end.cx, end.cy, { steps: 5 }); await page.mouse.up();
     expect(await recipe(page)).toEqual(before);
-    await page.getByRole("button", { name: "Back to Design", exact: true }).click();
+    await page.getByRole("tab", { name: "Design", exact: true }).click();
     await expect(page.getByRole("button", { name: "Select", exact: true })).toHaveAttribute("aria-pressed", "true");
     const returned = await cellCoord(page, 3, 3), moved = await cellCoord(page, 4, 4);
     await page.mouse.move(returned.cx, returned.cy); await page.mouse.down();

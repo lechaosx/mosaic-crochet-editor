@@ -23,7 +23,7 @@ for (const { width, height, textSize } of [
     { width: 1920, height: 1080, textSize: "200%" },
     { width: 320, height: 568, textSize: "200%" },
 ]) {
-    test(`Crochet action stays centred in the pattern's header without moving the canvas at ${width}px and ${textSize} text`, async ({ page }) => {
+    test(`Design and Crochet views keep the header and canvas in place at ${width}px and ${textSize} text`, async ({ page }) => {
         await page.setViewportSize({ width, height });
         await bootApp(page);
         await page.evaluate(size => {
@@ -32,29 +32,24 @@ for (const { width, height, textSize } of [
         }, textSize);
 
         const canvas = await page.locator(".canvas-area").boundingBox();
-        const action = page.locator("#btn-export");
-        for (const label of ["Begin Crocheting", "Back to Design", "Continue Crocheting"]) {
-            await expect(action).toHaveText(label);
-            await expect.poll(async () => {
-                const box = await action.boundingBox();
-                const header = await page.locator("#document-bar").boundingBox();
-                return Math.abs(box!.x + box!.width / 2 - (header!.x + header!.width / 2));
-            }).toBeLessThanOrEqual(1);
-            const box = (await action.boundingBox())!;
-            for (const button of await page.locator("#document-bar button").all()) {
-                if (!await button.isVisible() || await button.getAttribute("id") === "btn-export") continue;
+        const views = page.getByRole("tablist", { name: "View" });
+        for (const state of ["Design", "Crochet", "Design with progress"]) {
+            await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", String(state === "Crochet"));
+            const box = (await views.boundingBox())!;
+            for (const button of await page.locator("#document-bar .g-file button").all()) {
+                if (!await button.isVisible()) continue;
                 const other = (await button.boundingBox())!;
                 expect(other.x + other.width <= box.x || other.x >= box.x + box.width
                     || other.y + other.height <= box.y || other.y >= box.y + box.height).toBe(true);
             }
             expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
             expect(await page.locator(".canvas-area").boundingBox()).toEqual(canvas);
-            if (label === "Begin Crocheting") {
-                await action.click();
+            if (state === "Design") {
+                await page.locator("#view-crochet").click();
                 await expect(page.locator("#instructions-live-forward")).toBeEnabled();
                 await page.locator("#instructions-live-forward").press("Enter");
-            } else if (label === "Back to Design") {
-                await action.click();
+            } else if (state === "Crochet") {
+                await page.locator("#view-design").click();
             }
         }
     });
@@ -215,7 +210,7 @@ test("Fit keeps the chart below persistent view controls", async ({ page }) => {
 test("Fit centres Crochet on the full canvas behind its panel", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 600 });
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Fit view" }).click();
 
     const { canvasCentre, patternCentre } = await page.evaluate(() => {
@@ -372,7 +367,7 @@ test("Crochet panel reflows without horizontal scrolling at doubled text size", 
         document.documentElement.style.fontSize = "200%";
         window.dispatchEvent(new Event("resize"));
     });
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
 
     const workspace = page.locator("#instructions-workspace");
     await expect(workspace).toBeVisible();
@@ -475,7 +470,7 @@ for (const { width, appCommands } of [{ width: 1280, appCommands: ["Open", "Sett
         await page.setViewportSize({ width, height: 800 });
         await bootApp(page);
         const sheet = (await page.locator("#document-bar").boundingBox())!;
-        const tab = (await page.getByRole("tab", { selected: true }).boundingBox())!;
+        const tab = (await page.getByRole("tablist", { name: "Open patterns" }).getByRole("tab", { selected: true }).boundingBox())!;
         expect(Math.abs(tab.y + tab.height - sheet.y)).toBeLessThanOrEqual(0.5);
         for (const name of appCommands) {
             const command = (await page.getByRole("button", { name, exact: true }).boundingBox())!;

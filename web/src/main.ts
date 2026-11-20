@@ -396,14 +396,6 @@ function renderCanvas() {
     render(viewport, ctx, rs, instructionsPreviewStore ?? store);
 }
 
-// Synced once per plan version: a commit that keeps the plan keeps the count.
-let crochetErrorsVersion: object | null = null;
-function syncCrochetErrors() {
-    if (store.planVersion === crochetErrorsVersion) return;
-    crochetErrorsVersion = store.planVersion;
-    ui.setCrochetErrors(store.plan.invalid);
-}
-
 observeCanvasResize(viewport.canvas, v => { viewport.dpr = v; }, renderCanvas);
 
 // Renderer + side-effect channels (Store invokes them on every `commit`).
@@ -443,7 +435,6 @@ store.addObserver(s => ui.setViewState(
     s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
 store.addObserver(() => updateCoordinates(null, null));
-store.addObserver(syncCrochetErrors);
 store.addObserver(s => syncProjectColorInputs(s.state));
 store.addObserver(() => {
     if (!document.getElementById("edit-pattern-widget")!.hidden) syncClearDrawingControl();
@@ -2248,7 +2239,6 @@ for (const p of projects) if (p.history !== p.historyWritten) persistHistory(p);
 if (lost.length > 0) {
     ui.setDocumentNotice(`${lost.map(title => `“${title}”`).join(", ")} couldn’t be recovered and ${lost.length === 1 ? "was" : "were"} closed.`);
 }
-syncCrochetErrors();
 syncTabs();
 fitToView(
     viewport.canvas, viewport.view, store.state.pattern, store.state.rotation,

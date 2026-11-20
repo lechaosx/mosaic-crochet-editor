@@ -23,7 +23,7 @@ for (const extent of ["Rows", "Full", "Half", "Quarter"] as const) {
                 : { mode: "round", canvasWidth: width, canvasHeight: height,
                     virtualWidth: 7, virtualHeight: 7, offsetX: 0, offsetY, rounds: 3 },
             pixels, colorA: "#000000", colorB: "#ffffff" })) });
-        await page.locator("#btn-export").click();
+        await page.locator("#view-crochet").click();
         const whole = page.getByRole("button", { name: "Pattern overview, contains invalid placements", exact: true });
         await expect(whole).toBeVisible();
         await expect(page.locator('.instructions-unit[aria-label^="Row"], .instructions-unit[aria-label^="Round"]'))
@@ -75,7 +75,7 @@ test("interior corner warnings remain owned by their generated round", async ({ 
         buffer: Buffer.from(JSON.stringify({ version: 1,
             state: { mode: "round", canvasWidth: 7, canvasHeight: 7, virtualWidth: 7, virtualHeight: 7,
                 offsetX: 0, offsetY: 0, rounds: 3 }, pixels, colorA: "#000000", colorB: "#ffffff" })) });
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Round 3, Yarn A, contains invalid placements", exact: true })).toBeVisible();
 });
@@ -89,14 +89,14 @@ test("warnings owned by a generated row stay on that row", async ({ page }) => {
     await clickCell(page, 0, 2);
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
     await clickCell(page, 0, 1);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Row 9, Yarn A, contains invalid placements", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toBeVisible();
 });
 
 test("Pattern overview is transient progress and wraps around real rows", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     const row = page.getByRole("button", { name: "Row 3, Yarn A", exact: true });
     await row.click();
     const saved = await storedLiveProgress(page);
@@ -107,12 +107,12 @@ test("Pattern overview is transient progress and wraps around real rows", async 
     await expect(page.locator("#instructions-live-progress")).toHaveText("Pattern overview");
     expect(await storedLiveProgress(page)).toEqual(saved);
     expect(await page.evaluate(() => window.__test_instruction_seam_geometry__)).toBeNull();
-    await page.locator("#btn-export").click();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
+    await page.locator("#view-crochet").click();
     await expect(row).toHaveAttribute("aria-current", "step");
     await whole.click();
     await page.reload();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(row).toHaveAttribute("aria-current", "step");
     await page.getByRole("button", { name: "Row 9, Yarn A", exact: true }).click();
     await page.getByRole("button", { name: "Forward one row" }).click();
@@ -129,7 +129,7 @@ test("the final real row keeps focused guidance and descriptive hover text", asy
     await bootApp(page);
     await page.getByRole("button", { name: "Yarn B", exact: true }).click();
     await clickCell(page, 4, 8);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     const last = page.getByRole("button", { name: "Row 9, Yarn A", exact: true });
     await last.click();
     const guidance = await page.evaluate(() => (window as typeof window & {
@@ -154,7 +154,7 @@ test("Whole stays selected through direction and colour changes and is absent fr
     await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { configurable: true,
         value: { writeText: async (text: string) => { (window as typeof window & { copied: string }).copied = text; } } }));
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Row 2, Yarn B", exact: true }).click();
     const saved = await storedLiveProgress(page);
     const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
@@ -188,7 +188,7 @@ test("Whole does not enter files or authored history, and stitch edits resume th
             write: async (source: string) => { target.savedMcw = source; }, close: async () => {},
         }) });
     });
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.getByRole("button", { name: "Row 4, Yarn B", exact: true }).click();
     await page.getByRole("button", { name: "Save", exact: true }).click();
     const before = {
@@ -207,9 +207,9 @@ test("Whole does not enter files or authored history, and stitch edits resume th
         history: await storedHistory(page), recovery: await storedRecovery(page),
         progress: await storedLiveProgress(page),
     }).toEqual(before);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-design").click();
     await clickCell(page, 3, 1);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Row 4, Yarn B", exact: true })).toHaveAttribute("aria-current", "step");
     await page.getByRole("button", { name: "Row 4, Yarn B", exact: true }).focus();
     await page.locator("#alternate").evaluate((input: HTMLInputElement) => {

@@ -6,23 +6,23 @@ test("workspace transitions preserve canvas geometry near the compact toolbar th
     await page.setViewportSize({ width: 860, height: 900 });
     await bootApp(page);
     const bounds = await page.locator("#canvas").boundingBox();
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     expect(await page.locator("#canvas").boundingBox()).toEqual(bounds);
     await expect(page.locator("#export-copy")).toBeEnabled();
     await page.locator("#instructions-units button").nth(1).click();
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Continue Crocheting", exact: true })).toBeVisible();
+    await page.locator("#view-design").click();
+    await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Resume crochet progress");
     expect(await page.locator("#canvas").boundingBox()).toEqual(bounds);
 });
 
 test("increasing text size recomposes document actions without overlapping Crochet", async ({ page }) => {
-    await page.setViewportSize({ width: 1000, height: 960 });
+    await page.setViewportSize({ width: 800, height: 960 });
     await bootApp(page);
     await expect(page.locator("#btn-more")).toBeHidden();
     await page.addStyleTag({ content: "html { font-size: 200%; }" });
     await expect.poll(() => page.evaluate(() => {
-        const crochet = document.querySelector("#btn-export")!.getBoundingClientRect();
+        const crochet = document.querySelector(".g-mode")!.getBoundingClientRect();
         return Array.from(document.querySelectorAll<HTMLButtonElement>(".g-file button"))
             .filter(button => button.getClientRects().length > 0)
             .every(button => {
@@ -164,7 +164,7 @@ test("mirror updates preserve position fields, row identity, and focused actions
 
 test("changing Crochet direction retains instruction row identity and focus", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
+    await page.locator("#view-crochet").click();
     await expect(page.locator("#export-copy")).toBeEnabled();
     const item = page.locator("#instructions-units button").nth(2);
     const row = await item.elementHandle();
