@@ -444,3 +444,50 @@ test("the tab strip scrolls sideways on a phone without widening the page", asyn
     expect(await page.evaluate(() => document.body.scrollWidth <= document.body.clientWidth)).toBe(true);
     await expect(tab(page, "Untitled 6")).toBeInViewport();
 });
+
+test("New tab stays whole and the strip scrolls whole tabs into view on a phone with doubled text", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootApp(page);
+    await page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%";
+        window.dispatchEvent(new Event("resize"));
+    });
+    const plus = page.getByRole("button", { name: "New tab" });
+    const expectWhole = async () => {
+        const box = (await plus.boundingBox())!;
+        // Inset from the corners, which the button's rounding leaves to its parent.
+        const [left, right, top, bottom] = [box.x + box.width * 0.2, box.x + box.width * 0.8, box.y + box.height * 0.2, box.y + box.height * 0.8];
+        const corners = [[left, top], [right, top], [left, bottom], [right, bottom]];
+        for (const [x, y] of corners) {
+            expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest("#tab-new") !== null, [x, y])).toBe(true);
+        }
+    };
+    await expectWhole();
+    for (let i = 0; i < 5; i++) await newTab(page);
+    await expectWhole();
+    const strip = page.locator("#project-tabs");
+    expect(await strip.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
+    await expect(tab(page, "Untitled 6")).toBeInViewport();
+    await strip.evaluate(el => el.scrollTo({ left: el.scrollWidth, behavior: "instant" }));
+    const end = await page.getByRole("button", { name: "Close Untitled 6" }).evaluate(close => {
+        const r = close.getBoundingClientRect(), s = close.closest("#project-tabs")!.getBoundingClientRect();
+        return r.left >= s.left && r.right <= s.right + 0.5;
+    });
+    expect(end).toBe(true);
+
+    await tab(page, "Untitled 6").focus();
+    await page.keyboard.press("Home");
+    for (let i = 0; i < 2; i++) await page.keyboard.press("ArrowRight");
+    await expect(tab(page, "Untitled 3")).toHaveAttribute("aria-selected", "true");
+    // Scrolled back part way, the strip still never shows a close button without its tab.
+    await strip.evaluate(el => el.scrollBy({ left: -20, behavior: "instant" }));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const orphans = await page.evaluate(() => {
+        const visible = document.getElementById("project-tabs")!.getBoundingClientRect();
+        const shows = (el: Element) => { const r = el.getBoundingClientRect(); return r.right > visible.left + 1 && r.left < visible.right - 1; };
+        return [...document.querySelectorAll<HTMLElement>(".project-tab-close")]
+            .filter(close => shows(close) && !shows(document.getElementById(`project-tab-${close.dataset.project}`)!))
+            .map(close => close.getAttribute("aria-label"));
+    });
+    expect(orphans).toEqual([]);
+});

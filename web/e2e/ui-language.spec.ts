@@ -23,7 +23,7 @@ test("increasing text size recomposes document actions without overlapping Croch
     await page.addStyleTag({ content: "html { font-size: 200%; }" });
     await expect.poll(() => page.evaluate(() => {
         const crochet = document.querySelector("#btn-export")!.getBoundingClientRect();
-        return Array.from(document.querySelectorAll<HTMLButtonElement>(".g-file button, .g-hlrot button"))
+        return Array.from(document.querySelectorAll<HTMLButtonElement>(".g-file button"))
             .filter(button => button.getClientRects().length > 0)
             .every(button => {
                 const box = button.getBoundingClientRect();

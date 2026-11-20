@@ -218,7 +218,7 @@ test("compact Menu exposes and navigates a keyboard menu", async ({ page }) => {
     const pattern = page.getByRole("menuitem", { name: "Pattern" });
     await expect(pattern).toBeFocused();
     await page.keyboard.press("ArrowDown");
-    await expect(page.getByRole("menuitem", { name: "Open" })).toBeFocused();
+    await expect(page.getByRole("menuitem", { name: "Save" })).toBeFocused();
     await page.keyboard.press("End");
     await expect(page.getByRole("menuitem", { name: "Settings" })).toBeFocused();
     await page.keyboard.press("Home");

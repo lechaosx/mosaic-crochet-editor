@@ -10,6 +10,11 @@
 </head>
 <body>
   <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+    <symbol id="icon-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+    <symbol id="icon-open" viewBox="0 0 24 24"><path d="M4 19V6a1 1 0 0 1 1-1h4l2 2h7a1 1 0 0 1 1 1v2"/><path d="M4 19l2.6-7.2a1 1 0 0 1 .9-.7H20a.6.6 0 0 1 .6.8L18 19H4Z"/></symbol>
+    <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M5 7h8m4 0h2M5 17h2m4 0h8"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
+    <symbol id="icon-save" viewBox="0 0 24 24"><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5"/><path d="M5 15v3.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V15"/></symbol>
     <symbol id="icon-pencil" viewBox="0 0 24 24">
       <path d="M4 20l4.5-1.1L19 8.4a2 2 0 0 0-2.8-2.8L5.7 16.1 4 20Z"/><path d="m14.8 7 2.8 2.8"/>
     </symbol>
@@ -77,26 +82,28 @@
     <symbol id="icon-mirror-d1" viewBox="0 0 24 24"><path d="m4 4 16 16M4 11v9h9ZM11 4h9v9Z"/></symbol>
     <symbol id="icon-mirror-d2" viewBox="0 0 24 24"><path d="M20 4 4 20M4 4v9l9-9ZM20 11v9h-9Z"/></symbol>
   </svg>
-  <div class="project-tabs" id="project-tabs">
-    <div id="project-tablist" role="tablist" aria-label="Open patterns"></div>
-    <div id="project-tab-closes"></div>
+  <div class="app-bar">
+    <div class="project-tabs" id="project-tabs">
+      <div id="project-tablist" role="tablist" aria-label="Open patterns"></div>
+      <div id="project-tab-closes"></div>
+    </div>
     <button class="btn btn--icon btn--ghost" id="tab-new" type="button" aria-label="New tab" title="New pattern in a new tab"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg></button>
+    <div class="app-actions">
+      <button class="btn" id="btn-load" title="Open an .mcw file in a new tab"><svg class="tool-icon" aria-hidden="true"><use href="#icon-open"/></svg>Open</button>
+      <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true"><use href="#icon-settings"/></svg><span class="menu-label">Settings</span></button>
+      <button class="btn" id="btn-more" title="Menu" aria-haspopup="menu" aria-expanded="false" hidden>Menu</button>
+    </div>
   </div>
   <header class="document-bar" id="document-bar">
       <div class="document-actions g-file">
-        <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions">Pattern</button>
-        <button class="btn" id="btn-load"   title="Open .mcw file">Open</button>
-        <button class="btn" id="btn-save"   title="Save editable pattern as an .mcw file">Save</button>
-        <button class="btn" id="btn-undo"   title="Undo (Ctrl+Z)">Undo</button>
-        <button class="btn" id="btn-redo"   title="Redo (Ctrl+Y / Ctrl+Shift+Z)">Redo</button>
-        <button class="btn" id="btn-more" title="Menu" aria-haspopup="menu" aria-expanded="false" hidden>Menu</button>
+        <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions"><svg class="tool-icon" aria-hidden="true"><use href="#icon-sliders"/></svg>Pattern</button>
+        <button class="btn" id="btn-save" title="Save editable pattern as an .mcw file"><svg class="tool-icon" aria-hidden="true"><use href="#icon-save"/></svg>Save</button>
+        <button class="btn btn--icon" id="btn-undo" title="Undo (Ctrl+Z)" aria-label="Undo"><svg class="tool-icon" aria-hidden="true"><use href="#icon-undo"/></svg></button>
+        <button class="btn btn--icon" id="btn-redo" title="Redo (Ctrl+Y / Ctrl+Shift+Z)" aria-label="Redo"><svg class="tool-icon" aria-hidden="true"><use href="#icon-redo"/></svg></button>
         <span id="recovery-status" class="document-status" role="status" aria-label="Browser recovery" aria-live="polite" hidden></span>
       </div>
       <div class="document-actions g-mode" role="group" aria-label="Crochet workspace">
         <button class="btn" id="btn-export" type="button" aria-pressed="false" title="Start crochet instructions" aria-controls="instructions-workspace"><span id="crochet-mode-label">Begin Crocheting</span></button>
-      </div>
-      <div class="document-actions g-hlrot">
-        <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
       </div>
       <div id="document-error" class="document-error" role="alert" hidden>
         <span id="document-error-message"></span>
@@ -105,7 +112,8 @@
   </header>
 
   <div id="more-popover" popover role="menu" aria-label="Menu">
-    <div id="more-actions"></div>
+    <div class="menu-group" id="menu-pattern" role="group" aria-labelledby="menu-pattern-label"><span class="menu-group-label" id="menu-pattern-label" aria-hidden="true">This pattern</span></div>
+    <div class="menu-group" id="menu-app" role="group" aria-labelledby="menu-app-label"><span class="menu-group-label" id="menu-app-label" aria-hidden="true">All patterns</span></div>
   </div>
 
   <div class="workspace" id="workspace" role="tabpanel">

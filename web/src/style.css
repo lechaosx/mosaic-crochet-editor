@@ -54,6 +54,13 @@
 
   --t-fast: 120ms ease;
   --t-med: 220ms ease;
+
+  /* The tool dock's column on wide layouts; the pattern's sheet starts beside it. */
+  --dock-width: 0px;
+}
+
+@media (min-width: 64rem) {
+  :root { --dock-width: calc(max(var(--hit), 2.25rem) + 2 * var(--space-1) + 1px); }
 }
 
 @media (any-pointer: coarse), (max-width: 48rem) {
@@ -103,6 +110,25 @@ input  { font: inherit; color: inherit; }
 /* ──────────────────────────────────────────────────────────────────────────
    Adaptive workspace shell
    ────────────────────────────────────────────────────────────────────────── */
+/* The app bar on the frame holds what every pattern shares: the tabs, Open,
+   Settings and Menu. The active tab joins its pattern's sheet below, whose
+   header holds that pattern's own commands. */
+.app-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) 0 var(--dock-width);
+  background: var(--frame);
+  flex-shrink: 0;
+}
+.app-actions { display: flex; align-items: center; gap: var(--space-1); align-self: center; margin-inline-start: auto; }
+.app-actions .btn,
+.document-bar .btn { background: transparent; }
+.app-actions .btn:hover:not(:disabled),
+.document-bar .btn:hover:not(:disabled) { background: var(--bg-3); }
+.app-actions .menu-label { display: none; }
+#btn-load, #btn-edit, #btn-save { gap: var(--space-2); padding-inline: var(--space-2) var(--space-3); }
+
 .document-bar {
   position: relative;
   display: grid;
@@ -110,11 +136,14 @@ input  { font: inherit; color: inherit; }
   align-items: center;
   row-gap: var(--space-2);
   column-gap: var(--space-2);
+  margin-left: var(--dock-width);
   padding: var(--space-1);
-  background: var(--bg-1);
+  background: var(--sheet);
   border-bottom: var(--border);
+  border-radius: var(--radius-2) var(--radius-2) 0 0;
   flex-shrink: 0;
 }
+.app-bar:has(#project-tablist > [aria-selected="true"]:first-child) + .document-bar { border-top-left-radius: 0; }
 
 .document-actions,
 .dock-group {
@@ -130,7 +159,6 @@ input  { font: inherit; color: inherit; }
 .g-mode .btn.btn--danger { border-color: var(--danger); }
 /* Reserve the longest mode label to keep the chart fixed across workspace changes. */
 .g-mode .btn::after { content: "Continue Crocheting"; visibility: hidden; grid-area: 1 / 1; }
-.g-hlrot { justify-self: end; }
 
 .document-status {
   display: inline-flex;
@@ -170,16 +198,16 @@ input  { font: inherit; color: inherit; }
 
 .project-tabs {
   display: flex;
-  align-items: center;
-  padding-inline: var(--space-1);
+  flex: 0 1 auto;
+  align-items: flex-end;
+  min-width: 0;
   overflow-x: auto;
   scrollbar-width: thin;
-  background: var(--frame);
-  border-bottom: var(--border);
-  flex-shrink: 0;
+  /* Scrolled tabs start at a tab, so a close button shows only beside its tab. */
+  scroll-snap-type: x mandatory;
 }
 #project-tablist, #project-tab-closes { display: contents; }
-#tab-new { order: 1000000; flex: none; margin-inline-start: var(--space-1); }
+#tab-new { flex: none; align-self: center; }
 
 .project-tab-select,
 .project-tab-close {
@@ -195,6 +223,8 @@ input  { font: inherit; color: inherit; }
   max-width: 14rem;
   padding-inline: var(--space-3) var(--space-2);
   white-space: nowrap;
+  border-radius: var(--radius-2) 0 0 0;
+  scroll-snap-align: start;
 }
 .project-tab-select > span:first-child { overflow: hidden; text-overflow: ellipsis; }
 .project-tab-unsaved {
@@ -206,17 +236,25 @@ input  { font: inherit; color: inherit; }
   border-radius: 50%;
 }
 .project-tab-close {
+  position: relative;
   justify-content: center;
   min-width: var(--hit-sm);
+  border-radius: 0 var(--radius-2) 0 0;
+}
+.project-tab-close:not([data-selected])::after {
+  content: "";
+  position: absolute;
+  inset: 30% 0 30% auto;
   border-inline-end: var(--border);
 }
+.project-tab-close:last-child { scroll-snap-align: end; }
 .project-tab-close:hover { color: var(--fg-0); }
 .project-tab-select[aria-selected="true"],
 .project-tab-close[data-selected] {
   color: var(--fg-0);
   background: var(--sheet);
-  box-shadow: inset 0 -2px var(--accent);
 }
+.project-tab-select[aria-selected="true"] { font-weight: 600; }
 .project-tab-select:focus-visible,
 .project-tab-close:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
@@ -247,7 +285,7 @@ input  { font: inherit; color: inherit; }
   flex-wrap: wrap;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3) max(var(--space-2), env(safe-area-inset-bottom));
-  background: var(--bg-1);
+  background: var(--frame);
   border-top: var(--border);
   overflow-y: auto;
   z-index: 10;
@@ -258,15 +296,18 @@ input  { font: inherit; color: inherit; }
 .dock-group-label { display: none; }
 
 .document-bar--compact .g-file {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+.document-bar--compact .btn { padding-inline: var(--space-2); }
+.document-bar--compact .document-status { padding-inline: 0; }
+.document-bar--stacked .g-file {
   grid-column: 1 / -1;
   grid-row: 2;
   flex-wrap: wrap;
 }
-.document-bar--compact .btn { padding-inline: var(--space-2); }
-.document-bar--compact .document-status { padding-inline: 0; }
-.document-bar--compact .g-hlrot { display: none; }
-
-.document-bar--compact .g-mode {
+.document-bar--stacked .g-mode {
   grid-column: 1 / -1;
   grid-row: 1;
   justify-self: center;
@@ -319,9 +360,20 @@ input  { font: inherit; color: inherit; }
 }
 
 @media (min-width: 64rem) {
+  /* The frame keeps the dock's column while the dock is hidden. */
+  .workspace::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--dock-width);
+    background: var(--frame);
+    border-right: var(--border);
+    z-index: 9;
+  }
+
   .authoring-dock {
     inset: 0 auto 0 0;
-    width: calc(max(var(--hit), 2.25rem) + 2 * var(--space-1) + 1px);
+    width: var(--dock-width);
     max-height: none;
     flex-direction: column;
     flex-wrap: nowrap;
@@ -824,7 +876,7 @@ input[type="checkbox"] { accent-color: var(--accent); }
 #more-popover:popover-open {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 .pattern-summary {
@@ -834,13 +886,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
   line-height: 1.4;
 }
 
-#more-popover { min-width: min(18rem, 92vw); }
-#more-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-1);
-}
-#more-actions .btn { justify-content: flex-start; width: 100%; }
+#more-popover { min-width: min(16rem, 92vw); padding: var(--space-2); background: var(--frame); }
+.menu-group { display: grid; gap: 2px; }
+.menu-group + .menu-group { padding-top: var(--space-2); border-top: var(--border); }
+.menu-group-label { padding: var(--space-1) var(--space-3); color: var(--fg-2); font-size: var(--font-sm); font-weight: 600; }
+.menu-group .btn { justify-content: flex-start; gap: var(--space-2); width: 100%; padding-inline: var(--space-2) var(--space-3); background: transparent; font-size: var(--font-base); }
 
 .status-feedback { color: var(--fg-0); }
 

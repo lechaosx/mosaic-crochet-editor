@@ -23,7 +23,7 @@ for (const { width, height, textSize } of [
     { width: 1920, height: 1080, textSize: "200%" },
     { width: 320, height: 568, textSize: "200%" },
 ]) {
-    test(`Crochet action stays centred without moving the canvas at ${width}px and ${textSize} text`, async ({ page }) => {
+    test(`Crochet action stays centred in the pattern's header without moving the canvas at ${width}px and ${textSize} text`, async ({ page }) => {
         await page.setViewportSize({ width, height });
         await bootApp(page);
         await page.evaluate(size => {
@@ -37,7 +37,8 @@ for (const { width, height, textSize } of [
             await expect(action).toHaveText(label);
             await expect.poll(async () => {
                 const box = await action.boundingBox();
-                return Math.abs(box!.x + box!.width / 2 - width / 2);
+                const header = await page.locator("#document-bar").boundingBox();
+                return Math.abs(box!.x + box!.width / 2 - (header!.x + header!.width / 2));
             }).toBeLessThanOrEqual(1);
             const box = (await action.boundingBox())!;
             for (const button of await page.locator("#document-bar button").all()) {
@@ -467,4 +468,39 @@ test("phone Menu stays inside the viewport", async ({ page }) => {
     const menu = (await page.getByRole("menu", { name: "Menu" }).boundingBox())!;
     expect(menu.x).toBeGreaterThanOrEqual(0);
     expect(menu.x + menu.width).toBeLessThanOrEqual(390);
+});
+
+for (const { width, appCommands } of [{ width: 1280, appCommands: ["Open", "Settings"] }, { width: 390, appCommands: ["Menu"] }]) {
+    test(`commands for all patterns share the tab strip, outside the pattern's sheet, at ${width}px`, async ({ page }) => {
+        await page.setViewportSize({ width, height: 800 });
+        await bootApp(page);
+        const sheet = (await page.locator("#document-bar").boundingBox())!;
+        const tab = (await page.getByRole("tab", { selected: true }).boundingBox())!;
+        expect(Math.abs(tab.y + tab.height - sheet.y)).toBeLessThanOrEqual(0.5);
+        for (const name of appCommands) {
+            const command = (await page.getByRole("button", { name, exact: true }).boundingBox())!;
+            expect(command.y + command.height, name).toBeLessThanOrEqual(sheet.y);
+            expect(command.y + command.height, name).toBeGreaterThan(tab.y);
+        }
+        if (width === 1280) {
+            const dock = (await page.locator("#authoring-dock").boundingBox())!;
+            expect(dock.x + dock.width).toBeLessThanOrEqual(sheet.x + 0.5);
+        }
+    });
+}
+
+test("phone Menu groups this pattern's commands before those for all patterns", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Menu" }).click();
+    const menu = page.getByRole("menu", { name: "Menu" });
+    await expect(menu.getByRole("group", { name: "This pattern" }).getByRole("menuitem")).toHaveText(["Pattern", "Save"]);
+    await expect(menu.getByRole("group", { name: "All patterns" }).getByRole("menuitem")).toHaveText(["Open", "Settings"]);
+    const tops = await menu.getByRole("menuitem").evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
+    for (let i = 1; i < tops.length; i++) expect(tops[i]).toBeGreaterThan(tops[i - 1]);
+    await expect(menu.getByRole("menuitem", { name: "Pattern" })).toBeFocused();
+    for (const name of ["Save", "Open", "Settings"]) {
+        await page.keyboard.press("ArrowDown");
+        await expect(menu.getByRole("menuitem", { name, exact: true })).toBeFocused();
+    }
 });

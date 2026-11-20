@@ -8,7 +8,8 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Only one window edits at a time: opening the app in another window offers to continue editing there, and the previous window stops editing; browser recovery and undo history now also work for large patterns, though the recovered session, undo history and Crochet progress from before this update are not carried over.
 - Several patterns can be open at once as tabs, each with its own undo history, view, and Crochet progress; New, Open, and Example open new tabs, closing a tab with unsaved changes asks whether to save it first, and with no tab open the workspace shows how to start a pattern.
 - Crochet instructions for long rows and rounds generate without freezing the app, grouping repeated sections of at most 64 stitches or stitch groups unless a whole row or round repeats; a long current instruction wraps into lines of similar length instead of leaving a few stitches alone on the last line.
-- Controls have a refreshed, more consistent look and keep one highlight colour instead of taking on the active pattern's Accent colour, which now marks only the chart; on phones, the Menu no longer runs past the right edge of the screen.
+- Controls have a refreshed, more consistent look and keep one highlight colour instead of taking on the active pattern's Accent colour, which now marks only the chart.
+- The active tab joins a sheet holding that pattern's own commands, while Open, Settings and the tools sit outside it for every pattern; the phone Menu groups its commands the same way and no longer runs past the screen's edge.
 
 ## 9 October 2026
 

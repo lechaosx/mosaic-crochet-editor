@@ -179,19 +179,22 @@ export function mountToolbar(
     return { setTool, setToolVariants, setExecutingAction, setCanvasFeedback, setHistory, setRecoveryStatus, setDocumentError, setDocumentNotice, setViewState };
 }
 // ─── Toolbar layout ──────────────────────────────────────────────────────────
+// When the pattern's header cannot keep Crochet centred beside its commands,
+// Pattern, Save, Open and Settings move into Menu, grouped by what they act on.
+// If Undo and Redo still do not fit beside Crochet, they stack below it.
 function mountToolbarLayout() {
     const documentBar = el("document-bar");
     const modeGroup = document.querySelector(".g-mode") as HTMLElement;
     const fileGroup = document.querySelector(".g-file") as HTMLElement;
-    const viewGroup = document.querySelector(".g-hlrot") as HTMLElement;
+    const appGroup = document.querySelector(".app-actions") as HTMLElement;
     const moreButton = el<HTMLButtonElement>("btn-more");
     const morePopover = el("more-popover");
-    const moreActions = el("more-actions");
-    const fileActions = [el("btn-edit"), el("btn-load"), el("btn-save")];
-    const viewActions = [el("btn-hl-toggle")];
-    const compactActions = [...fileActions, ...viewActions] as HTMLButtonElement[];
+    const patternActions = [el<HTMLButtonElement>("btn-edit"), el<HTMLButtonElement>("btn-save")];
+    const appActions = [el<HTMLButtonElement>("btn-load"), el<HTMLButtonElement>("btn-hl-toggle")];
+    const compactActions = [...patternActions, ...appActions];
     let compact = false;
     let compactBelow = 0;
+    let stackBelow = 0;
 
     moreButton.addEventListener("click", e => {
         e.preventDefault();
@@ -205,7 +208,7 @@ function mountToolbarLayout() {
     morePopover.addEventListener("toggle", e => {
         moreButton.setAttribute("aria-expanded", String((e as ToggleEvent).newState === "open"));
     });
-    moreActions.addEventListener("click", e => {
+    morePopover.addEventListener("click", e => {
         if ((e.target as Element).closest("button") && morePopover.matches(":popover-open"))
             morePopover.hidePopover();
     });
@@ -228,16 +231,18 @@ function mountToolbarLayout() {
     function setCompact(next: boolean) {
         if (compact === next) return;
         compact = next;
+        documentBar.classList.toggle("document-bar--compact", compact);
         if (compact) {
             for (const button of compactActions) {
                 button.setAttribute("role", "menuitem");
                 button.tabIndex = -1;
             }
-            moreActions.append(...fileActions, ...viewActions);
+            el("menu-pattern").append(...patternActions);
+            el("menu-app").append(...appActions);
             moreButton.hidden = false;
         } else {
-            fileGroup.prepend(...fileActions);
-            viewGroup.append(...viewActions);
+            fileGroup.prepend(...patternActions);
+            appGroup.prepend(...appActions);
             for (const button of compactActions) {
                 button.removeAttribute("role");
                 button.tabIndex = 0;
@@ -247,20 +252,26 @@ function mountToolbarLayout() {
         }
     }
 
-    function measure() {
-        setCompact(false);
-        documentBar.classList.remove("document-bar--compact");
+    // Crochet stays centred, so the commands beside it need their width on both sides.
+    function centredWidth() {
         const cs = getComputedStyle(documentBar);
         const padding = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
         const gap     = parseFloat(cs.columnGap) || 0;
-        compactBelow = padding + gap * 2 + modeGroup.offsetWidth
-            + 2 * Math.max(fileGroup.offsetWidth, viewGroup.offsetWidth);
+        return padding + gap * 2 + modeGroup.offsetWidth + 2 * fileGroup.offsetWidth;
+    }
+
+    function measure() {
+        documentBar.classList.remove("document-bar--stacked");
+        setCompact(true);
+        stackBelow = centredWidth();
+        setCompact(false);
+        compactBelow = centredWidth();
     }
 
     function applyLayout() {
-        const useCompact = window.innerWidth < compactBelow;
-        setCompact(useCompact);
-        documentBar.classList.toggle("document-bar--compact", useCompact);
+        const width = documentBar.offsetWidth;
+        setCompact(width < compactBelow);
+        documentBar.classList.toggle("document-bar--stacked", width < stackBelow);
     }
 
     function update() {
