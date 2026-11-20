@@ -196,6 +196,15 @@ test("closing a clean tab needs no answer", async ({ page }) => {
     await expect(tab(page, "Untitled 1")).toHaveAttribute("aria-selected", "true");
 });
 
+test("one click closes a tab while a Pattern change is pending", async ({ page }) => {
+    await bootApp(page);
+    await newTab(page);
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
+    await page.locator("#edit-width").fill("5");
+    await page.getByRole("button", { name: "Close Untitled 1" }).click();
+    await expect(tabs(page)).toHaveText([/^Untitled 2/]);
+});
+
 test("closing the last tab leaves the empty workspace, where nothing needs a pattern", async ({ page }) => {
     const errors: Error[] = [];
     page.on("pageerror", error => errors.push(error));

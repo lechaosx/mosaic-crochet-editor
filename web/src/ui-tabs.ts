@@ -41,50 +41,53 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
         answer = null;
     });
 
+    // A tab's buttons stay in place while it is open: committing a pending
+    // edit on pointerdown updates the tabs, and a replaced button loses the click.
     function setTabs(tabs: readonly ProjectTab[], active: string | null) {
         const focused = document.activeElement instanceof HTMLElement
             && (tablist.contains(document.activeElement) || closes.contains(document.activeElement))
             ? document.activeElement : null;
-        tablist.replaceChildren(...tabs.map(({ id, title, unsaved }, i) => {
-            const tab = document.createElement("button");
-            tab.type = "button";
-            tab.className = "project-tab-select";
-            tab.id = `project-tab-${id}`;
-            tab.dataset.project = id;
+        for (const button of [...tablist.children, ...closes.children] as HTMLElement[]) {
+            if (!tabs.some(({ id }) => id === button.dataset.project)) button.remove();
+        }
+        tabs.forEach(({ id, title, unsaved }, i) => {
+            let tab = document.getElementById(`project-tab-${id}`) as HTMLButtonElement | null;
+            if (!tab) {
+                tab = document.createElement("button");
+                tab.type = "button";
+                tab.className = "project-tab-select";
+                tab.id = `project-tab-${id}`;
+                tab.dataset.project = id;
+                tab.setAttribute("role", "tab");
+                tab.setAttribute("aria-controls", "workspace");
+                tab.append(document.createElement("span"));
+                tab.addEventListener("click", () => cb.onTabSelect(id));
+                const close = document.createElement("button");
+                close.type = "button";
+                close.className = "project-tab-close";
+                close.dataset.project = id;
+                close.innerHTML = '<svg class="tool-icon" aria-hidden="true"><use href="#icon-close"/></svg>';
+                close.addEventListener("click", () => cb.onTabClose(id));
+                tablist.append(tab);
+                closes.append(close);
+            }
             tab.style.order = String(2 * i);
-            tab.setAttribute("role", "tab");
             tab.setAttribute("aria-selected", String(id === active));
-            tab.setAttribute("aria-controls", "workspace");
             tab.tabIndex = id === active ? 0 : -1;
             tab.title = title;
-            const name = document.createElement("span");
-            name.textContent = title;
-            tab.append(name);
-            if (unsaved) {
-                const marker = document.createElement("span");
-                marker.className = "project-tab-unsaved";
-                marker.setAttribute("aria-hidden", "true");
-                marker.textContent = "●";
-                tab.append(marker);
-                tab.setAttribute("aria-label", `${title}, unsaved changes`);
-            }
-            tab.addEventListener("click", () => cb.onTabSelect(id));
-            return tab;
-        }));
-        closes.replaceChildren(...tabs.map(({ id, title }, i) => {
-            const close = document.createElement("button");
-            close.type = "button";
-            close.className = "project-tab-close";
-            close.dataset.project = id;
+            tab.firstElementChild!.textContent = title;
+            const marker = tab.querySelector(".project-tab-unsaved");
+            if (unsaved && !marker) tab.insertAdjacentHTML("beforeend", '<span class="project-tab-unsaved" aria-hidden="true">●</span>');
+            if (!unsaved) marker?.remove();
+            if (unsaved) tab.setAttribute("aria-label", `${title}, unsaved changes`);
+            else tab.removeAttribute("aria-label");
+            const close = closes.querySelector<HTMLElement>(`[data-project="${id}"]`)!;
             close.style.order = String(2 * i + 1);
             close.toggleAttribute("data-selected", id === active);
             close.tabIndex = id === active ? 0 : -1;
             close.setAttribute("aria-label", `Close ${title}`);
             close.title = `Close ${title}`;
-            close.innerHTML = '<svg class="tool-icon" aria-hidden="true"><use href="#icon-close"/></svg>';
-            close.addEventListener("click", () => cb.onTabClose(id));
-            return close;
-        }));
+        });
         for (const region of editor) region.hidden = active === null;
         empty.hidden = active !== null;
         for (const command of patternCommands) command.disabled = active === null;
