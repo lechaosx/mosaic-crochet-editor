@@ -5,27 +5,27 @@ import { PatternState } from "./types";
 // On disk we pack to 1 bit per cell (A=0, B=1). Hole cells get an arbitrary
 // bit; the load path rebuilds the transparent sentinel from geometry.
 
-export function u8ToB64(u8: Uint8Array): string {
-    let s = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < u8.length; i += chunk) {
-        s += String.fromCharCode(...u8.subarray(i, i + chunk));
+// Byte-wise because undo snapshots and browser recovery pack whole charts of
+// up to millions of cells on every commit. `p >> 1` maps A/hole to 0, B to 1.
+export function packPixels(p: Uint8Array): string {
+    const out = new Uint8Array(Math.ceil(p.length / 8));
+    const full = p.length >> 3;
+    for (let b = 0, i = 0; b < full; b++, i += 8) {
+        out[b] = (p[i] >> 1) | (p[i + 1] >> 1) << 1 | (p[i + 2] >> 1) << 2 | (p[i + 3] >> 1) << 3
+            | (p[i + 4] >> 1) << 4 | (p[i + 5] >> 1) << 5 | (p[i + 6] >> 1) << 6 | (p[i + 7] >> 1) << 7;
     }
-    return btoa(s);
-}
-export function b64ToU8(s: string): Uint8Array {
-    const bin = atob(s);
-    const u8 = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-    return u8;
+    for (let i = full * 8; i < p.length; i++) {
+        if (p[i] === 2) out[i >> 3] |= 1 << (i & 7);
+    }
+    return out.toBase64();
 }
 
-export function packPixels(pixels: Uint8Array): string {
-    const out = new Uint8Array(Math.ceil(pixels.length / 8));
-    for (let i = 0; i < pixels.length; i++) {
-        if (pixels[i] === 2) out[i >> 3] |= 1 << (i & 7);
-    }
-    return u8ToB64(out);
+// CELLS[2v], CELLS[2v + 1]: packed byte v expanded to eight cells (1 or 2) as
+// two little-endian words, so they land in cell order through a Uint32Array
+// view on little-endian hosts (every browser platform).
+const CELLS = new Uint32Array(512);
+for (let v = 0; v < 256; v++) {
+    for (let k = 0; k < 8; k++) CELLS[2 * v + (k >> 2)] |= ((v >> k) & 1 ? 2 : 1) << 8 * (k & 3);
 }
 
 // Start from a fresh natural-colour pattern (which already encodes hole
@@ -38,11 +38,21 @@ export function unpackPixels(s: string, state: PatternState): Uint8Array {
               state.virtualWidth, state.virtualHeight,
               state.offsetX, state.offsetY, state.rounds,
           );
-    const packed = b64ToU8(s);
+    const packed = Uint8Array.fromBase64(s);
     if (packed.length !== Math.ceil(out.length / 8)) {
         throw new RangeError("Packed pixel data has the wrong length.");
     }
-    for (let i = 0; i < out.length; i++) {
+    // Eight cells per step. Cell bytes are 0, 1 or 2, so (w | w >>> 1) has bit
+    // 0 of each byte set exactly for non-hole cells; times 0xff that becomes a
+    // byte mask that keeps holes 0.
+    const full = out.length >> 3;
+    const words = new Uint32Array(out.buffer, out.byteOffset, full * 2);
+    for (let b = 0; b < full; b++) {
+        const v = packed[b], lo = words[2 * b], hi = words[2 * b + 1];
+        words[2 * b]     = CELLS[2 * v]     & ((lo | lo >>> 1) & 0x01010101) * 0xff;
+        words[2 * b + 1] = CELLS[2 * v + 1] & ((hi | hi >>> 1) & 0x01010101) * 0xff;
+    }
+    for (let i = full * 8; i < out.length; i++) {
         if (out[i] !== 0) {
             out[i] = ((packed[i >> 3] >> (i & 7)) & 1) ? 2 : 1;
         }
@@ -64,8 +74,8 @@ export interface PackedFloat {
     pixels: string;   // base64 of raw w×h bytes (0/1/2)
 }
 export function packFloat(f: Float): PackedFloat {
-    return { x: f.x, y: f.y, w: f.w, h: f.h, pixels: u8ToB64(f.pixels) };
+    return { x: f.x, y: f.y, w: f.w, h: f.h, pixels: f.pixels.toBase64() };
 }
 export function unpackFloat(p: PackedFloat): Float {
-    return { x: p.x, y: p.y, w: p.w, h: p.h, pixels: b64ToU8(p.pixels) };
+    return { x: p.x, y: p.y, w: p.w, h: p.h, pixels: Uint8Array.fromBase64(p.pixels) };
 }

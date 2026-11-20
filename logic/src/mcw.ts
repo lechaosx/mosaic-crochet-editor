@@ -1,5 +1,5 @@
 import { assertPatternDimensions } from "./pattern";
-import { b64ToU8, packPixels, u8ToB64, unpackPixels } from "./storage";
+import { packPixels, unpackPixels } from "./storage";
 import { axisIsProjectValid, migrateAxes, mirrorIsProjectValid, readMirrorRecords } from "./symmetry";
 import { emptyGridRecipe, legacySelectionBehaviorChanged, restoreGridRecipes } from "./grid-recipes";
 import type { Axis, MirrorCenter, GridRecipe, PatternState } from "./types";
@@ -42,11 +42,11 @@ function packMask(mask: Uint8Array): string {
     for (let i = 0; i < mask.length; i++) {
         if (mask[i] !== 0) packed[i >> 3] |= 1 << (i & 7);
     }
-    return u8ToB64(packed);
+    return packed.toBase64();
 }
 
 function unpackMask(source: string, length: number): Uint8Array {
-    const bytes = b64ToU8(source);
+    const bytes = Uint8Array.fromBase64(source);
     if (bytes.length !== Math.ceil(length / 8)) throw invalidFile();
     const mask = new Uint8Array(length);
     for (let i = 0; i < length; i++) mask[i] = (bytes[i >> 3] >> (i & 7)) & 1;

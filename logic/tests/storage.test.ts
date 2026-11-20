@@ -431,6 +431,17 @@ describe("packPixels / unpackPixels", () => {
         expect(out[1]).toBe(2);
     });
 
+    test("encoding matches the stored format: LSB-first B bits, standard padded base64", () => {
+        const pattern = { mode: "row" as const, canvasWidth: 5, canvasHeight: 4 };
+        const pixels = new Uint8Array([
+            1, 2, 2, 1, 1, 1, 1, 2,
+            2, 2, 2, 2, 2, 2, 2, 2,
+            1, 2, 1, 2,
+        ]);
+        expect(packPixels(pixels)).toBe("hv8K");
+        expect(unpackPixels("hv8K", pattern)).toEqual(pixels);
+    });
+
     test("packed byte count is ceil(N/8)", () => {
         for (const n of [1, 8, 9, 16, 17]) {
             const out = atob(packPixels(new Uint8Array(n)));
