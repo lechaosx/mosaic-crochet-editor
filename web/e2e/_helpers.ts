@@ -182,14 +182,14 @@ export async function touchPanZoom(
     await session.detach();
 }
 
+// Launches the app for the first time and starts one new "Untitled 1" tab from
+// About, with no dialog or inspector open.
 export async function bootApp(page: Page) {
     await page.goto("/");
-    await page.waitForFunction(() => !!window.__test_matrix__);
-    if (await page.locator("#about-dialog").isVisible()) {
-        await page.locator("#about-new").evaluate((button: HTMLButtonElement) => button.click());
-        await page.locator("#about-dialog").waitFor({ state: "hidden" });
-        await page.keyboard.press("Escape");
-    }
+    await page.locator("#about-dialog").waitFor();
+    await page.locator("#about-new").evaluate((button: HTMLButtonElement) => button.click());
+    await page.locator("#about-dialog").waitFor({ state: "hidden" });
+    await page.keyboard.press("Escape");
 }
 
 // The helpers below keep the storage layout of the recovery, undo history and

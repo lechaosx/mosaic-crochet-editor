@@ -147,7 +147,7 @@ removeRetiredRecords();
 const index = loadProjectIndex();
 // Null while the session runs without browser records: IndexedDB is denied
 // or unreadable, or the project index can't be stored. The session then
-// starts one new project and leaves the stored index and records alone.
+// starts with no open project and leaves the stored index and records alone.
 let database = await openProjectDatabase();
 const listed = index?.open ?? [];
 const storedProjects = database && await Promise.all(listed.map(({ id }) => readProject(database!, id)));
@@ -187,7 +187,7 @@ function newProject(title: string, session: SessionState): OpenProject {
     return { id: newProjectId(), title, session, history: historyMarkClean(historyFrom(session)),
         historyWritten: null, historyStored: null, historyFailures: 0, view: null, crochet: false };
 }
-const restored: OpenProject[] = database ? listed.flatMap(({ id, title }, i) => {
+const projects: OpenProject[] = database ? listed.flatMap(({ id, title }, i) => {
     const stored = storedProjects![i]!, saved = sessionFromRecovery(stored.recovery);
     if (!saved) return [];
     const storedHistory = historyFromStored(stored.history, stored.snapshots);
@@ -197,18 +197,22 @@ const restored: OpenProject[] = database ? listed.flatMap(({ id, title }, i) => 
         historyWritten: storedHistory, historyStored: storedHistory, historyFailures: 0, view: null, crochet: false }];
 }) : [];
 // Projects without a valid recovery record can't be shown as they were, so they close.
-const lost = database ? listed.filter(({ id }) => !restored.some(p => p.id === id)).map(({ title }) => title) : [];
-const projects = restored.length > 0 ? restored : [newProject("Untitled 1", defaultSession())];
-let project = projects.find(({ id }) => id === index?.active) ?? projects[0];
+const lost = database ? listed.filter(({ id }) => !projects.some(p => p.id === id)).map(({ title }) => title) : [];
+// The shown project; null while none is open.
+let project: OpenProject | null = projects.find(({ id }) => id === index?.active) ?? projects[0] ?? null;
 const projectIds = projects.map(({ id }) => id);
-if (database && editing && (lost.length > 0 || restored.length === 0)
-    && !saveProjectIndex(projects.map(({ id, title }) => ({ id, title })), project.id)) database = null;
+if (database && editing && (lost.length > 0 || projects.length === 0)
+    && !saveProjectIndex(projects.map(({ id, title }) => ({ id, title })), project?.id ?? null)) database = null;
 if (database && editing) {
     deleteProjectsExcept(database, projectIds);
     deleteLiveProgressExcept(projectIds);
 }
-const store    = new Store(project.session);
-function commitHistory(next: UndoHistory, p = project) {
+// While no project is open, the store keeps the last shown session, or a
+// default one at boot, and the favicon still draws it. It carries the shared
+// tools into the next opened project; replacing it would notify store
+// observers, which need an open project.
+const store    = new Store(project?.session ?? defaultSession());
+function commitHistory(next: UndoHistory, p = project!) {
     if (next === p.history) return;
     const wasClean = isClean(p.history);
     p.history = next;
@@ -232,10 +236,10 @@ function persistHistory(p: OpenProject) {
     });
 }
 function persistRecovery(s: Readonly<SessionState>) {
-    if (database && editing) writeRecovery(database, project.id, s, written => reportStorage("recovery", written));
+    if (database && editing) writeRecovery(database, project!.id, s, written => reportStorage("recovery", written));
 }
 function persistIndex() {
-    if (database && editing) reportStorage("index", saveProjectIndex(projects.map(({ id, title }) => ({ id, title })), project.id));
+    if (database && editing) reportStorage("index", saveProjectIndex(projects.map(({ id, title }) => ({ id, title })), project?.id ?? null));
 }
 // Whether each kind of record's latest write failed.
 const storageFailed = { recovery: false, history: false, index: false };
@@ -429,12 +433,12 @@ let savingRecipeHistory = false;
 store.setHistoryFn(s => {
     if (!savingPatternHistory) patternHistorySession = false;
     if (!savingRecipeHistory) recipeHistorySession = false;
-    commitHistory(historySave(project.history, s));
+    commitHistory(historySave(project!.history, s));
 });
 store.setPersistFn(persistRecovery);
 
 // Observers — run after every commit.
-store.addObserver(() => ui.setHistory(canUndo(project.history), canRedo(project.history)));
+store.addObserver(() => ui.setHistory(canUndo(project!.history), canRedo(project!.history)));
 store.addObserver(s => ui.setViewState(
     s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
@@ -777,7 +781,7 @@ function onRecipeCommit() {
         savingRecipeHistory = true;
         try {
             if (recipeHistorySession) {
-                const { history: next, replaced } = historyReplaceCurrent(project.history, store.state);
+                const { history: next, replaced } = historyReplaceCurrent(project!.history, store.state);
                 commitHistory(next);
                 recipeHistorySession = replaced;
             } else {
@@ -785,7 +789,7 @@ function onRecipeCommit() {
                 recipeHistorySession = true;
             }
             persistRecovery(store.state);
-            ui.setHistory(canUndo(project.history), canRedo(project.history));
+            ui.setHistory(canUndo(project!.history), canRedo(project!.history));
         } finally { savingRecipeHistory = false; }
     }
     ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
@@ -1103,10 +1107,10 @@ function onEditCommit(clearDesign = false) {
         } finally {
             applyingPatternPreview = false;
         }
-        const { history: next, replaced } = historyReplaceCurrent(project.history, store.state);
+        const { history: next, replaced } = historyReplaceCurrent(project!.history, store.state);
         commitHistory(next);
         patternHistorySession = replaced;
-        ui.setHistory(canUndo(project.history), canRedo(project.history));
+        ui.setHistory(canUndo(project!.history), canRedo(project!.history));
     } else if (changed) {
         savingPatternHistory = true;
         try {
@@ -1176,11 +1180,11 @@ function undo() {
     gestureInputs.cancel();
     clearExecutingAction();
     patternHistorySession = false;
-    const previous = historyUndo(project.history);
+    const previous = historyUndo(project!.history);
     if (!previous) return;
     commitHistory(previous);
     instructionsView?.close(false);
-    applyRestored(historyPeek(project.history));
+    applyRestored(historyPeek(project!.history));
 }
 function redo() {
     if (document.querySelector("dialog:modal")) return;
@@ -1188,11 +1192,11 @@ function redo() {
     gestureInputs.cancel();
     clearExecutingAction();
     patternHistorySession = false;
-    const next = historyRedo(project.history);
+    const next = historyRedo(project!.history);
     if (!next) return;
     commitHistory(next);
     instructionsView?.close(false);
-    applyRestored(historyPeek(project.history));
+    applyRestored(historyPeek(project!.history));
 }
 
 // ── Save / load ──────────────────────────────────────────────────────────────
@@ -1205,7 +1209,7 @@ async function onSave(): Promise<boolean> {
     const snapshot: SessionState = store.state.float
         ? { ...store.state, ...anchorIntoCanvas(store.state) }
         : store.state;
-    const saving = project, head = historyHeadId(project.history);
+    const saving = project!, head = historyHeadId(saving.history);
     try {
         const name = await saveToFile(snapshot, saving.title.endsWith(".mcw") ? saving.title : `${saving.title}.mcw`);
         if (name === null) return false;
@@ -1316,8 +1320,8 @@ async function onInstructions() {
     const totalUnits = store.state.pattern.mode === "row"
         ? store.state.pattern.canvasHeight
         : store.state.pattern.rounds;
-    let completedUnits = loadLiveProgress(project.id, progressFingerprint, totalUnits);
-    ui.setCrochetProgress(hasLiveProgress(project.id, progressFingerprint, totalUnits));
+    let completedUnits = loadLiveProgress(project!.id, progressFingerprint, totalUnits);
+    ui.setCrochetProgress(hasLiveProgress(project!.id, progressFingerprint, totalUnits));
     let generatedUnits: readonly CachedInstructionUnit[] = [];
     // Reversed corner groups can jump diagonally; markers must stay on cell edges.
     const edgeDirection = (dx: number, dy: number) => Math.abs(dx) >= Math.abs(dy)
@@ -1366,8 +1370,8 @@ async function onInstructions() {
             const wholeInvalid = hasUnrepresentedWarning(store.plan, W, H, units.map(unit => unit.invalidWorkedCoords));
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
                 completedUnits = nextCompleted;
-                const saved = editing && saveLiveProgress(project.id, progressFingerprint, completedUnits);
-                if (saved) ui.setCrochetProgress(hasLiveProgress(project.id, progressFingerprint, totalUnits));
+                const saved = editing && saveLiveProgress(project!.id, progressFingerprint, completedUnits);
+                if (saved) ui.setCrochetProgress(hasLiveProgress(project!.id, progressFingerprint, totalUnits));
                 return saved;
             }, wholeInvalid);
         }
@@ -1520,7 +1524,7 @@ function crochetProgressTotal() {
 }
 
 function syncCrochetProgressControl() {
-    ui.setCrochetProgress(hasLiveProgress(project.id, crochetProgressFingerprint(), crochetProgressTotal()));
+    ui.setCrochetProgress(project !== null && hasLiveProgress(project.id, crochetProgressFingerprint(), crochetProgressTotal()));
 }
 
 store.addObserver(syncCrochetProgressControl);
@@ -1535,7 +1539,7 @@ function endSessionInteractions() {
 }
 
 function syncTabs() {
-    ui.setTabs(projects.map(({ id, title, history }) => ({ id, title, unsaved: !isClean(history) })), project.id);
+    ui.setTabs(projects.map(({ id, title, history }) => ({ id, title, unsaved: !isClean(history) })), project?.id ?? null);
 }
 
 // Settles the active project's edits and keeps its session, view and mode.
@@ -1544,24 +1548,27 @@ function leaveProject() {
     finishAuthoredInput();
     onEditCommit();
     endSessionInteractions();
-    project.session = store.state as SessionState;
-    project.view = { ...viewport.view };
-    project.crochet = crochet;
+    project!.session = store.state as SessionState;
+    project!.view = { ...viewport.view };
+    project!.crochet = crochet;
 }
 
 // Shows the active project with the shared tools, in the view and mode it was
 // last shown in.
 function showProject() {
+    const shown = project!;
+    // Before fitting: it unhides the editor that fitting measures.
+    syncTabs();
     ui.setDocumentError(null);
     ui.setCanvasFeedback(null);
     // A different history continues no earlier Pattern or selection edit.
     patternHistorySession = false;
     recipeHistorySession = false;
     const { activeTool, toolVariants, primaryColor } = store.state;
-    const session = { ...project.session, activeTool, toolVariants, primaryColor };
+    const session = { ...shown.session, activeTool, toolVariants, primaryColor };
     rs.targetRotation = null;
     rs.rotAnim = null;
-    if (project.view) Object.assign(viewport.view, project.view);
+    if (shown.view) Object.assign(viewport.view, shown.view);
     else fitToView(viewport.canvas, viewport.view, session.pattern, session.rotation, ui.getCanvasWorkspace());
     store.replace(session, { persist: true });
     syncDomInputs(session);
@@ -1569,9 +1576,8 @@ function showProject() {
     ui.syncEditInputs(session.pattern);
     refreshSymmetryUi();
     closeAbout();
-    syncTabs();
     persistIndex();
-    if (project.crochet) onInstructions();
+    if (shown.crochet) onInstructions();
 }
 
 function selectProject(id: string) {
@@ -1584,19 +1590,17 @@ function selectProject(id: string) {
 
 // Opens `session` as a new, unmodified project after the others.
 function openProject(title: string, session: SessionState) {
-    leaveProject();
+    if (project) leaveProject();
     project = newProject(title, session);
     projects.push(project);
     persistHistory(project);
     showProject();
 }
 
-// The last project stays open.
 async function closeProject(id: string) {
     const closing = projects.find(candidate => candidate.id === id)!;
-    if (projects.length === 1) return;
     // An unsaved project is shown while its prompt is open.
-    const previous = project;
+    const previous = project!;
     if (!isClean(closing.history)) {
         selectProject(id);
         const answer = await ui.confirmClose(closing.title);
@@ -1606,7 +1610,17 @@ async function closeProject(id: string) {
         }
     }
     const at = projects.indexOf(closing);
-    if (closing === project) selectProject((previous !== closing ? previous : projects[at + 1] ?? projects[at - 1]).id);
+    if (closing === project) {
+        const next = previous !== closing ? previous : projects[at + 1] ?? projects[at - 1];
+        if (next) selectProject(next.id);
+        else {
+            leaveProject();
+            project = null;
+            ui.setDocumentError(null);
+            ui.setHistory(false, false);
+            syncCrochetProgressControl();
+        }
+    }
     projects.splice(at, 1);
     persistIndex();
     syncTabs();
@@ -1627,11 +1641,13 @@ function newPattern() {
     (document.getElementById("btn-edit") as HTMLButtonElement).click();
 }
 
-document.getElementById("about-new")!.addEventListener("click", newPattern);
-document.getElementById("about-open")!.addEventListener("click", () => {
-    (document.getElementById("btn-load") as HTMLButtonElement).click();
-});
-document.getElementById("about-example")!.addEventListener("click", () => openProject("Example", exampleSession()));
+for (const place of ["about", "empty"]) {
+    document.getElementById(`${place}-new`)!.addEventListener("click", newPattern);
+    document.getElementById(`${place}-open`)!.addEventListener("click", () => {
+        (document.getElementById("btn-load") as HTMLButtonElement).click();
+    });
+    document.getElementById(`${place}-example`)!.addEventListener("click", () => openProject("Example", exampleSession()));
+}
 
 const clientToPattern = (cx: number, cy: number) => {
     const pattern = store.state.pattern;
@@ -2100,7 +2116,7 @@ function moveWithArrow(e: KeyboardEvent) {
 }
 
 document.addEventListener("keydown", e => {
-    if (document.querySelector("dialog:modal")) return;
+    if (document.querySelector("dialog:modal") || !project) return;
     if (e.key === "Escape" && document.querySelector(":popover-open")) return;
     const t = e.target as HTMLElement;
     if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
@@ -2226,10 +2242,9 @@ ui.setColors(store.state.colorA, store.state.colorB);
 ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
 ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 ui.syncEditInputs(store.state.pattern);
-ui.setHistory(canUndo(project.history), canRedo(project.history));
-ui.setRecoveryStatus(!database ? "failed" : restored.length > 0 ? "recovered" : "saved");
+ui.setHistory(project !== null && canUndo(project.history), project !== null && canRedo(project.history));
+ui.setRecoveryStatus(!database ? "failed" : projects.length > 0 ? "recovered" : "saved");
 for (const p of projects) if (p.history !== p.historyWritten) persistHistory(p);
-if (restored.length === 0) persistRecovery(store.state);
 if (lost.length > 0) {
     ui.setDocumentNotice(`${lost.map(title => `“${title}”`).join(", ")} couldn’t be recovered and ${lost.length === 1 ? "was" : "were"} closed.`);
 }

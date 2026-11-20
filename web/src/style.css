@@ -582,6 +582,21 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .chart-unavailable[hidden] { display: none; }
 
+.empty-workspace {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  text-align: center;
+  background: var(--bg-0);
+}
+.empty-workspace > h2 { color: var(--fg-0); font-size: var(--font-lg); }
+.empty-workspace > p { max-width: 28rem; color: var(--fg-2); }
+.empty-workspace-actions { width: min(20rem, 100%); }
+
 #canvas.canvas--navigate { cursor: grab; }
 #canvas.canvas--navigate:active { cursor: grabbing; }
 
@@ -695,13 +710,15 @@ input[type="checkbox"] { accent-color: var(--accent); }
   font-size: var(--font-sm);
 }
 
-.about-actions {
+.about-actions,
+.empty-workspace-actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-2);
 }
 
-.about-actions .btn { white-space: normal; }
+.about-actions .btn,
+.empty-workspace-actions .btn { white-space: normal; }
 .about-release-notes-region {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

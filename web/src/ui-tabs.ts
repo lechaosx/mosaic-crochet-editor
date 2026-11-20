@@ -1,14 +1,20 @@
 import { el } from "./dom";
-import type { UICallbacks, ProjectTab } from "./ui-types";
+import type { UICallbacks, ProjectTab, InspectorControls } from "./ui-types";
 
 type CloseAnswer = "save" | "discard" | "cancel";
 
 // The open projects as a WAI-ARIA tablist with automatic activation. Each
-// tab's close button sits beside the tablist, ordered after its tab.
-export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "onTabNew">) {
+// tab's close button sits beside the tablist, ordered after its tab. Without
+// an open project, the workspace offers ways to start one in place of the
+// editor, and the commands that act on a pattern are unavailable.
+export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "onTabNew">,
+    inspector: Pick<InspectorControls, "isOpen" | "close">) {
     const tablist = el("project-tablist");
     const closes = el("project-tab-closes");
     const workspace = el("workspace");
+    const editor = [el("authoring-dock"), workspace.querySelector<HTMLElement>(".canvas-area")!];
+    const empty = el("empty-workspace");
+    const patternCommands = ["btn-edit", "btn-save", "btn-export"].map(id => el<HTMLButtonElement>(id));
     const closePrompt = el<HTMLDialogElement>("close-tab-prompt");
     let answer: ((value: CloseAnswer) => void) | null = null;
 
@@ -35,7 +41,7 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
         answer = null;
     });
 
-    function setTabs(tabs: readonly ProjectTab[], active: string) {
+    function setTabs(tabs: readonly ProjectTab[], active: string | null) {
         const focused = document.activeElement instanceof HTMLElement
             && (tablist.contains(document.activeElement) || closes.contains(document.activeElement))
             ? document.activeElement : null;
@@ -65,7 +71,7 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
             tab.addEventListener("click", () => cb.onTabSelect(id));
             return tab;
         }));
-        closes.replaceChildren(...(tabs.length > 1 ? tabs : []).map(({ id, title }, i) => {
+        closes.replaceChildren(...tabs.map(({ id, title }, i) => {
             const close = document.createElement("button");
             close.type = "button";
             close.className = "project-tab-close";
@@ -79,6 +85,15 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
             close.addEventListener("click", () => cb.onTabClose(id));
             return close;
         }));
+        for (const region of editor) region.hidden = active === null;
+        empty.hidden = active !== null;
+        for (const command of patternCommands) command.disabled = active === null;
+        if (active === null) {
+            if (!inspector.isOpen("settings")) inspector.close(false);
+            workspace.removeAttribute("aria-labelledby");
+            if (focused) el("tab-new").focus();
+            return;
+        }
         workspace.setAttribute("aria-labelledby", `project-tab-${active}`);
         const selected = el(`project-tab-${active}`);
         selected.scrollIntoView({ block: "nearest", inline: "nearest" });

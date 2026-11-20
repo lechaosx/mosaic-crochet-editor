@@ -11,6 +11,11 @@ describe("project index", () => {
         expect(loadProjectIndex()).toEqual({ open, active: "a" });
     });
 
+    test("reads back an index with no open project", () => {
+        expect(saveProjectIndex([], null)).toBe(true);
+        expect(loadProjectIndex()).toEqual({ open: [], active: null });
+    });
+
     test("lists no projects when no index or an index of another version is stored", () => {
         expect(loadProjectIndex()).toBeNull();
         localStorage.setItem("mosaic-projects", JSON.stringify({ version: 1, open: ["a"], active: "a" }));

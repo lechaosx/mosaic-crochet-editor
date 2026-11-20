@@ -94,7 +94,7 @@ export interface UIHandle {
     setEditSummary:     (width: number, height: number, preserved: number, added: number, removed: number) => void;
     syncEditInputs:     (s: PatternState) => void;
     openInstructions:   () => InstructionsView;
-    setTabs:            (tabs: readonly ProjectTab[], active: string) => void;
+    setTabs:            (tabs: readonly ProjectTab[], active: string | null) => void;
     confirmClose:       (title: string) => Promise<"save" | "discard" | "cancel">;
 }
 

@@ -32,7 +32,7 @@ test("Save downloads no empty selection record and Open restores an editable uns
     const downloading = page.waitForEvent("download");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     const download = await downloading;
-    expect(download.suggestedFilename()).toBe("Untitled 2.mcw");
+    expect(download.suggestedFilename()).toBe("Untitled 1.mcw");
     const source = await readFile((await download.path())!, "utf8");
     expect(JSON.parse(source).recipes).toEqual([]);
     expect({ recovery: await storedRecovery(page), history: await storedHistory(page) }).toEqual(before);
@@ -299,11 +299,12 @@ test("a newer app version can upgrade the project database while this one runs",
     await expect(page.getByRole("status", { name: "Browser recovery" })).toHaveText("Recovery failed");
 });
 
-test("when the project index can't be stored, the failure shows and other projects' records are kept", async ({ page }) => {
+test("when the project index can't be stored, the session starts with no tab, the failure shows and other projects' records are kept", async ({ page }) => {
     await bootApp(page);
     const projects = await storedProjectIds(page);
     await loseProjectIndex(page);
     await reloadApp(page);
     await expect(page.getByRole("status", { name: "Browser recovery" })).toHaveText("Recovery failed");
+    await expect(page.getByRole("tab")).toHaveCount(0);
     expect(await storedProjectIds(page)).toEqual(projects);
 });

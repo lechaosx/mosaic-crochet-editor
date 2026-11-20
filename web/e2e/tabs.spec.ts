@@ -1,7 +1,7 @@
 // Open patterns as tabs: each keeps its own project, undo history, view and
 // mode, while tools are shared.
 import { test, expect, type Page } from "@playwright/test";
-import { activeProjectId, cellCoord, clickCell, deleteStoredRecovery, pixelRGB, storedLiveProgress, storedProjectIds,
+import { activeProjectId, bootApp, cellCoord, clickCell, deleteStoredRecovery, pixelRGB, storedLiveProgress, storedProjectIds,
          storedRecovery } from "./_helpers";
 
 const A: [number, number, number] = [0, 0, 0];
@@ -13,19 +13,16 @@ const motif = JSON.stringify({
     colorA: "#123456", colorB: "#ffffff",
 });
 
-// One "Untitled 1" tab, with About closed.
-async function boot(page: Page) {
-    await page.goto("/");
-    await page.waitForFunction(() => !!window.__test_matrix__);
-    await page.getByRole("button", { name: "Close About" }).click();
-}
-
 function tabs(page: Page) {
     return page.getByRole("tablist", { name: "Open patterns" }).getByRole("tab");
 }
 
 function tab(page: Page, name: string) {
     return page.getByRole("tab", { name: new RegExp(`^${name}\\b`) });
+}
+
+function emptyWorkspace(page: Page) {
+    return page.getByRole("region", { name: "No pattern open" });
 }
 
 async function newTab(page: Page) {
@@ -56,7 +53,7 @@ async function camera(page: Page) {
 }
 
 test("New, Example and Open each open a clean tab, and opening a file again opens another", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await expect(tabs(page)).toHaveCount(1);
     await newTab(page);
     await openExample(page);
@@ -72,7 +69,7 @@ test("New, Example and Open each open a clean tab, and opening a file again open
 
 test("each tab keeps its own document, selection, view, mode and progress, while tools are shared", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await boot(page);
+    await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
     await page.keyboard.press("s");
@@ -104,7 +101,7 @@ test("each tab keeps its own document, selection, view, mode and progress, while
 });
 
 test("switching tabs clears the previous tab's document messages", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await newTab(page);
     const chooser = page.waitForEvent("filechooser");
     await page.getByRole("button", { name: "Open", exact: true }).click();
@@ -115,7 +112,7 @@ test("switching tabs clears the previous tab's document messages", async ({ page
 });
 
 test("Save names the tab after the saved file and suggests the tab's title", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await page.evaluate(() => Object.assign(window, {
         showSaveFilePicker: async (options: { suggestedName: string }) => {
             (window as unknown as { suggested: string }).suggested = options.suggestedName;
@@ -135,7 +132,7 @@ test("Save names the tab after the saved file and suggests the tab's title", asy
 });
 
 test("each tab undoes only its own edits", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
     await newTab(page);
@@ -152,7 +149,7 @@ test("each tab undoes only its own edits", async ({ page }) => {
 });
 
 test("a selection alone marks its tab unsaved until undone", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await page.keyboard.press("s");
     await clickCell(page, 1, 1);
     await expect(tab(page, "Untitled 1")).toHaveAccessibleName("Untitled 1, unsaved changes");
@@ -161,7 +158,7 @@ test("a selection alone marks its tab unsaved until undone", async ({ page }) =>
 });
 
 test("a reload restores every open tab and selects the active one", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
     await newTab(page);
@@ -180,7 +177,7 @@ test("a reload restores every open tab and selects the active one", async ({ pag
 });
 
 test("a reload closes a tab whose browser records are missing and says so", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await openMotif(page);
     await deleteStoredRecovery(page, await activeProjectId(page));
     await newTab(page);
@@ -191,20 +188,84 @@ test("a reload closes a tab whose browser records are missing and says so", asyn
     await expect(page.getByRole("status").filter({ hasText: "motif.mcw" })).toContainText("couldn’t be recovered");
 });
 
-test("closing a clean tab needs no answer, and the last tab can't be closed", async ({ page }) => {
-    await boot(page);
-    await expect(page.getByRole("button", { name: "Close Untitled 1" })).toHaveCount(0);
+test("closing a clean tab needs no answer", async ({ page }) => {
+    await bootApp(page);
     await newTab(page);
     await page.getByRole("button", { name: "Close Untitled 2" }).click();
     await expect(tabs(page)).toHaveText(["Untitled 1"]);
     await expect(tab(page, "Untitled 1")).toHaveAttribute("aria-selected", "true");
-    await expect(page.getByRole("button", { name: "Close Untitled 1" })).toHaveCount(0);
+});
+
+test("closing the last tab leaves the empty workspace, where nothing needs a pattern", async ({ page }) => {
+    const errors: Error[] = [];
+    page.on("pageerror", error => errors.push(error));
+    await bootApp(page);
+    await page.getByRole("button", { name: "Close Untitled 1" }).focus();
+    await page.keyboard.press("Enter");
+
+    await expect(tabs(page)).toHaveCount(0);
+    await expect(emptyWorkspace(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "New tab" })).toBeFocused();
+    await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
+    await expect(page.getByRole("img", { name: "Editable pattern chart" })).toBeHidden();
+    for (const name of ["Pattern", "Save", "Undo", "Redo", "Begin Crocheting"]) {
+        await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
+    }
+    await expect(page.locator("#btn-load")).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Settings" })).toBeEnabled();
+    for (const key of ["p", "s", "v", "r", "Control+a", "Control+z", "Control+v"]) await page.keyboard.press(key);
+    await expect(tabs(page)).toHaveCount(0);
+    expect(await storedProjectIds(page)).toEqual([]);
+    expect(errors).toEqual([]);
+});
+
+test("New, Open and Example in the empty workspace each open the first tab", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Close Untitled 1" }).click();
+
+    await emptyWorkspace(page).getByRole("button", { name: "New" }).click();
+    await expect(tabs(page)).toHaveText(["Untitled 1"]);
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Close Untitled 1" }).click();
+
+    const chooser = page.waitForEvent("filechooser");
+    await emptyWorkspace(page).getByRole("button", { name: "Open" }).click();
+    await (await chooser).setFiles({ name: "motif.mcw", mimeType: "application/json", buffer: Buffer.from(motif) });
+    await expect(tabs(page)).toHaveText(["motif.mcw"]);
+    expect(await cellRGB(page, 0, 0)).toEqual([18, 52, 86]);
+    await page.getByRole("button", { name: "Close motif.mcw" }).click();
+
+    await emptyWorkspace(page).getByRole("button", { name: "Example" }).click();
+    await expect(tabs(page)).toHaveText(["Example"]);
+    await expect(emptyWorkspace(page)).toBeHidden();
+});
+
+test("a reload keeps the empty workspace", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Close Untitled 1" }).click();
+    await expect(emptyWorkspace(page)).toBeVisible();
+
+    await page.reload();
+    await expect(emptyWorkspace(page)).toBeVisible();
+    await expect(tabs(page)).toHaveCount(0);
+    expect(await storedProjectIds(page)).toEqual([]);
+});
+
+test("a reload that recovers no tab shows the empty workspace and says what was closed", async ({ page }) => {
+    await bootApp(page);
+    await deleteStoredRecovery(page, await activeProjectId(page));
+
+    await page.reload();
+    await expect(emptyWorkspace(page)).toBeVisible();
+    await expect(tabs(page)).toHaveCount(0);
+    await expect(page.getByRole("status").filter({ hasText: "Untitled 1" })).toContainText("couldn’t be recovered");
 });
 
 test.describe("closing an unsaved tab", () => {
     // Untitled 1 has an unsaved stroke and Crochet progress, and Untitled 3 is active.
     async function unsavedTab(page: Page) {
-        await boot(page);
+        await bootApp(page);
         await page.keyboard.press("p");
         await clickCell(page, 0, 1);
         await page.locator("#btn-export").click();
@@ -251,6 +312,18 @@ test.describe("closing an unsaved tab", () => {
         await expect(tabs(page)).toHaveText(["Untitled 2", "Untitled 3"]);
     });
 
+    test("Close without saving the last tab leaves the empty workspace", async ({ page }) => {
+        await bootApp(page);
+        await page.keyboard.press("p");
+        await clickCell(page, 0, 1);
+        await page.getByRole("button", { name: "Close Untitled 1" }).click();
+        await page.getByRole("dialog", { name: "Save changes to “Untitled 1”?" })
+            .getByRole("button", { name: "Close without saving" }).click();
+        await expect(tabs(page)).toHaveCount(0);
+        await expect(emptyWorkspace(page)).toBeVisible();
+        expect(await storedProjectIds(page)).toEqual([]);
+    });
+
     test("Save… keeps it open when saving is cancelled", async ({ page }) => {
         const { prompt } = await unsavedTab(page);
         await page.evaluate(() => Object.assign(window, {
@@ -263,7 +336,7 @@ test.describe("closing an unsaved tab", () => {
 });
 
 test("arrow, Home and End keys move between tabs", async ({ page }) => {
-    await boot(page);
+    await bootApp(page);
     await newTab(page);
     await openExample(page);
     await tab(page, "Example").focus();
@@ -283,7 +356,7 @@ test("arrow, Home and End keys move between tabs", async ({ page }) => {
 
 test("the tab strip scrolls sideways on a phone without widening the page", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await boot(page);
+    await bootApp(page);
     for (let i = 0; i < 5; i++) await newTab(page);
     const strip = page.locator("#project-tabs");
     expect(await strip.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);

@@ -1,10 +1,19 @@
 import { test, expect } from "@playwright/test";
-import { storedRecovery } from "./_helpers";
+import { storedProjectIds, storedRecovery } from "./_helpers";
 
 async function bootFresh(page: import("@playwright/test").Page) {
     await page.goto("/");
     await page.waitForFunction(() => !!(window as { __test_matrix__?: DOMMatrix }).__test_matrix__);
 }
+
+test("first launch shows About over the empty workspace and stores no pattern", async ({ page }) => {
+    await bootFresh(page);
+
+    await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
+    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.locator("#empty-workspace")).toBeVisible();
+    expect(await storedProjectIds(page)).toEqual([]);
+});
 
 test("first load shows About and New creates a pattern in the Pattern inspector", async ({ page }) => {
     await bootFresh(page);
@@ -31,6 +40,7 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
     await about.getByRole("button", { name: "New" }).click();
 
     await expect(about).toBeHidden();
+    await expect(page.getByRole("tab")).toHaveText(["Untitled 1"]);
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await storedRecovery(page)).not.toBeNull();
     expect((await storedRecovery(page)).workspace.mirrors).toEqual([]);
@@ -55,7 +65,7 @@ test("canceling the About file picker keeps the dialog available", async ({ page
         .getByRole("button", { name: "Open", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
-    await expect(page.getByRole("tab")).toHaveCount(1);
+    await expect(page.getByRole("tab")).toHaveCount(0);
 });
 
 test("opening an mcw file from About enters the editor", async ({ page }) => {
@@ -110,7 +120,7 @@ test("About reopens from Settings and light-dismisses", async ({ page }) => {
 
 test("example is editable and demonstrates overlay, global mirror, and Crochet", async ({ page }) => {
     await bootFresh(page);
-    await page.getByRole("button", { name: "Example" }).click();
+    await page.getByRole("dialog", { name: "Mosaic Crochet Editor" }).getByRole("button", { name: "Example" }).click();
 
     const recovery = await storedRecovery(page);
     expect(recovery.workspace.mirrors.length).toBeGreaterThan(0);
@@ -141,7 +151,7 @@ test("About fits a compact viewport", async ({ page }) => {
     expect(actionsBox!.y).toBeGreaterThan(copyrightBox!.y + copyrightBox!.height);
 
     for (const name of ["New", "Open", "Example"]) {
-        const button = page.getByRole("button", { name, exact: true });
+        const button = page.getByRole("dialog", { name: "Mosaic Crochet Editor" }).getByRole("button", { name, exact: true });
         await expect(button).toBeVisible();
         const box = await button.boundingBox();
         expect(box).not.toBeNull();

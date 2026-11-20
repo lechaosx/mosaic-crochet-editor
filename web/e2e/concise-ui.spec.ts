@@ -78,7 +78,7 @@ test("About and the idle canvas omit redundant guidance and status", async ({ pa
     await expect(about).toBeVisible();
     await expect(page.getByText("Begin with a blank chart", { exact: false })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "New", exact: true }).click();
+    await about.getByRole("button", { name: "New", exact: true }).click();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("status", { name: "Browser recovery" })).toBeHidden();
     await expect(page.getByLabel("Canvas context")).toBeHidden();

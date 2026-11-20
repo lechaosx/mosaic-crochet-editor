@@ -212,7 +212,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
         if (activeInspector !== null && !retainedInspector) closeInspector(false);
     }, syncCanvasChromeInsets, queueCanvasChromeSync);
 
-    const tabs = mountTabs(cb);
+    const tabs = mountTabs(cb, inspector);
 
     return {
         ...toolbar, ...selection, ...mirrors, ...tabs,

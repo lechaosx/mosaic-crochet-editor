@@ -23,7 +23,8 @@ export interface OpenEntry {
 export interface ProjectIndex {
     // In tab order.
     open:   OpenEntry[];
-    active: string;
+    // Null exactly when no project is open.
+    active: string | null;
 }
 
 export interface StoredProject {
@@ -51,7 +52,7 @@ export function loadProjectIndex(): ProjectIndex | null {
     try {
         const value = JSON.parse(localStorage.getItem(INDEX_KEY) ?? "null");
         if (value?.version === INDEX_VERSION && Array.isArray(value.open) && value.open.every(isOpenEntry)
-            && value.open.some((entry: OpenEntry) => entry.id === value.active)) {
+            && (value.open.length === 0 ? value.active === null : value.open.some((entry: OpenEntry) => entry.id === value.active))) {
             return { open: value.open.map(({ id, title }: OpenEntry) => ({ id, title })), active: value.active };
         }
     } catch {
@@ -61,7 +62,7 @@ export function loadProjectIndex(): ProjectIndex | null {
 }
 
 // False when the index can't be stored.
-export function saveProjectIndex(open: readonly OpenEntry[], active: string): boolean {
+export function saveProjectIndex(open: readonly OpenEntry[], active: string | null): boolean {
     try {
         localStorage.setItem(INDEX_KEY, JSON.stringify({ version: INDEX_VERSION, open, active }));
         return true;
