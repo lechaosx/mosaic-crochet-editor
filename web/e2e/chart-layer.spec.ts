@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { bootApp, chartPixel, clickCell } from "./_helpers";
+import { bootApp, chartPixel, chartPixels, clickCell, dragCells } from "./_helpers";
 
 const DANGER = [211, 47, 47], A = [0, 0, 0], B = [255, 255, 255];
 
@@ -127,4 +127,63 @@ test("the chart returns when the browser restores its graphics context", async (
     await page.evaluate(() => (window as typeof window & { contextControl: WEBGL_lose_context }).contextControl.restoreContext());
     await expect(message).toBeHidden();
     await expect.poll(() => patternRGB(page, 0.5, 1.5)).toEqual(B);
+});
+
+// The cells showing ✕ and !, and the colour at the centre of each of a W×H
+// chart's cells, as drawn.
+async function drawnChart(page: Page, W: number, H: number) {
+    await page.mouse.move(0, 0);
+    const { glyphs, matrix, rect } = await page.evaluate(({ W, H }) => {
+        const guidance = (window as typeof window & { __test_instruction_guidance__?: {
+            validGlyphCoords: { x: number; y: number }[]; invalidGlyphCoords: { x: number; y: number }[];
+        } }).__test_instruction_guidance__!;
+        const m = window.__test_matrix__!;
+        const [a, b] = [{ x: 0, y: 0 }, { x: W, y: H }].map(point => m.transformPoint(point));
+        const x = Math.floor(Math.min(a.x, b.x)), y = Math.floor(Math.min(a.y, b.y));
+        return {
+            glyphs: { cross: guidance.validGlyphCoords, warning: guidance.invalidGlyphCoords },
+            matrix: [m.a, m.b, m.c, m.d, m.e, m.f],
+            rect: { x, y, width: Math.ceil(Math.max(a.x, b.x)) - x, height: Math.ceil(Math.max(a.y, b.y)) - y },
+        };
+    }, { W, H });
+    const { data } = await chartPixels(page, rect);
+    const [a, b, c, d, e, f] = matrix;
+    const centres: number[][] = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const px = Math.floor(a * (x + 0.5) + c * (y + 0.5) + e) - rect.x;
+        const py = Math.floor(b * (x + 0.5) + d * (y + 0.5) + f) - rect.y;
+        const i = (py * rect.width + px) * 4;
+        centres.push([data[i], data[i + 1], data[i + 2]]);
+    }
+    return { ...glyphs, centres };
+}
+
+test("Undo and Redo redraw the chart each edit left, also after a reload", async ({ page }) => {
+    // Each chart readback repaints and copies the whole WebGL canvas.
+    test.slow();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await bootApp(page);
+    const charts = [await drawnChart(page, 9, 9)];
+    await page.getByRole("button", { name: "Yarn B", exact: true }).click();
+    await clickCell(page, 4, 8);
+    charts.push(await drawnChart(page, 9, 9));
+    expect(charts[1].cross).toContainEqual({ x: 4, y: 7 });
+    await page.keyboard.press("s");
+    await dragCells(page, 3, 6, 5, 8);
+    charts.push(await drawnChart(page, 9, 9));
+    await page.keyboard.press("m");
+    await dragCells(page, 4, 7, 1, 4);
+    charts.push(await drawnChart(page, 9, 9));
+    expect(charts[3]).not.toEqual(charts[2]);
+
+    for (let step = 2; step >= 0; step--) {
+        await page.keyboard.press("Control+z");
+        expect(await drawnChart(page, 9, 9), `undo to ${step}`).toEqual(charts[step]);
+    }
+    for (let step = 1; step <= 3; step++) await page.keyboard.press("Control+y");
+    expect(await drawnChart(page, 9, 9)).toEqual(charts[3]);
+    await page.reload();
+    await page.waitForFunction(() => !!window.__test_matrix__);
+    await page.keyboard.press("Control+z");
+    expect(await drawnChart(page, 9, 9)).toEqual(charts[2]);
 });

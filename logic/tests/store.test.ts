@@ -216,7 +216,8 @@ describe("Store plan changes", () => {
         | { kind: "move"; dx: number; dy: number }
         | { kind: "drop" }
         | { kind: "keep" }
-        | { kind: "pattern" };
+        | { kind: "pattern" }
+        | { kind: "restore"; back: number };
     const step: fc.Arbitrary<Step> = fc.oneof(
         fc.record({ kind: fc.constant("paint" as const), x: fc.nat(), y: fc.nat(), yarn: fc.constantFrom<1 | 2>(1, 2) }),
         fc.record({ kind: fc.constant("lift" as const), x: fc.nat(), y: fc.nat(),
@@ -225,9 +226,10 @@ describe("Store plan changes", () => {
         fc.constant({ kind: "drop" as const }),
         fc.constant({ kind: "keep" as const }),
         fc.constant({ kind: "pattern" as const }),
+        fc.record({ kind: fc.constant("restore" as const), back: fc.nat() }),
     );
 
-    function apply(state: SessionState, next: Step): void {
+    function apply(state: SessionState, next: Exclude<Step, { kind: "restore" }>): void {
         const { canvasWidth: W, canvasHeight: H } = state.pattern;
         switch (next.kind) {
             case "paint": {
@@ -255,15 +257,18 @@ describe("Store plan changes", () => {
         }
     }
 
-    test("each commit's change region holds every changed visible pixel and plan cell", () => {
+    test("each change region holds every changed visible pixel and plan cell", () => {
         fc.assert(fc.property(
             fc.integer({ min: 1, max: 7 }), fc.integer({ min: 1, max: 7 }), fc.array(step, { minLength: 1, maxLength: 12 }),
             (W, H, steps) => {
                 const s = new Store(rowSession(W, H));
+                const earlier = [{ pattern: s.state.pattern, pixels: s.state.pixels, float: s.state.float }];
                 for (const next of steps) {
                     const version = s.planVersion;
                     const visible = visiblePixels(s.state).slice(), cells = s.plan.cells.slice();
-                    s.commit(state => apply(state, next));
+                    if (next.kind === "restore") s.replace({ ...s.state, ...earlier[next.back % earlier.length] });
+                    else s.commit(state => apply(state, next));
+                    earlier.push({ pattern: s.state.pattern, pixels: s.state.pixels, float: s.state.float });
                     expect(s.plan).toEqual(new Store({ ...s.state }).plan);
                     const change = s.planChangeSince(version);
                     if (next.kind === "pattern") expect(change).toBe("all");
@@ -300,10 +305,23 @@ describe("Store plan changes", () => {
         expect(s.planChangeSince(null)).toBe("all");
     });
 
-    test("replace rebuilds the plan", () => {
+    test("replace updates the plan only around the cells it changes", () => {
+        const s = new Store(rowSession(9, 9));
+        const version = s.planVersion;
+        const pixels = s.state.pixels.slice();
+        pixels[4 * 9 + 4] = 3 - pixels[4 * 9 + 4];
+        s.replace({ ...s.state, pixels });
+        expect(s.plan).toEqual(new Store({ ...s.state }).plan);
+        const change = s.planChangeSince(version);
+        expect(change).not.toBe("all");
+        expect(change).not.toBeNull();
+    });
+
+    test("replace with another pattern rebuilds the plan", () => {
         const s = new Store(rowSession(3, 3));
         const version = s.planVersion;
-        s.replace({ ...s.state, pixels: filledPixels(3, 3, 1) });
+        const { pattern, pixels } = rowSession(4, 3);
+        s.replace({ ...s.state, pattern, pixels });
         expect(s.planChangeSince(version)).toBe("all");
     });
 });

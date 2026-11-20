@@ -14,8 +14,8 @@ import {
     type CellRect, type HighlightPlan, type MutableHighlightPlan,
 } from "./highlight-plan";
 
-// Commits assign new `pattern`, `pixels` and `float` values instead of writing
-// into the current ones: the plan update skips a commit that keeps all three,
+// Changes assign new `pattern`, `pixels` and `float` values instead of writing
+// into the current ones: the plan update skips a change that keeps all three,
 // finds changed cells by comparing the visible pixels with the previous ones,
 // and rebuilds only when `pattern` is a different object.
 export interface SessionState {
@@ -146,14 +146,14 @@ export class Store {
         for (const fn of this._observers) fn(this);
     }
 
-    // Bulk replace — used for file load, undo/redo. Always recomputes plan
-    // and renders. `history`/`persist` default off because the typical caller
-    // (undo/redo) is itself navigating history.
+    // Bulk replace — used for file load, undo/redo. Updates the plan as
+    // `commit` does and always renders. `history`/`persist` default off
+    // because the typical caller (undo/redo) is itself navigating history.
     replace(state: SessionState, opts?: { history?: boolean; persist?: boolean }): void {
         if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
-        this.rebuildPlan();
+        this.updatePlan();
         if (opts?.history) this._historyFn?.(state);
         this._renderer?.(this);
         if (opts?.persist) this._persistFn?.(state);
