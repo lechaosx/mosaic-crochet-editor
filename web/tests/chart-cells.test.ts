@@ -4,7 +4,7 @@ import { PlanCell, initialize_round_pattern } from "@mosaic/wasm";
 import { Store } from "@mosaic/logic/store";
 import type { PatternState } from "@mosaic/logic/types";
 import { CELL_CROSS, CELL_CROSS_B, CELL_WARNING, packChartCells, repackChartCells } from "../src/chart-cells";
-import { packInstructionCoordinates } from "../src/instruction-coordinates";
+import { forEachPlanGlyph, packInstructionCoordinates } from "../src/instruction-coordinates";
 import { rowSession } from "./_helpers";
 
 // 3×2 chart: row 0 = A B A, row 1 = B hole B.
@@ -61,6 +61,34 @@ describe("packChartCells", () => {
         expect(at(cells, -1, 0)).toBe(CELL_WARNING);
         expect(at(cells, 1, 1)).toBe(CELL_WARNING);
         expect(at(cells, 2, 0)).toBe(1 | CELL_WARNING);
+    });
+
+    it("marks ✕ or ! on exactly the outward cells of the plan's glyphs", () => {
+        // Hole-free charts, so every ✕ has a yarn to contrast with.
+        const chart = fc.oneof(
+            fc.record({ W: fc.integer({ min: 1, max: 8 }), H: fc.integer({ min: 1, max: 8 }) })
+                .map(({ W, H }): PatternState => ({ mode: "row", canvasWidth: W, canvasHeight: H })),
+            fc.record({ W: fc.integer({ min: 1, max: 8 }), H: fc.integer({ min: 1, max: 8 }) })
+                .map(({ W, H }): PatternState => ({ mode: "round", canvasWidth: W, canvasHeight: H,
+                    virtualWidth: W, virtualHeight: H, offsetX: 0, offsetY: 0, rounds: 4 })),
+        );
+        fc.assert(fc.property(chart, fc.array(fc.constantFrom<1 | 2>(1, 2), { minLength: 64, maxLength: 64 }),
+            (pattern, yarns) => {
+                const { canvasWidth: W, canvasHeight: H } = pattern;
+                const pixels = new Uint8Array(yarns.slice(0, W * H));
+                const plan = new Store(rowSession(W, H, { pattern, pixels })).plan.cells;
+                const cells = packChartCells(pixels, W, H, plan, null);
+                const stride = W + 2, crosses = new Set<number>(), warnings = new Set<number>();
+                forEachPlanGlyph(plan, W, (invalid, x, y) => (invalid ? warnings : crosses).add((y + 1) * stride + x + 1));
+                cells.forEach((cell, index) => {
+                    const x = index % stride - 1, y = Math.floor(index / stride) - 1;
+                    const inside = x >= 0 && x < W && y >= 0 && y < H;
+                    expect(cell & 3).toBe(inside ? pixels[y * W + x] : 0);
+                    expect((cell & CELL_CROSS) !== 0).toBe(crosses.has(index));
+                    expect((cell & CELL_WARNING) !== 0).toBe(warnings.has(index));
+                });
+            },
+        ), { numRuns: 500 });
     });
 
     it("keeps only the glyphs whose outward cell the guidance includes", () => {

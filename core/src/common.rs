@@ -389,6 +389,16 @@ pub fn highlight_plan_round(
     plan
 }
 
+// The plan cells carrying a glyph, and those of them whose glyph is a warning.
+pub fn plan_counts(plan: &[u8]) -> (u32, u32) {
+    plan.iter().fold((0, 0), |(marked, invalid), &cell| {
+        (
+            marked + u32::from(cell != 0),
+            invalid + u32::from(cell & PLAN_INVALID),
+        )
+    })
+}
+
 // Outermost ring: outward direction is *outside* the canvas. It is still
 // emitted — the renderer chooses what to do (typically draws in the gutter).
 // Corners (min_dist.x == min_dist.y) carry two perpendicular directions.
@@ -885,6 +895,17 @@ mod tests {
             .filter(|&i| plan[i as usize] != 0)
             .map(|i| (i % width, i / width, plan[i as usize]))
             .collect()
+    }
+
+    #[test]
+    fn plan_counts_cells_with_a_glyph_and_those_with_a_warning() {
+        let plan = [
+            0,
+            PLAN_UP,
+            PLAN_INVALID | PLAN_LEFT,
+            PLAN_INVALID | PLAN_UP | PLAN_RIGHT,
+        ];
+        assert_eq!(plan_counts(&plan), (3, 2));
     }
 
     #[test]

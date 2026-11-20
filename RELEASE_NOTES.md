@@ -4,7 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 20 November 2026
 
-- Editing, undo, panning and zooming large charts respond much faster, and pattern sides are now limited to 32,767 stitches; the chart needs WebGL 2 and shows a message in browsers without it, and the app needs Chrome 140, Firefox 133, Safari 18.2 or newer.
+- Opening, editing, undo, panning and zooming large charts respond much faster, and pattern sides are now limited to 32,767 stitches; the chart needs WebGL 2 and shows a message in browsers without it, and the app needs Chrome 140, Firefox 133, Safari 18.2 or newer.
 - Browser recovery and undo history now also work for large patterns; the recovered session, undo history and Crochet progress from before this update are not carried over.
 - Only one window edits at a time: opening the app in another window offers to continue editing there, and the previous window stops editing.
 - Several patterns can be open at once as tabs, each with its own undo history, view, and Crochet progress; New, Open, and Example open new tabs, closing a tab with unsaved changes asks whether to save it first, and with no tab open the workspace shows how to start a pattern.

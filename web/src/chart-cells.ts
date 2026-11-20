@@ -1,5 +1,6 @@
 import type { CellRect } from "@mosaic/logic/highlight-plan";
-import { forEachPlanGlyph, type PackedInstructionCoordinates } from "./instruction-coordinates";
+import { PlanCell } from "@mosaic/wasm";
+import type { PackedInstructionCoordinates } from "./instruction-coordinates";
 
 // The chart layer's cell bytes: bits 0–1 hold the yarn (0 = hole or outside),
 // the flags below the plan glyph drawn on that cell.
@@ -29,22 +30,42 @@ export function repackChartCells(
     const top = rect.y - 1, bottom = rect.y + rect.height;
     const left = rect.x - 1, right = rect.x + rect.width;
     for (let y = top; y <= bottom; y++) {
-        for (let x = left; x <= right; x++) {
-            cells[(y + 1) * stride + x + 1] = x >= 0 && x < W && y >= 0 && y < H ? pixels[y * W + x] : 0;
+        const row = (y + 1) * stride + 1;
+        cells.fill(0, row + left, row + right + 1);
+        if (y >= 0 && y < H) {
+            cells.set(pixels.subarray(y * W + Math.max(0, left), y * W + Math.min(W, right + 1)), row + Math.max(0, left));
         }
     }
     // Glyphs landing outside the rewritten cells are already there; setting their flags again keeps them.
-    const sources = { x: Math.max(0, rect.x - 2), y: Math.max(0, rect.y - 2) };
-    forEachPlanGlyph(plan, W, (invalid, x, y, wrongX, wrongY) => {
-        if (guidance && !guidance.has(x, y)) return;
-        const index = (y + 1) * stride + x + 1;
-        if (invalid) {
-            cells[index] |= CELL_WARNING;
-            return;
+    const fromX = Math.max(0, rect.x - 2), toX = Math.min(W, right + 2);
+    for (let y = Math.max(0, rect.y - 2); y < Math.min(H, bottom + 2); y++) {
+        for (let x = fromX, wrong = y * W + x; x < toX; x++, wrong++) {
+            const cell = plan[wrong];
+            if (cell === 0) continue;
+            if (cell & PlanCell.Up) markGlyph(cells, pixels, W, H, guidance, cell, x, y - 1, wrong);
+            if (cell & PlanCell.Down) markGlyph(cells, pixels, W, H, guidance, cell, x, y + 1, wrong);
+            if (cell & PlanCell.Left) markGlyph(cells, pixels, W, H, guidance, cell, x - 1, y, wrong);
+            if (cell & PlanCell.Right) markGlyph(cells, pixels, W, H, guidance, cell, x + 1, y, wrong);
         }
-        // ✕ contrasts with the yarn it lands on; in the border, with its supporting cell.
-        const under = x >= 0 && x < W && y >= 0 && y < H ? pixels[y * W + x] : pixels[wrongY * W + wrongX];
-        if (under !== 0) cells[index] |= CELL_CROSS | (under === 1 ? CELL_CROSS_B : 0);
-    }, { ...sources, width: Math.min(W, right + 2) - sources.x, height: Math.min(H, bottom + 2) - sources.y });
+    }
     return [(top + 1) * stride, (bottom + 2) * stride];
+}
+
+// The flags a glyph sets on its outward cell, indexed by its warning bit and the
+// yarn under the ✕, which contrasts with that yarn and is omitted on a hole.
+// Looked up rather than branched on: a noisy chart defeats branch prediction.
+const GLYPH_FLAGS = new Uint8Array([
+    0, CELL_CROSS | CELL_CROSS_B, CELL_CROSS, 0,
+    CELL_WARNING, CELL_WARNING, CELL_WARNING, 0,
+]);
+
+// Flags the glyph of plan byte `cell`, whose wrong cell is at index `wrong`, on its outward cell (x, y).
+function markGlyph(
+    cells: Uint8Array, pixels: Uint8Array, W: number, H: number,
+    guidance: PackedInstructionCoordinates | null, cell: number, x: number, y: number, wrong: number,
+): void {
+    if (guidance && !guidance.has(x, y)) return;
+    // ✕ contrasts with the yarn it lands on; in the border, with its supporting cell.
+    const under = pixels[x >= 0 && x < W && y >= 0 && y < H ? y * W + x : wrong];
+    cells[(y + 1) * (W + 2) + x + 1] |= GLYPH_FLAGS[(cell & PlanCell.Invalid) << 2 | under];
 }

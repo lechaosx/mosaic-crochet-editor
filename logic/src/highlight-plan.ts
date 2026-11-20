@@ -1,7 +1,7 @@
 // The Rust highlight plan of the visible pixels, kept up to date by
 // recomputing only the cells an edit can affect.
 
-import { PlanCell, highlight_plan_reach, highlight_plan_round, highlight_plan_row } from "@mosaic/wasm";
+import { PlanCell, highlight_plan_counts, highlight_plan_reach, highlight_plan_round, highlight_plan_row } from "@mosaic/wasm";
 import type { PatternState } from "./types";
 
 export interface CellRect {
@@ -59,9 +59,11 @@ function planCells(pattern: PatternState, visible: Uint8Array, rect: CellRect): 
 }
 
 export function computeHighlightPlan(pattern: PatternState, visible: Uint8Array): MutableHighlightPlan {
-    const plan = { cells: new Uint8Array(visible.length), marked: 0, invalid: 0 };
-    updateHighlightPlan(plan, pattern, visible, wholeCanvas(pattern));
-    return plan;
+    const cells = planCells(pattern, visible, wholeCanvas(pattern));
+    // Counted in wasm: run once over a large chart, a JS loop is as fast as
+    // whichever tier V8 has compiled it to by then, at worst over ten times slower.
+    const [marked, invalid] = highlight_plan_counts(cells);
+    return { cells, marked, invalid };
 }
 
 // Recomputes the plan of the cells within reach of `changed`, which holds

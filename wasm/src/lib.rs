@@ -496,6 +496,13 @@ pub fn highlight_plan_round(
     )
 }
 
+// [glyph cells, warning cells] of a plan.
+#[wasm_bindgen]
+pub fn highlight_plan_counts(plan: &[u8]) -> Vec<u32> {
+    let (marked, invalid) = common::plan_counts(plan);
+    vec![marked, invalid]
+}
+
 #[wasm_bindgen]
 pub fn instruction_start_row(pixels: &[u8], width: i32, height: i32) -> InstructionSession {
     InstructionSession {
