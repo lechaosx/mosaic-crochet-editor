@@ -8,19 +8,22 @@ import { recoveryRecord } from "./storage-io";
 import type { HistoryMeta, Snapshot } from "./history";
 
 const INDEX_KEY     = "mosaic-projects";
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
 const DATABASE      = "mosaic-projects";
 // Records of the earlier single-session storage, discarded rather than migrated.
 const RETIRED_KEYS  = ["mosaic-recovery", "mosaic-pattern-v4", "mosaic-history", "mosaic-history-v4", "mosaic-live-progress"];
 // "recovery" and "history" are keyed by project id, "snapshots" by [project id, snapshot id].
 const STORES        = ["recovery", "history", "snapshots"];
 
+export interface OpenEntry {
+    id:    string;
+    title: string;
+}
+
 export interface ProjectIndex {
-    open:   string[];
+    // In tab order.
+    open:   OpenEntry[];
     active: string;
-    // False when a new index couldn't be stored, so a later boot won't find
-    // this session's project records.
-    stored: boolean;
 }
 
 export interface StoredProject {
@@ -33,24 +36,37 @@ export function removeRetiredRecords(): void {
     for (const key of RETIRED_KEYS) localStorage.removeItem(key);
 }
 
-// Starts a new index with one new project when none valid is stored.
-export function loadProjectIndex(): ProjectIndex {
+export function newProjectId(): string {
+    // `crypto.randomUUID` exists only in secure contexts.
+    return Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isOpenEntry(value: unknown): value is OpenEntry {
+    return typeof value === "object" && value !== null
+        && typeof (value as OpenEntry).id === "string" && typeof (value as OpenEntry).title === "string";
+}
+
+// Null when no valid index is stored.
+export function loadProjectIndex(): ProjectIndex | null {
     try {
         const value = JSON.parse(localStorage.getItem(INDEX_KEY) ?? "null");
-        if (value?.version === INDEX_VERSION && Array.isArray(value.open)
-            && value.open.every((id: unknown) => typeof id === "string") && value.open.includes(value.active)) {
-            return { open: value.open, active: value.active, stored: true };
+        if (value?.version === INDEX_VERSION && Array.isArray(value.open) && value.open.every(isOpenEntry)
+            && value.open.some((entry: OpenEntry) => entry.id === value.active)) {
+            return { open: value.open.map(({ id, title }: OpenEntry) => ({ id, title })), active: value.active };
         }
     } catch {
-        // A malformed index starts a new one.
+        // A malformed index lists no projects.
     }
-    // `crypto.randomUUID` exists only in secure contexts.
-    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
+    return null;
+}
+
+// False when the index can't be stored.
+export function saveProjectIndex(open: readonly OpenEntry[], active: string): boolean {
     try {
-        localStorage.setItem(INDEX_KEY, JSON.stringify({ version: INDEX_VERSION, open: [id], active: id }));
-        return { open: [id], active: id, stored: true };
+        localStorage.setItem(INDEX_KEY, JSON.stringify({ version: INDEX_VERSION, open, active }));
+        return true;
     } catch {
-        return { open: [id], active: id, stored: false };
+        return false;
     }
 }
 

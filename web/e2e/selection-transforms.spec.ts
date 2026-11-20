@@ -284,51 +284,7 @@ test("local Mirror describes implied types while buttons and history retain expl
     expect((await recipe(page)).mirrorTypes).toEqual(["V"]);
 });
 
-for (const ordering of ["independent choices", "recipe and source field keys"] as const) test(
-    `identical Open ignores reordered ${ordering} without moving the rotated view`, async ({ page }) => {
-    await selection(page);
-    await category(page, "Circle");
-    await page.locator("#recipe-turn-90").check(); await page.locator("#recipe-turn-270").check();
-    await category(page, "Mirror");
-    await page.locator("#recipe-mirror-centre-x").fill("2.5"); await page.locator("#recipe-mirror-centre-y").fill("2.5");
-    await page.locator("#recipe-mirror-centre-y").press("Enter");
-    await page.locator("#recipe-mirror-v").click(); await page.locator("#recipe-mirror-h").click();
-    await page.evaluate(() => {
-        const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
-        target.showSaveFilePicker = async () => ({ createWritable: async () => ({
-            write: async (source: string) => { target.savedMcw = source; }, close: async () => {},
-        }) });
-    });
-    await page.getByRole("button", { name: "Save", exact: true }).click();
-    await expect.poll(() => page.evaluate(() => (window as unknown as { savedMcw?: string }).savedMcw)).toBeTruthy();
-    const file = JSON.parse(await page.evaluate(() => (window as unknown as { savedMcw: string }).savedMcw));
-    if (ordering === "independent choices") {
-        file.recipes[0].mirrorTypes.reverse(); file.recipes[0].rotationTurns.reverse();
-    } else {
-        file.recipes[0].source = Object.fromEntries(Object.entries(file.recipes[0].source).reverse());
-        file.recipes[0] = Object.fromEntries(Object.entries(file.recipes[0]).reverse());
-    }
-    await page.getByRole("button", { name: "Rotate view right", exact: true }).click();
-    await page.waitForFunction(() => Math.abs(window.__test_matrix__!.a - window.__test_matrix__!.b) < 1e-10);
-    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-    const before = { history: await storedHistory(page), recovery: await storedRecovery(page),
-        matrix: await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array())) };
-    await page.evaluate(() => {
-        const read = FileReader.prototype.readAsText;
-        FileReader.prototype.readAsText = function (...args) {
-            this.addEventListener("loadend", () => { (window as unknown as { fileReadComplete: boolean }).fileReadComplete = true; }, { once: true });
-            read.apply(this, args);
-        };
-    });
-    const choosing = page.waitForEvent("filechooser"); await page.getByRole("button", { name: "Open", exact: true }).click();
-    await (await choosing).setFiles({ name: "same-choices.mcw", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
-    await page.waitForFunction(() => (window as unknown as { fileReadComplete: boolean }).fileReadComplete);
-    await expect(page.locator("#document-error")).toBeHidden();
-    expect({ history: await storedHistory(page), recovery: await storedRecovery(page),
-        matrix: await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array())) }).toEqual(before);
-});
-
-test("a successful legacy file conversion uses a neutral notice and keeps an identical project camera and history", async ({ page }) => {
+test("a successful legacy file conversion uses a neutral notice and keeps the selection's transforms", async ({ page }) => {
     await selection(page); await category(page, "Circle");
     await page.locator("#recipe-centre-x").fill("2.5"); await page.locator("#recipe-centre-y").fill("2.5");
     await page.locator("#recipe-centre-y").press("Enter");
@@ -338,7 +294,7 @@ test("a successful legacy file conversion uses a neutral notice and keeps an ide
     await page.locator("#recipe-mirror-v").click(); await page.locator("#recipe-mirror-h").click();
     await page.evaluate(() => {
         const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
-        target.showSaveFilePicker = async () => ({ createWritable: async () => ({
+        target.showSaveFilePicker = async () => ({ name: "pattern.mcw", createWritable: async () => ({
             write: async (source: string) => { target.savedMcw = source; }, close: async () => {},
         }) });
     });
@@ -348,18 +304,14 @@ test("a successful legacy file conversion uses a neutral notice and keeps an ide
     file.version = 5;
     file.recipes[0].mode = "rotation"; file.recipes[0].mirrorHorizontal = true; file.recipes[0].mirrorVertical = true;
     delete file.recipes[0].mirrorTypes; delete file.recipes[0].mirrorCentreX; delete file.recipes[0].mirrorCentreY;
-    await page.getByRole("button", { name: "Rotate view right", exact: true }).click();
-    await page.waitForFunction(() => Math.abs(window.__test_matrix__!.a - window.__test_matrix__!.b) < 1e-10);
-    const before = { history: await storedHistory(page), recovery: await storedRecovery(page),
-        matrix: await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array())) };
+    const before = (await storedRecovery(page)).workspace.recipes;
     const choosing = page.waitForEvent("filechooser"); await page.getByRole("button", { name: "Open", exact: true }).click();
     await (await choosing).setFiles({ name: "legacy-selection.mcw", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(file)) });
     const notice = page.getByRole("status").filter({ hasText: "Saved selection transforms were converted" });
     await expect(notice).toBeVisible();
     await page.getByRole("button", { name: "Dismiss document notice", exact: true }).click();
     await expect(notice).toBeHidden();
-    expect({ history: await storedHistory(page), recovery: await storedRecovery(page),
-        matrix: await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array())) }).toEqual(before);
+    expect((await storedRecovery(page)).workspace.recipes).toEqual(before);
 });
 
 for (const cancellation of ["blur", "pointercancel", "lostpointercapture"] as const) {

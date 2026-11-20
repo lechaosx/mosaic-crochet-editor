@@ -55,6 +55,7 @@ The intended end-to-end story is:
 ## Projects, recovery, and ownership
 
 - `.mcw` is the editable project format. It carries authored crochet content and reusable project transforms, but not transient tool state, a live selection, app-wide preferences, undo history, or Crochet progress. — **your decision**
+- Several projects can be open at once as tabs, and the user moves between them freely; each tab resumes where it was left ([what each tab keeps](ARCHITECTURE.md#state-boundaries)). New, Open, and Example each open a new, unmodified tab, even for a file that is already open; a tab is titled by its file, or as Untitled or Example until saved. A reload restores every open tab and the active one. Closing a tab with unsaved changes, including selection-only changes, offers to save it first, close it without saving, or cancel; closing discards its undo history and Crochet progress. — **your decision**
 - Browser recovery is automatic and separate from Save. It restores the local editing session but never implies that an external project file was updated. — **your decision**
 - One window of the app per browser profile edits at a time. Opening it in another window offers to take over, which continues the recovered work and undo history there and stops editing in the previous window. — **Agent's choice**
 - Danger and Accent defaults follow the yarn colours; explicit project colour choices remain fixed when the yarns change. — **your decision**

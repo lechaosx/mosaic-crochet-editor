@@ -180,11 +180,11 @@ test("Whole stays selected through direction and colour changes and is absent fr
     expect(text.split("\n").map(line => line.match(/^Row \d+ · Yarn ([AB]):/)![1])).toEqual(["A", "B", "A", "B", "A", "B", "A", "B", "A"]);
 });
 
-test("Whole does not enter files or authored history, identical Open retains it, and stitch edits resume the real instruction", async ({ page }) => {
+test("Whole does not enter files or authored history, and stitch edits resume the real instruction", async ({ page }) => {
     await bootApp(page);
     await page.evaluate(() => {
         const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
-        target.showSaveFilePicker = async () => ({ createWritable: async () => ({
+        target.showSaveFilePicker = async () => ({ name: "pattern.mcw", createWritable: async () => ({
             write: async (source: string) => { target.savedMcw = source; }, close: async () => {},
         }) });
     });
@@ -207,10 +207,6 @@ test("Whole does not enter files or authored history, identical Open retains it,
         history: await storedHistory(page), recovery: await storedRecovery(page),
         progress: await storedLiveProgress(page),
     }).toEqual(before);
-    const chooser = page.waitForEvent("filechooser");
-    await page.getByRole("button", { name: "Open", exact: true }).click();
-    await (await chooser).setFiles({ name: "same.mcw", mimeType: "application/json", buffer: Buffer.from(before.file) });
-    await expect(whole).toHaveAttribute("aria-current", "step");
     await page.locator("#btn-export").click();
     await clickCell(page, 3, 1);
     await page.locator("#btn-export").click();

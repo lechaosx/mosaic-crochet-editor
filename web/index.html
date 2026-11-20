@@ -77,6 +77,11 @@
     <symbol id="icon-mirror-d1" viewBox="0 0 24 24"><path d="m4 4 16 16M4 11v9h9ZM11 4h9v9Z"/></symbol>
     <symbol id="icon-mirror-d2" viewBox="0 0 24 24"><path d="M20 4 4 20M4 4v9l9-9ZM20 11v9h-9Z"/></symbol>
   </svg>
+  <div class="project-tabs" id="project-tabs">
+    <div id="project-tablist" role="tablist" aria-label="Open patterns"></div>
+    <div id="project-tab-closes"></div>
+    <button class="btn btn--icon btn--ghost" id="tab-new" type="button" aria-label="New tab" title="New pattern in a new tab"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg></button>
+  </div>
   <header class="document-bar" id="document-bar">
       <div class="document-actions g-file">
         <button class="btn" id="btn-edit" aria-controls="inspector-host" aria-expanded="false" title="Pattern dimensions">Pattern</button>
@@ -103,7 +108,7 @@
     <div id="more-actions"></div>
   </div>
 
-  <div class="workspace">
+  <div class="workspace" id="workspace" role="tabpanel">
     <nav class="authoring-dock" id="authoring-dock" aria-label="Authoring tools" data-workspace="design">
       <div class="dock-group g-paint" role="group" aria-label="Colour tools">
         <span class="dock-group-label" aria-hidden="true">Colour</span>
@@ -446,6 +451,18 @@
       <p id="take-over-message">Mosaic Crochet Editor is open in another window, and only one window can edit at a time. Edit here to continue your work in this window.</p>
       <button class="btn" id="take-over" type="button" autofocus>Edit here</button>
     </article>
+  </dialog>
+
+  <dialog id="close-tab-prompt" class="close-tab-prompt" aria-labelledby="close-tab-title" aria-describedby="close-tab-message">
+    <form class="take-over-card" method="dialog">
+      <h1 id="close-tab-title"></h1>
+      <p id="close-tab-message">Unsaved changes are lost unless you save them. Closing also discards this pattern’s undo history.</p>
+      <div class="close-tab-actions">
+        <button class="btn" value="save" autofocus>Save…</button>
+        <button class="btn btn--destructive" value="discard">Close without saving</button>
+        <button class="btn" value="cancel">Cancel</button>
+      </div>
+    </form>
   </dialog>
 
   <script type="module" src="./src/main.ts"></script>

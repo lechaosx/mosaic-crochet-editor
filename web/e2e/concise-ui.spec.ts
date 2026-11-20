@@ -305,12 +305,8 @@ test("Pattern colour resets restore automatic guidance and preserve browser defa
     await expect(page.locator("#edit-pattern-widget").getByLabel("Yarn B", { exact: true })).toHaveValue("#ffffff");
 });
 
-test("opening project contrast overrides keeps app defaults and Crochet progress", async ({ page }) => {
+test("opening project contrast overrides keeps app defaults", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
-    await page.getByRole("button", { name: "Forward one row" }).click();
-    await page.locator("#btn-export").click();
     const project = (await storedRecovery(page)).document;
     const defaults = await page.evaluate(() => localStorage.getItem("mosaic-preferences"));
 
@@ -331,7 +327,6 @@ test("opening project contrast overrides keeps app defaults and Crochet progress
     });
 
     expect(await page.evaluate(() => localStorage.getItem("mosaic-preferences"))).toBe(defaults);
-    await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
     await page.getByRole("button", { name: "Pattern" }).click();
     await expect(page.getByLabel("Danger", { exact: true })).toHaveValue("#123456");
     await expect(page.getByLabel("Accent", { exact: true })).toHaveValue("#abcdef");

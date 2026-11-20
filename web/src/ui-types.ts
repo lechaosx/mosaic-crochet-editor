@@ -57,6 +57,15 @@ export interface UICallbacks {
     onLoad:            () => void;
     onInstructions:    () => void;
     onAbout:           () => void;
+    onTabSelect:       (id: string) => void;
+    onTabClose:        (id: string) => void;
+    onTabNew:          () => void;
+}
+
+export interface ProjectTab {
+    id:      string;
+    title:   string;
+    unsaved: boolean;
 }
 
 export interface UIHandle {
@@ -85,6 +94,8 @@ export interface UIHandle {
     setEditSummary:     (width: number, height: number, preserved: number, added: number, removed: number) => void;
     syncEditInputs:     (s: PatternState) => void;
     openInstructions:   () => InstructionsView;
+    setTabs:            (tabs: readonly ProjectTab[], active: string) => void;
+    confirmClose:       (title: string) => Promise<"save" | "discard" | "cancel">;
 }
 
 export interface InstructionOverviewUnit {

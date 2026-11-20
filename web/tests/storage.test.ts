@@ -154,12 +154,37 @@ describe("saveToFile", () => {
         delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker;
     });
 
-    test("returns false when the file picker is cancelled", async () => {
+    test("resolves null when the file picker is cancelled", async () => {
         Object.assign(window, {
             showSaveFilePicker: () => Promise.reject(new DOMException("cancelled", "AbortError")),
         });
 
-        await expect(saveToFile(rowSession(3, 3))).resolves.toBe(false);
+        await expect(saveToFile(rowSession(3, 3), "motif.mcw")).resolves.toBeNull();
+    });
+
+    test("suggests the given name and resolves the name of the chosen file", async () => {
+        let suggested = "";
+        Object.assign(window, {
+            showSaveFilePicker: async (options: { suggestedName: string }) => {
+                suggested = options.suggestedName;
+                return { name: "scarf.mcw", createWritable: async () => ({ write: async () => {}, close: async () => {} }) };
+            },
+        });
+
+        await expect(saveToFile(rowSession(3, 3), "motif.mcw")).resolves.toBe("scarf.mcw");
+        expect(suggested).toBe("motif.mcw");
+    });
+
+    test("without a file picker, downloads under the given name and resolves it", async () => {
+        let downloaded = "";
+        vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+            downloaded = this.download;
+        });
+        Object.assign(URL, { createObjectURL: () => "blob:", revokeObjectURL: () => {} });
+
+        await expect(saveToFile(rowSession(3, 3), "motif.mcw")).resolves.toBe("motif.mcw");
+        expect(downloaded).toBe("motif.mcw");
+        vi.restoreAllMocks();
     });
 
     test("propagates file picker failures", async () => {
@@ -167,13 +192,14 @@ describe("saveToFile", () => {
             showSaveFilePicker: () => Promise.reject(new Error("Disk full.")),
         });
 
-        await expect(saveToFile(rowSession(3, 3))).rejects.toThrow("Disk full.");
+        await expect(saveToFile(rowSession(3, 3), "motif.mcw")).rejects.toThrow("Disk full.");
     });
 
     test("writes only project fields, including global mirror centres", async () => {
         let written = "";
         Object.assign(window, {
             showSaveFilePicker: async () => ({
+                name: "pattern.mcw",
                 createWritable: async () => ({
                     write: async (source: string) => { written = source; },
                     close: async () => {},
@@ -191,7 +217,7 @@ describe("saveToFile", () => {
             accentColorOverride: "#abcdef",
         });
 
-        await expect(saveToFile(session)).resolves.toBe(true);
+        await expect(saveToFile(session, "pattern.mcw")).resolves.toBe("pattern.mcw");
         const file = JSON.parse(written);
         expect(file).toMatchObject({ version: 6, mirrors: session.mirrors });
         expect(file.recipes).toHaveLength(1);

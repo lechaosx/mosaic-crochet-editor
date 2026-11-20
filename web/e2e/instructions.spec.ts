@@ -55,7 +55,7 @@ test("a crocheter gets a focused workspace while the global document bar stays a
     })).toBe(true);
     await expect(page.locator("#instructions-units .instructions-unit").first()).toHaveAttribute("aria-current", "step");
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    await expect(page.getByRole("tab")).toHaveCount(0);
+    await expect(page.getByRole("complementary", { name: "Crochet" }).getByRole("tab")).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Compressed instructions" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Download text" })).toHaveCount(0);
 

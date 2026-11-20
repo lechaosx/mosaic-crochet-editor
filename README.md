@@ -41,6 +41,7 @@ Round 15 · Yarn A: [(sc, ch, sc), sc × 27] × 4
 - Selection, movement, copying, repetition, rotation, and mirroring of motifs
 - Global mirror centres with independent reflection and point-symmetry types that apply while drawing
 - Generated crochet instructions that can be copied, with progress shown on the chart
+- Several patterns open at once in tabs, each with its own undo history
 - Editable `.mcw` project files, with separate browser-local recovery for in-progress work
 - Accessible desktop and mobile layouts with mouse, touch, pen, and keyboard support
 

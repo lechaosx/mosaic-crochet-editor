@@ -159,7 +159,7 @@ for (const record of ["recipes", "mirrors"] as const) {
         await page.locator("#add-mirror").click();
         await page.evaluate(() => {
             const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
-            target.showSaveFilePicker = async () => ({ createWritable: async () => ({
+            target.showSaveFilePicker = async () => ({ name: "pattern.mcw", createWritable: async () => ({
                 write: async (source: string) => { target.savedMcw = source; }, close: async () => {},
             }) });
         });

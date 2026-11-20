@@ -511,13 +511,11 @@ test("opening a different project resets orientation and fits the available char
     expect(await page.evaluate(() => Array.from(window.__test_matrix__!.toFloat64Array()))).toEqual(initial);
 });
 
-for (const outcome of ["invalid", "cancelled", "identical"]) {
+for (const outcome of ["invalid", "cancelled"]) {
     test(`${outcome} Open preserves Crochet and its current chart view`, async ({ page }) => {
         await page.emulateMedia({ reducedMotion: "reduce" });
         await bootApp(page);
         await clickCell(page, 1, 1);
-        const session = await storedRecovery(page);
-        const project = { ...session.document, mirrors: session.workspace.mirrors };
         await page.locator("#btn-export").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await page.getByRole("button", { name: "Forward one row" }).click();
@@ -538,9 +536,8 @@ for (const outcome of ["invalid", "cancelled", "identical"]) {
         } else {
             const chooser = page.waitForEvent("filechooser");
             await page.getByRole("button", { name: "Open", exact: true }).click();
-            await (await chooser).setFiles({ name: "pattern.mcw", mimeType: "application/json",
-                buffer: Buffer.from(outcome === "invalid" ? "invalid" : JSON.stringify({ version: 5, ...project })) });
-            if (outcome === "invalid") await expect(page.locator("#document-error")).toBeVisible();
+            await (await chooser).setFiles({ name: "pattern.mcw", mimeType: "application/json", buffer: Buffer.from("invalid") });
+            await expect(page.locator("#document-error")).toBeVisible();
         }
         await expect(page.locator("#btn-export")).toHaveAttribute("aria-pressed", "true");
         expect(await storedRecovery(page)).toEqual(before);

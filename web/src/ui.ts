@@ -7,6 +7,7 @@ import { mountMirrors } from "./ui-mirrors";
 import { mountPattern } from "./ui-pattern";
 import { mountSettings } from "./ui-settings";
 import { mountInstructions } from "./ui-instructions";
+import { mountTabs } from "./ui-tabs";
 
 export type { UICallbacks, UIHandle, SelectionMoveMode, InstructionOverviewUnit, InstructionsView } from "./ui-types";
 
@@ -211,8 +212,10 @@ export function mountUI(cb: UICallbacks): UIHandle {
         if (activeInspector !== null && !retainedInspector) closeInspector(false);
     }, syncCanvasChromeInsets, queueCanvasChromeSync);
 
+    const tabs = mountTabs(cb);
+
     return {
-        ...toolbar, ...selection, ...mirrors,
+        ...toolbar, ...selection, ...mirrors, ...tabs,
         setExecutingAction: (action, yarn = null) => {
             toolbar.setExecutingAction(action, yarn);
             pattern.setExecutingYarn(yarn ?? (action?.kind === "paint"

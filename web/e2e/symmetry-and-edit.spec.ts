@@ -1,6 +1,6 @@
 // Symmetry toggles + Pattern inspector resize.
 import { test, expect } from "@playwright/test";
-import { addGlobalMirror, bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant, storedHistory, storedRecovery } from "./_helpers";
+import { addGlobalMirror, bootApp, clickCell, dragCells, cellCoord, pixelRGB, chooseToolVariant, storedRecovery } from "./_helpers";
 
 test("vertical symmetry mirrors paint horizontally", async ({ page }) => {
     await bootApp(page);
@@ -796,12 +796,8 @@ test("Load rejects a future file without replacing the active session", async ({
     await expect(page.getByRole("button", { name: "Menu" })).toBeFocused();
 });
 
-test("Open restores a global mirror without resetting Crochet progress", async ({ page }) => {
+test("Open restores a global mirror", async ({ page }) => {
     await bootApp(page);
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    await page.getByRole("button", { name: "Forward one row" }).click();
-    await page.locator("#btn-export").click();
     const project = (await storedRecovery(page)).document;
 
     const chooserPromise = page.waitForEvent("filechooser");
@@ -822,7 +818,6 @@ test("Open restores a global mirror without resetting Crochet progress", async (
     await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Global Mirror");
     await expect(page.locator("#sym-list")).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "Enable mirror at (2, 4)" })).toBeVisible();
-    await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
 
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
@@ -839,99 +834,5 @@ test("Open restores a global mirror without resetting Crochet progress", async (
         buffer: Buffer.from(JSON.stringify({ version: 2, ...legacyProject })),
     });
     await expect(page.locator(".sym-list-row")).toHaveCount(0);
-    await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
 });
 
-test("Open leaves an identical global-mirror project view unchanged", async ({ page }) => {
-    await page.emulateMedia({ reducedMotion: "reduce" });
-    await bootApp(page);
-    await page.keyboard.press("v");
-    await expect.poll(async () => (await storedRecovery(page)).workspace.mirrors.length).toBe(1);
-    await page.getByRole("button", { name: "Rotate view right" }).click();
-    await page.getByRole("button", { name: "Zoom in" }).click();
-    await page.waitForTimeout(300);
-    const recovery = await storedRecovery(page);
-    const project = { ...recovery.document, mirrors: recovery.workspace.mirrors };
-    const before = await page.evaluate(() => {
-        const matrix = window.__test_matrix__!;
-        return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
-    });
-
-    const chooserPromise = page.waitForEvent("filechooser");
-    await page.locator("#btn-load").click();
-    const chooser = await chooserPromise;
-    await chooser.setFiles({
-        name: "same-project.mcw",
-        mimeType: "application/json",
-        buffer: Buffer.from(JSON.stringify({ version: 5, ...project })),
-    });
-
-    await expect.poll(() => page.evaluate(() => {
-        const matrix = window.__test_matrix__!;
-        return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
-    })).toEqual(before);
-});
-
-test("identical Open preserves Crochet progress and an active float", async ({ page }) => {
-    await bootApp(page);
-    await page.locator("#btn-export").click();
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
-    await page.getByRole("button", { name: "Forward one row" }).click();
-    await page.locator("#btn-export").click();
-    await page.keyboard.press("s");
-    await dragCells(page, 1, 1, 1, 1);
-    await page.keyboard.press("m");
-    await dragCells(page, 1, 1, 1, 2);
-    await expect.poll(async () => (await storedRecovery(page)).workspace.float?.y).toBe(2);
-    await page.evaluate(() => {
-        const target = window as unknown as {
-            savedMcw?: string;
-            showSaveFilePicker?: () => Promise<{
-                createWritable: () => Promise<{
-                    write: (source: string) => Promise<void>;
-                    close: () => Promise<void>;
-                }>;
-            }>;
-        };
-        target.showSaveFilePicker = async () => ({
-            createWritable: async () => ({
-                write: async source => { target.savedMcw = source; },
-                close: async () => {},
-            }),
-        });
-    });
-    await page.locator("#btn-save").click();
-    await expect.poll(() => page.evaluate(() =>
-        (window as unknown as { savedMcw?: string }).savedMcw ?? null,
-    )).not.toBeNull();
-    await page.getByRole("button", { name: "Zoom in" }).click();
-    await page.waitForTimeout(300);
-    const before = {
-        savedMcw: await page.evaluate(() => (window as unknown as { savedMcw: string }).savedMcw),
-        recovery: await storedRecovery(page),
-        history: await storedHistory(page),
-        matrix: await page.evaluate(() => {
-            const matrix = window.__test_matrix__!;
-            return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
-        }),
-    };
-
-    const chooserPromise = page.waitForEvent("filechooser");
-    await page.locator("#btn-load").click();
-    const chooser = await chooserPromise;
-    await chooser.setFiles({
-        name: "same-with-float.mcw",
-        mimeType: "application/json",
-        buffer: Buffer.from(before.savedMcw),
-    });
-
-    await expect(page.locator("#btn-export")).toContainText("Continue Crocheting");
-    await expect.poll(async () => ({
-        recovery: await storedRecovery(page),
-        history: await storedHistory(page),
-        matrix: await page.evaluate(() => {
-            const matrix = window.__test_matrix__!;
-            return [matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f];
-        }),
-    })).toEqual({ recovery: before.recovery, history: before.history, matrix: before.matrix });
-});

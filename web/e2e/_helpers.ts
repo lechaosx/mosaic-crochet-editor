@@ -225,12 +225,12 @@ function projectDatabase(page: Page): Promise<any> {
     });
 }
 
-function activeProject(page: Page): Promise<string> {
+export function activeProjectId(page: Page): Promise<string> {
     return page.evaluate(() => JSON.parse(localStorage.getItem("mosaic-projects")!).active);
 }
 
 async function storedProject(page: Page) {
-    const [records, project] = await Promise.all([projectDatabase(page), activeProject(page)]);
+    const [records, project] = await Promise.all([projectDatabase(page), activeProjectId(page)]);
     const value = (name: string) => records?.[name].find((record: any) => record.key === project)?.value ?? null;
     const snapshots = new Map((records?.snapshots ?? [])
         .filter((record: any) => record.key[0] === project)
@@ -267,6 +267,24 @@ export async function storedProjectIds(page: Page): Promise<string[]> {
         records[name].map(({ key }: { key: IDBValidKey }) => Array.isArray(key) ? key[0] : key)))].sort();
 }
 
+// Deletes the recovery record of project `id`, as when its write never landed.
+export function deleteStoredRecovery(page: Page, id: string) {
+    return page.evaluate(async id => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open("mosaic-projects");
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        await new Promise((resolve, reject) => {
+            const transaction = database.transaction("recovery", "readwrite");
+            transaction.objectStore("recovery").delete(id);
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+        });
+        database.close();
+    }, id);
+}
+
 // Stores records of a project the index doesn't list, as a closed project leaves.
 export function addUnlistedProject(page: Page, id: string) {
     return page.evaluate(async id => {
@@ -288,7 +306,7 @@ export function addUnlistedProject(page: Page, id: string) {
 }
 
 export async function storedLiveProgress(page: Page) {
-    const project = await activeProject(page);
+    const project = await activeProjectId(page);
     return page.evaluate(key => {
         const raw = localStorage.getItem(key);
         return raw === null ? null : JSON.parse(raw);

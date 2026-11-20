@@ -115,7 +115,10 @@ function recoveryToolVariants(value: unknown): ToolVariants {
 
 // ── File save / load ──────────────────────────────────────────────────────────
 
-export type LoadedFile = ProjectDocument;
+export interface LoadedFile {
+    name:    string;
+    project: ProjectDocument;
+}
 
 function projectDocumentFrom(s: Readonly<SessionState>): ProjectDocument {
     return {
@@ -130,33 +133,36 @@ function projectDocumentFrom(s: Readonly<SessionState>): ProjectDocument {
     };
 }
 
-export async function saveToFile(s: Readonly<SessionState>): Promise<boolean> {
+// Resolves the saved file's name, or null when the user cancels. `name` is
+// suggested to the file picker, or names the download without one.
+export async function saveToFile(s: Readonly<SessionState>, name: string): Promise<string | null> {
     const json = encodeMcw(projectDocumentFrom(s));
 
     if ("showSaveFilePicker" in window) {
         try {
             const handle = await (window as unknown as {
                 showSaveFilePicker: (opts: object) => Promise<{
+                    name: string;
                     createWritable: () => Promise<{ write: (s: string) => Promise<void>; close: () => Promise<void> }>
                 }>
             }).showSaveFilePicker({
-                suggestedName: "pattern.mcw",
+                suggestedName: name,
                 types: [{ description: "Mosaic Crochet Pattern", accept: { "application/json": [".mcw"] } }],
             });
             const writable = await handle.createWritable();
             await writable.write(json);
             await writable.close();
-            return true;
+            return handle.name;
         } catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") return false;
+            if (error instanceof DOMException && error.name === "AbortError") return null;
             throw error;
         }
     } else {
         const blob = new Blob([json], { type: "application/json" });
         const url  = URL.createObjectURL(blob);
-        Object.assign(document.createElement("a"), { href: url, download: "pattern.mcw" }).click();
+        Object.assign(document.createElement("a"), { href: url, download: name }).click();
         URL.revokeObjectURL(url);
-        return true;
+        return name;
     }
 }
 
@@ -171,7 +177,7 @@ export function loadFromFile(onMigration?: () => void): Promise<LoadedFile | nul
                 try {
                     const loaded = decodeMcwWithMigration(reader.result as string);
                     if (loaded.selectionBehaviorChanged) onMigration?.();
-                    resolve(loaded.project);
+                    resolve({ name: file.name, project: loaded.project });
                 } catch (error) {
                     reject(error instanceof Error ? error : new Error("Invalid pattern file."));
                 }

@@ -32,7 +32,7 @@ test("Save downloads no empty selection record and Open restores an editable uns
     const downloading = page.waitForEvent("download");
     await page.getByRole("button", { name: "Save", exact: true }).click();
     const download = await downloading;
-    expect(download.suggestedFilename()).toBe("pattern.mcw");
+    expect(download.suggestedFilename()).toBe("Untitled 2.mcw");
     const source = await readFile((await download.path())!, "utf8");
     expect(JSON.parse(source).recipes).toEqual([]);
     expect({ recovery: await storedRecovery(page), history: await storedHistory(page) }).toEqual(before);

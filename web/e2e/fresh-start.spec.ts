@@ -25,7 +25,6 @@ test("first load shows About and New creates a pattern in the Pattern inspector"
     await expect(about.getByRole("button", { name: "New" })).toBeFocused();
     await expect(about.getByRole("button", { name: "Open" })).toBeVisible();
     await expect(about.getByRole("button", { name: "Example" })).toBeVisible();
-    expect(await storedRecovery(page)).toBeNull();
     const currentReleaseHash = await about.locator("#about-release-notes").getAttribute("data-current-hash");
     expect(currentReleaseHash).toMatch(/^[a-f0-9]{64}$/);
 
@@ -56,7 +55,7 @@ test("canceling the About file picker keeps the dialog available", async ({ page
         .getByRole("button", { name: "Open", exact: true }).click();
 
     await expect(page.getByRole("dialog", { name: "Mosaic Crochet Editor" })).toBeVisible();
-    expect(await storedRecovery(page)).toBeNull();
+    await expect(page.getByRole("tab")).toHaveCount(1);
 });
 
 test("opening an mcw file from About enters the editor", async ({ page }) => {

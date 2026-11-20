@@ -156,6 +156,60 @@ input  { font: inherit; color: inherit; }
   border-color: var(--fg-2);
 }
 
+.project-tabs {
+  display: flex;
+  align-items: center;
+  padding-inline: var(--space-1);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  background: var(--bg-0);
+  border-bottom: var(--border);
+  flex-shrink: 0;
+}
+#project-tablist, #project-tab-closes { display: contents; }
+#tab-new { order: 1000000; flex: none; margin-inline-start: var(--space-1); }
+
+.project-tab-select,
+.project-tab-close {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  min-height: var(--hit-sm);
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.project-tab-select {
+  gap: var(--space-1);
+  max-width: 14rem;
+  padding-inline: var(--space-3) var(--space-2);
+  white-space: nowrap;
+}
+.project-tab-select > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.project-tab-unsaved { font-size: var(--font-xs); }
+.project-tab-close {
+  justify-content: center;
+  min-width: var(--hit-sm);
+  border-inline-end: var(--border);
+}
+.project-tab-close:hover { color: var(--fg-0); }
+.project-tab-select[aria-selected="true"],
+.project-tab-close[data-selected] {
+  color: var(--fg-0);
+  background: var(--bg-2);
+  box-shadow: inset 0 -2px var(--accent);
+}
+.project-tab-select:focus-visible,
+.project-tab-close:focus-visible { outline: 2px solid var(--fg-0); outline-offset: -2px; }
+
+.close-tab-prompt {
+  margin: auto;
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+.close-tab-prompt::backdrop { background: rgba(0, 0, 0, 0.55); }
+.close-tab-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
 .workspace {
   position: relative;
   flex: 1 1 0;

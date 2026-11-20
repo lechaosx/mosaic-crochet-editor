@@ -249,7 +249,7 @@ test("composed mirror drawing survives a new-format Save, Open, and recovery rel
     const before = await storedRecovery(page);
     await page.evaluate(() => {
         const target = window as unknown as { savedMcw?: string; showSaveFilePicker?: () => Promise<unknown> };
-        target.showSaveFilePicker = async () => ({ createWritable: async () => ({
+        target.showSaveFilePicker = async () => ({ name: "pattern.mcw", createWritable: async () => ({
             write: async (source: string) => { target.savedMcw = source; }, close: async () => {},
         }) });
     });
