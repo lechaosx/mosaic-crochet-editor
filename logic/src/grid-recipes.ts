@@ -224,8 +224,7 @@ function originShape(recipe: GridRecipe): { recipe: GridRecipe; key: string } | 
     return { recipe: relative, key: JSON.stringify([source.w, source.h, geometry]) };
 }
 
-export function evaluateGridRecipe(recipe: GridRecipe, evaluations?: RecipeEvaluations): PackedGridEvaluation {
-    if (evaluations) return evaluations.evaluate(recipe);
+export function evaluateGridRecipe(recipe: GridRecipe): PackedGridEvaluation {
     const source = recipeSourceCells(recipe);
     if (source.length === 0) return {
         source: [], placements: [],

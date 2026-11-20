@@ -2,7 +2,7 @@ import { PatternState, RowState, RoundState, MirrorCenter, SymKey, Float } from 
 import { mirrorAxes, mirrorsToFlat } from "@mosaic/logic/symmetry";
 import { mirrorTypePresentation } from "./mirror-presentation";
 import { GridRecipe } from "@mosaic/logic/types";
-import { evaluateGridRecipe, RecipeEvaluations } from "@mosaic/logic/grid-recipes";
+import type { RecipeEvaluations } from "@mosaic/logic/grid-recipes";
 import { applyEditSettings } from "@mosaic/logic/pattern";
 import { transformed_target_indices } from "@mosaic/wasm";
 import { Store } from "@mosaic/logic/store";
@@ -720,13 +720,13 @@ function renderRecipeHandles(ctx: CanvasRenderingContext2D, view: ViewState, rec
 }
 
 export function recipeInstancePaths(
-    pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe, evaluations?: RecipeEvaluations,
+    pattern: PatternState, pixels: Uint8Array, recipe: GridRecipe, evaluations: RecipeEvaluations,
 ): number[][][] {
     const { canvasWidth: W, canvasHeight: H } = pattern;
     const { source } = recipe;
     const inSource = (x: number, y: number) => x >= source.x && x < source.x + source.w && y >= source.y && y < source.y + source.h
         && source.mask[(y - source.y) * source.w + x - source.x] !== 0;
-    return evaluateGridRecipe(recipe, evaluations).instances.flatMap(instance => {
+    return evaluations.evaluate(recipe).instances.flatMap(instance => {
         // Cells as y * W + x.
         const cells = new Set<number>();
         for (const cell of instance) {

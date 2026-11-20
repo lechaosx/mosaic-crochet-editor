@@ -401,7 +401,7 @@ describe("recipes at every source position", () => {
         fc.assert(fc.property(shape, fc.array(step, { maxLength: 12 }), (recipe, steps) => {
             const evaluations = new RecipeEvaluations();
             const recipes = walk(recipe, steps);
-            expect(recipes.map(step => outcome(() => evaluateGridRecipe(step, evaluations))))
+            expect(recipes.map(step => outcome(() => evaluations.evaluate(step))))
                 .toEqual(recipes.map(step => outcome(() => evaluateGridRecipe(step))));
         }), { numRuns: 200 });
     });
@@ -412,7 +412,7 @@ describe("recipes at every source position", () => {
         const withMask = (mask: Uint8Array, w = 2) => ({ ...recipe, source: { ...recipe.source, w, mask } });
         const partial = new Uint8Array([1, 2]), empty = new Uint8Array([0, 0]);
         for (const mask of [recipe.source.mask, partial, empty]) {
-            evaluateGridRecipe(withMask(mask), evaluations);
+            evaluations.evaluate(withMask(mask));
             for (let check = 0; check < 2; check++) {
                 expect(gridRecipeError(withMask(mask), undefined, evaluations)).toBe(gridRecipeError(withMask(mask)));
             }
@@ -428,7 +428,7 @@ describe("recipes at every source position", () => {
         const centre = { rotationCentreX: 1 - 2 ** 52, rotationCentreY: 0, mirrorCentreX: 1 - 2 ** 52, mirrorCentreY: 0 };
         expect(gridRecipeError({ ...recipe, ...centre }, undefined, evaluations)).toBeNull();
         expect(gridRecipeError(moved({ ...recipe, ...centre }, 2 ** 53 - 3, 0), undefined, evaluations)).toMatch(/safe integer/i);
-        expect(() => evaluateGridRecipe({ ...recipe, ...centre }, evaluations)).not.toThrow();
-        expect(() => evaluateGridRecipe(moved({ ...recipe, ...centre }, 2 ** 53 - 3, 0), evaluations)).toThrow(/safe integer/i);
+        expect(() => evaluations.evaluate({ ...recipe, ...centre })).not.toThrow();
+        expect(() => evaluations.evaluate(moved({ ...recipe, ...centre }, 2 ** 53 - 3, 0))).toThrow(/safe integer/i);
     });
 });

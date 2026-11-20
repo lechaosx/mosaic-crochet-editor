@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, test } from "vitest";
-import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
+import { gridRecipeFromFloat, RecipeEvaluations } from "@mosaic/logic/grid-recipes";
 import { recipeInstancePaths, selectionTransformHandles } from "../src/render";
 
 test("Grid uses inspector fields without canvas handles or hit targets", () => {
@@ -32,6 +32,7 @@ describe("repeat instance outlines", () => {
             { mode: "row", canvasWidth: width, canvasHeight: 1 },
             pixels,
             recipe,
+            new RecipeEvaluations(),
         );
 
         expect(paths).toHaveLength(1_000);
@@ -51,6 +52,7 @@ describe("repeat instance outlines", () => {
             { mode: "row", canvasWidth: 4, canvasHeight: 1 },
             pixels,
             recipe,
+            new RecipeEvaluations(),
         );
 
         expect(paths).toHaveLength(2);
@@ -68,6 +70,7 @@ describe("repeat instance outlines", () => {
             { mode: "row", canvasWidth: 6, canvasHeight: 2 },
             pixels,
             recipe,
+            new RecipeEvaluations(),
         );
 
         expect(paths).toHaveLength(1);

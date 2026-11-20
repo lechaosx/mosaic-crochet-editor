@@ -16,7 +16,7 @@ import { UndoHistory, historyFrom, historySave, historyReplaceCurrent, historyUn
 import { addMirror, pickMirrorCenter, snapMirrorCenter, snapHalf,
          mirrorIsProjectValid, mirrorsForPattern } from "@mosaic/logic/symmetry";
 import { mirrorsToFlat } from "@mosaic/logic/symmetry";
-import { emptyGridRecipe, evaluateGridRecipe, gridRecipeError, gridRecipesEqual, withRecipeSource, recipesForPattern,
+import { emptyGridRecipe, gridRecipeError, gridRecipesEqual, withRecipeSource, recipesForPattern,
          RecipeEvaluations } from "@mosaic/logic/grid-recipes";
 import { sessionFromRecovery, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { deleteProjectsExcept, loadProjectIndex, openProjectDatabase, readProject, removeRetiredRecords,
@@ -490,7 +490,7 @@ function evaluatePaintAt(action: PaintAction, x: number, y: number, invertVisite
     const visible = visiblePixels(s);
     const recipe = activeGridRecipe(s);
     // Spread to move each part of the cached evaluation once; painting reads them repeatedly.
-    const evaluatedRecipe = recipe ? { ...evaluateGridRecipe(recipe, recipeEvaluations) } : null;
+    const evaluatedRecipe = recipe ? { ...recipeEvaluations.evaluate(recipe) } : null;
     const recipeCell = evaluatedRecipe
         ? evaluatedRecipe.cells.find(cell => cell.x === x && cell.y === y) ?? null
         : null;
