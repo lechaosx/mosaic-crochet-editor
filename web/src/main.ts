@@ -1261,7 +1261,6 @@ async function onInstructions() {
         ui.setViewState(store.state.rotation, instructionsOpen || navigateLatched || navigateMomentary);
         renderCanvas();
     });
-    const plan = store.plan;
 
     instructionsPreviewStore = new Store({
         ...store.state,
@@ -1359,7 +1358,7 @@ async function onInstructions() {
         });
         if (live) {
             const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-            const wholeInvalid = hasUnrepresentedWarning(plan, W, H, units.map(unit => unit.invalidWorkedCoords));
+            const wholeInvalid = hasUnrepresentedWarning(store.plan, W, H, units.map(unit => unit.invalidWorkedCoords));
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
                 completedUnits = nextCompleted;
                 const saved = editing && saveLiveProgress(projectId, progressFingerprint, completedUnits);
