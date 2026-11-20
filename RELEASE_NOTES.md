@@ -9,7 +9,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Only one window edits at a time: opening the app in another window offers to continue editing there, and the previous window stops editing.
 - Several patterns can be open at once as tabs, each with its own undo history, view, and Crochet progress; New, Open, and Example open new tabs, closing a tab with unsaved changes asks whether to save it first, and with no tab open the workspace shows how to start a pattern.
 - On phones, the Menu no longer runs past the right edge of the screen.
-- A long current Crochet instruction wraps into lines of similar length instead of leaving a few stitches alone on the last line.
+- Crochet instructions for long rows and rounds generate without freezing the app, grouping repeated sections of at most 64 stitches or stitch groups; a long current instruction wraps into lines of similar length instead of leaving a few stitches alone on the last line.
 
 ## 9 October 2026
 

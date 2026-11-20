@@ -39,154 +39,113 @@ impl SequenceItem {
     }
 }
 
-#[derive(Clone, Copy)]
-enum Decision {
-    Literal,
-    Split { k: u32 },
-    Repeat { period: u32 },
-}
+/// Longest repeat body, in items, that compression searches for. It bounds
+/// compression to O(n·P²) time and O(n + P²) memory.
+const MAX_REPEAT_PERIOD: usize = 64;
 
-/// LCE table: `lce[i * n + j]` (for `i < j`) is the length of the longest
-/// shared prefix between the suffixes `items[i..]` and `items[j..]`. Built
-/// in O(n²) via the recurrence
-///   lce(i,j) = if items[i] == items[j] then 1 + lce(i+1, j+1) else 0.
-/// With this table, periodicity is one read: `items[s..s+len]` is
-/// `period`-periodic iff `len % period == 0 && lce(s, s+period) >= len-period`.
-fn build_lce(items: &[SequenceItem]) -> Vec<u32> {
-    let n = items.len();
-    let mut lce = vec![0u32; n * n];
-    for i in (0..n).rev() {
-        for j in ((i + 1)..n).rev() {
-            if items[i] == items[j] {
-                let next = if i + 1 < n && j + 1 < n {
-                    lce[(i + 1) * n + (j + 1)]
-                } else {
-                    0
-                };
-                lce[i * n + j] = next + 1;
-            }
-        }
-    }
-    lce
-}
-
-/// Bottom-up DP filling `cost` and `dec` tables in increasing-length order.
-/// Each cell `(start, len)` reads only cells with strictly smaller `len`,
-/// so a single forward pass suffices.
-///
-/// Per cell, work is ordered most-promising-first and aggressively pruned:
-/// - Periods iterate 1..=len/2. The first valid period in iteration order is
-///   the fundamental period `q` of the slice; by Fine–Wilf any other valid
-///   period is a multiple `kq` of it, and `cost[start, kq] = cost[start, q]`,
-///   so we `break` after the first hit — larger valid periods can't improve
-///   the inner cost.
-/// - If `best_cost == 1` after the period (or before) we're at the floor;
-///   any non-empty slice has cost ≥ 1.
-/// - Splits run second only if `best_cost > 2` — a split is two non-empty
-///   children each with cost ≥ 1, so total ≥ 2; if `best_cost <= 2` no
-///   split can beat it, skip the loop entirely.
-/// - Within the split loop, branch-and-bound is tightened from the naive
-///   `left >= best_cost` to `left + 1 >= best_cost`. The `+1` is the floor
-///   on `cost(right)`, letting us prune one step earlier (e.g. when
-///   `best_cost == 3` we can drop splits with `left == 2` immediately).
-fn solve(n: usize, lce: &[u32], stride: usize) -> (Vec<u32>, Vec<Decision>) {
-    let table_size = stride * stride;
-    let mut cost = vec![0u32; table_size];
-    let mut dec = vec![Decision::Literal; table_size];
-
-    for start in 0..n {
-        cost[start * stride + 1] = 1;
-    }
-
-    for len in 2..=n {
-        for start in 0..=(n - len) {
-            let cell = start * stride + len;
-            let mut best_cost = len as u32;
-            let mut best_dec = Decision::Literal;
-
-            let need_base = len as u32;
-            for period in 1..=(len / 2) {
-                if len % period != 0 {
-                    continue;
-                }
-                let need = need_base - period as u32;
-                if lce[start * n + (start + period)] < need {
-                    continue;
-                }
-                let inner_cost = cost[start * stride + period];
-                if inner_cost < best_cost {
-                    best_cost = inner_cost;
-                    best_dec = Decision::Repeat {
-                        period: period as u32,
-                    };
-                }
-                break;
-            }
-
-            if best_cost > 2 {
-                for k in 1..len {
-                    let left = cost[start * stride + k];
-                    if left + 1 >= best_cost {
-                        continue;
-                    }
-                    let right = cost[(start + k) * stride + (len - k)];
-                    let total = left + right;
-                    if total < best_cost {
-                        best_cost = total;
-                        best_dec = Decision::Split { k: k as u32 };
-                    }
-                }
-            }
-
-            cost[cell] = best_cost;
-            dec[cell] = best_dec;
-        }
-    }
-
-    (cost, dec)
-}
-
-fn reconstruct(
-    items: &[SequenceItem],
-    start: usize,
-    len: usize,
-    dec: &[Decision],
-    stride: usize,
-) -> Vec<SequenceItem> {
-    if len == 0 {
-        return Vec::new();
-    }
-
-    match dec[start * stride + len] {
-        Decision::Literal => items[start..start + len].to_vec(),
-        Decision::Split { k } => {
-            let k = k as usize;
-            let mut out = reconstruct(items, start, k, dec, stride);
-            out.extend(reconstruct(items, start + k, len - k, dec, stride));
-            out
-        }
-        Decision::Repeat { period } => {
-            let period = period as usize;
-            vec![SequenceItem::repeat(
-                reconstruct(items, start, period, dec, stride),
-                len / period,
-            )]
-        }
-    }
-}
-
-/// Maximum-compression DP. Iterative bottom-up over `(start, len)` cells.
-/// Periods are O(1) per check (LCE table); splits prune via branch-and-bound
-/// against the current best. Overall O(n³) with a tight constant.
+/// Fewest-items encoding: a sequence costs the items it writes out, with
+/// each repeat body counted once. Among equally cheap encodings, a repeat of
+/// everything that remains wins, then the shortest leading block.
 pub fn compress(items: &[SequenceItem]) -> Vec<SequenceItem> {
+    compress_capped(items, MAX_REPEAT_PERIOD)
+}
+
+/// Searches only repeats whose body has at most `max_period` items.
+///
+/// One right-to-left pass computes `best[a]`, the cost of `items[a..]`, from
+/// its first block: a single item, or `c ≥ 2` copies of a primitive body of
+/// period `p ≤ max_period`. Copies of a body share its cost, so per `p` only
+/// the cheapest remainder `best[a + c·p]` over the current `p`-periodic run is
+/// needed, which a running minimum per residue `a % p` keeps. Body costs come
+/// from the same recurrence restricted to slices of at most `max_period`
+/// items, kept in ring buffers.
+fn compress_capped(items: &[SequenceItem], max_period: usize) -> Vec<SequenceItem> {
     let n = items.len();
-    if n == 0 {
-        return Vec::new();
+    let cap = max_period.min(n / 2);
+    let divisors: Vec<Vec<usize>> = (0..=cap)
+        .map(|len| (1..=len / 2).filter(|&q| len.is_multiple_of(q)).collect())
+        .collect();
+    let width = (cap + 1).next_power_of_two();
+    let mask = width - 1;
+
+    // lce[p]: length of the common prefix of items[a..] and items[a + p..].
+    let mut lce = vec![0usize; cap + 1];
+    // The cost of items[s..s + len] for the last `width` starts s and ends
+    // s + len, at by_start[(s & mask) * width + len] and
+    // by_end[((s + len) & mask) * width + width - len]. The two layouts make
+    // the halves of all splits of items[a..a + len] two ascending runs.
+    let mut by_start = vec![0u16; width * width];
+    let mut by_end = vec![0u16; width * width];
+    let mut primitive = vec![false; cap + 1];
+    // run_best[p(p-1)/2 + a % p]: cheapest (best[x], smallest x) over the
+    // ends x = a + 2p, a + 3p, … of p-periodic blocks starting at a.
+    let mut run_best = vec![(0u32, 0usize); (cap + 1) * cap / 2];
+    let mut best = vec![0u32; n + 1];
+    // step[a]: length and period of the first block of items[a..]; period 0
+    // is a single item.
+    let mut step = vec![(1usize, 0usize); n];
+
+    for a in (0..n).rev() {
+        for p in 1..=cap {
+            lce[p] = if a + p < n && items[a] == items[a + p] {
+                lce[p] + 1
+            } else {
+                0
+            };
+        }
+
+        let row = (a & mask) * width;
+        for len in 1..=cap.min(n - a) {
+            let end_row = ((a + len) & mask) * width;
+            let period = divisors[len].iter().find(|&&q| lce[q] >= len - q);
+            primitive[len] = period.is_none();
+            let repeat = period.map_or(len as u16, |&q| by_start[row + q]);
+            // Splits into items[a..a + k] and items[a + k..a + len], k = 1..len.
+            let lefts = &by_start[row + 1..row + len];
+            let rights = &by_end[end_row + width - len + 1..end_row + width];
+            let split = lefts.iter().zip(rights).map(|(l, r)| l + r).min();
+            let cost = split.map_or(repeat, |split| split.min(repeat));
+            by_start[row + len] = cost;
+            by_end[end_row + width - len] = cost;
+        }
+
+        let (mut cost, mut len, mut period) = (best[a + 1] + 1, 1, 0);
+        let mut whole = false;
+        for p in 1..=cap {
+            if lce[p] < p {
+                continue;
+            }
+            let run = &mut run_best[p * (p - 1) / 2 + a % p];
+            let end = a + 2 * p;
+            if lce[p] < 2 * p || best[end] <= run.0 {
+                *run = (best[end], end);
+            }
+            if !primitive[p] {
+                continue;
+            }
+            let candidate = u32::from(by_start[row + p]) + run.0;
+            let reaches_end = run.1 == n;
+            if candidate < cost || candidate == cost && (reaches_end || !whole && run.1 - a < len) {
+                (cost, len, period, whole) = (candidate, run.1 - a, p, reaches_end);
+            }
+        }
+        best[a] = cost;
+        step[a] = (len, period);
     }
-    let stride = n + 1;
-    let lce = build_lce(items);
-    let (_, dec) = solve(n, &lce, stride);
-    reconstruct(items, 0, n, &dec, stride)
+
+    let mut out = Vec::new();
+    let mut a = 0;
+    while a < n {
+        let (len, period) = step[a];
+        out.push(if period == 0 {
+            items[a].clone()
+        } else {
+            let body = compress_capped(&items[a..a + period], max_period);
+            SequenceItem::repeat(body, len / period)
+        });
+        a += len;
+    }
+    out
 }
 
 /// Renders an item as one syntactic token: a bare stitch ("sc") or a
@@ -258,6 +217,160 @@ mod tests {
             to_string(got),
             to_string(expected),
         );
+    }
+
+    // ── uncapped reference ───────────────────────────────────────────────────
+
+    /// The O(n³) interval DP that `compress` replaced: it searches repeats of
+    /// any period, and `compress` must agree with it wherever its result has
+    /// no repeat body longer than the cap.
+    fn reference_compress(items: &[SequenceItem]) -> Vec<SequenceItem> {
+        #[derive(Clone, Copy)]
+        enum Decision {
+            Literal,
+            Split(usize),
+            Repeat(usize),
+        }
+
+        let n = items.len();
+        // lce[i * n + j]: common prefix length of items[i..] and items[j..].
+        let mut lce = vec![0usize; n * n];
+        for i in (0..n).rev() {
+            for j in ((i + 1)..n).rev() {
+                if items[i] == items[j] {
+                    lce[i * n + j] = 1 + if j + 1 < n {
+                        lce[(i + 1) * n + j + 1]
+                    } else {
+                        0
+                    };
+                }
+            }
+        }
+
+        let stride = n + 1;
+        let mut cost = vec![0usize; stride * stride];
+        let mut dec = vec![Decision::Literal; stride * stride];
+        for start in 0..n {
+            cost[start * stride + 1] = 1;
+        }
+        for len in 2..=n {
+            for start in 0..=(n - len) {
+                let mut best = (len, Decision::Literal);
+                if let Some(period) =
+                    (1..=len / 2).find(|&q| len % q == 0 && lce[start * n + start + q] >= len - q)
+                {
+                    best = (cost[start * stride + period], Decision::Repeat(period));
+                }
+                for k in 1..len {
+                    let total = cost[start * stride + k] + cost[(start + k) * stride + len - k];
+                    if total < best.0 {
+                        best = (total, Decision::Split(k));
+                    }
+                }
+                (cost[start * stride + len], dec[start * stride + len]) = best;
+            }
+        }
+
+        fn rebuild(
+            items: &[SequenceItem],
+            start: usize,
+            len: usize,
+            dec: &[Decision],
+            stride: usize,
+        ) -> Vec<SequenceItem> {
+            match dec[start * stride + len] {
+                Decision::Literal => items[start..start + len].to_vec(),
+                Decision::Split(k) => {
+                    let mut out = rebuild(items, start, k, dec, stride);
+                    out.extend(rebuild(items, start + k, len - k, dec, stride));
+                    out
+                }
+                Decision::Repeat(period) => vec![SequenceItem::repeat(
+                    rebuild(items, start, period, dec, stride),
+                    len / period,
+                )],
+            }
+        }
+        rebuild(items, 0, n, &dec, stride)
+    }
+
+    fn longest_period(seq: &[SequenceItem]) -> usize {
+        seq.iter()
+            .map(|item| match item {
+                SequenceItem::RepeatGroup(data) => {
+                    flatten(&data.items).len().max(longest_period(&data.items))
+                }
+                _ => 0,
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Deterministic xorshift64, so failures reproduce.
+    struct Rng(u64);
+
+    impl Rng {
+        fn below(&mut self, n: usize) -> usize {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % n as u64) as usize
+        }
+
+        fn items(&mut self, len: usize, alphabet: &[SequenceItem]) -> Vec<SequenceItem> {
+            (0..len)
+                .map(|_| alphabet[self.below(alphabet.len())].clone())
+                .collect()
+        }
+    }
+
+    /// Random rows and motif rows (a random motif repeated, with random
+    /// edges and occasional changed stitches) over sc, oc and a corner group.
+    fn sample_row(rng: &mut Rng) -> Vec<SequenceItem> {
+        let corner = SequenceItem::group(vec![sc(), SequenceItem::Stitch(Stitch::Ch), sc()]);
+        let alphabet = [sc(), oc(), corner];
+        let alphabet = &alphabet[..2 + rng.below(2)];
+        if rng.below(2) == 0 {
+            let len = 1 + rng.below(40);
+            return rng.items(len, alphabet);
+        }
+        let motif_len = 1 + rng.below(10);
+        let motif = rng.items(motif_len, alphabet);
+        let copies = 2 + rng.below(5);
+        let (prefix_len, suffix_len) = (rng.below(4), rng.below(4));
+        let mut row = rng.items(prefix_len, alphabet);
+        for _ in 0..copies {
+            row.extend_from_slice(&motif);
+        }
+        row.extend(rng.items(suffix_len, alphabet));
+        if rng.below(3) == 0 {
+            let at = rng.below(row.len());
+            row[at] = alphabet[rng.below(alphabet.len())].clone();
+        }
+        row
+    }
+
+    #[test]
+    fn compress_matches_reference_unless_it_needs_a_longer_repeat() {
+        let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
+        let mut compared = 0;
+        for _ in 0..4000 {
+            let row = sample_row(&mut rng);
+            let max_period = 1 + rng.below(8);
+            let got = compress_capped(&row, max_period);
+            assert_eq!(flatten(&got), row);
+            let expected = reference_compress(&row);
+            if longest_period(&expected) <= max_period {
+                compared += 1;
+                assert_eq!(
+                    to_string(&got),
+                    to_string(&expected),
+                    "row {} with max period {max_period}",
+                    to_string(&row),
+                );
+            }
+        }
+        assert!(compared > 2000, "only {compared} rows compared");
     }
 
     // ── compress: basics ─────────────────────────────────────────────────────
@@ -448,6 +561,40 @@ mod tests {
         eq(
             &compress(&flat),
             &[rep(vec![rep(vec![sc(), oc()], 2), oc()], 2)],
+        );
+    }
+
+    // ── compress: repeat period cap ───────────────────────────────────────────
+
+    /// `sc` followed by `len - 1` `oc`: a primitive body that compresses to two tokens.
+    fn sc_then_oc(len: usize) -> Vec<SequenceItem> {
+        let mut body = vec![sc()];
+        body.resize(len, oc());
+        body
+    }
+
+    #[test]
+    fn compress_keeps_repeat_at_period_cap() {
+        let p = MAX_REPEAT_PERIOD;
+        let row = [vec![sc()], sc_then_oc(p), sc_then_oc(p)].concat();
+        eq(
+            &compress(&row),
+            &[sc(), rep(vec![sc(), rep(vec![oc()], p - 1)], 2)],
+        );
+    }
+
+    #[test]
+    fn compress_spells_out_repeat_beyond_period_cap() {
+        let p = MAX_REPEAT_PERIOD + 1;
+        let row = [vec![sc()], sc_then_oc(p), sc_then_oc(p)].concat();
+        eq(
+            &compress(&row),
+            &[
+                rep(vec![sc()], 2),
+                rep(vec![oc()], p - 1),
+                sc(),
+                rep(vec![oc()], p - 1),
+            ],
         );
     }
 
