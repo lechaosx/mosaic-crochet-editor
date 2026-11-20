@@ -170,11 +170,10 @@ addEventListener("pageshow", event => {
 });
 removeRetiredRecords();
 const projects = loadProjectIndex();
-const projectId = projects.active;
 // Null while the session runs without browser records: the project index
 // can't be stored, or IndexedDB is denied or unreadable.
 let database = projects.stored ? await openProjectDatabase() : null;
-const stored = database && await readProject(database, projectId);
+const stored = database && await readProject(database, projects.active);
 if (!stored) database = null;
 if (database && editing) deleteProjectsExcept(database, projects.open);
 if (projects.stored && editing) deleteLiveProgressExcept(projects.open);
@@ -189,44 +188,56 @@ const recipeEvaluations = new RecipeEvaluations();
 const rs       = makeRendererState(preferences, chartLayer, recipeEvaluations);
 let projectColorsSynced: string | null = null;
 const store    = new Store(saved ?? defaultSession());
-// What the history records hold once every issued write lands, and what they
-// are known to hold; null when unknown, so a write stores every snapshot.
-let historyWritten = saved && stored ? historyFromStored(stored.history, stored.snapshots) : null;
-let historyStored = historyWritten;
-// Counts failed history writes. A write issued before the latest failure was
-// known built on records that lack the failed write, so its outcome confirms
-// nothing.
-let historyFailures = 0;
-// The in-memory history is authoritative; storage failures never shorten it.
-// A recovered document that differs from the stored current snapshot becomes a
-// new, unsaved step. Without a recovered session, boot replaces this once the
-// default pattern is built.
-let undoHistory: UndoHistory = saved
-    ? historySave(historyWritten ?? historyFrom(saved), saved)
-    : historyFrom(store.state);
+// The project the store edits, with its undo history and the state of its
+// history records.
+interface OpenProject {
+    id: string;
+    // In memory it is authoritative; storage failures never shorten it.
+    history: UndoHistory;
+    // What the history records hold once every issued write lands, and what
+    // they are known to hold; null when unknown, so a write stores every
+    // snapshot.
+    historyWritten: UndoHistory | null;
+    historyStored:  UndoHistory | null;
+    // Counts failed history writes. A write issued before the latest failure
+    // was known built on records that lack the failed write, so its outcome
+    // confirms nothing.
+    historyFailures: number;
+}
+const storedHistory = saved && stored ? historyFromStored(stored.history, stored.snapshots) : null;
+// A recovered document that differs from the stored current snapshot becomes
+// a new, unsaved step. Without a recovered session, boot replaces the history
+// once the default pattern is built.
+const project: OpenProject = {
+    id: projects.active,
+    history: saved ? historySave(storedHistory ?? historyFrom(saved), saved) : historyFrom(store.state),
+    historyWritten: storedHistory,
+    historyStored: storedHistory,
+    historyFailures: 0,
+};
 function commitHistory(next: UndoHistory) {
-    if (next === undoHistory) return;
-    undoHistory = next;
+    if (next === project.history) return;
+    project.history = next;
     persistHistory();
 }
 function persistHistory() {
     if (!database || !editing) return;
-    const history = undoHistory, failures = historyFailures;
-    const changes = historyChanges(historyWritten, history);
-    historyWritten = history;
-    writeHistory(database, projectId, changes, written => {
-        if (failures !== historyFailures) return;
+    const history = project.history, failures = project.historyFailures;
+    const changes = historyChanges(project.historyWritten, history);
+    project.historyWritten = history;
+    writeHistory(database, project.id, changes, written => {
+        if (failures !== project.historyFailures) return;
         if (written) {
-            historyStored = history;
+            project.historyStored = history;
         } else {
-            historyFailures++;
-            historyWritten = historyStored;
+            project.historyFailures++;
+            project.historyWritten = project.historyStored;
         }
         reportStorage("history", written);
     });
 }
 function persistRecovery(s: Readonly<SessionState>) {
-    if (database && editing) writeRecovery(database, projectId, s, written => reportStorage("recovery", written));
+    if (database && editing) writeRecovery(database, project.id, s, written => reportStorage("recovery", written));
 }
 // Whether each kind of record's latest write failed.
 const storageFailed = { recovery: false, history: false };
@@ -426,12 +437,12 @@ function startHistory(next: UndoHistory) {
 store.setHistoryFn(s => {
     if (!savingPatternHistory) patternHistorySession = false;
     if (!savingRecipeHistory) recipeHistorySession = false;
-    commitHistory(historySave(undoHistory, s));
+    commitHistory(historySave(project.history, s));
 });
 store.setPersistFn(persistRecovery);
 
 // Observers — run after every commit.
-store.addObserver(() => ui.setHistory(canUndo(undoHistory), canRedo(undoHistory)));
+store.addObserver(() => ui.setHistory(canUndo(project.history), canRedo(project.history)));
 store.addObserver(s => ui.setViewState(
     s.state.rotation, instructionsOpen || navigateLatched || navigateMomentary,
 ));
@@ -774,7 +785,7 @@ function onRecipeCommit() {
         savingRecipeHistory = true;
         try {
             if (recipeHistorySession) {
-                const { history: next, replaced } = historyReplaceCurrent(undoHistory, store.state);
+                const { history: next, replaced } = historyReplaceCurrent(project.history, store.state);
                 commitHistory(next);
                 recipeHistorySession = replaced;
             } else {
@@ -782,7 +793,7 @@ function onRecipeCommit() {
                 recipeHistorySession = true;
             }
             persistRecovery(store.state);
-            ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
+            ui.setHistory(canUndo(project.history), canRedo(project.history));
         } finally { savingRecipeHistory = false; }
     }
     ui.setRecipes(store.state.recipes, store.state.activeRecipeId);
@@ -1100,10 +1111,10 @@ function onEditCommit(clearDesign = false) {
         } finally {
             applyingPatternPreview = false;
         }
-        const { history: next, replaced } = historyReplaceCurrent(undoHistory, store.state);
+        const { history: next, replaced } = historyReplaceCurrent(project.history, store.state);
         commitHistory(next);
         patternHistorySession = replaced;
-        ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
+        ui.setHistory(canUndo(project.history), canRedo(project.history));
     } else if (changed) {
         savingPatternHistory = true;
         try {
@@ -1173,11 +1184,11 @@ function undo() {
     gestureInputs.cancel();
     clearExecutingAction();
     patternHistorySession = false;
-    const previous = historyUndo(undoHistory);
+    const previous = historyUndo(project.history);
     if (!previous) return;
     commitHistory(previous);
     instructionsView?.close(false);
-    applyRestored(historyPeek(undoHistory));
+    applyRestored(historyPeek(project.history));
 }
 function redo() {
     if (document.querySelector("dialog:modal")) return;
@@ -1185,11 +1196,11 @@ function redo() {
     gestureInputs.cancel();
     clearExecutingAction();
     patternHistorySession = false;
-    const next = historyRedo(undoHistory);
+    const next = historyRedo(project.history);
     if (!next) return;
     commitHistory(next);
     instructionsView?.close(false);
-    applyRestored(historyPeek(undoHistory));
+    applyRestored(historyPeek(project.history));
 }
 
 // ── Save / load ──────────────────────────────────────────────────────────────
@@ -1201,9 +1212,9 @@ async function onSave() {
     const snapshot: SessionState = store.state.float
         ? { ...store.state, ...anchorIntoCanvas(store.state) }
         : store.state;
-    const saving = historyHeadId(undoHistory);
+    const saving = historyHeadId(project.history);
     try {
-        if (await saveToFile(snapshot)) commitHistory(historyMarkClean(undoHistory, saving));
+        if (await saveToFile(snapshot)) commitHistory(historyMarkClean(project.history, saving));
     } catch (error) {
         const detail = error instanceof Error ? error.message : "The file could not be written.";
         ui.setDocumentError(`Could not save pattern: ${detail}`, "save");
@@ -1222,7 +1233,7 @@ async function onLoad() {
     if (!loaded) return;
     if (selectionBehaviorChanged) ui.setDocumentNotice("Saved selection transforms were converted: Circle uses chosen turns; Mirror composes its types. Pattern stitches and colours are unchanged.");
     if (sameProject(loaded)) {
-        commitHistory(historyMarkClean(undoHistory));
+        commitHistory(historyMarkClean(project.history));
         closeAbout();
         return;
     }
@@ -1236,7 +1247,7 @@ async function onLoad() {
           recipes: loaded.recipes, activeRecipeId: null, float: null, rotation: 0 },
         { history: true },
     );
-    commitHistory(historyMarkClean(undoHistory));
+    commitHistory(historyMarkClean(project.history));
 }
 
 // ── Instructions ─────────────────────────────────────────────────────────────
@@ -1313,8 +1324,8 @@ async function onInstructions() {
     const totalUnits = store.state.pattern.mode === "row"
         ? store.state.pattern.canvasHeight
         : store.state.pattern.rounds;
-    let completedUnits = loadLiveProgress(projectId, progressFingerprint, totalUnits);
-    ui.setCrochetProgress(hasLiveProgress(projectId, progressFingerprint, totalUnits));
+    let completedUnits = loadLiveProgress(project.id, progressFingerprint, totalUnits);
+    ui.setCrochetProgress(hasLiveProgress(project.id, progressFingerprint, totalUnits));
     let generatedUnits: readonly CachedInstructionUnit[] = [];
     // Reversed corner groups can jump diagonally; markers must stay on cell edges.
     const edgeDirection = (dx: number, dy: number) => Math.abs(dx) >= Math.abs(dy)
@@ -1363,8 +1374,8 @@ async function onInstructions() {
             const wholeInvalid = hasUnrepresentedWarning(store.plan, W, H, units.map(unit => unit.invalidWorkedCoords));
             dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
                 completedUnits = nextCompleted;
-                const saved = editing && saveLiveProgress(projectId, progressFingerprint, completedUnits);
-                if (saved) ui.setCrochetProgress(hasLiveProgress(projectId, progressFingerprint, totalUnits));
+                const saved = editing && saveLiveProgress(project.id, progressFingerprint, completedUnits);
+                if (saved) ui.setCrochetProgress(hasLiveProgress(project.id, progressFingerprint, totalUnits));
                 return saved;
             }, wholeInvalid);
         }
@@ -1514,11 +1525,11 @@ function crochetProgressTotal() {
 }
 
 function syncCrochetProgressControl() {
-    ui.setCrochetProgress(hasLiveProgress(projectId, crochetProgressFingerprint(), crochetProgressTotal()));
+    ui.setCrochetProgress(hasLiveProgress(project.id, crochetProgressFingerprint(), crochetProgressTotal()));
 }
 
 function clearCrochetProgress() {
-    if (editing) clearLiveProgress(projectId);
+    if (editing) clearLiveProgress(project.id);
     ui.setCrochetProgress(false);
 }
 
@@ -2173,9 +2184,9 @@ ui.setColors(store.state.colorA, store.state.colorB);
 ui.setTransformState(Boolean(store.state.float), hasConfiguredTransforms());
 ui.setSelectionState(selectionCellCount(), clipboardCellCount());
 ui.syncEditInputs(store.state.pattern);
-ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
+ui.setHistory(canUndo(project.history), canRedo(project.history));
 ui.setRecoveryStatus(!database ? "failed" : saved ? "recovered" : "saved");
-if (saved && undoHistory !== historyWritten) persistHistory();
+if (saved && project.history !== project.historyWritten) persistHistory();
 syncCrochetErrors();
 
 if (saved) {
@@ -2194,7 +2205,7 @@ if (saved) {
     store.commit(s => { s.pattern = pattern; s.pixels = pixels; }, { persist: false });
     refreshSymmetryUi();
     commitHistory(historyMarkClean(historyFrom(store.state)));
-    ui.setHistory(canUndo(undoHistory), canRedo(undoHistory));
+    ui.setHistory(canUndo(project.history), canRedo(project.history));
 }
 ui.setViewState(store.state.rotation, false);
 if (shouldShowAbout(currentReleaseHash)) showAbout();
