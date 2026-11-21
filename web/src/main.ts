@@ -1265,9 +1265,7 @@ async function onInstructions() {
     gestureInputs.cancel();
     clearExecutingAction();
     // Instructions reflect the visible pattern without anchoring the live float.
-    const exportPixels = store.state.float
-        ? anchorIntoCanvas(store.state).pixels
-        : store.state.pixels;
+    const exportPixels = store.visible;
     instructionsOpen = true;
     ui.setViewState(store.state.rotation, true);
     const dlg = ui.openInstructions();
@@ -1284,13 +1282,7 @@ async function onInstructions() {
         renderCanvas();
     });
 
-    instructionsPreviewStore = new Store({
-        ...store.state,
-        pixels: exportPixels,
-        mirrors: [],
-        liveMirrors: false,
-        float: null,
-    });
+    instructionsPreviewStore = store.derive({ ...store.state, mirrors: [], liveMirrors: false });
     renderCanvas();
 
     dlg.onLivePreview((completedUnits) => {

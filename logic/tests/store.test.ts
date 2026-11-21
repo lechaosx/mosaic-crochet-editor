@@ -379,3 +379,58 @@ describe("Store sessions", () => {
         expect(s.planChangeSince(version)).toBe("all");
     });
 });
+
+describe("Store derive", () => {
+    // Row and round charts with arbitrary yarns, an optional float and mirrors.
+    const session = fc.record({
+        round: fc.boolean(),
+        W: fc.integer({ min: 1, max: 8 }), H: fc.integer({ min: 1, max: 8 }), rounds: fc.integer({ min: 1, max: 5 }),
+        yarns: fc.array(fc.constantFrom<1 | 2>(1, 2), { minLength: 64, maxLength: 64 }),
+        float: fc.option(fc.record({ x: fc.integer({ min: -2, max: 8 }), y: fc.integer({ min: -2, max: 8 }),
+            w: fc.integer({ min: 1, max: 3 }), h: fc.integer({ min: 1, max: 3 }),
+            yarns: fc.array(fc.constantFrom<0 | 1 | 2>(0, 1, 2), { minLength: 9, maxLength: 9 }) })),
+    }).map(({ round, W, H, rounds, yarns, float }): SessionState => {
+        const pattern: PatternState = round
+            ? { mode: "round", canvasWidth: W, canvasHeight: H, virtualWidth: W, virtualHeight: H, offsetX: 0, offsetY: 0, rounds }
+            : { mode: "row", canvasWidth: W, canvasHeight: H };
+        const pixels = round ? initialize_round_pattern(W, H, W, H, 0, 0, rounds) : new Uint8Array(W * H).fill(1);
+        pixels.forEach((value, i) => { if (value !== 0) pixels[i] = yarns[i]; });
+        return rowSession(W, H, {
+            pattern, pixels,
+            mirrors: [{ id: "m", enabled: true, x: W / 2, y: H / 2, types: ["H"] }],
+            float: float && { x: float.x, y: float.y, w: float.w, h: float.h, pixels: new Uint8Array(float.yarns.slice(0, float.w * float.h)) },
+        });
+    });
+
+    test("a derived store shows its source's visible pixels with its plan and version", () => {
+        fc.assert(fc.property(session, state => {
+            const source = new Store(state);
+            const derived = source.derive({ ...source.state, mirrors: [], liveMirrors: false });
+            const scratch = new Store({ ...state, pixels: visiblePixels(state), float: null, mirrors: [] });
+            expect(derived.state.float).toBeNull();
+            expect(derived.state.mirrors).toEqual([]);
+            expect(derived.state.pixels).toEqual(scratch.state.pixels);
+            expect(derived.visible).toEqual(scratch.visible);
+            expect(derived.plan).toEqual(scratch.plan);
+            expect(derived.planChangeSince(source.planVersion)).toBeNull();
+        }), { numRuns: 300 });
+    });
+
+    test("a derived store's changes keep its plan exact and never reach its source's plan", () => {
+        fc.assert(fc.property(session, fc.array(fc.nat(), { minLength: 1, maxLength: 4 }), (state, flips) => {
+            const source = new Store(state);
+            const sourcePlan = structuredClone(source.plan);
+            const derived = source.derive({ ...source.state });
+            for (const flip of flips) {
+                const version = derived.planVersion;
+                const pixels = derived.state.pixels.slice();
+                const at = flip % pixels.length;
+                if (pixels[at] !== 0) pixels[at] = 3 - pixels[at];
+                derived.commit(s => { s.pixels = pixels; });
+                expect(derived.plan).toEqual(new Store({ ...derived.state }).plan);
+                expect(derived.planChangeSince(version)).not.toBe("all");
+            }
+            expect(source.plan).toEqual(sourcePlan);
+        }), { numRuns: 300 });
+    });
+});

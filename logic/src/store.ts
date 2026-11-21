@@ -127,12 +127,27 @@ export class Store {
     private _persistFn: PersistFn | null = null;
     private _observers: ObserverFn[] = [];
 
-    constructor(state: SessionState, session: string | null = null) {
+    // `derived`, from `derive`, is data already computed for `state`.
+    constructor(state: SessionState, session: string | null = null, derived?: DerivedData) {
         if (state.recipes.length === 0) state.recipes = [emptyGridRecipe()];
         state.activeRecipeId = normalizeActiveRecipeId(state.recipes, state.activeRecipeId, state.float);
         this._state = state;
         this._session = session;
-        this.rebuildPlan();
+        if (derived) this.adopt(derived);
+        else this.rebuildPlan();
+    }
+
+    // A store of `state` whose canvas is this store's visible pixels, with no
+    // float. The plan depends only on the pattern and the visible pixels, so
+    // it starts from a copy of this store's plan at this store's version: a
+    // reader of either store may use what it derived for that version.
+    derive(state: Omit<SessionState, "pattern" | "pixels" | "float">): Store {
+        const { pattern } = this._state, visible = this._visible;
+        const { cells, marked, invalid } = this._plan;
+        return new Store({ ...state, pattern, pixels: visible, float: null }, null, {
+            source: { pattern, pixels: visible, float: null }, visible,
+            plan: { cells: cells.slice(), marked, invalid }, version: this._version,
+        });
     }
 
     get state(): Readonly<SessionState> { return this._state; }
@@ -199,11 +214,15 @@ export class Store {
         if (!kept || kept.source.pattern !== pattern || kept.source.pixels !== pixels || kept.source.float !== float) {
             return this.rebuildPlan();
         }
-        this._planSource = kept.source;
-        this._visible    = kept.visible;
-        this._plan       = kept.plan;
+        this.adopt(kept);
+    }
+
+    private adopt(data: DerivedData): void {
+        this._planSource = data.source;
+        this._visible    = data.visible;
+        this._plan       = data.plan;
         this._previousVersion = null;
-        this._version         = kept.version;
+        this._version         = data.version;
         this._change          = null;
     }
 
