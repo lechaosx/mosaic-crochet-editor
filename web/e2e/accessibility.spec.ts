@@ -177,10 +177,10 @@ test("closing an inspector restores focus to the available authoring context", a
     await bootApp(page);
     const selectionInspector = page.getByRole("dialog", { name: "Selection" });
 
-    const settings = page.getByRole("button", { name: "Settings" });
-    await settings.click();
+    const pattern = page.getByRole("button", { name: "Pattern", exact: true });
+    await pattern.click();
     await page.getByRole("button", { name: "Close inspector" }).click();
-    await expect(settings).toBeFocused();
+    await expect(pattern).toBeFocused();
 
     await page.keyboard.press("Control+a");
     await page.getByRole("button", { name: "Select", exact: true }).click();
@@ -205,6 +205,82 @@ test("closing an inspector restores focus to the available authoring context", a
     await page.getByRole("menuitem", { name: "Pattern" }).click();
     await page.keyboard.press("Escape");
     await expect(more).toBeFocused();
+});
+
+test("Settings drops from the app bar as a dialog over the pattern's open panel", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
+    const pattern = page.getByRole("complementary", { name: "Pattern" });
+    const settings = page.getByRole("button", { name: "Settings" });
+    const dialog = page.getByRole("dialog", { name: "Settings" });
+
+    await settings.click();
+    await expect(dialog).toBeVisible();
+    await expect(settings).toHaveAttribute("aria-expanded", "true");
+    await expect(dialog.getByRole("slider", { name: "Guidance opacity" })).toBeFocused();
+    await expect(pattern).toBeVisible();
+    const [button, box] = [(await settings.boundingBox())!, (await dialog.boundingBox())!];
+    expect(box.y).toBeGreaterThanOrEqual(button.y + button.height);
+    expect(box.x + box.width).toBeCloseTo(button.x + button.width, -1);
+
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(settings).toBeFocused();
+    await expect(settings).toHaveAttribute("aria-expanded", "false");
+    await expect(pattern).toBeVisible();
+
+    await settings.click();
+    await settings.click();
+    await expect(dialog).toBeHidden();
+
+    await settings.click();
+    await clickCell(page, 1, 1);
+    await expect(dialog).toBeHidden();
+
+    await page.setViewportSize({ width: 360, height: 740 });
+    const menu = page.getByRole("button", { name: "Menu" });
+    await menu.click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+    await expect(dialog.getByRole("slider", { name: "Guidance opacity" })).toBeFocused();
+    await expect(dialog).toBeInViewport({ ratio: 1 });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect(menu).toBeFocused();
+});
+
+test("Settings closes once focus leaves it and its button", async ({ page }) => {
+    await bootApp(page);
+    const settings = page.getByRole("button", { name: "Settings" });
+    const dialog = page.getByRole("dialog", { name: "Settings" });
+
+    await settings.click();
+    await page.keyboard.press("Shift+Tab");
+    await expect(settings).toBeFocused();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Tab");
+    await expect(dialog.getByRole("slider", { name: "Guidance opacity" })).toBeFocused();
+
+    const about = dialog.getByRole("button", { name: "About Mosaic Crochet Editor" });
+    while (!await about.evaluate(el => el === document.activeElement)) await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(dialog).toBeHidden();
+    const outside = await page.evaluate(() => document.activeElement?.id);
+    await page.keyboard.press("Escape");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe(outside);
+});
+
+test("Settings stay inside a phone screen with doubled text", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootApp(page);
+    await page.evaluate(() => {
+        document.documentElement.style.fontSize = "200%";
+        window.dispatchEvent(new Event("resize"));
+    });
+    await page.getByRole("button", { name: "Menu" }).click();
+    await page.getByRole("menuitem", { name: "Settings" }).click();
+    const box = (await page.getByRole("dialog", { name: "Settings" }).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(390);
 });
 
 test("compact Menu exposes and navigates a keyboard menu", async ({ page }) => {
@@ -286,7 +362,7 @@ test("Escape closes an inspector before applying a canvas shortcut", async ({ pa
     const settings = page.getByRole("button", { name: "Settings" });
     await settings.click();
     await page.keyboard.press("Escape");
-    await expect(page.locator("#inspector-host")).toBeHidden();
+    await expect(page.getByRole("dialog", { name: "Settings" })).toBeHidden();
     await expect(settings).toBeFocused();
 });
 
@@ -302,8 +378,8 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
 
     await expectHoverLabels("Design");
     await page.getByRole("button", { name: "Settings" }).click();
-    await expectHoverLabels("Settings inspector");
-    await page.getByRole("button", { name: "Close inspector" }).click();
+    await expectHoverLabels("Settings");
+    await page.keyboard.press("Escape");
 
     await page.keyboard.press("Control+a");
     await page.getByRole("button", { name: "Select", exact: true }).click();

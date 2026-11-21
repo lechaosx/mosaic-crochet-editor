@@ -92,9 +92,31 @@
     <button class="btn btn--icon btn--ghost" id="tab-new" type="button" aria-label="New tab" title="New pattern in a new tab"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg></button>
     <div class="app-actions">
       <button class="btn" id="btn-load" title="Open an .mcw file in a new tab"><svg class="tool-icon" aria-hidden="true"><use href="#icon-open"/></svg>Open</button>
-      <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true"><use href="#icon-settings"/></svg><span class="menu-label">Settings</span></button>
+      <button class="btn btn--icon" id="btn-hl-toggle" title="Settings" aria-label="Settings" aria-controls="hl-popover" aria-haspopup="dialog" aria-expanded="false"><svg class="tool-icon" aria-hidden="true"><use href="#icon-settings"/></svg><span class="menu-label">Settings</span></button>
       <button class="btn" id="btn-more" title="Menu" aria-haspopup="menu" aria-expanded="false" hidden>Menu</button>
     </div>
+    <section id="hl-popover" class="settings-popover" popover="manual" role="dialog" aria-labelledby="settings-title">
+      <header class="inspector-header">
+        <strong id="settings-title">Settings</strong>
+      </header>
+      <div class="settings-body">
+        <div class="popover-row" title="Fade the visible ✕ overlay marks and ! invalid marks.">
+          <span class="popover-label">Guidance opacity</span>
+          <input type="range" id="hl-opacity" value="100" min="0" max="100" aria-label="Guidance opacity">
+        </div>
+        <label class="toggle popover-row" title="Row numbers start at the bottom row; round numbers start at the innermost band.">
+          <span class="popover-label">Show numbers</span>
+          <input type="checkbox" id="labels-on" checked>
+          <span class="toggle-track"></span>
+        </label>
+        <label class="toggle popover-row" title="Block new marks on cells that cannot host an overlay">
+          <span class="popover-label">Prevent impossible overlay placements</span>
+          <input type="checkbox" id="lock-invalid" checked>
+          <span class="toggle-track"></span>
+        </label>
+        <button class="btn settings-about" id="settings-about" type="button" title="About Mosaic Crochet Editor">About Mosaic Crochet Editor</button>
+      </div>
+    </section>
   </div>
   <header class="document-bar" id="document-bar">
       <div class="document-actions g-mode" role="tablist" aria-label="View">
@@ -328,25 +350,6 @@
       </div>
       <div id="recipe-error" class="warning" role="alert" hidden></div>
     </div>
-  </section>
-
-  <!-- ── Settings inspector ───────────────────────────────────────────── -->
-  <section id="hl-popover" class="inspector-panel" aria-label="Settings" hidden>
-    <div class="popover-row" title="Fade the visible ✕ overlay marks and ! invalid marks.">
-      <span class="popover-label">Guidance opacity</span>
-      <input type="range" id="hl-opacity" value="100" min="0" max="100" aria-label="Guidance opacity">
-    </div>
-    <label class="toggle popover-row" title="Row numbers start at the bottom row; round numbers start at the innermost band.">
-      <span class="popover-label">Show numbers</span>
-      <input type="checkbox" id="labels-on" checked>
-      <span class="toggle-track"></span>
-    </label>
-    <label class="toggle popover-row" title="Block new marks on cells that cannot host an overlay">
-        <span class="popover-label">Prevent impossible overlay placements</span>
-        <input type="checkbox" id="lock-invalid" checked>
-        <span class="toggle-track"></span>
-    </label>
-    <button class="btn settings-about" id="settings-about" type="button" title="About Mosaic Crochet Editor">About Mosaic Crochet Editor</button>
   </section>
 
   <!-- ── Global Mirror inspector ───────────────────────────────────── -->

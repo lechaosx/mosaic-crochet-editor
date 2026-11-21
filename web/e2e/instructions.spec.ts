@@ -155,21 +155,18 @@ test("only document-changing commands leave Crochet", async ({ page }) => {
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
 });
 
-test("Crochet retains Pattern and Settings inspectors across the mode switch", async ({ page }) => {
+test("Crochet retains the Pattern inspector across the mode switch", async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await bootApp(page);
 
-    for (const name of ["Settings", "Pattern"] as const) {
-        await page.getByRole("button", { name }).click();
-        const inspector = page.getByRole("complementary", { name });
-        await expect(inspector).toBeVisible();
-        await page.locator("#view-crochet").click();
-        await expect(inspector).toBeVisible();
-        await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
-        await page.locator("#view-design").click();
-        await expect(inspector).toBeVisible();
-        await page.keyboard.press("Escape");
-    }
+    await page.getByRole("button", { name: "Pattern" }).click();
+    const inspector = page.getByRole("complementary", { name: "Pattern" });
+    await expect(inspector).toBeVisible();
+    await page.locator("#view-crochet").click();
+    await expect(inspector).toBeVisible();
+    await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
+    await page.locator("#view-design").click();
+    await expect(inspector).toBeVisible();
 });
 
 test("Pattern palette edits refresh the open Crochet chart and yarn markers", async ({ page }) => {
@@ -221,7 +218,7 @@ test("Pattern palette edits refresh the open Crochet chart and yarn markers", as
 test("Fit uses the whole canvas width while an inspector is open", async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     await bootApp(page);
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByRole("button", { name: "Fit view" }).click();
 
     const centres = await page.evaluate(() => {

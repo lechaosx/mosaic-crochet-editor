@@ -42,7 +42,7 @@ test("unavailable Undo and Redo leave Crochet open", async ({ page }) => {
     await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "true");
 });
 
-test("About shields document shortcuts and Escape preserves the underlying Settings", async ({ page }) => {
+test("About from Settings shields document shortcuts and Escape returns focus to Settings", async ({ page }) => {
     await bootApp(page);
     await clickCell(page, 1, 1);
     const before = await storedRecovery(page);
@@ -55,23 +55,24 @@ test("About shields document shortcuts and Escape preserves the underlying Setti
     expect(await storedRecovery(page)).toEqual(before);
     await page.keyboard.press("Escape");
     await expect(page.locator("#about-dialog")).toBeHidden();
-    await expect(page.locator("#hl-popover")).toBeVisible();
-    await expect(page.locator("#settings-about")).toBeFocused();
-    await page.keyboard.press("Escape");
     await expect(page.locator("#hl-popover")).toBeHidden();
+    await expect(page.getByRole("button", { name: "Settings" })).toBeFocused();
 });
 
-test("Escape dismisses the compact menu before the underlying Settings", async ({ page }) => {
+test("Escape dismisses the compact menu and then Settings opened from it", async ({ page }) => {
     await page.setViewportSize({ width: 360, height: 740 });
     await bootApp(page);
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
-    await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
-    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    const menu = page.getByRole("button", { name: "Menu", exact: true });
+    await menu.click();
     await page.keyboard.press("Escape");
+    await expect(page.locator("#more-popover")).toBeHidden();
+    await menu.click();
+    await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
     await expect(page.locator("#more-popover")).toBeHidden();
     await expect(page.locator("#hl-popover")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator("#hl-popover")).toBeHidden();
+    await expect(menu).toBeFocused();
 });
 
 for (const mode of ["Move content", "Duplicate", "Move area"]) {
@@ -587,6 +588,7 @@ test("a Pattern change right after Example is its own undoable step", async ({ p
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").press("Tab");
+    await page.getByRole("button", { name: "Close inspector" }).click();
     await page.getByRole("button", { name: "Settings" }).click();
     await page.locator("#settings-about").click();
     await page.locator("#about-example").click();

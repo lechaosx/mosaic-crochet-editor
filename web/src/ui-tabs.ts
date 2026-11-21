@@ -8,7 +8,7 @@ type CloseAnswer = "save" | "discard" | "cancel";
 // an open project, the workspace offers ways to start one in place of the
 // editor, and the commands that act on a pattern are unavailable.
 export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "onTabNew">,
-    inspector: Pick<InspectorControls, "isOpen" | "close">) {
+    inspector: Pick<InspectorControls, "close">) {
     const tablist = el("project-tablist");
     const closes = el("project-tab-closes");
     const workspace = el("workspace");
@@ -92,7 +92,7 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
         empty.hidden = active !== null;
         for (const command of patternCommands) command.disabled = active === null;
         if (active === null) {
-            if (!inspector.isOpen("settings")) inspector.close(false);
+            inspector.close(false);
             workspace.removeAttribute("aria-labelledby");
             if (focused) el("tab-new").focus();
             return;

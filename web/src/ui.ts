@@ -16,13 +16,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const inspectorTitle = el("inspector-title");
     const inspectorPanels: Record<InspectorPanel, HTMLElement> = {
         selection: el("selection-popover"),
-        settings: el("hl-popover"),
         transforms: el("sym-popover"),
         pattern: el("edit-pattern-widget"),
     };
     const inspectorTriggers: Record<InspectorPanel, HTMLElement> = {
         selection: el("tool-select"),
-        settings: el("btn-hl-toggle"),
         transforms: el("btn-sym-toggle"),
         pattern: el("btn-edit"),
     };
@@ -116,7 +114,6 @@ export function mountUI(cb: UICallbacks): UIHandle {
 
     const panelTriggers: Record<InspectorPanel, HTMLElement[]> = {
         selection: [],
-        settings: [el("btn-hl-toggle")],
         transforms: [el("btn-sym-toggle")],
         pattern: [el("btn-edit")],
     };
@@ -206,10 +203,9 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const pattern = mountPattern(cb, inspector, enterDesignForCommand);
     finishPatternEdit = pattern.finishPatternEdit;
     const mirrors = mountMirrors(cb, inspector);
-    mountSettings(cb, inspector, pattern.drawPatternPreview);
+    mountSettings(cb, pattern.drawPatternPreview);
     const instructions = mountInstructions(cb, canvas, () => {
-        const retainedInspector = activeInspector === "pattern" || activeInspector === "settings";
-        if (activeInspector !== null && !retainedInspector) closeInspector(false);
+        if (activeInspector !== null && activeInspector !== "pattern") closeInspector(false);
     }, syncCanvasChromeInsets, queueCanvasChromeSync);
 
     const tabs = mountTabs(cb, inspector);

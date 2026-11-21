@@ -25,9 +25,9 @@ test("Pattern remains modeless across canvas authoring and inspector changes", a
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
 
-    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("button", { name: /Global Mirror/ }).click();
     await expect(page.locator("#edit-pattern-widget")).toBeHidden();
-    await expect(page.locator("#hl-popover")).toBeVisible();
+    await expect(page.locator("#sym-popover")).toBeVisible();
 });
 
 test("Pattern keeps canvas zoom available", async ({ page }) => {

@@ -125,7 +125,7 @@ export interface InstructionsView {
     close:       (restoreFocus?: boolean) => void;
 }
 
-export type InspectorPanel = "selection" | "settings" | "transforms" | "pattern";
+export type InspectorPanel = "selection" | "transforms" | "pattern";
 
 export interface InspectorControls {
     isOpen: (panel: InspectorPanel) => boolean;
