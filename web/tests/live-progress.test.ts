@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, test } from "vitest";
+import fc from "fast-check";
 import {
     fingerprintPattern,
     fingerprintPatternShape,
@@ -28,6 +29,32 @@ describe("Live instruction progress", () => {
         expect(same).toBe(first);
         expect(changedPixels).not.toBe(first);
         expect(fingerprintPatternShape(pattern)).toBe(fingerprintPatternShape({ ...pattern }));
+    });
+
+    test("fingerprints equal pixels alike wherever they are stored, and tells a changed pixel apart", () => {
+        const pattern = { mode: "row" as const, canvasWidth: 3, canvasHeight: 2 };
+        fc.assert(fc.property(
+            fc.uint8Array({ minLength: 1, maxLength: 40 }).map(bytes => bytes.map(byte => byte % 3)),
+            fc.nat(), fc.integer({ min: 0, max: 7 }),
+            (pixels, at, offset) => {
+                const stored = new Uint8Array(pixels.length + offset);
+                stored.set(pixels, offset);
+                const view = stored.subarray(offset);
+                expect(fingerprintPattern(pattern, view)).toBe(fingerprintPattern(pattern, pixels));
+                const changed = pixels.slice();
+                changed[at % pixels.length] = (changed[at % pixels.length] + 1) % 3;
+                expect(fingerprintPattern(pattern, changed)).not.toBe(fingerprintPattern(pattern, pixels));
+            },
+        ));
+    });
+
+    // Saved progress is looked up by this fingerprint.
+    test("keeps the shape fingerprint of saved progress", () => {
+        expect(fingerprintPatternShape({ mode: "row", canvasWidth: 3, canvasHeight: 2 })).toBe("70379a13482e1bde");
+        expect(fingerprintPatternShape({
+            mode: "round", canvasWidth: 8, canvasHeight: 8, virtualWidth: 8, virtualHeight: 8,
+            offsetX: 0, offsetY: 0, rounds: 4,
+        })).toBe("21de3f6723e24a20");
     });
 
     test("restores progress after stitch changes with the same geometry", () => {

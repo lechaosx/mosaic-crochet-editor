@@ -37,8 +37,8 @@ function readLiveProgress(project: string, fingerprint: string, totalUnits: numb
     }
 }
 
-function fingerprint(bytes: Uint8Array, initial = FNV_OFFSET): bigint {
-    let hash = initial;
+function fingerprint(bytes: Uint8Array): bigint {
+    let hash = FNV_OFFSET;
     for (const byte of bytes) {
         hash ^= BigInt(byte);
         hash = BigInt.asUintN(64, hash * FNV_PRIME);
@@ -54,11 +54,26 @@ export function fingerprintPatternShape(pattern: PatternState): string {
     return fingerprintString(JSON.stringify(pattern)).toString(16).padStart(16, "0");
 }
 
+// Two 32-bit lanes over four pixels at a time: a whole-chart BigInt hash is
+// too slow for millions of pixels. Each step is a bijection of the lane for a
+// given word, so pixels differing in one word always differ in fingerprint.
+function fingerprintPixels(pixels: Uint8Array): string {
+    const aligned = pixels.byteOffset % 4 === 0 ? pixels : pixels.slice();
+    const words = new Uint32Array(aligned.buffer, aligned.byteOffset, aligned.length >> 2);
+    let a = 0x811c9dc5, b = 0x9e3779b9;
+    const mix = (word: number) => {
+        a = Math.imul(a ^ word, 0x01000193);
+        a = a << 13 | a >>> 19;
+        b = Math.imul(b ^ word, 0x85ebca6b);
+        b = b << 17 | b >>> 15;
+    };
+    for (let i = 0; i < words.length; i++) mix(words[i]);
+    for (let i = words.length * 4; i < aligned.length; i++) mix(aligned[i]);
+    return (a >>> 0).toString(16).padStart(8, "0") + (b >>> 0).toString(16).padStart(8, "0");
+}
+
 export function fingerprintPattern(pattern: PatternState, pixels: Uint8Array): string {
-    let hash = fingerprintString(JSON.stringify(pattern));
-    hash = fingerprint(new Uint8Array([0]), hash);
-    hash = fingerprint(pixels, hash);
-    return hash.toString(16).padStart(16, "0");
+    return fingerprintPatternShape(pattern) + fingerprintPixels(pixels);
 }
 
 export function loadLiveProgress(project: string, fingerprint: string, totalUnits: number): number {
