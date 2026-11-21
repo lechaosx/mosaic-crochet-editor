@@ -542,3 +542,29 @@ test("New tab stays whole and the strip scrolls whole tabs into view on a phone 
     });
     expect(orphans).toEqual([]);
 });
+
+test("a tab strip scrolled to its end never shows a close button without its tab", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootApp(page);
+    const strip = page.locator("#project-tabs");
+    for (const name of ["Tulip border", "Chevron blanket", "Mitten cuff", "Star medallion"]) {
+        const chooser = page.waitForEvent("filechooser");
+        await page.getByRole("button", { name: "Menu" }).click();
+        await page.getByRole("menuitem", { name: "Open" }).click();
+        await (await chooser).setFiles({ name: `${name}.mcw`, mimeType: "application/json", buffer: Buffer.from(motif) });
+        await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
+        await strip.evaluate(el => el.scrollTo({ left: el.scrollWidth, behavior: "instant" }));
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        const orphans = await page.evaluate(() => {
+            const visible = document.getElementById("project-tabs")!.getBoundingClientRect();
+            const shows = (el: Element) => {
+                const r = el.getBoundingClientRect();
+                return el.checkVisibility({ visibilityProperty: true }) && r.right > visible.left + 1 && r.left < visible.right - 1;
+            };
+            return [...document.querySelectorAll<HTMLElement>(".project-tab-close")]
+                .filter(close => shows(close) && !shows(document.getElementById(`project-tab-${close.dataset.project}`)!))
+                .map(close => close.getAttribute("aria-label"));
+        });
+        expect(orphans, name).toEqual([]);
+    }
+});

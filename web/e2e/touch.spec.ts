@@ -256,3 +256,18 @@ test("Yarn selection stays direct while phone colour editing lives in Pattern", 
     await expect(page.getByRole("button", { name: "Swap yarn colours" })).toBeVisible();
     expect(await page.locator("#authoring-dock").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
+
+test("closing a background tab takes two taps: select it, then close it", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "New tab" }).tap();
+    await page.keyboard.press("Escape");
+    const first = page.getByRole("tab", { name: "Untitled 1" });
+    await expect(page.getByRole("button", { name: "Close Untitled 2" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Close Untitled 1" })).toBeHidden();
+
+    await first.tap();
+    await expect(first).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("button", { name: "Close Untitled 2" })).toBeHidden();
+    await page.getByRole("button", { name: "Close Untitled 1" }).tap();
+    await expect(page.getByRole("tablist", { name: "Open patterns" }).getByRole("tab")).toHaveText(["Untitled 2"]);
+});

@@ -6,6 +6,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Warnings and danger signals on controls keep one fixed colour instead of taking on the active pattern's Danger colour, which now marks only its chart and Crochet list.
 - Settings drop down from the app bar without closing the open pattern panel.
+- On touch screens a background tab is selected before it can be closed.
 
 ## 20 November 2026
 

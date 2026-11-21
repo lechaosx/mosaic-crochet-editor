@@ -17,6 +17,14 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
     const patternCommands = ["btn-edit", "btn-save", "view-design", "view-crochet"].map(id => el<HTMLButtonElement>(id));
     const closePrompt = el<HTMLDialogElement>("close-tab-prompt");
     let answer: ((value: CloseAnswer) => void) | null = null;
+    // Scroll snapping can't keep a tab beside its close button at the strip's
+    // end, and a close button showing alone reads as closing another tab.
+    const offscreen = new IntersectionObserver(entries => {
+        for (const { target, isIntersecting } of entries) {
+            closes.querySelector(`[data-project="${(target as HTMLElement).dataset.project}"]`)
+                ?.toggleAttribute("data-offscreen", !isIntersecting);
+        }
+    }, { root: el("project-tabs") });
 
     el("tab-new").addEventListener("click", cb.onTabNew);
 
@@ -48,7 +56,9 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
             && (tablist.contains(document.activeElement) || closes.contains(document.activeElement))
             ? document.activeElement : null;
         for (const button of [...tablist.children, ...closes.children] as HTMLElement[]) {
-            if (!tabs.some(({ id }) => id === button.dataset.project)) button.remove();
+            if (tabs.some(({ id }) => id === button.dataset.project)) continue;
+            offscreen.unobserve(button);
+            button.remove();
         }
         tabs.forEach(({ id, title, unsaved }, i) => {
             let tab = document.getElementById(`project-tab-${id}`) as HTMLButtonElement | null;
@@ -70,6 +80,7 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
                 close.addEventListener("click", () => cb.onTabClose(id));
                 tablist.append(tab);
                 closes.append(close);
+                offscreen.observe(tab);
             }
             tab.style.order = String(2 * i);
             tab.setAttribute("aria-selected", String(id === active));

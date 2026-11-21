@@ -261,6 +261,19 @@ input  { font: inherit; color: inherit; }
   border-inline-end: var(--border);
 }
 .project-tab-close:last-child { scroll-snap-align: end; }
+.project-tab-close[data-offscreen] { visibility: hidden; }
+/* On touch, a background tab is selected before it can be closed, so a tap
+   meant for it can't close it. */
+@media (pointer: coarse) {
+  .project-tab-close:not([data-selected]) { display: none; }
+  .project-tab-select:not([aria-selected="true"]) { position: relative; padding-inline-end: var(--space-3); }
+  .project-tab-select:not([aria-selected="true"])::after {
+    content: "";
+    position: absolute;
+    inset: 30% 0 30% auto;
+    border-inline-end: var(--border);
+  }
+}
 .project-tab-close:hover { color: var(--fg-0); }
 .project-tab-select[aria-selected="true"],
 .project-tab-close[data-selected] {
