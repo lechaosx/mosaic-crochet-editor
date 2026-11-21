@@ -203,6 +203,21 @@ describe("pasteClipboard", () => {
         expect(dest.state.float!.x).toBe(1);
     });
 
+    test("paste keeps the cells the placement filter refuses at the chart's colour", () => {
+        copyFloat(storeOf({ pixels: filledPixels(3, 3, 1),
+            float: makeFloat([{ x: 1, y: 1, v: 2 }, { x: 2, y: 1, v: 2 }]) }));
+        const dest = storeOf({ pixels: filledPixels(3, 3, 1) });
+
+        expect(pasteClipboard(dest, undefined, (before, after) => {
+            const kept = after.slice();
+            kept[3 + 1] = before[3 + 1];
+            return kept;
+        })).toBe("pasted");
+
+        expect(floatAt(dest.state.float!, 1, 1)).toBe(1);
+        expect(floatAt(dest.state.float!, 2, 1)).toBe(2);
+    });
+
     test("accepted paste prepares the current selection before its authored snapshot", () => {
         copyFloat(storeOf({ float: makeFloat([{ x: 1, y: 1, v: 2 }]) }));
         const original = makeFloat([{ x: 0, y: 0, v: 2 }]);

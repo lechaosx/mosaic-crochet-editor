@@ -316,6 +316,28 @@ export function previewSelectRect(
     return { x, y, w, h, mask };
 }
 
+// `after` with its visible pixels passed through `filter` against those of
+// `before`. A refused cell is reset in the float where the float covers it, so
+// the selection keeps its shape, and in the canvas elsewhere.
+export function filterPlacement(
+    before: Readonly<SessionState>, after: Readonly<SessionState>, filter: PlacementFilter,
+): { pixels: Uint8Array; float: Float | null } {
+    const placed = visiblePixels(after);
+    const kept = filter(visiblePixels(before), placed);
+    if (kept.every((value, i) => value === placed[i])) return { pixels: after.pixels, float: after.float };
+    const W = after.pattern.canvasWidth;
+    const pixels = after.pixels.slice();
+    const float = after.float && { ...after.float, pixels: after.float.pixels.slice() };
+    kept.forEach((value, i) => {
+        if (value === placed[i]) return;
+        const lx = i % W - (float?.x ?? 0), ly = Math.floor(i / W) - (float?.y ?? 0);
+        if (float && lx >= 0 && lx < float.w && ly >= 0 && ly < float.h && float.pixels[ly * float.w + lx] !== 0) {
+            float.pixels[ly * float.w + lx] = value;
+        } else pixels[i] = value;
+    });
+    return { pixels, float };
+}
+
 // Bake the float into the canvas; return pixels with float stamped + float=null.
 export function anchorIntoCanvas(s: SessionState): { pixels: Uint8Array; float: null } {
     return { pixels: visiblePixels(s), float: null };

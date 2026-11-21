@@ -32,7 +32,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection, createGridRecipe,
          activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe, gridRecipeStamp,
-         syncActiveGridRecipe, selectionSourceIsValid, type PlacementFilter } from "@mosaic/logic/selection";
+         syncActiveGridRecipe, selectionSourceIsValid, filterPlacement, type PlacementFilter } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary, hasDrawing, samePatternGeometry } from "@mosaic/logic/pattern";
@@ -602,13 +602,21 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
 const PROTECTED_FEEDBACK = "Protected · Settings";
 
 // Edits that place copied cells keep drawing's protection and notice.
-function placementFilter(): PlacementFilter | undefined {
+function placementFilter(onRefuse = () => ui.setCanvasFeedback(PROTECTED_FEEDBACK)): PlacementFilter | undefined {
     if (!preferences.lockInvalid) return undefined;
     return (before, after) => {
         const placed = lockAlwaysInvalid(store.state.pattern, before, after);
-        if (!arraysEqual(placed, after)) ui.setCanvasFeedback(PROTECTED_FEEDBACK);
+        if (!arraysEqual(placed, after)) onRefuse();
         return placed;
     };
+}
+
+// Records a move, with the cells it placed since `before` protected.
+function commitMove(before: Readonly<SessionState>) {
+    const filter = placementFilter();
+    const { pixels, float } = filter ? filterPlacement(before, store.state, filter) : store.state;
+    const refused = pixels !== store.state.pixels || float !== store.state.float;
+    store.commit(s => { s.pixels = pixels; s.float = float; }, { render: refused, history: true });
 }
 
 function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
@@ -944,15 +952,16 @@ function toggleNavigate() {
 // `pasteClipboard` itself only touches state; the tool switch is a UI side
 // effect that lives here in the orchestrator.
 function onPaste() {
-    const result = pasteClipboard(store, finishAuthoredInput);
+    let refused = false;
+    const result = pasteClipboard(store, finishAuthoredInput, placementFilter(() => { refused = true; }));
     if (result !== "pasted") {
         ui.setCanvasFeedback(result === "conflict" ? null : result === "empty"
             ? "Clipboard is empty · copy a selection first"
             : "Copied selection cannot fit this pattern · no cells land on the chart");
         return;
     }
-    ui.setCanvasFeedback(null);
     if (store.state.activeTool !== "move") setTool("move");
+    ui.setCanvasFeedback(refused ? PROTECTED_FEEDBACK : null);
 }
 function onCopy() {
     copyFloat(store);
@@ -1895,9 +1904,9 @@ const gestureInputs = mountGestures(viewport.canvas, viewport.view, clientToPatt
                 store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; syncActiveGridRecipe(s); }, { history: true });
             } else {
                 // Move and duplicate converge here: the duplicate's pre-stamp
-                // already happened at paintdown, so release just records the
+                // already happened at paintdown, so release records the
                 // final dx/dy.
-                store.commit(() => {}, { render: false, history: true });
+                commitMove({ ...store.state, pixels: gesture.prePixels ?? store.state.pixels, float: gesture.preFloat });
             }
             refreshSymmetryUi();
             gesture = null;
@@ -2048,7 +2057,7 @@ function finishKeyboardMove() {
     if (move.mode === "mask-only" && store.state.float) {
         const lifted = liftCells(store.state.pixels, store.state.pattern, shiftedFloatMask(store.state));
         store.commit(s => { s.pixels = lifted.pixels; s.float = lifted.float; syncActiveGridRecipe(s); }, { history: true });
-    } else store.commit(() => {}, { render: false, history: true });
+    } else commitMove(move.baseline);
 }
 
 function cancelKeyboardMove() {

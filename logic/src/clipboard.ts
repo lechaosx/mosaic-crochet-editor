@@ -5,7 +5,8 @@
 
 import { Float } from "./types";
 import { Store, outOfBounds, visiblePixels } from "./store";
-import { cutCells, matchedCutMask, deleteFloat, syncActiveGridRecipe, selectionSourceIsValid } from "./selection";
+import { cutCells, matchedCutMask, deleteFloat, syncActiveGridRecipe, selectionSourceIsValid,
+         filterPlacement, type PlacementFilter } from "./selection";
 
 // The clipboard is just a Float snapshot.
 let clipboard: Float | null = null;
@@ -39,7 +40,7 @@ export function cutFloat(store: Store): void {
 // float first. Cells that land on holes are dropped.
 export type PasteResult = "pasted" | "empty" | "outside" | "conflict";
 
-export function pasteClipboard(store: Store, beforeCommit?: () => void): PasteResult {
+export function pasteClipboard(store: Store, beforeCommit?: () => void, filter?: PlacementFilter): PasteResult {
     if (!clipboard) return "empty";
 
     const W = store.state.pattern.canvasWidth, H = store.state.pattern.canvasHeight;
@@ -62,9 +63,11 @@ export function pasteClipboard(store: Store, beforeCommit?: () => void): PasteRe
     beforeCommit?.();
     if (!selectionSourceIsValid(store.state, newFloat)) return "conflict";
     const currentRecipeId = store.state.activeRecipeId;
+    const pasted = { ...store.state, pixels: visiblePixels(store.state), float: newFloat };
+    const { pixels, float } = filter ? filterPlacement(store.state, pasted, filter) : pasted;
     store.commit(s => {
-        s.pixels = visiblePixels(s);
-        s.float = newFloat;
+        s.pixels = pixels;
+        s.float = float;
         s.activeRecipeId = currentRecipeId;
         syncActiveGridRecipe(s);
     }, { history: true });

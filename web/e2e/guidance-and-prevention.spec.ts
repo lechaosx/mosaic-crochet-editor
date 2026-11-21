@@ -1,5 +1,5 @@
-import { test, expect } from "@playwright/test";
-import { addGlobalMirror, bootApp, cellCoord, clickCell, pixelRGB, storedHistoryLength, storedRecovery } from "./_helpers";
+import { test, expect, type Page } from "@playwright/test";
+import { addGlobalMirror, bootApp, cellCoord, clickCell, dragCells, pixelRGB, storedHistoryLength, storedRecovery } from "./_helpers";
 
 test("guidance opacity changes chart markers without changing placement rules", async ({ page }) => {
     await bootApp(page);
@@ -88,3 +88,42 @@ test("prevention keeps global mirror Stamp copies off impossible cells", async (
     expect((await storedRecovery(page)).document.pixels).toBe(before);
     await expect(page.locator("#status-feedback")).toContainText("Protected");
 });
+
+test("prevention keeps a paste off impossible cells", async ({ page }) => {
+    await bootApp(page);
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("p");
+    await clickCell(page, 1, 0, { button: "right" });
+    await page.keyboard.press("s");
+    await clickCell(page, 1, 0);
+    await page.keyboard.press("Control+x");
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
+    const before = (await storedRecovery(page)).document.pixels;
+
+    await page.keyboard.press("Control+v");
+    await expect(page.locator("#status-feedback")).toContainText("Protected");
+    await page.keyboard.press("Control+Shift+A");
+    expect((await storedRecovery(page)).document.pixels).toBe(before);
+});
+
+for (const [name, move] of [
+    ["dragging", (page: Page) => dragCells(page, 2, 1, 2, 0)],
+    ["an arrow key", (page: Page) => page.keyboard.press("ArrowUp")],
+] as const) {
+    test(`prevention keeps a selection moved by ${name} off impossible cells`, async ({ page }) => {
+        await bootApp(page);
+        const natural = (await storedRecovery(page)).document.pixels;
+        await page.keyboard.press("s");
+        await clickCell(page, 2, 1);
+        await page.keyboard.press("m");
+
+        await move(page);
+        await expect(page.locator("#status-feedback")).toContainText("Protected");
+        await page.keyboard.press("Control+Shift+A");
+        expect((await storedRecovery(page)).document.pixels).toBe(natural);
+    });
+}

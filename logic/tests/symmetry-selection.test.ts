@@ -8,7 +8,8 @@ import { initialize_round_pattern } from "@mosaic/wasm";
 import { paintOps } from "../src/paint";
 import { mirrorsToFlat, addMirror } from "../src/symmetry";
 import { Store } from "../src/store";
-import { applyGridRecipe, replicateSelection, activateGridRecipe, createGridRecipe, deleteGridRecipe, commitSelectRect } from "../src/selection";
+import { applyGridRecipe, replicateSelection, activateGridRecipe, createGridRecipe, deleteGridRecipe, commitSelectRect,
+         filterPlacement } from "../src/selection";
 import { filledPixels, makeFloat, rowPattern, rowSession } from "./_helpers";
 import { gridRecipeFromFloat, restoreGridRecipes } from "../src/grid-recipes";
 
@@ -208,6 +209,22 @@ describe("placement filter", () => {
         expect(store.state.pixels).toBe(pixels);
         expect(settle).not.toHaveBeenCalled();
         expect(history).not.toHaveBeenCalled();
+    });
+
+    test("a refused cell takes its earlier colour in the selection over it, or on the chart elsewhere", () => {
+        const before = rowSession(3, 1, { pixels: filledPixels(3, 1, 1) });
+        const float = makeFloat([{ x: 1, y: 0, v: 2 }]);
+        const after = { ...before, pixels: new Uint8Array([1, 1, 2]), float };
+
+        const kept = filterPlacement(before, after, (_, placed) => {
+            const out = placed.slice();
+            out[1] = 1;
+            out[2] = 1;
+            return out;
+        });
+
+        expect(kept.pixels).toEqual(new Uint8Array([1, 1, 1]));
+        expect(kept.float).toEqual({ ...float, pixels: new Uint8Array([1]) });
     });
 });
 
