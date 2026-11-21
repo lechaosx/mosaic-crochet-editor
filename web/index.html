@@ -203,8 +203,12 @@
     </main>
 
     <section id="empty-workspace" class="empty-workspace" aria-labelledby="empty-workspace-title" hidden>
-      <h2 id="empty-workspace-title">No pattern open</h2>
-      <p>Start a new pattern, open an .mcw file, or explore the example.</p>
+      <svg class="empty-motif" viewBox="0 0 7 7" aria-hidden="true">
+        <rect width="7" height="7" fill="#2a5560"/>
+        <path fill="#f0a55e" d="M0 1h3v1H0zM4 1h3v1H4zM2 2h1v1H2zM4 2h1v1H4zM0 3h1v1H0zM2 3h3v1H2zM6 3h1v1H6zM2 4h1v1H2zM4 4h1v1H4zM0 5h3v1H0zM4 5h3v1H4z"/>
+      </svg>
+      <h2 id="empty-workspace-title">Start a pattern</h2>
+      <p>Each pattern opens in its own tab, which keeps its own chart, undo history and Crochet progress. Tools, settings and copied cells are shared by every tab.</p>
       <div class="empty-workspace-actions">
         <button class="btn btn--primary" id="empty-new" type="button">New</button>
         <button class="btn" id="empty-open" type="button">Open</button>
@@ -222,6 +226,11 @@
           <button class="btn btn--icon btn--ghost" id="about-close" type="button" aria-label="Close About" title="Close About"><svg class="tool-icon" aria-hidden="true"><use href="#icon-close"/></svg></button>
         </header>
         <p>Design alternating-yarn mosaic crochet charts, preview overlay stitches, and follow chart-derived crochet instructions in your browser.</p>
+        <div class="about-actions" id="about-actions" aria-label="Pattern actions">
+          <button class="btn btn--primary" id="about-new" type="button" autofocus>New</button>
+          <button class="btn" id="about-open" type="button">Open</button>
+          <button class="btn" id="about-example" type="button">Example</button>
+        </div>
         <section class="about-release-notes-region" aria-labelledby="about-release-notes-title">
           <h2 id="about-release-notes-title">Release notes</h2>
           <div class="about-release-notes" id="about-release-notes">
@@ -232,11 +241,6 @@
           <a href="https://github.com/lechaosx/mosaic-crochet-editor" target="_blank" rel="noreferrer">Source code</a>
           <span id="about-copyright"></span>
         </footer>
-        <div class="about-actions" id="about-actions" aria-label="Pattern actions">
-          <button class="btn btn--primary" id="about-new" type="button" autofocus>New</button>
-          <button class="btn" id="about-open" type="button">Open</button>
-          <button class="btn" id="about-example" type="button">Example</button>
-        </div>
       </article>
     </dialog>
 

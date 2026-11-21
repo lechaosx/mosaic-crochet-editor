@@ -148,7 +148,8 @@ test("About fits a compact viewport", async ({ page }) => {
     expect(releaseNotesBox).not.toBeNull();
     expect(copyrightBox).not.toBeNull();
     expect(actionsBox).not.toBeNull();
-    expect(actionsBox!.y).toBeGreaterThan(copyrightBox!.y + copyrightBox!.height);
+    expect(actionsBox!.y + actionsBox!.height).toBeLessThanOrEqual(releaseNotesBox!.y);
+    expect(copyrightBox!.y).toBeGreaterThan(releaseNotesBox!.y + releaseNotesBox!.height);
 
     for (const name of ["New", "Open", "Example"]) {
         const button = page.getByRole("dialog", { name: "Mosaic Crochet Editor" }).getByRole("button", { name, exact: true });

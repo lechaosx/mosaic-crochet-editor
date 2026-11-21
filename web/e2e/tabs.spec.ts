@@ -22,7 +22,7 @@ function tab(page: Page, name: string) {
 }
 
 function emptyWorkspace(page: Page) {
-    return page.getByRole("region", { name: "No pattern open" });
+    return page.getByRole("region", { name: "Start a pattern" });
 }
 
 async function newTab(page: Page) {
@@ -339,16 +339,28 @@ test("closing the last tab leaves the empty workspace, where nothing needs a pat
     await expect(page.getByRole("button", { name: "New tab" })).toBeFocused();
     await expect(page.getByRole("navigation", { name: "Authoring tools" })).toBeHidden();
     await expect(page.getByRole("img", { name: "Editable pattern chart" })).toBeHidden();
+    await expect(emptyWorkspace(page)).toContainText("its own tab");
+    await expect(emptyWorkspace(page)).toContainText("shared by every tab");
     for (const name of ["Pattern", "Save", "Undo", "Redo"]) {
-        await expect(page.getByRole("button", { name, exact: true })).toBeDisabled();
+        await expect(page.getByRole("button", { name, exact: true })).toBeHidden();
     }
-    for (const name of ["Design", "Crochet"]) await expect(page.getByRole("tab", { name, exact: true })).toBeDisabled();
+    for (const name of ["Design", "Crochet"]) await expect(page.getByRole("tab", { name, exact: true })).toBeHidden();
+    await expect(page.locator("#document-bar")).toBeHidden();
     await expect(page.locator("#btn-load")).toBeEnabled();
     await expect(page.getByRole("button", { name: "Settings" })).toBeEnabled();
     for (const key of ["p", "s", "v", "r", "Control+a", "Control+z", "Control+v"]) await page.keyboard.press(key);
     await expect(tabs(page)).toHaveCount(0);
     expect(await storedProjectIds(page)).toEqual([]);
     expect(errors).toEqual([]);
+});
+
+test("the phone Menu offers only commands for every pattern while no pattern is open", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Close Untitled 1" }).click();
+    await page.getByRole("button", { name: "Menu" }).click();
+    await expect(page.getByRole("menuitem")).toHaveText(["Open", "Settings"]);
+    await expect(page.getByRole("group", { name: "This pattern" })).toBeHidden();
 });
 
 test("New, Open and Example in the empty workspace each open the first tab", async ({ page }) => {
