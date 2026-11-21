@@ -64,7 +64,8 @@ export function mountInstructions(
         const livePreviewListeners: ((completedUnits: number | null) => void)[] = [];
         const unitElements: HTMLButtonElement[] = [];
         const unitRows = new Map<string, HTMLElement>();
-        let liveUnits: readonly InstructionOverviewUnit[] = [];
+        let liveUnits: (InstructionOverviewUnit | undefined)[] = [];
+        let liveKind: "row" | "round" = "row";
         let liveCompleted = 0;
         let showWhole = false;
         const wholeRow = document.createElement("li");
@@ -73,8 +74,15 @@ export function mountInstructions(
         wholeButton.className = "instructions-unit instructions-unit--whole";
         wholeButton.textContent = "Pattern overview";
         wholeRow.append(wholeButton);
+        const markWholeInvalid = (invalid: boolean) => {
+            wholeButton.classList.toggle("instructions-unit--invalid", invalid);
+            wholeButton.setAttribute("aria-label", `Pattern overview${invalid ? ", contains invalid placements" : ""}`);
+            wholeButton.title = `Pattern overview${invalid ? " · contains invalid placements outside the instructions" : ""}`;
+        };
+        markWholeInvalid(false);
         let liveProgressChanged = (_completedUnits: number) => true;
         let isBusy = true;
+        let failed = false;
         beforeOpen();
         unitsList.replaceChildren();
         const onAlt = () => altListeners.forEach(f => f());
@@ -87,64 +95,70 @@ export function mountInstructions(
         syncCanvasChromeInsets();
         queueCanvasChromeSync();
 
-        const workKind = () => liveUnits[0]?.label.startsWith("Round") ? "round" : "row";
+        const markUnit = (item: HTMLButtonElement, index: number) => {
+            item.classList.toggle("instructions-unit--complete", index < liveCompleted);
+            item.classList.toggle(
+                "instructions-unit--current-invalid",
+                !showWhole && index === liveCompleted && Boolean(liveUnits[index]?.invalid),
+            );
+            if (!showWhole && index === liveCompleted) {
+                item.setAttribute("aria-current", "step");
+            } else {
+                item.removeAttribute("aria-current");
+            }
+        };
+        // Previews the selection once its unit is generated.
+        const previewSelection = () => {
+            if (liveUnits.length > 0 && (showWhole || liveUnits[liveCompleted])) {
+                livePreviewListeners.forEach(f => f(showWhole ? null : liveCompleted + 1));
+            }
+        };
         const renderCrochet = () => {
             const total = liveUnits.length;
             const current = total === 0 ? 0 : Math.min(liveCompleted + 1, total);
             liveProgress.textContent = showWhole && total > 0 ? "Pattern overview" : `${current} / ${total}`;
-            liveBack.disabled = isBusy || total === 0;
-            liveBack.setAttribute("aria-label", `Back one ${workKind()}`);
-            liveBack.title = `Back one ${workKind()}`;
-            liveForward.disabled = isBusy || total === 0;
-            liveForward.setAttribute("aria-label", `Forward one ${workKind()}`);
-            liveForward.title = `Forward one ${workKind()}`;
-            unitElements.forEach((item, index) => {
-                item.disabled = isBusy;
-                item.classList.toggle("instructions-unit--complete", index < liveCompleted);
-                item.classList.toggle(
-                    "instructions-unit--current-invalid",
-                    !showWhole && index === liveCompleted && Boolean(liveUnits[index]?.invalid),
-                );
-                if (!showWhole && index === liveCompleted) {
-                    item.setAttribute("aria-current", "step");
-                } else {
-                    item.removeAttribute("aria-current");
-                }
-            });
-            wholeButton.disabled = isBusy;
+            liveBack.disabled = total === 0;
+            liveBack.setAttribute("aria-label", `Back one ${liveKind}`);
+            liveBack.title = `Back one ${liveKind}`;
+            liveForward.disabled = total === 0;
+            liveForward.setAttribute("aria-label", `Forward one ${liveKind}`);
+            liveForward.title = `Forward one ${liveKind}`;
+            unitElements.forEach(markUnit);
             wholeButton.classList.toggle("instructions-unit--current-invalid",
                 showWhole && wholeButton.classList.contains("instructions-unit--invalid"));
             if (showWhole) wholeButton.setAttribute("aria-current", "step");
             else wholeButton.removeAttribute("aria-current");
-            const currentUnit = liveUnits[liveCompleted] ?? null;
-            currentInstruction.hidden = showWhole || currentUnit === null || isBusy;
-            if (currentUnit) {
-                currentInstructionText.textContent =
-                    currentUnit.text.slice(currentUnit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0");
-            }
-            if (!isBusy && total > 0) livePreviewListeners.forEach(f => f(showWhole ? null : current));
+            const currentUnit = liveUnits[liveCompleted];
+            currentInstruction.hidden = showWhole || total === 0;
+            currentInstructionText.textContent = currentUnit
+                ? currentUnit.text.slice(currentUnit.text.indexOf(":") + 1).trim().replaceAll(" × ", "\u00a0×\u00a0")
+                : failed ? "Not generated" : "Generating…";
             syncCanvasChromeInsets();
             (showWhole ? wholeButton : unitElements[Math.min(liveCompleted, total - 1)])
                 ?.scrollIntoView({ block: "nearest" });
         };
         const refreshCrochetAvailability = () => {
-            if (!isBusy && liveUnits.length === 0) {
+            if (failed) {
+                liveUnavailable.textContent = "Instructions could not be generated. Reload the page to try again.";
+                liveUnavailable.hidden = false;
+            } else if (!isBusy && liveUnits.length === 0) {
                 liveUnavailable.textContent = "No instructions";
                 liveUnavailable.hidden = false;
             } else {
                 liveUnavailable.hidden = true;
             }
-            liveBack.disabled = isBusy || liveUnits.length === 0;
-            liveForward.disabled = isBusy || liveUnits.length === 0;
+            liveBack.disabled = liveUnits.length === 0;
+            liveForward.disabled = liveUnits.length === 0;
         };
         const select = (index: number | null) => {
-            if (isBusy || liveUnits.length === 0) return;
+            if (liveUnits.length === 0) return;
             showWhole = index === null;
             if (index !== null) {
                 liveCompleted = index;
                 liveSaveWarning.hidden = liveProgressChanged(liveCompleted);
             }
             renderCrochet();
+            previewSelection();
         };
         wholeButton.onclick = () => select(null);
         liveBack.onclick = () => select(showWhole ? liveUnits.length - 1 : liveCompleted === 0 ? null : liveCompleted - 1);
@@ -184,14 +198,13 @@ export function mountInstructions(
                 row.dataset.instructionLabel = unit.label;
                 const item = row.querySelector("button") ?? document.createElement("button");
                 item.type = "button";
-                item.disabled = isBusy;
                 item.className = "instructions-unit";
                 item.classList.toggle("instructions-unit--invalid", unit.invalid);
                 item.setAttribute("aria-label", `${unit.label}, Yarn ${unit.yarn}${unit.invalid ? ", contains invalid placements" : ""}`);
                 item.title = `${unit.label}, Yarn ${unit.yarn}${unit.invalid ? " · contains invalid placements" : ""}`;
                 const index = unitElements.length;
                 item.onclick = () => {
-                    if (isBusy || index >= liveUnits.length) return;
+                    if (index >= liveUnits.length) return;
                     select(index);
                 };
                 const meta = item.querySelector<HTMLElement>(".instructions-unit-number") ?? document.createElement("span");
@@ -207,6 +220,8 @@ export function mountInstructions(
                     unitsList.insertBefore(row, wholeRow.parentElement ? wholeRow : null);
                 }
                 unitElements.push(item);
+                markUnit(item, index);
+                if (!showWhole && index === liveCompleted) item.scrollIntoView({ block: "nearest" });
             },
             clearText: () => {
                 instructionText = "";
@@ -219,8 +234,8 @@ export function mountInstructions(
                 currentInstruction.hidden = true;
                 refreshCrochetAvailability();
             },
-            setLivePlan: (units, completedUnits, onProgress, wholeInvalid = false) => {
-                const labels = new Set(units.map(unit => unit.label));
+            setLivePlan: (units, kind, completedUnits, onProgress) => {
+                const labels = new Set(units.map(unit => unit?.label));
                 Array.from(unitsList.children).forEach(row => {
                     if (row === wholeRow) return;
                     const label = (row as HTMLElement).dataset.instructionLabel!;
@@ -229,7 +244,8 @@ export function mountInstructions(
                         unitRows.delete(label);
                     }
                 });
-                liveUnits = units;
+                liveUnits = units.slice();
+                liveKind = kind;
                 liveCompleted = units.length === 0
                     ? 0
                     : Math.min(Math.max(0, completedUnits), units.length - 1);
@@ -240,12 +256,25 @@ export function mountInstructions(
                     wholeRow.remove();
                     showWhole = false;
                 }
-                wholeButton.classList.toggle("instructions-unit--invalid", wholeInvalid);
-                wholeButton.setAttribute("aria-label", `Pattern overview${wholeInvalid ? ", contains invalid placements" : ""}`);
-                wholeButton.title = `Pattern overview${wholeInvalid ? " · contains invalid placements outside the instructions" : ""}`;
                 liveSaveWarning.hidden = true;
                 refreshCrochetAvailability();
                 renderCrochet();
+                previewSelection();
+            },
+            setFailed: () => {
+                failed = true;
+                refreshCrochetAvailability();
+                renderCrochet();
+            },
+            setWholeInvalid: (invalid) => {
+                markWholeInvalid(invalid);
+                renderCrochet();
+            },
+            setUnit: (index, unit) => {
+                liveUnits[index] = unit;
+                if (showWhole || index !== liveCompleted) return;
+                renderCrochet();
+                previewSelection();
             },
             setYarnColors: (a, b) => {
                 unitElements.forEach(item => {
@@ -258,7 +287,6 @@ export function mountInstructions(
                 isBusy = busy;
                 el<HTMLButtonElement>("export-copy").disabled = busy;
                 refreshCrochetAvailability();
-                renderCrochet();
             },
             onAlternate: (f) => altListeners.push(f),
             onLivePreview: (f) => livePreviewListeners.push(f),

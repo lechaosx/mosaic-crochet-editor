@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInstructionUnits, shouldYieldInstructionGeneration, type CachedInstructionUnit, type InstructionUnitSignature } from "../src/instruction-cache";
+import { buildInstructionUnits, type CachedInstructionUnit, type InstructionUnitSignature } from "../src/instruction-cache";
 
 function signature(contentKey: string, invalidWorkedCoords: readonly number[] = []): InstructionUnitSignature {
     return {
@@ -75,15 +75,5 @@ describe("instruction cache", () => {
         expect(next[0]).not.toBe(first[0]);
         expect(next[0].invalid).toBe(true);
         expect(next[0].invalidWorkedCoords).toEqual([3, 4]);
-    });
-
-    it("batches warm cache scans while yielding changed units and long scans", () => {
-        const warmYields = Array.from({ length: 80 }, (_, index) =>
-            shouldYieldInstructionGeneration(index, false));
-        const localYields = Array.from({ length: 80 }, (_, index) =>
-            shouldYieldInstructionGeneration(index, index === 31));
-
-        expect(warmYields.flatMap((yielded, index) => yielded ? [index] : [])).toEqual([63]);
-        expect(localYields.flatMap((yielded, index) => yielded ? [index] : [])).toEqual([31, 63]);
     });
 });

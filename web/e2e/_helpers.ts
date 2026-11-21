@@ -48,8 +48,6 @@ declare global {
             screenTriangle: number[][];
             outline: number[][];
         } | null;
-        __test_instruction_yields__?: readonly { index: number; recomputed: boolean }[];
-        __test_on_instruction_yield__?: (yielded: { index: number; recomputed: boolean }) => void;
     }
 }
 

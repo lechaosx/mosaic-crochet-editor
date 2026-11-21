@@ -114,8 +114,14 @@ export interface InstructionsView {
     appendUnit:  (unit: InstructionOverviewUnit) => void;
     clearText:   () => void;
     clearUnits:  () => void;
-    setLivePlan: (units: readonly InstructionOverviewUnit[], completedUnits: number,
-                  onProgress: (completedUnits: number) => boolean, wholeInvalid?: boolean) => void;
+    // Units still being generated are undefined until `setUnit` provides them.
+    setLivePlan: (units: readonly (InstructionOverviewUnit | undefined)[], kind: "row" | "round",
+                  completedUnits: number, onProgress: (completedUnits: number) => boolean) => void;
+    // Whether invalid placements warn outside every unit; known once all are generated.
+    setWholeInvalid: (invalid: boolean) => void;
+    setUnit:     (index: number, unit: InstructionOverviewUnit) => void;
+    // Generation stopped before every unit arrived; the missing ones stay missing.
+    setFailed:   () => void;
     setYarnColors: (a: string, b: string) => void;
     alternate:   () => boolean;
     setBusy:     (busy: boolean) => void;

@@ -54,6 +54,7 @@ function wasmFullReload(): PluginOption {
 
 export default defineConfig({
     plugins: [wasm(), wasmFullReload(), generatedReleaseNotes()],
+    worker: { format: "es", plugins: () => [wasm()] },
     base: "./",
     build: { target: "esnext" },
     // jsdom workers run in Node, so WASM imports must use the server loader.

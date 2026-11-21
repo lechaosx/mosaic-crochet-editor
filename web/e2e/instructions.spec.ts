@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Worker } from "@playwright/test";
 import { bootApp, clickCell, cellCoord, chartPixel, chartPixels, pixelRGB, chooseToolVariant, failLiveProgressWrites } from "./_helpers";
 
 // [r, g, b, a] of the chart pixel showing pattern point (x, y).
@@ -512,31 +512,80 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     });
 }
 
+// Opens a random `width` × `height` row chart in a new tab: large enough that
+// its instructions take seconds to generate.
+async function openLargeRowChart(page: Page, width = 1000, height = 2000) {
+    let seed = 12345;
+    const bytes = Buffer.alloc(Math.ceil(width * height / 8));
+    for (let i = 0; i < bytes.length; i++) {
+        seed = (seed * 1103515245 + 12345) >>> 0;
+        bytes[i] = seed >>> 24;
+    }
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Open" }).click();
+    await (await chooserPromise).setFiles({
+        name: "large.mcw",
+        mimeType: "application/json",
+        buffer: Buffer.from(JSON.stringify({
+            version: 2, state: { mode: "row", canvasWidth: width, canvasHeight: height },
+            pixels: bytes.toString("base64"), colorA: "#244b5a", colorB: "#e6b566",
+        })),
+    });
+    await expect(page.getByRole("tab", { name: /^large/ })).toHaveAttribute("aria-selected", "true");
+}
+
 test("generation feedback occupies space only while generation is active", async ({ page }) => {
+    test.setTimeout(90_000);
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern", exact: true }).click();
-    await page.locator("#edit-height").fill("80");
+    await openLargeRowChart(page);
     await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
 
     await page.locator("#view-crochet").click();
     await expect(page.locator("#export-progress")).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
-    await expect(page.locator("#export-progress")).toHaveText(/^Generating… \d+ \/ 80$/);
+    await expect(page.locator("#export-progress")).toHaveText(/^Generating… \d+ \/ 2000$/);
     const whileGenerating = await page.locator("#instructions-units").boundingBox();
     const progress = await page.locator("#export-progress").boundingBox();
     expect(progress!.y + progress!.height).toBeLessThan(whileGenerating!.y);
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled({ timeout: 60_000 });
     await expect(page.locator("#export-progress")).toBeHidden();
     const complete = await page.locator("#instructions-units").boundingBox();
     expect(complete!.y).toBeLessThan(whileGenerating!.y);
     expect(complete!.y + complete!.height).toBeCloseTo(whileGenerating!.y + whileGenerating!.height, 0);
 });
 
+test("the current row shows and any row can be followed while later rows generate", async ({ page }) => {
+    test.setTimeout(90_000);
+    await bootApp(page);
+    await openLargeRowChart(page);
+    await page.locator("#view-crochet").click();
+    const current = page.locator("#instructions-current-text");
+    const generating = page.locator("#export-progress");
+    await expect(current).toHaveText(/×/);
+    await expect(generating).toBeVisible();
+    await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 2000");
+
+    const back = page.getByRole("button", { name: "Back one row" });
+    await back.click();
+    await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toHaveAttribute("aria-current", "step");
+    await back.click();
+    await expect(page.locator("#instructions-live-progress")).toHaveText("2000 / 2000");
+    await expect(current).toHaveText(/×/);
+    await expect(generating).toBeVisible();
+    const lastRow = page.locator('.instructions-unit[aria-label^="Row 2000,"]');
+    await expect(lastRow).toHaveCount(0);
+    const lastInstruction = await current.textContent();
+
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled({ timeout: 60_000 });
+    await expect(lastRow).toHaveAttribute("aria-current", "step");
+    await expect(lastRow.locator("code")).toHaveText(lastInstruction!);
+    await expect(page.locator("#instructions-live-progress")).toHaveText("2000 / 2000");
+});
+
 test("Crochet can return to Design during a long generation", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern", exact: true }).click();
-    await page.locator("#edit-height").fill("80");
+    await openLargeRowChart(page);
     await page.locator("#view-crochet").click();
     await expect(page.locator("#export-progress")).toBeVisible();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
@@ -546,6 +595,51 @@ test("Crochet can return to Design during a long generation", async ({ page }) =
     await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
 });
+
+test("another tab's Crochet shows only its own instructions while a large tab was generating", async ({ page }) => {
+    await bootApp(page);
+    await openLargeRowChart(page);
+    const workers: Worker[] = [];
+    page.on("worker", worker => workers.push(worker));
+    await page.locator("#view-crochet").click();
+    await expect(page.locator("#instructions-current-text")).toHaveText(/×/);
+    await expect(page.locator("#export-progress")).toBeVisible();
+    expect(workers.length).toBeGreaterThan(0);
+    const largeTabWorkersClosed = Promise.all(workers.map(worker => new Promise(resolve => worker.once("close", resolve))));
+
+    await page.getByRole("tab", { name: /^Untitled/ }).click();
+    await page.locator("#view-crochet").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 9");
+    await largeTabWorkersClosed;
+    await expect(page.locator('.instructions-unit[aria-label^="Row"]')).toHaveCount(9);
+    await expect(page.locator("#export-progress")).toBeHidden();
+    await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 9");
+});
+
+test("a small chart lists every row as soon as its instructions are generated", async ({ page }) => {
+    await page.clock.install();
+    await bootApp(page);
+    // Paused timers never fire, so nothing may wait for one before showing the rows.
+    await page.clock.pauseAt(new Date("2030-01-01T00:00:00"));
+    await page.locator("#view-crochet").click();
+    await expect(page.locator('.instructions-unit[aria-label^="Row"]')).toHaveCount(9);
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await expect(page.locator("#export-progress")).toBeHidden();
+});
+
+for (const [name, route] of [["its script", "**/instruction-worker*"], ["the wasm module", "**/*.wasm"]] as const) {
+    test(`Crochet reports instructions that cannot be generated when a worker cannot load ${name}`, async ({ page }) => {
+        await bootApp(page);
+        await page.route(route, request => request.abort());
+        await page.locator("#view-crochet").click();
+        await expect(page.locator("#instructions-live-unavailable"))
+            .toHaveText("Instructions could not be generated. Reload the page to try again.");
+        await expect(page.locator("#export-progress")).toBeHidden();
+        await expect(page.locator("#instructions-current-text")).not.toHaveText("Generating…");
+        await expect(page.getByRole("button", { name: "Copy instructions" })).toBeDisabled();
+    });
+}
 
 test("a loaded empty round remains a single progress unit", async ({ page }) => {
     await bootApp(page);
@@ -573,38 +667,6 @@ test("a loaded empty round remains a single progress unit", async ({ page }) => 
     await expect(page.locator("#instructions-live-progress")).toHaveText("1 / 1");
     await page.getByRole("button", { name: "Forward one round" }).click();
     await expect(page.getByRole("button", { name: "Pattern overview", exact: true })).toHaveAttribute("aria-current", "step");
-});
-
-test("a local cache scan can cancel at its periodic yield", async ({ page }) => {
-    await bootApp(page);
-    await page.getByRole("button", { name: "Pattern", exact: true }).click();
-    await page.locator("#edit-height").fill("80");
-    await page.locator("#view-crochet").click();
-    // Generation takes an animation frame per row, and frames slow down under a loaded software GPU.
-    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled({ timeout: 15_000 });
-    await page.locator("#view-design").click();
-    const before = await cellCoord(page, 0, 1);
-    const beforePixel = await pixelRGB(page, before.cx, before.cy);
-    await page.getByRole("button", {
-        name: beforePixel[0] < 128 ? "Yarn B" : "Yarn A",
-        exact: true,
-    }).click();
-    await clickCell(page, 0, 1);
-    const after = await cellCoord(page, 0, 1);
-    expect(await pixelRGB(page, after.cx, after.cy)).not.toEqual(beforePixel);
-    await page.evaluate(() => {
-        window.__test_instruction_yields__ = [];
-        window.__test_on_instruction_yield__ = yielded => {
-            if (yielded.index === 63 && !yielded.recomputed) {
-                document.getElementById("view-design")!.click();
-            }
-        };
-    });
-
-    await page.locator("#view-crochet").click();
-    await expect.poll(() => page.evaluate(() => window.__test_instruction_yields__))
-        .toContainEqual({ index: 63, recomputed: false });
-    await expect(page.getByRole("complementary", { name: "Crochet" })).toBeHidden();
 });
 
 test("long Crochet instructions wrap between stitch counts beside a yarn number that fills the row height", async ({ page }) => {

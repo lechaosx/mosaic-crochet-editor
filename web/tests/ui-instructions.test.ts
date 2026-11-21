@@ -23,16 +23,19 @@ beforeEach(() => {
     HTMLElement.prototype.scrollIntoView = vi.fn();
 });
 
-function open(plan = units, completed = 0) {
+function open(plan: readonly (InstructionOverviewUnit | undefined)[] = units, completed = 0, busy = false) {
     const mounted = mountInstructions({ onInstructions: vi.fn() }, document.getElementById("canvas")!,
         vi.fn(), vi.fn(), vi.fn());
     const view = mounted.openInstructions();
     const save = vi.fn(() => true);
     const preview = vi.fn();
     view.onLivePreview(preview);
-    plan.forEach(view.appendUnit);
-    view.setLivePlan(plan, completed, save);
-    view.setBusy(false);
+    view.setBusy(busy);
+    for (const unit of plan) {
+        if (!unit) break;
+        view.appendUnit(unit);
+    }
+    view.setLivePlan(plan, "row", completed, save);
     return { view, save, preview };
 }
 
@@ -63,7 +66,7 @@ test("Whole remains selected and focused while the real plan is replaced", () =>
     const original = whole();
     view.clearUnits();
     units.forEach(view.appendUnit);
-    view.setLivePlan(units, 0, save);
+    view.setLivePlan(units, "row", 0, save);
     expect(whole()).toBe(original);
     expect(document.activeElement).toBe(original);
     expect(whole().getAttribute("aria-current")).toBe("step");
@@ -96,7 +99,7 @@ test("Whole stays after newly generated real units without losing focus", () => 
     const original = whole();
     view.clearUnits();
     units.forEach(view.appendUnit);
-    view.setLivePlan(units, 0, save);
+    view.setLivePlan(units, "row", 0, save);
     const displayed = Array.from(document.querySelectorAll(".instructions-unit"));
     expect(displayed.map(item => item.getAttribute("aria-label"))).toEqual([
         "Row 1, Yarn A", "Row 2, Yarn B", "Pattern overview",
@@ -112,4 +115,59 @@ test("existing completed-total records select the last real unit, with Whole nex
     button("instructions-live-forward").click();
     expect(whole().getAttribute("aria-current")).toBe("step");
     expect(save).not.toHaveBeenCalled();
+});
+
+test("a pending unit can be selected and shows its instruction once generated", () => {
+    const { view, save, preview } = open([units[0], undefined], 0, true);
+    const forward = button("instructions-live-forward");
+    expect(forward.disabled).toBe(false);
+    expect(document.querySelector<HTMLButtonElement>('[aria-label="Row 1, Yarn A"]')!.disabled).toBe(false);
+    expect(preview).toHaveBeenLastCalledWith(1);
+    forward.click();
+    expect(save).toHaveBeenLastCalledWith(1);
+    expect(document.getElementById("instructions-live-progress")!.textContent).toBe("2 / 2");
+    expect(document.getElementById("instructions-current")!.hidden).toBe(false);
+    expect(document.getElementById("instructions-current-text")!.textContent).toBe("Generating…");
+    expect(preview).toHaveBeenCalledTimes(1);
+    view.setUnit(1, units[1]);
+    expect(document.getElementById("instructions-current-text")!.textContent).toBe("sc\u00a0×\u00a03");
+    expect(preview).toHaveBeenLastCalledWith(2);
+});
+
+test("units listed after the selection was made show whether they are complete or current", () => {
+    const { view } = open([undefined, undefined], 1, true);
+    view.appendUnit(units[0]);
+    view.appendUnit(units[1]);
+    const [first, second] = document.querySelectorAll(".instructions-unit");
+    expect(first.classList.contains("instructions-unit--complete")).toBe(true);
+    expect(second.getAttribute("aria-current")).toBe("step");
+});
+
+test("rounds are navigated by round before any is generated", () => {
+    const mounted = mountInstructions({ onInstructions: vi.fn() }, document.getElementById("canvas")!,
+        vi.fn(), vi.fn(), vi.fn());
+    const view = mounted.openInstructions();
+    view.setLivePlan([undefined], "round", 0, vi.fn(() => true));
+    expect(button("instructions-live-forward").getAttribute("aria-label")).toBe("Forward one round");
+});
+
+test("Pattern overview is marked invalid once the whole plan is known, without previewing again", () => {
+    const { view, preview } = open(units, 0, true);
+    whole().click();
+    preview.mockClear();
+    view.setWholeInvalid(true);
+    const marked = document.querySelector<HTMLButtonElement>('[aria-label="Pattern overview, contains invalid placements"]')!;
+    expect(marked.classList.contains("instructions-unit--current-invalid")).toBe(true);
+    expect(preview).not.toHaveBeenCalled();
+});
+
+test("a failed generation says so and leaves no pending unit generating", () => {
+    const { view } = open([units[0], undefined], 1, true);
+    view.setFailed();
+    expect(document.getElementById("instructions-live-unavailable")!.hidden).toBe(false);
+    expect(document.getElementById("instructions-live-unavailable")!.textContent)
+        .toBe("Instructions could not be generated. Reload the page to try again.");
+    expect(document.getElementById("instructions-current-text")!.textContent).toBe("Not generated");
+    button("instructions-live-back").click();
+    expect(document.getElementById("instructions-current-text")!.textContent).toBe("sc × 3");
 });

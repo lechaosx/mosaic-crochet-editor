@@ -2,9 +2,7 @@ import { lock_invalid_row, lock_invalid_round, transformed_target_indices,
          overlay_target_available_row, overlay_target_available_round,
          overlay_inward_cell_row, overlay_inward_cell_round,
          initialize_row_pattern,
-         instruction_start_row, instruction_start_round,
-         instruction_wip_row, instruction_wip_round,
-         InstructionUnitKind, InstructionYarn } from "@mosaic/wasm";
+         instruction_wip_row, instruction_wip_round } from "@mosaic/wasm";
 import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction } from "@mosaic/logic/tool-input";
 import { makeViewport, makeRendererState, observeCanvasResize, type ViewState,
@@ -23,7 +21,8 @@ import { deleteProjectsExcept, loadProjectIndex, newProjectId, openProjectDataba
          saveProjectIndex, writeHistory, writeRecovery } from "./project-store";
 import { becomeEditor } from "./editor-lock";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
-import { InstructionCache, CachedInstructionUnit, cachedInstructionUnit, shouldYieldInstructionGeneration, InstructionUnitSignature } from "./instruction-cache";
+import type { InstructionCache, CachedInstructionUnit } from "./instruction-cache";
+import { generateInstructions } from "./instruction-generation";
 import { hasUnrepresentedWarning, packInstructionCoordinates } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
 import { createChartLayer } from "./chart-layer";
@@ -1260,7 +1259,12 @@ async function onLoad() {
 }
 
 // ── Instructions ─────────────────────────────────────────────────────────────
-async function onInstructions() {
+// Each instruction worker computes the whole chart's highlights before its
+// first unit, so beyond a few workers memory grows faster than generation speeds up.
+const INSTRUCTION_WORKERS = Math.max(1, Math.min(4, navigator.hardwareConcurrency - 1));
+const LIST_GROWTH_INTERVAL = 250;
+
+function onInstructions() {
     if (instructionsOpen) return;
     gestureInputs.cancel();
     clearExecutingAction();
@@ -1270,10 +1274,8 @@ async function onInstructions() {
     ui.setViewState(store.state.rotation, true);
     const dlg = ui.openInstructions();
     instructionsView = dlg;
-    let cancelled = false;
     dlg.onClose(() => {
         instructionsOpen = false;
-        cancelled = true;
         if (instructionsView === dlg) instructionsView = null;
         instructionsPreviewStore = null;
         rs.instructionSeam = null;
@@ -1312,29 +1314,18 @@ async function onInstructions() {
         renderCanvas();
     });
 
-    const startSession = () => {
-        const { pattern } = store.state;
-        const { canvasWidth: W, canvasHeight: H } = pattern;
-        if (pattern.mode === "row") return instruction_start_row(exportPixels, W, H);
-        const { virtualWidth: vw, virtualHeight: vh, offsetX: ox, offsetY: oy, rounds } = pattern;
-        return instruction_start_round(exportPixels, W, H, vw, vh, ox, oy, rounds);
-    };
-
-    const patternFingerprint = fingerprintPattern(store.state.pattern, exportPixels);
-    const progressFingerprint = fingerprintPatternShape(store.state.pattern);
-    const totalUnits = store.state.pattern.mode === "row"
-        ? store.state.pattern.canvasHeight
-        : store.state.pattern.rounds;
+    const { pattern } = store.state;
+    const patternFingerprint = fingerprintPattern(pattern, exportPixels);
+    const progressFingerprint = fingerprintPatternShape(pattern);
+    const totalUnits = pattern.mode === "row" ? pattern.canvasHeight : pattern.rounds;
     let completedUnits = loadLiveProgress(project!.id, progressFingerprint, totalUnits);
     ui.setCrochetProgress(hasLiveProgress(project!.id, progressFingerprint, totalUnits));
-    let generatedUnits: readonly CachedInstructionUnit[] = [];
     // Reversed corner groups can jump diagonally; markers must stay on cell edges.
     const edgeDirection = (dx: number, dy: number) => Math.abs(dx) >= Math.abs(dy)
         ? { dx: Math.sign(dx), dy: 0 } : { dx: 0, dy: Math.sign(dy) };
     const directionalUnit = (unit: CachedInstructionUnit, index: number): InstructionOverviewUnit => {
         const reversed = dlg.alternate() && index % 2 === 1;
         const direction = reversed ? unit.reversedStartDirection : unit.startDirection;
-        const pattern = store.state.pattern;
         const width = pattern.canvasWidth;
         const coords = reversed ? unit.reversedWorkedCoords : unit.workedCoords;
         const last = coords.length - 2;
@@ -1356,111 +1347,85 @@ async function onInstructions() {
             } : null,
         };
     };
-    let previewUnits: readonly InstructionOverviewUnit[] = [];
     const copiedInstruction = (unit: InstructionOverviewUnit) => {
         const content = unit.text.slice(unit.text.indexOf(":") + 1).trim();
         return `${unit.label} · Yarn ${unit.yarn}: ${content}`;
     };
-    const renderUnits = (units: readonly CachedInstructionUnit[], live: boolean) => {
+    const cached = instructionCache?.fingerprint === patternFingerprint ? instructionCache.units : null;
+    // Generated units by index; the list shows the leading run of them in order.
+    const units: (CachedInstructionUnit | undefined)[] = cached ? cached.slice() : new Array(totalUnits);
+    let generated = cached ? totalUnits : 0;
+    let previewUnits: (InstructionOverviewUnit | undefined)[] = [];
+    let listed = 0;
+    const listGeneratedUnits = () => {
+        for (; listed < totalUnits && previewUnits[listed]; listed++) {
+            dlg.appendUnit(previewUnits[listed]!);
+            dlg.appendLine(copiedInstruction(previewUnits[listed]!));
+        }
+    };
+    const renderUnits = () => {
         dlg.clearText();
         dlg.clearUnits();
-        const directionalUnits = units.map(directionalUnit);
-        previewUnits = directionalUnits;
-        directionalUnits.forEach(directional => {
-            dlg.appendUnit(directional);
-            dlg.appendLine(copiedInstruction(directional));
+        previewUnits = Array.from(units, (unit, index) => unit && directionalUnit(unit, index));
+        listed = 0;
+        listGeneratedUnits();
+        dlg.setLivePlan(previewUnits, pattern.mode, completedUnits, nextCompleted => {
+            completedUnits = nextCompleted;
+            const saved = editing && saveLiveProgress(project!.id, progressFingerprint, completedUnits);
+            if (saved) ui.setCrochetProgress(hasLiveProgress(project!.id, progressFingerprint, totalUnits));
+            return saved;
         });
-        if (live) {
-            const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
-            const wholeInvalid = hasUnrepresentedWarning(store.plan, W, H, units.map(unit => unit.invalidWorkedCoords));
-            dlg.setLivePlan(directionalUnits, completedUnits, nextCompleted => {
-                completedUnits = nextCompleted;
-                const saved = editing && saveLiveProgress(project!.id, progressFingerprint, completedUnits);
-                if (saved) ui.setCrochetProgress(hasLiveProgress(project!.id, progressFingerprint, totalUnits));
-                return saved;
-            }, wholeInvalid);
-        }
     };
-    const cached = instructionCache?.fingerprint === patternFingerprint
-        ? instructionCache.units
-        : null;
-
-    const run = async () => {
-        dlg.setBusy(true);
-        dlg.clearText();
-        dlg.clearUnits();
-        const session = startSession();
-        const total = session.total();
-        const units: CachedInstructionUnit[] = [];
-        generatedUnits = units;
-        for (let index = 0; index < total; index++) {
-            if (cancelled) {
-                session.free();
-                dlg.endProgress();
-                return;
-            }
-            const signature = session.signature_at(index)!;
-            const rawSignature: InstructionUnitSignature = {
-                label: `${signature.kind() === InstructionUnitKind.Row ? "Row" : "Round"} ${signature.number()}`,
-                yarn: signature.yarn() === InstructionYarn.A ? "A" : "B",
-                contentKey: signature.content_key(),
-                invalidWorkedCoords: signature.invalid_worked_coords(),
-                startDirection: signature.start_direction(),
-                reversedStartDirection: signature.reversed_start_direction(),
-            };
-            signature.free();
-            let cachedUnit = cachedInstructionUnit(instructionCache, progressFingerprint, index, rawSignature);
-            const recomputed = !cachedUnit;
-            if (!cachedUnit) {
-                const unit = session.unit_at(index)!;
-                cachedUnit = {
-                    ...rawSignature,
-                    text: unit.text(), reversedText: unit.reversed_text(),
-                    workedCoords: unit.worked_coords(), reversedWorkedCoords: unit.reversed_worked_coords(),
-                    invalid: rawSignature.invalidWorkedCoords.length > 0,
-                };
-                unit.free();
-            }
-            units.push(cachedUnit);
-            const directional = directionalUnit(cachedUnit, units.length - 1);
-            dlg.appendUnit(directional);
-            dlg.appendLine(copiedInstruction(directional));
-            dlg.setProgress(index + 1, total);
-            if (shouldYieldInstructionGeneration(index, recomputed)) {
-                const hooks = window as unknown as {
-                    __test_instruction_yields__?: { index: number; recomputed: boolean }[];
-                    __test_on_instruction_yield__?: (yielded: { index: number; recomputed: boolean }) => void;
-                };
-                const yielded = { index, recomputed };
-                hooks.__test_instruction_yields__?.push(yielded);
-                hooks.__test_on_instruction_yield__?.(yielded);
-                await new Promise<void>(res => requestAnimationFrame(() => res()));
-            }
-        }
-        session.free();
-        if (!cancelled) {
-            generatedUnits = units;
-            instructionCache = { fingerprint: patternFingerprint, shapeFingerprint: progressFingerprint, units };
-            renderUnits(generatedUnits, true);
-        }
+    const finish = () => {
+        dlg.setWholeInvalid(hasUnrepresentedWarning(store.plan, pattern.canvasWidth, pattern.canvasHeight,
+            units.map(unit => unit!.invalidWorkedCoords)));
         dlg.endProgress();
         dlg.setBusy(false);
     };
-
-    dlg.onAlternate(() => {
-        const units = instructionCache?.fingerprint === patternFingerprint
-            ? instructionCache.units
-            : generatedUnits;
-        renderUnits(units, instructionCache?.fingerprint === patternFingerprint);
-    });
-    if (cached) {
-        generatedUnits = cached;
-        renderUnits(cached, true);
-        dlg.endProgress();
-        dlg.setBusy(false);
-    } else {
-        run();
+    dlg.onAlternate(renderUnits);
+    renderUnits();
+    if (generated === totalUnits) {
+        finish();
+        return;
     }
+    dlg.setBusy(true);
+    dlg.setProgress(0, totalUnits);
+    const previous = instructionCache;
+    const workers = Array.from({ length: Math.min(INSTRUCTION_WORKERS, totalUnits) },
+        () => new Worker(new URL("./instruction-worker.ts", import.meta.url), { type: "module" }));
+    // Laying out the list costs more the longer it grows, so between the first
+    // and the last unit it grows a few times a second rather than with each.
+    let shown: ReturnType<typeof setTimeout> | null = null;
+    const showGenerated = () => {
+        if (shown !== null) clearTimeout(shown);
+        shown = null;
+        listGeneratedUnits();
+        dlg.setProgress(generated, totalUnits);
+        if (generated === totalUnits) finish();
+    };
+    const stop = generateInstructions(workers, { pattern, pixels: exportPixels }, totalUnits, previous,
+        progressFingerprint, () => Math.min(completedUnits, totalUnits - 1), (index, unit) => {
+            units[index] = unit;
+            generated++;
+            previewUnits[index] = directionalUnit(unit, index);
+            dlg.setUnit(index, previewUnits[index]!);
+            if (generated === totalUnits) {
+                instructionCache = { fingerprint: patternFingerprint, shapeFingerprint: progressFingerprint,
+                    units: units as CachedInstructionUnit[] };
+            }
+            if (generated === 1 || generated === totalUnits) showGenerated();
+            else shown ??= setTimeout(showGenerated, LIST_GROWTH_INTERVAL);
+        }, error => {
+            console.error(`Crochet instructions could not be generated: ${error}`);
+            showGenerated();
+            dlg.endProgress();
+            dlg.setFailed();
+        });
+    dlg.onClose(() => {
+        stop();
+        if (shown !== null) clearTimeout(shown);
+        dlg.endProgress();
+    });
 }
 
 // ── Mount UI + gestures ─────────────────────────────────────────────────────

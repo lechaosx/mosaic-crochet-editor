@@ -21,12 +21,6 @@ export interface InstructionCache {
     units: readonly CachedInstructionUnit[];
 }
 
-const SCAN_YIELD_INTERVAL = 64;
-
-export function shouldYieldInstructionGeneration(index: number, recomputed: boolean): boolean {
-    return recomputed || (index + 1) % SCAN_YIELD_INTERVAL === 0;
-}
-
 export function cachedInstructionUnit(
     previous: Pick<InstructionCache, "shapeFingerprint" | "units"> | null,
     shapeFingerprint: string,
