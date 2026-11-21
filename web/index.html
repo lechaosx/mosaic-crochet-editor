@@ -12,6 +12,8 @@
   <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
     <symbol id="icon-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
     <symbol id="icon-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></symbol>
+    <symbol id="icon-scope-pattern" viewBox="0 0 24 24"><path d="M6 4.5h8l4 4v11H6z"/><path d="M14 4.5v4h4"/></symbol>
+    <symbol id="icon-scope-app" viewBox="0 0 24 24"><rect x="8" y="4.5" width="11.5" height="11.5" rx="1.5"/><path d="M5.5 8v10a1.5 1.5 0 0 0 1.5 1.5h10"/></symbol>
     <symbol id="icon-open" viewBox="0 0 24 24"><path d="M4 19V6a1 1 0 0 1 1-1h4l2 2h7a1 1 0 0 1 1 1v2"/><path d="M4 19l2.6-7.2a1 1 0 0 1 .9-.7H20a.6.6 0 0 1 .6.8L18 19H4Z"/></symbol>
     <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M5 7h8m4 0h2M5 17h2m4 0h8"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol>
     <symbol id="icon-chart" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="15" rx="1.5"/><path d="M4.5 9.5h15M4.5 14.5h15M9.5 4.5v15M14.5 4.5v15"/></symbol>
@@ -100,6 +102,7 @@
         <strong id="settings-title">Settings</strong>
       </header>
       <div class="settings-body">
+        <p class="panel-scope"><svg class="tool-icon" aria-hidden="true"><use href="#icon-scope-app"/></svg>All patterns · Kept in this browser</p>
         <div class="popover-row" title="Fade the visible ✕ overlay marks and ! invalid marks.">
           <span class="popover-label">Guidance opacity</span>
           <input type="range" id="hl-opacity" value="100" min="0" max="100" aria-label="Guidance opacity">
@@ -281,6 +284,7 @@
       </header>
       <div class="inspector-content">
   <section id="selection-popover" class="inspector-panel" role="dialog" aria-label="Selection" hidden>
+    <p class="panel-scope"><svg class="tool-icon" aria-hidden="true"><use href="#icon-scope-pattern"/></svg>This pattern · Sources saved in its file; copied cells paste into any tab</p>
     <div class="selection-card-header">
       <strong id="selection-card-title">Selection</strong>
       <span id="selection-card-clipboard"></span>
@@ -358,6 +362,7 @@
 
   <!-- ── Global Mirror inspector ───────────────────────────────────── -->
   <section id="sym-popover" class="inspector-panel" aria-label="Global Mirror" hidden>
+    <p class="panel-scope"><svg class="tool-icon" aria-hidden="true"><use href="#icon-scope-pattern"/></svg>This pattern · Saved in its file</p>
     <div id="sym-list" class="sym-list" aria-label="Mirror centres"><div data-mirror-key="placeholder" class="sym-list-placeholder"><button class="btn btn--ghost list-placeholder" id="add-mirror" aria-label="Add mirror" title="Add a mirror centre, then choose its types"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg>New mirror</button></div></div>
     <div id="mirror-editor" class="mirror-editor" role="group" aria-label="Selected mirror centre" hidden>
       <fieldset class="coordinate-position">
@@ -378,6 +383,7 @@
 
   <!-- ── Pattern inspector ────────────────────────────────────────────── -->
   <section id="edit-pattern-widget" class="inspector-panel" aria-label="Pattern" hidden>
+    <p class="panel-scope"><svg class="tool-icon" aria-hidden="true"><use href="#icon-scope-pattern"/></svg>This pattern · Saved in its file</p>
     <div class="property-actions">
     <div class="segmented" role="radiogroup" aria-label="Pattern geometry">
       <label><input type="radio" name="edit-mode" value="row" checked> Rows</label>
@@ -484,9 +490,9 @@
       <h1 id="close-tab-title"></h1>
       <p id="close-tab-message">Unsaved changes are lost unless you save them. Closing also discards this pattern’s undo history.</p>
       <div class="close-tab-actions">
-        <button class="btn btn--primary" value="save" autofocus>Save…</button>
         <button class="btn btn--destructive" value="discard">Close without saving</button>
         <button class="btn" value="cancel">Cancel</button>
+        <button class="btn btn--primary" value="save" autofocus>Save…</button>
       </div>
     </form>
   </dialog>

@@ -291,7 +291,15 @@ input  { font: inherit; color: inherit; }
   border: 0;
 }
 .close-tab-prompt::backdrop { background: rgba(0, 0, 0, 0.55); }
-.close-tab-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.close-tab-prompt .take-over-card h1 { font-size: 1.125rem; line-height: 1.35; }
+/* A file name wraps as a whole, onto its own line if needed. */
+.close-tab-name { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.close-tab-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-self: stretch; margin-top: var(--space-2); }
+.close-tab-actions .btn--destructive { margin-inline-end: auto; }
+@media (max-width: 30rem) {
+  .close-tab-actions { flex-direction: column-reverse; }
+  .close-tab-actions .btn--destructive { margin-inline-end: 0; }
+}
 
 .workspace {
   position: relative;
@@ -364,6 +372,16 @@ input  { font: inherit; color: inherit; }
   flex-direction: column;
   gap: var(--space-3);
 }
+/* What a panel's settings belong to and where they are kept. */
+.panel-scope {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--fg-2);
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+.panel-scope .tool-icon { width: 1rem; height: 1rem; margin-top: 0.05rem; }
 
 @media (max-width: 63.999rem) {
   .inspector-host:has(#sym-popover:not([hidden])) { max-height: 38dvh; }
@@ -1179,7 +1197,7 @@ body:has(#empty-workspace:not([hidden])) #menu-app { padding-top: 0; border-top:
   gap: var(--space-2);
   padding-top: var(--space-3);
 }
-#instructions-live-progress { text-align: center; font-variant-numeric: tabular-nums; }
+#instructions-live-progress { color: var(--fg-0); font-size: var(--font-lg); font-weight: 600; text-align: center; font-variant-numeric: tabular-nums; }
 
 .instructions-sequence {
   flex: 1 1 0;
@@ -1194,13 +1212,13 @@ body:has(#empty-workspace:not([hidden])) #menu-app { padding-top: 0; border-top:
 #instructions-units {
   flex: 1 1 auto;
   min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 2px;
   list-style: none;
   overflow-x: hidden;
   overflow-y: auto;
-  border: var(--border);
-  border-radius: var(--radius-1);
 }
-#instructions-units > li + li { border-top: var(--border); }
 
 .instructions-unit {
   --unit-size: max(var(--hit), calc(var(--font-sm) * 1.4 + 2 * var(--space-2)));
@@ -1212,6 +1230,8 @@ body:has(#empty-workspace:not([hidden])) #menu-app { padding-top: 0; border-top:
   color: inherit;
   background: var(--bg-1);
   border: 0;
+  border-radius: var(--radius-1);
+  overflow: hidden;
   cursor: pointer;
   text-align: left;
 }
@@ -1221,8 +1241,9 @@ body:has(#empty-workspace:not([hidden])) #menu-app { padding-top: 0; border-top:
 
 .instructions-unit[aria-current="step"] {
   background: var(--accent-soft);
-  box-shadow: inset 3px 0 var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
+.instructions-unit[aria-current="step"] code { color: var(--fg-0); font-weight: 600; }
 
 .instructions-unit--complete code { color: var(--fg-1); }
 .instructions-unit.instructions-unit--invalid {
@@ -1233,6 +1254,7 @@ body:has(#empty-workspace:not([hidden])) #menu-app { padding-top: 0; border-top:
   background: color-mix(in srgb, var(--pattern-danger) 18%, var(--bg-1));
 }
 .instructions-unit--whole {
+  margin-top: var(--space-2);
   display: block;
   text-align: center;
   padding: var(--space-2) var(--space-3);
@@ -1416,8 +1438,9 @@ body:has(#empty-workspace:not([hidden])) #menu-app { padding-top: 0; border-top:
 }
 
 @media (min-width: 64rem) {
+  /* Beside the frame's tool column, under the pattern's header. */
   .instructions-workspace {
-    inset: 0 auto 0 0;
+    inset: 0 auto 0 var(--dock-width);
     width: clamp(16rem, 24vw, 20rem);
     height: auto;
     border-top: 0;

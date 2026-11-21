@@ -456,7 +456,8 @@ test("Crochet lines are compact progress controls", async ({ page }) => {
     await expect(page.locator("#instructions-units")).toHaveCSS("overflow-x", "hidden");
     const workspace = await page.locator(".workspace").boundingBox();
     const panel = await page.getByRole("complementary", { name: "Crochet" }).boundingBox();
-    expect(panel!.x).toBe(workspace!.x);
+    const header = await page.locator("#document-bar").boundingBox();
+    expect(panel!.x).toBe(header!.x);
     expect(panel!.y).toBe(workspace!.y);
     expect(panel!.height).toBe(workspace!.height);
 

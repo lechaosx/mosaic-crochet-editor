@@ -118,7 +118,8 @@ export function mountTabs(cb: Pick<UICallbacks, "onTabSelect" | "onTabClose" | "
     }
 
     function confirmClose(title: string): Promise<CloseAnswer> {
-        el("close-tab-title").textContent = `Save changes to “${title}”?`;
+        const name = Object.assign(document.createElement("span"), { className: "close-tab-name", textContent: `“${title}”?` });
+        el("close-tab-title").replaceChildren("Save changes to ", name);
         closePrompt.returnValue = "";
         closePrompt.showModal();
         return new Promise(resolve => { answer = resolve; });
