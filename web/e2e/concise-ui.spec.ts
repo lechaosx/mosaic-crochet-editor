@@ -5,7 +5,7 @@ import { bootApp, cellCoord, clickCell, storedRecovery } from "./_helpers";
 for (const mode of ["row", "round"] as const) {
     test(`${mode} colour preview shows its warning within the yarn chart`, async ({ page }) => {
         await bootApp(page);
-        await page.getByRole("button", { name: "Pattern" }).click();
+        await page.getByRole("button", { name: "Pattern", exact: true }).click();
         if (mode === "round") await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
         const preview = page.getByRole("img", { name: /colour preview/ });
         const warnings = await preview.evaluate(element => {
@@ -37,7 +37,7 @@ for (const mode of ["row", "round"] as const) {
 test("Centre-out colour preview follows Full, Half, and Quarter extents", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator('label:has(input[name="edit-mode"][value="round"])').click();
     const preview = page.getByRole("img", { name: /Centre-out colour preview/ });
     const images: string[] = [];
@@ -94,7 +94,7 @@ test("About and the idle canvas omit redundant guidance and status", async ({ pa
 
 test("Pattern owns all colour editing while Settings keeps non-colour preferences", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
 
     await expect(page.locator("#edit-pattern-widget").getByLabel("Yarn A", { exact: true })).toHaveValue("#000000");
     await expect(page.locator("#edit-pattern-widget").getByLabel("Yarn B", { exact: true })).toHaveValue("#ffffff");
@@ -166,7 +166,7 @@ test("Pattern owns all colour editing while Settings keeps non-colour preference
 test("the pattern swatch uses the chart's row and concentric-round yarn geometry", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     const sample = async () => page.locator("#pattern-colour-preview canvas").evaluate((canvas: HTMLCanvasElement) => {
         const ctx = canvas.getContext("2d")!;
         const n = 7;
@@ -198,7 +198,7 @@ test.describe("responsive pattern swatch", () => {
 
     test("fits inside the panel and sizes its bitmap for the display", async ({ page }) => {
         await bootApp(page);
-        await page.getByRole("button", { name: "Pattern" }).click();
+        await page.getByRole("button", { name: "Pattern", exact: true }).click();
         const preview = page.locator("#pattern-preview-canvas");
         const measure = () => preview.evaluate((canvas: HTMLCanvasElement) => ({
             width: canvas.clientWidth,
@@ -222,7 +222,7 @@ test.describe("responsive pattern swatch", () => {
 
 test("corner swatch shows its central slash mirror in the project accent colour", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Quarter", { exact: true }).click();
     await page.getByLabel("Accent", { exact: true }).fill("#123456");
@@ -239,7 +239,7 @@ test("corner swatch shows its central slash mirror in the project accent colour"
 
 test("swatch selection marches while visible and pauses for reduced motion and closed Pattern", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     const preview = page.locator("#pattern-preview-canvas");
     const bitmap = () => preview.evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
     const initial = await bitmap();
@@ -256,7 +256,7 @@ test("swatch selection marches while visible and pauses for reduced motion and c
     const hidden = await bitmap();
     await page.waitForTimeout(250);
     expect(await bitmap()).toBe(hidden);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await expect.poll(bitmap).not.toBe(hidden);
 });
 
@@ -270,7 +270,7 @@ test("Pattern colour resets restore automatic guidance and preserve browser defa
         lockInvalid: true,
     })));
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
 
     const danger = page.getByLabel("Danger", { exact: true });
     const accent = page.getByLabel("Accent", { exact: true });
@@ -327,7 +327,7 @@ test("opening project contrast overrides keeps app defaults", async ({ page }) =
     });
 
     expect(await page.evaluate(() => localStorage.getItem("mosaic-preferences"))).toBe(defaults);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await expect(page.getByLabel("Danger", { exact: true })).toHaveValue("#123456");
     await expect(page.getByLabel("Accent", { exact: true })).toHaveValue("#abcdef");
 });
@@ -390,7 +390,7 @@ test("contextual inspectors rely on controls and hover text", async ({ page }) =
     await expect(page.getByText("Nothing copied yet", { exact: false })).toHaveCount(0);
 
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await expect(page.getByText("Select cells and configure", { exact: false })).toHaveCount(0);
     await expect(page.getByText("No axes yet", { exact: false })).toHaveCount(0);
 });

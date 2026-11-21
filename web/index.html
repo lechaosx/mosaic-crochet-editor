@@ -164,7 +164,7 @@
         <button class="btn btn--icon" id="tool-select"  title="Select (S) — drag for rectangle; Shift adds, Ctrl removes" aria-label="Select" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-select"/></svg></button>
         <button class="btn btn--icon" id="tool-wand"    title="Magic wand (W) — click a cell to select its connected same-colour region; Shift adds, Ctrl removes" aria-label="Magic wand" aria-controls="inspector-host" aria-expanded="false"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-wand"/></svg></button>
         <button class="btn btn--icon" id="tool-move"    title="Move (M) — drag inside the selection; Ctrl duplicates; Alt moves the selection area" aria-label="Move"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-move"/></svg></button>
-        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Global Mirror: no active types" aria-controls="inspector-host" aria-expanded="false" aria-label="Global Mirror: no active types"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
+        <button class="btn btn--icon" id="btn-sym-toggle" data-transform-state="none" title="Pattern Mirror: no active types" aria-controls="inspector-host" aria-expanded="false" aria-label="Pattern Mirror: no active types"><svg class="tool-icon" aria-hidden="true" focusable="false"><use href="#icon-transform"/></svg></button>
       </div>
 
       <div class="dock-group g-colors" role="group" aria-label="Yarns">
@@ -360,8 +360,8 @@
     </div>
   </section>
 
-  <!-- ── Global Mirror inspector ───────────────────────────────────── -->
-  <section id="sym-popover" class="inspector-panel" aria-label="Global Mirror" hidden>
+  <!-- ── Pattern Mirror inspector ───────────────────────────────────── -->
+  <section id="sym-popover" class="inspector-panel" aria-label="Pattern Mirror" hidden>
     <p class="panel-scope"><svg class="tool-icon" aria-hidden="true"><use href="#icon-scope-pattern"/></svg>This pattern · Saved in its file</p>
     <div id="sym-list" class="sym-list" aria-label="Mirror centres"><div data-mirror-key="placeholder" class="sym-list-placeholder"><button class="btn btn--ghost list-placeholder" id="add-mirror" aria-label="Add mirror" title="Add a mirror centre, then choose its types"><svg class="tool-icon" aria-hidden="true"><use href="#icon-plus"/></svg>New mirror</button></div></div>
     <div id="mirror-editor" class="mirror-editor" role="group" aria-label="Selected mirror centre" hidden>
@@ -375,7 +375,7 @@
     </div>
     <div class="transform-usage">
       <div class="popover-row">
-        <button class="btn" id="replicate-selection" title="Stamp global mirror copies from the current selection (T)" disabled>Stamp copies</button>
+        <button class="btn" id="replicate-selection" title="Stamp pattern mirror copies from the current selection (T)" disabled>Stamp copies</button>
       </div>
       <div id="transform-error" class="warning" role="alert" hidden></div>
     </div>

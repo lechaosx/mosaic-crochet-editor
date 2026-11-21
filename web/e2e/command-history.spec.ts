@@ -585,7 +585,7 @@ for (const action of ["New", "Example"]) {
 
 test("a Pattern change right after Example is its own undoable step", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").press("Tab");
     await page.getByRole("button", { name: "Close inspector" }).click();
@@ -593,7 +593,7 @@ test("a Pattern change right after Example is its own undoable step", async ({ p
     await page.locator("#settings-about").click();
     await page.locator("#about-example").click();
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("7");
     await page.locator("#edit-width").press("Tab");
     await page.getByRole("button", { name: "Close inspector" }).click();

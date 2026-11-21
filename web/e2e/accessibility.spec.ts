@@ -27,7 +27,7 @@ test("active tool and yarn expose their selected state", async ({ page }) => {
 
 test("segmented radios and switches retain native keyboard operation", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await expect(page.getByRole("radiogroup", { name: "Pattern geometry" })).toBeVisible();
     const row = page.getByRole("radio", { name: "Rows" });
     const round = page.getByRole("radio", { name: "Centre-out" });
@@ -89,7 +89,7 @@ test("yarn controls expose direct selection and Pattern owns editing actions", a
     expect(focusOutline.style).toBe("solid");
     expect(focusOutline.width).toBeGreaterThanOrEqual(2);
     await page.keyboard.press("Space");
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     const swap = page.getByRole("button", { name: "Swap yarn colours" });
     await expect(page.locator("#edit-yarn")).toHaveCount(0);
     await expect(swap).toBeVisible();
@@ -141,7 +141,7 @@ test("double-click and long-press invoke the chosen yarn picker from the dock", 
 
 test("dynamic symmetry actions name their axis and position", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await addGlobalMirror(page, "Vertical");
 
     const disable = page.getByRole("checkbox", { name: "Enable mirror at (4, 4)" });
@@ -154,7 +154,7 @@ test("dynamic symmetry actions name their axis and position", async ({ page }) =
 
 test("dynamic symmetry actions retain keyboard focus after rebuilding the axis list", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await addGlobalMirror(page, "Vertical");
     await addGlobalMirror(page, "Horizontal");
 
@@ -306,7 +306,7 @@ test("compact Menu exposes and navigates a keyboard menu", async ({ page }) => {
 
     await page.setViewportSize({ width: 1280, height: 720 });
     await expect(page.getByRole("menuitem")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Pattern" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pattern", exact: true })).toBeVisible();
 });
 
 test("Tab leaves and closes the compact Menu menu", async ({ page }) => {
@@ -386,11 +386,11 @@ test("visible buttons provide hover labels across editor surfaces", async ({ pag
     await expectHoverLabels("Selection inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await expectHoverLabels("Pattern inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
 
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await addGlobalMirror(page, "Vertical");
     await expectHoverLabels("Transform inspector");
     await page.getByRole("button", { name: "Close inspector" }).click();
@@ -411,11 +411,11 @@ test("explicit inspector opening moves focus to its first available control", as
     await expect(page.getByRole("button", { name: "Select", exact: true })).toBeFocused();
     await page.keyboard.press("Escape");
 
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await expect(page.getByRole("button", { name: "Add mirror" })).toBeFocused();
     await page.keyboard.press("Escape");
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await expect(page.getByRole("radio", { name: "Rows" })).toBeFocused();
 
     await page.keyboard.press("Escape");

@@ -20,7 +20,7 @@ export function mountMirrors(
         e.preventDefault();
         if (inspector.isOpen("transforms")) inspector.close();
         else {
-            inspector.open("transforms", "Global Mirror");
+            inspector.open("transforms", "Pattern Mirror");
             inspector.focusFirst("transforms");
         }
     });
@@ -30,12 +30,12 @@ export function mountMirrors(
 
     function setTransformState(hasSelection: boolean, hasTransforms: boolean) {
         stamp.disabled = !hasSelection || !hasTransforms;
-        const stampTitle = !hasTransforms ? "Choose a Global Mirror type first"
-            : !hasSelection ? "Select cells to stamp global mirror copies" : "Stamp the current selection through all enabled global mirrors (T)";
+        const stampTitle = !hasTransforms ? "Choose a Pattern Mirror type first"
+            : !hasSelection ? "Select cells to stamp pattern mirror copies" : "Stamp the current selection through all enabled pattern mirrors (T)";
         if (stamp.title !== stampTitle) stamp.title = stampTitle;
         const state = hasTransforms ? "live" : "none";
         if (symToggle.dataset.transformState !== state) symToggle.dataset.transformState = state;
-        const label = hasTransforms ? "Global Mirror: applying while drawing" : "Global Mirror: no active types";
+        const label = hasTransforms ? "Pattern Mirror: applying while drawing" : "Pattern Mirror: no active types";
         if (symToggle.title !== label) symToggle.title = label;
         if (symToggle.getAttribute("aria-label") !== label) symToggle.setAttribute("aria-label", label);
     }
@@ -44,7 +44,7 @@ export function mountMirrors(
         if (transformError.textContent !== (message ?? "") || transformError.hidden !== (message === null)) {
             setMessage(transformError, message);
         }
-        if (message !== null && !inspector.isOpen("transforms")) inspector.open("transforms", "Global Mirror");
+        if (message !== null && !inspector.isOpen("transforms")) inspector.open("transforms", "Pattern Mirror");
     }
 
     const coordinateEditor = mountCoordinateEditor(el("mirror-centre-fields"), x, y,

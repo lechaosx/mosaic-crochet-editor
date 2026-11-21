@@ -5,7 +5,7 @@ test("Clear design on an empty default design leaves history unchanged", async (
     await bootApp(page);
     const before = await storedRecovery(page);
     const historyBefore = await storedHistory(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
 
     await expect(page.getByRole("button", { name: "Clear design" })).toBeDisabled();
 
@@ -18,7 +18,7 @@ test("Pattern edits before and after Clear design remain separate undo actions",
     await bootApp(page);
     await clickCell(page, 0, 1);
     const original = await storedRecovery(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("7");
     await page.locator("#edit-width").press("Tab");
     const beforeClear = await storedRecovery(page);
@@ -37,7 +37,7 @@ test("Pattern edits before and after Clear design remain separate undo actions",
 
 test("Clear design removes drawing and transform context in one recoverable edit", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("8");
     await page.locator("#edit-width").press("Tab");
     for (const [id, color] of [["color-a", "#7b3b27"], ["color-b", "#e8dbcd"],
@@ -63,11 +63,11 @@ test("Clear design removes drawing and transform context in one recoverable edit
     await page.locator("#recipe-down").fill("1");
     await page.locator("#recipe-down").press("Tab");
     await page.getByRole("button", { name: "Copy", exact: true }).click();
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await addGlobalMirror(page, "Vertical");
     await addGlobalMirror(page, "Horizontal");
     await page.getByRole("button", { name: "Move", exact: true }).click();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByRole("button", { name: "Zoom in" }).click();
     await page.getByRole("button", { name: "Navigate" }).click();
     const before = await storedRecovery(page);
@@ -116,7 +116,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
 
 test("Clear design preserves authored centre-out geometry and compatible Crochet progress", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Half", { exact: true }).click();
     await page.keyboard.press("Escape");
@@ -132,7 +132,7 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     const progress = await storedLiveProgress(page);
     expect(progress.completedUnits).toBeGreaterThan(0);
     await page.getByRole("tab", { name: "Design", exact: true }).click();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
 
     await page.locator("#edit-reset").click();
 
@@ -154,7 +154,7 @@ test("Clear design stays disabled with saved repeats and a natural chart", async
     await page.getByRole("button", { name: "No selection", exact: true }).click();
     const before = await storedRecovery(page);
     expect(before.workspace.float).toBeNull();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
 
     await expect(page.locator("#edit-reset")).toBeDisabled();
     expect(await storedRecovery(page)).toEqual(before);
@@ -167,7 +167,7 @@ test("Pattern previews after Clear design preserve the cleared source and revert
     await clickCell(page, 0, 1);
     await page.locator("#recipe-right").fill("1");
     await page.locator("#recipe-right").press("Tab");
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-reset").click();
     const cleared = await storedRecovery(page);
 

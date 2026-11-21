@@ -25,7 +25,7 @@ test("Pattern remains modeless across canvas authoring and inspector changes", a
     await expect(page.locator("#edit-pattern-widget")).toBeVisible();
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
 
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await expect(page.locator("#edit-pattern-widget")).toBeHidden();
     await expect(page.locator("#sym-popover")).toBeVisible();
 });
@@ -144,7 +144,7 @@ test("invalid Pattern input retains the last valid preview", async ({ page }) =>
 
 test("Pattern presents direct properties with contextual resize feedback", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
 
     await expect(page.getByLabel("Centre opening width")).toBeAttached();
     await expect(page.getByLabel("Centre opening height")).toBeAttached();
@@ -169,7 +169,7 @@ test("Pattern construction previews restore the captured baseline when switched 
     await clickCell(page, 0, 8);
     const baseline = (await storedRecovery(page)).document;
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await expect(page.getByRole("img", { name: /Centre-out colour preview/ })).toBeVisible();
     await expect.poll(async () => (await storedRecovery(page)).document.state.mode).toBe("round");
@@ -193,7 +193,7 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
         };
     });
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByRole("button", { name: "Spill", exact: true }).click();
     await page.getByRole("button", { name: "Yarn A", exact: true }).click();
@@ -218,7 +218,7 @@ test("tool and yarn choices do not replace the Pattern construction source", asy
 
 test("Pattern session source advances after modeless canvas edits", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     const width = page.locator("#edit-width");
     await width.fill("10");
     await width.press("Tab");
@@ -250,7 +250,7 @@ test("Pattern construction round-trip restores associated selection and mirror s
         };
     });
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByRole("radiogroup", { name: "Pattern geometry" })
         .getByText("Rows", { exact: true }).click();
@@ -268,7 +268,7 @@ test("Pattern construction round-trip restores associated selection and mirror s
 
 test("Pattern extent switches restore cells clipped by a smaller preview", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.keyboard.press("Escape");
 
@@ -282,7 +282,7 @@ test("Pattern extent switches restore cells clipped by a smaller preview", async
     expect(await pixelRGB(page, paintedCell.cx, paintedCell.cy)).not.toEqual(before);
     const baseline = (await storedRecovery(page)).document;
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Quarter", { exact: true }).click();
     await page.getByText("Full", { exact: true }).click();
 
@@ -295,7 +295,7 @@ test("Clear design restores natural colours immediately and is undoable", async 
     const cell = await cellCoord(page, 0, 1);
     expect(await pixelRGB(page, cell.cx, cell.cy)).toEqual(A);
     const beforeReset = await storedHistoryLength(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     const fittedCell = await cellCoord(page, 0, 1);
 
     await page.getByRole("button", { name: "Clear design" }).click();

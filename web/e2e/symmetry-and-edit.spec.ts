@@ -41,7 +41,7 @@ test("dragging the V mirror centre changes the mirrored drawing position", async
 
 test("Mirror inspector lets Pencil drag a centre without painting", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await addGlobalMirror(page, "Vertical");
     const start = await cellCoord(page, 4, 4);
     const end = await cellCoord(page, 2, 4);
@@ -59,7 +59,7 @@ test("Mirror inspector lets Pencil drag a centre without painting", async ({ pag
 
 test("exact symmetry position entry is one undoable edit", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await addGlobalMirror(page, "Vertical");
     const position = page.getByRole("spinbutton", { name: "Mirror centre x" });
     await expect(position).toHaveValue("4");
@@ -90,15 +90,15 @@ test("Symmetry popover: add V, toggle off, delete", async ({ page }) => {
 test("transform toolbar shows whether transforms are configured", async ({ page }) => {
     await bootApp(page);
     const transforms = page.locator("#btn-sym-toggle");
-    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: no active types");
+    await expect(transforms).toHaveAttribute("aria-label", "Pattern Mirror: no active types");
 
     await transforms.click();
     await addGlobalMirror(page, "Vertical");
-    await expect(transforms).toHaveAttribute("aria-label", "Global Mirror: applying while drawing");
+    await expect(transforms).toHaveAttribute("aria-label", "Pattern Mirror: applying while drawing");
     await expect(page.locator("#live-transforms")).toHaveCount(0);
 });
 
-test("Apply Global Mirror applies symmetry and keeps the source selected", async ({ page }) => {
+test("Apply Pattern Mirror applies symmetry and keeps the source selected", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
     await clickCell(page, 0, 1);
@@ -428,7 +428,7 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
         await clickCell(page, 2, 1);
         await page.locator("#recipe-right").fill("1");
         await page.locator("#recipe-right").dispatchEvent("change");
-        await page.getByRole("button", { name: /Global Mirror/ }).click();
+        await page.getByRole("button", { name: /Pattern Mirror/ }).click();
         await addGlobalMirror(page, "Vertical");
         await page.getByRole("button", { name: "Yarn A", exact: true }).click();
         await page.getByRole("button", { name: "Spill" }).click();
@@ -455,13 +455,13 @@ for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
 }
 
 for (const [origin, clickX] of [["source", 2], ["ghost", 3]] as const) {
-    test(`Overlay from a saved-repeat ${origin} keeps Global Mirror inside the extended selection`, async ({ page }) => {
+    test(`Overlay from a saved-repeat ${origin} keeps Pattern Mirror inside the extended selection`, async ({ page }) => {
         await bootApp(page);
         await page.getByRole("button", { name: "Select", exact: true }).click();
         await clickCell(page, 2, 1);
         await page.locator("#recipe-right").fill("1");
         await page.locator("#recipe-right").dispatchEvent("change");
-        await page.getByRole("button", { name: /Global Mirror/ }).click();
+        await page.getByRole("button", { name: /Pattern Mirror/ }).click();
         await addGlobalMirror(page, "Vertical");
         await page.getByRole("button", { name: "Place overlay" }).click();
 
@@ -606,7 +606,7 @@ test("Pattern resize deactivates a saved repeat when it removes the source selec
     await clickCell(page, 2, 1);
     await expect(page.getByRole("button", { name: /^Selection 1 / })).toHaveAttribute("aria-pressed", "true");
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").press("Tab");
     await page.getByRole("button", { name: "Select", exact: true }).click();
@@ -722,7 +722,7 @@ test("invalid Pattern preview restores the active saved-repeat source", async ({
     await bootApp(page);
     await page.getByRole("button", { name: "Select", exact: true }).click();
     await clickCell(page, 2, 1);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("5");
     await page.locator("#edit-width").fill("2000000");
     await expect(page.locator("#edit-error")).toBeVisible();
@@ -813,9 +813,9 @@ test("Open restores a global mirror", async ({ page }) => {
         })),
     });
 
-    await expect(page.getByRole("button", { name: /Global Mirror/ })).toBeVisible();
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
-    await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Global Mirror");
+    await expect(page.getByRole("button", { name: /Pattern Mirror/ })).toBeVisible();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
+    await expect(page.locator("#sym-popover")).toHaveAttribute("aria-label", "Pattern Mirror");
     await expect(page.locator("#sym-list")).toBeVisible();
     await expect(page.getByRole("checkbox", { name: "Enable mirror at (2, 4)" })).toBeVisible();
 

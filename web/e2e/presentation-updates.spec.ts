@@ -18,7 +18,7 @@ test("painting does not rewrite unchanged local mirror descriptions", async ({ p
 
 test("dimension changes leave unchanged global mirror metadata stable", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: /^Global Mirror:/ }).click();
+    await page.getByRole("button", { name: /^Pattern Mirror:/ }).click();
     await addGlobalMirror(page, "Vertical");
     await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.evaluate(() => {

@@ -159,7 +159,7 @@ test("Crochet retains the Pattern inspector across the mode switch", async ({ pa
     await page.setViewportSize({ width: 1600, height: 900 });
     await bootApp(page);
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     const inspector = page.getByRole("complementary", { name: "Pattern" });
     await expect(inspector).toBeVisible();
     await page.locator("#view-crochet").click();
@@ -402,7 +402,7 @@ test("Crochet advances by whole rows and resumes the exact instruction plan", as
     await expect(page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]')).toHaveAttribute("aria-current", "step");
 
     await page.locator("#view-design").click();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("10");
     await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
@@ -514,7 +514,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
 
 test("generation feedback occupies space only while generation is active", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-height").fill("80");
     await expect(page.locator("#view-crochet")).toHaveAttribute("aria-selected", "false");
     await expect(page.locator("#view-crochet")).toHaveAttribute("title", "Start crochet instructions");
@@ -535,7 +535,7 @@ test("generation feedback occupies space only while generation is active", async
 
 test("Crochet can return to Design during a long generation", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-height").fill("80");
     await page.locator("#view-crochet").click();
     await expect(page.locator("#export-progress")).toBeVisible();
@@ -577,7 +577,7 @@ test("a loaded empty round remains a single progress unit", async ({ page }) => 
 
 test("a local cache scan can cancel at its periodic yield", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-height").fill("80");
     await page.locator("#view-crochet").click();
     // Generation takes an animation frame per row, and frames slow down under a loaded software GPU.
@@ -609,7 +609,7 @@ test("a local cache scan can cancel at its periodic yield", async ({ page }) => 
 
 test("long Crochet instructions wrap between stitch counts beside a yarn number that fills the row height", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("50");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Settings" }).click();
@@ -684,7 +684,7 @@ test("long Crochet instructions wrap between stitch counts beside a yarn number 
 
 test("a wrapped current Crochet instruction splits into lines of similar length that its overlay fits", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("50");
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Settings" }).click();
@@ -751,7 +751,7 @@ test("Crochet marks only the current row's beginning seam", async ({ page }) => 
 
 test("a complete round marks the shared seam and points into its first stitch", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.locator("#edit-inner-width").fill("1");
     await page.locator("#edit-inner-height").fill("1");
@@ -778,7 +778,7 @@ test("a complete round marks the shared seam and points into its first stitch", 
 for (const extent of ["Half", "Quarter"]) {
     test(`${extent} rounds mark only the beginning seam`, async ({ page }) => {
         await bootApp(page);
-        await page.getByRole("button", { name: "Pattern" }).click();
+        await page.getByRole("button", { name: "Pattern", exact: true }).click();
         await page.getByText("Centre-out", { exact: true }).click();
         await page.getByText(extent, { exact: true }).click();
         await page.locator("#edit-inner-width").fill("1");
@@ -900,7 +900,7 @@ test("the joined seam triangle keeps its cell proportions through zoom", async (
 
 test("a single-cell Quarter has only its beginning seam and an inward triangle", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Quarter", { exact: true }).click();
     await page.locator("#edit-inner-width").fill("0");
@@ -921,7 +921,7 @@ test("a single-cell Quarter has only its beginning seam and an inward triangle",
 
 test("an adjacent first and last stitch share a seam only in a Full round", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("2");
     await page.locator("#edit-height").fill("2");
     await page.keyboard.press("Escape");
@@ -930,7 +930,7 @@ test("an adjacent first and last stitch share a seam only in a Full round", asyn
     expect((await page.evaluate(() => window.__test_instruction_seam_geometry__))!.edges)
         .toEqual([[0, 1, 0, 2]]);
     await page.getByRole("tab", { name: "Design", exact: true }).click();
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.locator("#edit-inner-width").fill("0");
     await page.locator("#edit-inner-height").fill("0");
@@ -947,7 +947,7 @@ test("an adjacent first and last stitch share a seam only in a Full round", asyn
 for (const extent of ["Full", "Half", "Quarter"]) {
     test(`${extent} round numbers keep their historical chart anchors and remain visible in Fit`, async ({ page }) => {
         await bootApp(page);
-        await page.getByRole("button", { name: "Pattern" }).click();
+        await page.getByRole("button", { name: "Pattern", exact: true }).click();
         await page.getByText("Centre-out", { exact: true }).click();
         await page.getByText(extent, { exact: true }).click();
         await page.locator("#edit-inner-width").fill("1");
@@ -1027,7 +1027,7 @@ for (const extent of ["Full", "Half", "Quarter"]) {
 
 test("partial-round beginning markers leave the historical number glyphs readable after rotation", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByText("Quarter", { exact: true }).click();
     await page.locator("#edit-rounds").fill("3");
@@ -1115,7 +1115,7 @@ test("Crochet renders through the current row and no future rows", async ({ page
 
 test("Crochet shows current-round guidance before the final round", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.locator("#edit-rounds").fill("3");
     await page.keyboard.press("Escape");
@@ -1165,7 +1165,7 @@ test("Crochet reports when its progress cannot be saved locally", async ({ page 
 
 test("Crochet wraps through Whole around a single Centre-out round", async ({ page }) => {
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByText("Centre-out", { exact: true }).click();
     await page.getByLabel("Rounds").fill("1");
 

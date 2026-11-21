@@ -5,7 +5,8 @@ New updates appear first. Each section summarizes the lasting changes available 
 ## 21 November 2026
 
 - Warnings and danger signals on controls keep one fixed colour instead of taking on the active pattern's Danger colour, which now marks only its chart and Crochet list.
-- Settings drop down from the app bar without closing the open pattern panel, and the Pattern, Selection, Global Mirror and Settings panels say whether they affect this pattern or all patterns.
+- Settings drop down from the app bar without closing the open pattern panel, and the Pattern, Selection, Pattern Mirror and Settings panels say whether they affect this pattern or all patterns.
+- Global Mirror is renamed Pattern Mirror, since its mirrors belong to the open pattern rather than to all patterns.
 - On touch screens a background tab is selected before it can be closed.
 - With no pattern open, the workspace says what each tab keeps and what all tabs share, and About offers New, Open and Example before its release notes.
 - A wrapped current Crochet instruction sits in a box as wide as its lines instead of one with empty space at the sides.

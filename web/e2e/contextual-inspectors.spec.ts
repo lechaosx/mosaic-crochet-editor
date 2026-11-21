@@ -66,7 +66,7 @@ test("overlay variants share one tool button with distinct icons and accessible 
 test("live repeat and mirror controls are always on", async ({ page }) => {
     await bootApp(page);
 
-    await page.getByRole("button", { name: /Global Mirror/ }).click();
+    await page.getByRole("button", { name: /Pattern Mirror/ }).click();
     await expect(page.locator("#live-transforms")).toHaveCount(0);
     await expect(page.getByText("Mirror while drawing", { exact: true })).toHaveCount(0);
 

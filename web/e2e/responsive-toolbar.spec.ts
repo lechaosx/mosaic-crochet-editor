@@ -121,7 +121,7 @@ test("turning row numbers on leaves the phone canvas view unchanged", async ({ p
 test("Fit centres the chart on the whole canvas behind wide overlay panels", async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 600 });
     await bootApp(page);
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.getByRole("button", { name: "Fit view" }).click();
 
     const visible = await page.evaluate(() => {
@@ -261,7 +261,7 @@ test("phone toolbar keeps authoring tools full-size and moves secondary commands
     }
     expect(await page.locator(".canvas-controls").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Pattern" })).toBeHidden();
+    await expect(page.getByRole("button", { name: "Pattern", exact: true })).toBeHidden();
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 
     await page.getByRole("button", { name: "Menu" }).click();
@@ -422,7 +422,7 @@ test("wide overlay panels leave canvas geometry stable and anchor its chrome to 
     const statusBefore = await page.locator("#status").boundingBox();
     expect(statusBefore!.x).toBeGreaterThanOrEqual(dock!.x + dock!.width - 1);
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     const canvasAfter = await page.locator(".canvas-area").boundingBox();
     const inspector = await page.locator("#inspector-host").boundingBox();
     const controls = await page.locator(".canvas-controls").boundingBox();
@@ -439,7 +439,7 @@ test("inspector controls keep their state while the same host recomposes", async
     await page.setViewportSize({ width: 1280, height: 800 });
     await bootApp(page);
 
-    await page.getByRole("button", { name: "Pattern" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
     await page.locator("#edit-width").fill("20");
     await expect(page.locator("#inspector-title")).toHaveText("Pattern");
 

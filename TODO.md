@@ -90,7 +90,7 @@ These ideas conflict with or substantially reshape current decisions. Do not beg
 
 - Persistent **Colour Design** and **Stitch Placement** strategy modes instead of the current tool-led workflow.
 - An explicit Pattern Apply/Cancel transaction instead of the current modeless, immediately undoable preview model.
-- Replacing separate Global Mirror and saved-repeat concepts with one staged transform recipe.
+- Replacing separate Pattern Mirror and saved-repeat concepts with one staged transform recipe.
 - Splitting the unified Crochet workflow into separate Overview, Live, and Text workspaces.
 - Treating composed output as project state rather than a separate derived operation.
 

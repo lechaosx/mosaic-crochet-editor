@@ -36,7 +36,7 @@ State is classified by meaning, not by whichever storage mechanism currently hol
 
 | Scope | Durable boundary | Attribution |
 |---|---|---|
-| Project document | Pattern geometry and cells, yarn definitions, global mirror centres and their selected types, saved repeat definitions, and project-specific display overrides travel in `.mcw`. | **your decision** |
+| Project document | Pattern geometry and cells, yarn definitions, pattern mirror centres and their selected types, saved repeat definitions, and project-specific display overrides travel in `.mcw`. | **your decision** |
 | Editor workspace | Active tools, live selection, current repeat source, and other resume-editing context may be recovered locally but are not part of the portable project. | **your decision** |
 | Undo and redo | Each project has its own browser-local history of reversible authored edits and relevant editing context, including yarns and project Danger/Accent overrides, kept across reloads; camera navigation, browser preferences, and crochet progress are excluded. The history marks the step that matches the last saved file, so undoing back to it leaves the project unmodified. | **your decision**; project-palette distinction: **Agent's choice** |
 | Open projects | Each open project keeps its own document, undo history, live selection, repeat source, view, Design/Crochet mode, and Crochet progress; tools, preferences, and the clipboard are shared by all of them. The open projects, their titles, and the active one are recovered locally, while each project's view and mode are held in memory only. | **your decision** |
