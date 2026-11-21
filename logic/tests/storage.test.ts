@@ -1,4 +1,5 @@
 import { describe, test, expect } from "vitest";
+import { Buffer } from "node:buffer";
 import { readFileSync } from "node:fs";
 import {
     packPixels, unpackPixels, packFloat, unpackFloat,
@@ -236,7 +237,10 @@ describe(".mcw codec", () => {
             }],
         };
 
-        expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(mask);
+        const decoded = decodeMcw(encodeMcw(document)).recipes[0].source.mask;
+        expect(decoded).toBeInstanceOf(Uint8Array);
+        // Byte comparison: toEqual walks a million-element typed array key by key for seconds.
+        expect(Buffer.compare(decoded, mask)).toBe(0);
     }, 10_000);
 
     test("defaults optional v3 recipe extensions when opening an earlier v3 file", () => {
