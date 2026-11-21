@@ -8,6 +8,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - Settings drop down from the app bar without closing the open pattern panel, and the Pattern, Selection, Global Mirror and Settings panels say whether they affect this pattern or all patterns.
 - On touch screens a background tab is selected before it can be closed.
 - With no pattern open, the workspace says what each tab keeps and what all tabs share, and About offers New, Open and Example before its release notes.
+- A wrapped current Crochet instruction sits in a box as wide as its lines instead of one with empty space at the sides.
 
 ## 20 November 2026
 

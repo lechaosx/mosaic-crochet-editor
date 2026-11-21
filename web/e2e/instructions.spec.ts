@@ -682,7 +682,7 @@ test("long Crochet instructions wrap between stitch counts beside a yarn number 
     }
 });
 
-test("a wrapped current Crochet instruction splits into lines of similar length", async ({ page }) => {
+test("a wrapped current Crochet instruction splits into lines of similar length that its overlay fits", async ({ page }) => {
     await bootApp(page);
     await page.getByRole("button", { name: "Pattern" }).click();
     await page.locator("#edit-width").fill("50");
@@ -706,6 +706,14 @@ test("a wrapped current Crochet instruction splits into lines of similar length"
         });
         expect(lines.length).toBeGreaterThan(1);
         expect(Math.min(...lines)).toBeGreaterThan(Math.max(...lines) * 0.5);
+        await expect.poll(() => text.evaluate(code => {
+            const range = document.createRange();
+            range.selectNodeContents(code);
+            const widest = Math.max(...Array.from(range.getClientRects(), rect => rect.width));
+            const box = code.parentElement!;
+            const style = getComputedStyle(box);
+            return box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - widest;
+        })).toBeLessThan(2);
     }
 });
 

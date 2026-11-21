@@ -35,6 +35,7 @@ export function mountUI(cb: UICallbacks): UIHandle {
     const canvasControls = document.querySelector<HTMLElement>(".canvas-controls")!;
     const canvasStatus = el("status");
     const canvasInstruction = el("instructions-current");
+    const canvasInstructionText = el("instructions-current-text");
     const authoringPanel = el("authoring-dock");
     const crochetPanel = el("instructions-workspace");
     const crochetBody = crochetPanel.querySelector<HTMLElement>(".instructions-body")!;
@@ -70,6 +71,17 @@ export function mountUI(cb: UICallbacks): UIHandle {
         canvasShell.style.setProperty("--canvas-chrome-bottom", `${Math.max(0, bottom)}px`);
         canvasInstruction.style.setProperty("--canvas-chrome-left", `${Math.max(0, left)}px`);
         canvasInstruction.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);
+        // A box sizes to its unbalanced max-content width, so fit it to the balanced lines it wraps into.
+        canvasInstruction.style.removeProperty("width");
+        const instructionLines = document.createRange();
+        instructionLines.selectNodeContents(canvasInstructionText);
+        const lineWidths = Array.from(instructionLines.getClientRects(), line => line.width);
+        if (lineWidths.length > 1) {
+            const style = getComputedStyle(canvasInstruction);
+            const frame = canvasInstruction.offsetWidth - canvasInstruction.clientWidth
+                + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+            canvasInstruction.style.width = `${Math.ceil(Math.max(...lineWidths)) + frame}px`;
+        }
         if (wide && canvasInstruction.getClientRects().length > 0) {
             const halfWidth = canvasInstruction.getBoundingClientRect().width / 2;
             const centre = Math.max(left + halfWidth, Math.min(canvasRect.width / 2, canvasRect.width - right - halfWidth));
