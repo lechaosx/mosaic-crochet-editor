@@ -2,6 +2,10 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 21 November 2026
+
+- Warnings and danger signals on controls keep one fixed colour instead of taking on the active pattern's Danger colour, which now marks only its chart and Crochet list.
+
 ## 20 November 2026
 
 - Opening, editing, undo, panning and zooming large charts, and switching between their tabs, respond much faster, and pattern sides are now limited to 32,767 stitches; the chart needs WebGL 2 and shows a message in browsers without it, and the app needs Chrome 140, Firefox 133, Safari 18.2 or newer.

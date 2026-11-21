@@ -220,6 +220,56 @@ test("controls keep one accent while each tab's chart marks its selection in tha
     expect(await controlAccents(page)).toEqual(controls);
 });
 
+// A motif with invalid placements in every row.
+function warnedMotif(name: string) {
+    const [w, h] = [12, 8];
+    return { name, mimeType: "application/json", buffer: Buffer.from(JSON.stringify({
+        version: 1, state: { mode: "row", canvasWidth: w, canvasHeight: h },
+        pixels: Array.from({ length: w * h }, (_, i) => {
+            const x = i % w, y = Math.floor(i / w);
+            return ((x + y) % 6 < 3) !== (y % 2 === 0) ? 1 : 2;
+        }),
+        colorA: "#123456", colorB: "#ffffff",
+    })) };
+}
+
+async function controlDangers(page: Page) {
+    return page.locator("#edit-error").evaluate(el => {
+        const style = getComputedStyle(el);
+        return [style.borderTopColor, style.backgroundColor];
+    });
+}
+
+test("controls keep one danger colour while each tab's chart and Crochet list warn in that pattern's Danger", async ({ page }) => {
+    await bootApp(page);
+    for (const [name, danger] of [["red.mcw", "#ff0000"], ["magenta.mcw", "#ff00ff"]]) {
+        const chooser = page.waitForEvent("filechooser");
+        await page.getByRole("button", { name: "Open", exact: true }).click();
+        await (await chooser).setFiles(warnedMotif(name));
+        await expect(tab(page, name)).toHaveAttribute("aria-selected", "true");
+        await page.getByRole("button", { name: "Pattern", exact: true }).click();
+        await page.getByLabel("Danger", { exact: true }).fill(danger);
+        await page.keyboard.press("Escape");
+    }
+    const crochetWarning = async () => {
+        await page.getByRole("tab", { name: "Crochet", exact: true }).click();
+        const colour = await page.locator(".instructions-unit--invalid").first()
+            .evaluate(el => getComputedStyle(el).borderRightColor);
+        await page.getByRole("tab", { name: "Design", exact: true }).click();
+        return colour;
+    };
+
+    expect(await chartShows(page, "#ff00ff")).toBe(true);
+    const controls = await controlDangers(page);
+    expect(await crochetWarning()).toBe("rgb(255, 0, 255)");
+
+    await tab(page, "red.mcw").click();
+    expect(await chartShows(page, "#ff0000")).toBe(true);
+    expect(await chartShows(page, "#ff00ff")).toBe(false);
+    expect(await controlDangers(page)).toEqual(controls);
+    expect(await crochetWarning()).toBe("rgb(255, 0, 0)");
+});
+
 test("a selection alone marks its tab unsaved until undone", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("s");

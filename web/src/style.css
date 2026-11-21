@@ -37,13 +37,13 @@
   /* Matches BACKGROUND in render.ts, which the chart draws behind its cells. */
   --chart: #161618;
 
-  /* One highlight for every control. A pattern's Accent colour marks only its chart. */
+  /* One highlight and one danger colour for every control. A pattern's Accent
+     and Danger colours mark only its chart, and Danger also its Crochet list. */
   --accent: #3aa8a2;
   --accent-ink: #062120;
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--bg-2));
   --danger: #d32f2f;
   --danger-soft: color-mix(in srgb, var(--danger) 12%, var(--bg-2));
-  /* Destructive controls stay fixed: a pattern's Danger colour can be too dark or light to read. */
   --danger-text: #ff8f86;
   --unsaved: #e9b45f;
 
@@ -1191,10 +1191,11 @@ input[type="checkbox"] { accent-color: var(--accent); }
 
 .instructions-unit--complete code { color: var(--fg-1); }
 .instructions-unit.instructions-unit--invalid {
-  background: color-mix(in srgb, var(--danger) 8%, var(--bg-1));
+  background: color-mix(in srgb, var(--pattern-danger) 8%, var(--bg-1));
+  border-inline-end: 3px solid var(--pattern-danger);
 }
 .instructions-unit.instructions-unit--current-invalid {
-  background: color-mix(in srgb, var(--danger) 18%, var(--bg-1));
+  background: color-mix(in srgb, var(--pattern-danger) 18%, var(--bg-1));
 }
 .instructions-unit--whole {
   display: block;

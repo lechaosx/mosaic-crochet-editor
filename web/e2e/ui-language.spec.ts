@@ -177,27 +177,20 @@ test("changing Crochet direction retains instruction row identity and focus", as
     expect(await row!.evaluate(element => element.isConnected)).toBe(true);
 });
 
-test("the project Danger colour reaches the UI, the Accent colour doesn't, and undo restores both", async ({ page }) => {
+test("undo restores the last project colour change alone", async ({ page }) => {
     await bootApp(page);
-    const palette = () => page.evaluate(() => {
-        const style = getComputedStyle(document.documentElement);
-        return [style.getPropertyValue("--danger").trim(), style.getPropertyValue("--accent").trim()];
-    });
-    const [, uiAccent] = await palette();
     await page.locator("#btn-edit").click();
     await page.locator("#danger-color").fill("#101010");
     await page.locator("#danger-color").dispatchEvent("change");
     await page.locator("#accent-color").fill("#ffffff");
     await page.locator("#accent-color").dispatchEvent("change");
-    expect(await palette()).toEqual(["#101010", uiAccent]);
     await page.locator("#btn-undo").click();
     await expect(page.locator("#accent-color")).toHaveValue(contrastingProjectColors("#000000", "#ffffff").accent);
-    expect(await palette()).toEqual(["#101010", uiAccent]);
+    await expect(page.locator("#danger-color")).toHaveValue("#101010");
 });
 
-test("Pattern icon actions expose concise names and the project Danger colour reaches UI feedback", async ({ page }) => {
+test("Pattern icon actions expose concise names", async ({ page }) => {
     await bootApp(page);
-    const uiAccent = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--accent").trim());
     await page.getByRole("button", { name: "Pattern", exact: true }).click();
     for (const name of ["Yarn A", "Yarn B", "Danger", "Accent"]) {
         await expect(page.getByLabel(name, { exact: true }).and(page.locator('input[type="color"]'))).toBeVisible();
@@ -208,11 +201,6 @@ test("Pattern icon actions expose concise names and the project Danger colour re
     await expect(clear).toHaveText("");
     await expect(clear).toHaveAttribute("title", /drawing, selections, repeats, and mirrors/);
     await page.getByLabel("Danger", { exact: true }).fill("#101010");
-    await page.getByLabel("Accent", { exact: true }).fill("#ffffff");
-    expect(await page.evaluate(() => {
-        const style = getComputedStyle(document.documentElement);
-        return [style.getPropertyValue("--danger").trim(), style.getPropertyValue("--accent").trim()];
-    })).toEqual(["#101010", uiAccent]);
     await automatic.click();
     await expect(page.getByLabel("Danger", { exact: true })).not.toHaveValue("#101010");
 });
