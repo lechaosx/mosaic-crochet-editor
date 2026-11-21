@@ -108,8 +108,10 @@ export function activateGridRecipe(store: Store, id: string): boolean {
 export type ApplyGridRecipeResult = "applied" | "unchanged" | "no-selection" | "conflict";
 export type GridRecipeStamp = { result: "applied"; pixels: Uint8Array }
     | { result: Exclude<ApplyGridRecipeResult, "applied"> };
+// The pixels an edit may place: `after` with any cells it refuses reset to `before`.
+export type PlacementFilter = (before: Uint8Array, after: Uint8Array) => Uint8Array;
 
-export function gridRecipeStamp(state: Readonly<SessionState>): GridRecipeStamp {
+export function gridRecipeStamp(state: Readonly<SessionState>, filter?: PlacementFilter): GridRecipeStamp {
     const recipe = activeGridRecipe(state);
     const float = state.float;
     if (!recipe || !float || !recipeHasSource(recipe)) return { result: "no-selection" };
@@ -120,26 +122,23 @@ export function gridRecipeStamp(state: Readonly<SessionState>): GridRecipeStamp 
         !outOfBounds(cell.x, cell.y, W, H) && state.pixels[cell.y * W + cell.x] !== 0
     )) return { result: "conflict" };
     const next = state.pixels.slice();
-    let changed = false;
     for (const cell of evaluated.cells) {
         const source = sources[cell.sourceIndex];
         if (cell.x === source.x && cell.y === source.y) continue;
         if (outOfBounds(cell.x, cell.y, W, H) || state.pixels[cell.y * W + cell.x] === 0) continue;
         const value = float.pixels[(source.y - float.y) * float.w + source.x - float.x];
-        if (value !== 0 && next[cell.y * W + cell.x] !== value) {
-            next[cell.y * W + cell.x] = value;
-            changed = true;
-        }
+        if (value !== 0) next[cell.y * W + cell.x] = value;
     }
-    return changed ? { result: "applied", pixels: next } : { result: "unchanged" };
+    const placed = filter ? filter(state.pixels, next) : next;
+    return placed.some((value, i) => value !== state.pixels[i]) ? { result: "applied", pixels: placed } : { result: "unchanged" };
 }
 
-export function applyGridRecipe(store: Store, beforeCommit?: () => void): ApplyGridRecipeResult {
-    const stamp = gridRecipeStamp(store.state);
+export function applyGridRecipe(store: Store, beforeCommit?: () => void, filter?: PlacementFilter): ApplyGridRecipeResult {
+    const stamp = gridRecipeStamp(store.state, filter);
     if (stamp.result !== "applied") return stamp.result;
     if (beforeCommit) {
         beforeCommit();
-        return applyGridRecipe(store);
+        return applyGridRecipe(store, undefined, filter);
     }
     store.commit(s => { s.pixels = stamp.pixels; }, { history: true });
     return "applied";
@@ -324,7 +323,7 @@ export function anchorIntoCanvas(s: SessionState): { pixels: Uint8Array; float: 
 
 export type ReplicateSelectionResult = "unchanged" | "applied" | "conflict" | "orbit-limit";
 
-export function replicateSelection(store: Store, beforeCommit?: () => void): ReplicateSelectionResult {
+export function replicateSelection(store: Store, beforeCommit?: () => void, filter?: PlacementFilter): ReplicateSelectionResult {
     const s = store.state;
     if (!s.float) return "unchanged";
 
@@ -350,14 +349,17 @@ export function replicateSelection(store: Store, beforeCommit?: () => void): Rep
     try {
         const status = applied.status();
         switch (status) {
-            case TransformApplicationStatus.Applied:
+            case TransformApplicationStatus.Applied: {
+                const placed = filter ? filter(s.pixels, applied.pixels()) : applied.pixels();
+                if (placed.every((value, i) => value === s.pixels[i])) return "unchanged";
                 if (beforeCommit) {
                     beforeCommit();
                     // Settling input can re-lift a selection; apply to its committed source.
-                    return replicateSelection(store);
+                    return replicateSelection(store, undefined, filter);
                 }
-                store.commit(state => { state.pixels = applied.pixels(); }, { history: true });
+                store.commit(state => { state.pixels = placed; }, { history: true });
                 return "applied";
+            }
             case TransformApplicationStatus.Unchanged:
                 return "unchanged";
             case TransformApplicationStatus.Conflict:

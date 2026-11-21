@@ -155,6 +155,62 @@ test("local stamp settles an accepted held input before reading the committed so
     expect(store.state.pixels[5 + 1]).toBe(1);
 });
 
+// A placement filter that keeps the cell at `index` at its previous colour.
+function keepCell(index: number) {
+    return (before: Uint8Array, after: Uint8Array) => {
+        const kept = after.slice();
+        kept[index] = before[index];
+        return kept;
+    };
+}
+
+describe("placement filter", () => {
+    test("local stamp places the copies the filter allows", () => {
+        const float = makeFloat([{ x: 0, y: 1, v: 2 }]);
+        const recipe = { ...gridRecipeFromFloat(float), right: 2 };
+        const store = new Store(rowSession(5, 3, { pixels: filledPixels(5, 3, 1), float,
+            recipes: [recipe], activeRecipeId: recipe.id }));
+
+        expect(applyGridRecipe(store, undefined, keepCell(5 + 1))).toBe("applied");
+
+        expect(store.state.pixels[5 + 1]).toBe(1);
+        expect(store.state.pixels[5 + 2]).toBe(2);
+    });
+
+    test("a local stamp whose every copy is filtered out records nothing", () => {
+        const float = makeFloat([{ x: 0, y: 1, v: 2 }]);
+        const recipe = { ...gridRecipeFromFloat(float), right: 1 };
+        const pixels = filledPixels(5, 3, 1);
+        const store = new Store(rowSession(5, 3, { pixels, float, recipes: [recipe], activeRecipeId: recipe.id }));
+        const history = vi.fn();
+        store.setHistoryFn(history);
+        const settle = vi.fn();
+
+        expect(applyGridRecipe(store, settle, before => before)).toBe("unchanged");
+
+        expect(store.state.pixels).toBe(pixels);
+        expect(settle).not.toHaveBeenCalled();
+        expect(history).not.toHaveBeenCalled();
+    });
+
+    test("a global stamp whose every copy is filtered out records nothing", () => {
+        const pixels = filledPixels(5, 1, 1);
+        const store = new Store(rowSession(5, 1, {
+            pixels, float: makeFloat([{ x: 0, y: 0, v: 2 }]),
+            mirrors: [{ id: "v", enabled: true, types: ["V"], x: 2, y: 0 }],
+        }));
+        const history = vi.fn();
+        store.setHistoryFn(history);
+        const settle = vi.fn();
+
+        expect(replicateSelection(store, settle, before => before)).toBe("unchanged");
+
+        expect(store.state.pixels).toBe(pixels);
+        expect(settle).not.toHaveBeenCalled();
+        expect(history).not.toHaveBeenCalled();
+    });
+});
+
 describe("saved recipe lifecycle", () => {
     test("apply ignores off-chart conflicts and keeps the chart unchanged", () => {
         const source = makeFloat([

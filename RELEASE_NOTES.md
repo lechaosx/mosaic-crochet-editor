@@ -9,6 +9,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 - On touch screens a background tab is selected before it can be closed.
 - With no pattern open, the workspace says what each tab keeps and what all tabs share, and About offers New, Open and Example before its release notes.
 - A wrapped current Crochet instruction sits in a box as wide as its lines instead of one with empty space at the sides.
+- While Prevent impossible overlay placements is on, Stamp copies skip impossible overlay placements and show the same Protected notice as drawing.
 
 ## 20 November 2026
 

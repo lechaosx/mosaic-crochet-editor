@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB, storedRecovery } from "./_helpers";
+import { addGlobalMirror, bootApp, cellCoord, clickCell, pixelRGB, storedHistoryLength, storedRecovery } from "./_helpers";
 
 test("guidance opacity changes chart markers without changing placement rules", async ({ page }) => {
     await bootApp(page);
@@ -51,4 +51,40 @@ test("prevention blocks a new impossible mark but allows its correction", async 
     await page.keyboard.press("Escape");
     await clickCell(page, 1, 0);
     expect((await storedRecovery(page)).document.pixels).toBe(before);
+});
+
+test("prevention keeps local Stamp copies off impossible cells", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 1);
+    await page.locator("#recipe-up").fill("1");
+    await page.locator("#recipe-up").press("Enter");
+    const before = (await storedRecovery(page)).document.pixels;
+    const snapshots = await storedHistoryLength(page);
+
+    await page.locator("#recipe-apply").click();
+    expect((await storedRecovery(page)).document.pixels).toBe(before);
+    expect(await storedHistoryLength(page)).toBe(snapshots);
+    await expect(page.locator("#status-feedback")).toContainText("Protected");
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.locator("label:has(#lock-invalid)").click();
+    await page.keyboard.press("Escape");
+    await page.locator("#recipe-apply").click();
+    expect((await storedRecovery(page)).document.pixels).not.toBe(before);
+});
+
+test("prevention keeps global mirror Stamp copies off impossible cells", async ({ page }) => {
+    await bootApp(page);
+    await page.keyboard.press("p");
+    await clickCell(page, 2, 8, { button: "right" });
+    await page.keyboard.press("s");
+    await clickCell(page, 2, 8);
+    await page.locator("#btn-sym-toggle").click();
+    await addGlobalMirror(page, "Horizontal");
+    const before = (await storedRecovery(page)).document.pixels;
+
+    await page.locator("#replicate-selection").click();
+    expect((await storedRecovery(page)).document.pixels).toBe(before);
+    await expect(page.locator("#status-feedback")).toContainText("Protected");
 });

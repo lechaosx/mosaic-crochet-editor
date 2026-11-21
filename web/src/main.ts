@@ -32,7 +32,7 @@ import { SelectMode, liftCells, shiftedFloatMask, anchorIntoCanvas,
          commitSelectRect, commitWandAt, selectAll, deselect, anchorFloat,
          deleteFloat, clipFloatToCanvas, replicateSelection, createGridRecipe,
          activateGridRecipe, deleteGridRecipe, activeGridRecipe, applyGridRecipe, gridRecipeStamp,
-         syncActiveGridRecipe, selectionSourceIsValid } from "@mosaic/logic/selection";
+         syncActiveGridRecipe, selectionSourceIsValid, type PlacementFilter } from "@mosaic/logic/selection";
 import { copyFloat, cutFloat, pasteClipboard, clipboardCellCount } from "@mosaic/logic/clipboard";
 import { OverlayAction, paintOps } from "@mosaic/logic/paint";
 import { MAX_CANVAS_DIMENSION, patternChangeSummary, hasDrawing, samePatternGeometry } from "@mosaic/logic/pattern";
@@ -580,7 +580,7 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         if (outcome.reason !== "Outside pattern") showGestureFeedback(outcome.reason);
         return;
     }
-    if (outcome.protectedSkipped) showGestureFeedback("Protected · Settings");
+    if (outcome.protectedSkipped) showGestureFeedback(PROTECTED_FEEDBACK);
     const support = g.action.tool === "overlay" ? overlayInwardCell(pattern, x, y) : null;
     const yarnIndex = support?.length ? support[1] * pattern.canvasWidth + support[0] : y * pattern.canvasWidth + x;
     const yarn = outcome.after[yarnIndex];
@@ -597,6 +597,18 @@ function paintAt(clientX: number, clientY: number, g: Extract<Gesture, { kind: "
         store.commit(state => { state.pixels = pixels; }, { persist: false });
     }
     updateCoordinates(x, y);
+}
+
+const PROTECTED_FEEDBACK = "Protected · Settings";
+
+// Edits that place copied cells keep drawing's protection and notice.
+function placementFilter(): PlacementFilter | undefined {
+    if (!preferences.lockInvalid) return undefined;
+    return (before, after) => {
+        const placed = lockAlwaysInvalid(store.state.pattern, before, after);
+        if (!arraysEqual(placed, after)) ui.setCanvasFeedback(PROTECTED_FEEDBACK);
+        return placed;
+    };
 }
 
 function lockAlwaysInvalid(p: PatternState, before: Uint8Array, after: Uint8Array): Uint8Array {
@@ -710,7 +722,7 @@ function onTransformPopoverToggle(open: boolean) {
 }
 
 function onReplicateSelection() {
-    const result = replicateSelection(store, gesture || keyboardMove ? finishAuthoredInput : undefined);
+    const result = replicateSelection(store, gesture || keyboardMove ? finishAuthoredInput : undefined, placementFilter());
     if (result === "conflict") {
         ui.setTransformError("Stamp failed: different colours claim the same transformed destination.");
     } else if (result === "orbit-limit") {
@@ -813,12 +825,13 @@ function onApplyRecipe() {
             if (error) { refreshRecipeUi(/overlap/.test(error) ? null : error); return; }
             syncActiveGridRecipe(projected);
         }
-        result = gridRecipeStamp(projected).result;
+        result = gridRecipeStamp(projected, placementFilter()).result;
         if (result === "applied") {
             finishAuthoredInput();
-            result = applyGridRecipe(store);
+            result = applyGridRecipe(store, undefined, placementFilter());
         }
-    } else result = applyGridRecipe(store, recipeEditBaseline || gesture || keyboardMove ? finishAuthoredInput : undefined);
+    } else result = applyGridRecipe(store, recipeEditBaseline || gesture || keyboardMove ? finishAuthoredInput : undefined,
+        placementFilter());
     refreshRecipeUi(result === "no-selection" ? "Select cells for this selection first."
         : null);
 }
