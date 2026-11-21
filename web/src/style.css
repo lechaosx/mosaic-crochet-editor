@@ -1219,6 +1219,12 @@ body:has(#empty-workspace:not([hidden])) #menu-app { padding-top: 0; border-top:
   overflow-x: hidden;
   overflow-y: auto;
 }
+/* A wide chart's list holds thousands of long rows; growing it would
+   otherwise lay all of them out again. */
+#instructions-units > li {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2.75rem;
+}
 
 .instructions-unit {
   --unit-size: max(var(--hit), calc(var(--font-sm) * 1.4 + 2 * var(--space-2)));
