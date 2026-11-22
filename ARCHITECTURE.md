@@ -55,6 +55,7 @@ Only the editing window writes or deletes browser records, and it reads them onl
 - A single state owner governs committed editor state; derived render data comes only from that state, rebuilt or updated from the owner's change reports, and nothing else edits it. — **your decision**
 - Pointer types share one interaction model. Mouse, touch, and pen may have different accelerators, but they do not have separate editing semantics. — **Agent's choice**
 - A floating selection is an editor layer over the chart. Saving and instruction generation consume a composed snapshot without mutating that live editing state. — **your decision**
+- Crochet instruction generation runs off the main thread; each Crochet session owns and terminates its workers, and only the session that requested a result applies it. — **joint**
 
 ## Safety and scale
 
