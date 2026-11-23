@@ -105,6 +105,9 @@ export function changedCells(before: Uint8Array, after: Uint8Array, width: numbe
         if (x < minX) minX = x;
         if (x > maxX) maxX = x;
     };
+    // Once the changes span every column, only the last changed cell is left
+    // to find, from the end: a whole-chart change costs about one row.
+    const spansRows = () => minX === 0 && maxX === width - 1;
     let index = 0;
     // Four cells per comparison where alignment allows: this scan covers the
     // whole canvas on every stroke step.
@@ -115,10 +118,15 @@ export function changedCells(before: Uint8Array, after: Uint8Array, width: numbe
         for (let word = 0; word < words; word++) {
             if (before32[word] === after32[word]) continue;
             for (let i = word * 4; i < word * 4 + 4; i++) if (before[i] !== after[i]) differs(i);
+            if (spansRows()) break;
         }
         index = words * 4;
     }
-    for (; index < before.length; index++) if (before[index] !== after[index]) differs(index);
+    for (; index < before.length && !spansRows(); index++) if (before[index] !== after[index]) differs(index);
+    if (spansRows()) {
+        last = before.length - 1;
+        while (before[last] === after[last]) last--;
+    }
     if (first < 0) return null;
     const top = Math.floor(first / width);
     return { x: minX, y: top, width: maxX - minX + 1, height: Math.floor(last / width) - top + 1 };

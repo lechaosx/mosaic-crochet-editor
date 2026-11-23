@@ -56,7 +56,7 @@ describe("highlight plan updates", () => {
     test("changed cells are bounded exactly, at any byte alignment", () => {
         fc.assert(fc.property(
             fc.integer({ min: 1, max: 9 }), fc.integer({ min: 1, max: 9 }), fc.integer({ min: 0, max: 3 }),
-            fc.array(fc.nat(), { maxLength: 4 }),
+            fc.array(fc.nat(), { maxLength: 40 }),
             (W, H, offset, picks) => {
                 const buffer = new Uint8Array(W * H + offset);
                 const before = buffer.subarray(offset);
