@@ -3,7 +3,7 @@ import fc from "fast-check";
 import { PlanCell, initialize_round_pattern } from "@mosaic/wasm";
 import { Store } from "@mosaic/logic/store";
 import type { PatternState } from "@mosaic/logic/types";
-import { CELL_CROSS, CELL_CROSS_B, CELL_WARNING, packChartCells, repackChartCells } from "../src/chart-cells";
+import { CELL_CROSS, CELL_CROSS_B, CELL_WARNING, guidanceChange, packChartCells, repackChartCells } from "../src/chart-cells";
 import { forEachPlanGlyph, packInstructionCoordinates } from "../src/instruction-coordinates";
 import { rowSession } from "./_helpers";
 
@@ -136,6 +136,34 @@ describe("repackChartCells", () => {
                 }
                 expect(cells).toEqual(packChartCells(store.visible, W, H, store.plan.cells, null));
             }
+        }), { numRuns: 500 });
+    });
+
+    const cellList = fc.array(fc.record({ x: fc.nat(), y: fc.nat() }), { maxLength: 12 });
+
+    it("rewriting the region of a guidance change keeps the cells of a full pack with the new guidance", () => {
+        const edit = fc.record({ x: fc.nat(), y: fc.nat(), yarn: fc.constantFrom<1 | 2>(1, 2) });
+        const yarns = fc.array(fc.constantFrom<1 | 2>(1, 2), { minLength: 64, maxLength: 64 });
+        fc.assert(fc.property(chart, yarns, cellList, cellList, edit, (pattern, yarns, before, after, { x, y, yarn }) => {
+            const { canvasWidth: W, canvasHeight: H } = pattern;
+            const pixels = pattern.mode === "row" ? new Uint8Array(W * H).fill(1)
+                : initialize_round_pattern(W, H, W, H, 0, 0, pattern.rounds);
+            pixels.forEach((value, i) => { if (value !== 0) pixels[i] = yarns[i]; });
+            const store = new Store(rowSession(W, H, { pattern, pixels }));
+            const guidance = (cells: { x: number; y: number }[]) =>
+                packInstructionCoordinates(cells.flatMap(({ x, y }) => [x % (W + 2) - 1, y % (H + 2) - 1]), W);
+            const from = guidance(before), to = guidance(after);
+            const cells = packChartCells(store.visible, W, H, store.plan.cells, from);
+            const version = store.planVersion;
+            store.commit(state => {
+                const next = state.pixels.slice();
+                if (next[(y % H) * W + x % W] !== 0) next[(y % H) * W + x % W] = yarn;
+                state.pixels = next;
+            });
+            const change = guidanceChange(store.planChangeSince(version), from, to, W, H);
+            if (change === "all") throw new Error("A guidance change between guided rows repacked everything");
+            if (change) repackChartCells(cells, store.visible, W, H, store.plan.cells, to, change);
+            expect(cells).toEqual(packChartCells(store.visible, W, H, store.plan.cells, to));
         }), { numRuns: 500 });
     });
 });

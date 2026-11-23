@@ -51,6 +51,31 @@ export function repackChartCells(
     return [(top + 1) * stride, (bottom + 2) * stride];
 }
 
+// The region of a W × H chart to rewrite when the guidance changes from
+// `before` to `after` along with the pixels and plan of `change`: glyphs
+// appear or disappear only on cells either guidance holds, or anywhere when
+// either shows every glyph. Guided border cells are rewritten with the chart
+// cells next to them.
+export function guidanceChange(
+    change: CellRect | "all" | null,
+    before: PackedInstructionCoordinates | null, after: PackedInstructionCoordinates | null,
+    W: number, H: number,
+): CellRect | "all" | null {
+    if (!before || !after || change === "all") return "all";
+    const union = [change, before.bounds, after.bounds].reduce<CellRect | null>((union, rect) => {
+        if (!union || !rect) return union ?? rect;
+        const x = Math.min(union.x, rect.x), y = Math.min(union.y, rect.y);
+        return { x, y,
+            width: Math.max(union.x + union.width, rect.x + rect.width) - x,
+            height: Math.max(union.y + union.height, rect.y + rect.height) - y };
+    }, null);
+    if (!union) return null;
+    const clamp = (value: number, size: number) => Math.min(Math.max(value, 0), size - 1);
+    const x = clamp(union.x, W), y = clamp(union.y, H);
+    return { x, y,
+        width: clamp(union.x + union.width - 1, W) - x + 1, height: clamp(union.y + union.height - 1, H) - y + 1 };
+}
+
 // The flags a glyph sets on its outward cell, indexed by its warning bit and the
 // yarn under the ✕, which contrasts with that yarn and is omitted on a hole.
 // Looked up rather than branched on: a noisy chart defeats branch prediction.

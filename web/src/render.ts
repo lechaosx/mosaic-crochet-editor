@@ -10,7 +10,7 @@ import type { CellMask } from "@mosaic/logic/selection";
 import { computeHighlightPlan } from "@mosaic/logic/highlight-plan";
 import { AppPreferences } from "./preferences";
 import { forEachPlanGlyph, type PackedInstructionCoordinates } from "./instruction-coordinates";
-import { CELL_CROSS, CELL_WARNING, packChartCells, repackChartCells } from "./chart-cells";
+import { CELL_CROSS, CELL_WARNING, guidanceChange, packChartCells, repackChartCells } from "./chart-cells";
 import { drawChartLayer, type ChartFrame, type ChartLayer } from "./chart-layer";
 
 const ZOOM_MIN     = 2;
@@ -125,8 +125,8 @@ export interface RendererState {
     faviconDrawn: { pixels: Uint8Array; width: number; height: number; colorA: string | null; colorB: string | null } | null;
     // Null when the browser cannot provide one; the overlay still renders.
     chart:         ChartLayer | null;
-    // Repacked where the store's plan version reports a change, and whole for
-    // other guidance.
+    // Repacked where the store's plan version reports a change or the
+    // guidance changes glyphs.
     chartCells: ChartCells | null;
     // Cells replaced whole, by plan version, for when the store shows that
     // version again, as it does another session's. Never repacked: they go
@@ -609,9 +609,10 @@ function rerender(vp: Viewport, ctx: CanvasRenderingContext2D, rs: RendererState
 // rewritten in place since the previous call.
 function chartCells(rs: RendererState, store: Store): Pick<ChartFrame, "cells" | "changed"> {
     const cached = rs.chartCells, guidance = rs.instructionGuidanceCoords;
-    const change = cached && cached.guidance === guidance ? store.planChangeSince(cached.version) : "all";
-    if (change === null) return { cells: cached!.cells, changed: null };
     const { canvasWidth: W, canvasHeight: H } = store.state.pattern;
+    const change = !cached ? "all" : cached.guidance === guidance ? store.planChangeSince(cached.version)
+        : guidanceChange(store.planChangeSince(cached.version), cached.guidance, guidance, W, H);
+    if (change === null) return { cells: cached!.cells, changed: null };
     const { visible, plan } = store;
     let cells: Uint8Array, changed: ChartFrame["changed"] = null;
     if (change === "all") {

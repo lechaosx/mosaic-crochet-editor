@@ -51,6 +51,8 @@ export function hasUnrepresentedWarning(
 
 export interface PackedInstructionCoordinates {
     readonly values: Uint32Array;
+    // The smallest rectangle holding every coordinate; null when there are none.
+    readonly bounds: CellRect | null;
     has(x: number, y: number): boolean;
     forEach(callback: (x: number, y: number) => void): void;
 }
@@ -70,8 +72,15 @@ export function packInstructionCoordinates(
     }
     const packed = length === values.length ? values : values.slice(0, length);
     const encode = (x: number, y: number) => (y + 1) * stride + x + 1;
+    let minX = Infinity, maxX = -Infinity;
+    for (let index = 0; index < coords.length; index += 2) {
+        minX = Math.min(minX, coords[index]);
+        maxX = Math.max(maxX, coords[index]);
+    }
+    const top = Math.floor(packed[0] / stride) - 1, bottom = Math.floor(packed[packed.length - 1] / stride) - 1;
     return {
         values: packed,
+        bounds: packed.length === 0 ? null : { x: minX, y: top, width: maxX - minX + 1, height: bottom - top + 1 },
         has(x, y) {
             if (x < -1 || x > canvasWidth || y < -1) return false;
             const target = encode(x, y);
