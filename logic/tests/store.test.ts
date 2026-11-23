@@ -8,6 +8,7 @@ import { Store, visiblePixels, outOfBounds, forEachCell, isChartCell } from "../
 import type { SessionState } from "../src/store";
 import type { PatternState } from "../src/types";
 import { initialize_round_pattern } from "@mosaic/wasm";
+import { computeHighlightPlan } from "../src/highlight-plan";
 import fc from "fast-check";
 import { filledPixels, makeFloat, rowSession } from "./_helpers";
 
@@ -431,6 +432,32 @@ describe("Store derive", () => {
                 expect(derived.planChangeSince(version)).not.toBe("all");
             }
             expect(source.plan).toEqual(sourcePlan);
+        }), { numRuns: 300 });
+    });
+});
+
+describe("Store commit with a plan", () => {
+    test("a commit given its pixels' plan shows that plan and reports the change a plain commit reports", () => {
+        const rows = fc.record({
+            W: fc.integer({ min: 1, max: 8 }), H: fc.integer({ min: 1, max: 8 }),
+            yarns: fc.array(fc.constantFrom<1 | 2>(1, 2), { minLength: 64, maxLength: 64 }),
+        });
+        const edits = fc.array(fc.array(fc.nat(), { maxLength: 3 }), { minLength: 1, maxLength: 4 });
+        fc.assert(fc.property(rows, edits, ({ W, H, yarns }, edits) => {
+            const state = rowSession(W, H, { pixels: new Uint8Array(yarns.slice(0, W * H)) });
+            const given = new Store({ ...state }), computed = new Store({ ...state });
+            for (const flips of edits) {
+                const pixels = given.state.pixels.slice();
+                for (const flip of flips) pixels[flip % pixels.length] = 3 - pixels[flip % pixels.length];
+                const givenVersion = given.planVersion, computedVersion = computed.planVersion;
+                const plan = computeHighlightPlan(state.pattern, pixels);
+                given.commit(s => { s.pixels = pixels; }, { plan });
+                computed.commit(s => { s.pixels = pixels; });
+                expect(given.plan).toBe(plan);
+                expect(given.plan).toEqual(computed.plan);
+                expect(given.visible).toBe(pixels);
+                expect(given.planChangeSince(givenVersion)).toEqual(computed.planChangeSince(computedVersion));
+            }
         }), { numRuns: 300 });
     });
 });

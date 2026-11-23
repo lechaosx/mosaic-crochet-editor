@@ -1,20 +1,34 @@
 import {
     instruction_start_round, instruction_start_row, InstructionSession, InstructionUnitKind, InstructionYarn,
 } from "@mosaic/wasm";
+import {
+    changedCells, computeHighlightPlan, updateHighlightPlan, type MutableHighlightPlan,
+} from "@mosaic/logic/highlight-plan";
 import type { PatternState } from "@mosaic/logic/types";
 import type { CachedInstructionUnit, InstructionUnitSignature } from "./instruction-cache";
 
-// What an instruction worker is asked: first the chart, then units by index.
-// A unit whose stitches match `knownContentKey` is answered with its signature
-// alone, for the caller to reuse its cached text.
+// What an instruction worker is asked: first the chart, then units by index,
+// or previews if it was started for them. A unit whose stitches match
+// `knownContentKey` is answered with its signature alone, for the caller to
+// reuse its cached text.
 export type InstructionRequest =
-    | { kind: "start"; pattern: PatternState; pixels: Uint8Array }
-    | { kind: "unit"; index: number; knownContentKey: string | null };
+    | { kind: "start"; pattern: PatternState; pixels: Uint8Array; previews: boolean }
+    | { kind: "unit"; index: number; knownContentKey: string | null }
+    | { kind: "preview"; completedUnits: number | null };
 
 export type InstructionReply =
     | { index: number; unit: CachedInstructionUnit }
     | { index: number; signature: InstructionUnitSignature }
     | { error: string };
+
+// The chart as Crochet shows it with `completedUnits` worked, or whole for
+// null, and the plan of those pixels.
+export interface InstructionPreview {
+    pixels: Uint8Array;
+    plan:   MutableHighlightPlan;
+}
+
+export type PreviewReply = { preview: InstructionPreview } | { error: string };
 
 export function startInstructions(pattern: PatternState, pixels: Uint8Array): InstructionSession {
     const { canvasWidth: W, canvasHeight: H } = pattern;
@@ -46,4 +60,17 @@ export function instructionReply(
     } };
     unit.free();
     return reply;
+}
+
+// The preview of `completedUnits` for the chart `pixels` of `session`. Its plan
+// is `previous`'s, updated in place where the pixels differ.
+export function nextPreview(
+    session: InstructionSession, pattern: PatternState, pixels: Uint8Array,
+    previous: InstructionPreview | null, completedUnits: number | null,
+): InstructionPreview {
+    const next = completedUnits === null ? pixels : session.wip_pixels(completedUnits);
+    if (!previous) return { pixels: next, plan: computeHighlightPlan(pattern, next) };
+    const changed = changedCells(previous.pixels, next, pattern.canvasWidth);
+    if (changed) updateHighlightPlan(previous.plan, pattern, next, changed);
+    return { pixels: next, plan: previous.plan };
 }

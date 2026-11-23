@@ -52,10 +52,10 @@ Only the editing window writes or deletes browser records, and it reads them onl
 ## Editor and presentation boundaries
 
 - The UI uses ordinary DOM controls around a chart drawn by a WebGL2 layer, driven from TypeScript, under a Canvas 2D overlay. The GPU draws only the output of the Rust highlight plan and never decides which cells get ✕ or !. Without WebGL2 the chart area explains that the chart can't be shown; there is no fallback renderer. Design and Crochet share one persistent chart and view, while mode-specific controls and inspectors overlay the workspace without changing the chart's screen geometry. — **your decision**; the split of cells, grid and highlight glyphs on the GPU from selections, guides, seams and labels on the overlay: **Agent's choice**
-- A single state owner governs committed editor state; derived render data comes only from that state, rebuilt or updated from the owner's change reports, and nothing else edits it. — **your decision**
+- A single state owner governs committed editor state; derived render data comes only from that state, rebuilt or updated from the owner's change reports, or adopted whole together with the state it was computed from; nothing else edits it. — **your decision**
 - Pointer types share one interaction model. Mouse, touch, and pen may have different accelerators, but they do not have separate editing semantics. — **Agent's choice**
 - A floating selection is an editor layer over the chart. Saving and instruction generation consume a composed snapshot without mutating that live editing state. — **your decision**
-- Crochet instruction generation runs off the main thread; each Crochet session owns and terminates its workers, and only the session that requested a result applies it. — **joint**
+- Crochet instruction generation and previews run off the main thread; each Crochet session owns and terminates its workers, and only the session that requested a result applies it. — **joint**
 
 ## Safety and scale
 

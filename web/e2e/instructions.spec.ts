@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Worker } from "@playwright/test";
-import { bootApp, clickCell, cellCoord, chartPixel, chartPixels, pixelRGB, chooseToolVariant, failLiveProgressWrites } from "./_helpers";
+import { bootApp, clickCell, cellCoord, chartPixel, chartPixels, pixelRGB, chooseToolVariant, crochetPreviewShown, failLiveProgressWrites } from "./_helpers";
 
 // [r, g, b, a] of the chart pixel showing pattern point (x, y).
 async function patternPixel(page: Page, x: number, y: number) {
@@ -181,6 +181,7 @@ test("Pattern palette edits refresh the open Crochet chart and yarn markers", as
     await clickCell(page, 0, 8);
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
 
     const chartCell = await cellCoord(page, 0, 8);
     expect(await pixelRGB(page, chartCell.cx, chartCell.cy)).toEqual([0, 0, 0]);
@@ -212,6 +213,7 @@ test("Pattern palette edits refresh the open Crochet chart and yarn markers", as
     };
     expect(await seamPixel()).toEqual([0, 255, 0]);
     await page.locator('.instructions-unit[aria-label^="Row 9, Yarn A"]').click();
+    await crochetPreviewShown(page);
     expect(await seamPixel()).toEqual([255, 0, 255]);
 });
 
@@ -308,6 +310,7 @@ test("Crochet uses danger accents without warning prefixes or blocking progress"
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await expect(page.getByRole("button", { name: "Forward one row" })).toBeEnabled();
     await invalidUnit.click();
+    await crochetPreviewShown(page);
     await expect(invalidUnit).toHaveClass(/instructions-unit--current-invalid/);
     expect(await invalidUnit.locator("code").evaluate(el => getComputedStyle(el, "::before").content)).not.toContain("!");
     const invalidGlyphs = await page.evaluate(() =>
@@ -641,6 +644,19 @@ for (const [name, route] of [["its script", "**/instruction-worker*"], ["the was
     });
 }
 
+test("Crochet reports a chart preview that cannot be computed", async ({ page }) => {
+    await bootApp(page);
+    await page.locator("#view-crochet").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await page.locator("#view-design").click();
+    // The cached instructions need no generation worker, so only the preview worker fails to load.
+    await page.route("**/instruction-worker*", request => request.abort());
+    await page.locator("#view-crochet").click();
+    await expect(page.locator("#instructions-live-unavailable"))
+        .toHaveText("Instructions could not be generated. Reload the page to try again.");
+    await crochetPreviewShown(page);
+});
+
 test("a loaded empty round remains a single progress unit", async ({ page }) => {
     await bootApp(page);
     const chooserPromise = page.waitForEvent("filechooser");
@@ -787,6 +803,7 @@ test("Crochet marks only the current row's beginning seam", async ({ page }) => 
     const grid = await rowTopPixel();
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     const crochetGrid = await rowTopPixel();
     for (let channel = 0; channel < 3; channel++) {
         expect(Math.abs(crochetGrid[channel] - grid[channel])).toBeLessThan(4);
@@ -799,9 +816,11 @@ test("Crochet marks only the current row's beginning seam", async ({ page }) => 
     expect(first!.triangle[2][0]).toBeGreaterThan(0);
     expect(first!.triangle[2][0]).toBeLessThan(1);
     await page.locator('.instructions-unit[aria-label="Row 2, Yarn B"]').click();
+    await crochetPreviewShown(page);
     expect((await page.evaluate(() => window.__test_instruction_seam_geometry__))!.edges)
         .toEqual([[0, 7, 0, 8]]);
     await page.getByText("Alternate direction", { exact: true }).click();
+    await crochetPreviewShown(page);
     const alternate = await page.evaluate(() => window.__test_instruction_seam_geometry__);
     expect(alternate!.edges).toEqual([[9, 7, 9, 8]]);
     expect(alternate!.triangle[0][0]).toBe(9);
@@ -821,6 +840,7 @@ test("a complete round marks the shared seam and points into its first stitch", 
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await page.locator('.instructions-unit[aria-label^="Round 3,"]').click();
+    await crochetPreviewShown(page);
     const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
     expect(seam!.edges).toEqual([[2, 0, 2, 1]]);
     expect(seam!.triangle[0][0]).toBe(2);
@@ -832,6 +852,7 @@ test("a complete round marks the shared seam and points into its first stitch", 
             .__test_instruction_guidance__?.filtered)).toBe(true);
     await page.locator('.instructions-unit[aria-label^="Round 2,"]').click();
     await page.getByText("Alternate direction", { exact: true }).click();
+    await crochetPreviewShown(page);
     const reversed = await page.evaluate(() => window.__test_instruction_seam_geometry__);
     expect(reversed!.edges).toEqual([[3, 1, 3, 2]]);
     expect(reversed!.triangle[2][0]).toBeGreaterThan(3);
@@ -852,6 +873,7 @@ for (const extent of ["Half", "Quarter"]) {
         await page.locator("#view-crochet").click();
         await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
         await page.locator('.instructions-unit[aria-label^="Round 3,"]').click();
+        await crochetPreviewShown(page);
         const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
         expect(await endingPixel()).toEqual(plainEnd);
         expect(seam!.edges).toEqual([[0, 0, 1, 0]]);
@@ -866,6 +888,7 @@ test("the seam triangle rotates with its cell and is painted in the accent colou
     await bootApp(page);
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     const geometry = async () => {
         const { x, y, ...shape } = await page.evaluate(() => {
             const seam = window.__test_instruction_seam_geometry__!;
@@ -906,6 +929,7 @@ test("the triangle and seam have a continuous filled junction", async ({ page })
     await bootApp(page);
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     const anchor = await page.evaluate(() => {
         const points = window.__test_instruction_seam_geometry__!.screenTriangle;
         const rect = document.getElementById("canvas")!.getBoundingClientRect();
@@ -930,6 +954,7 @@ test("the joined seam triangle keeps its cell proportions through zoom", async (
     await bootApp(page);
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     const shape = async () => {
         const { x, y, ...proportions } = await page.evaluate(() => {
             const points = window.__test_instruction_seam_geometry__!.screenTriangle;
@@ -972,6 +997,7 @@ test("a single-cell Quarter has only its beginning seam and an inward triangle",
     const plainEnd = await endingPixel();
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     expect(await endingPixel()).toEqual(plainEnd);
     const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
     expect(seam!.edges).toEqual([[0, 0, 0, 1]]);
@@ -989,6 +1015,7 @@ test("an adjacent first and last stitch share a seam only in a Full round", asyn
     await page.keyboard.press("Escape");
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     expect((await page.evaluate(() => window.__test_instruction_seam_geometry__))!.edges)
         .toEqual([[0, 1, 0, 2]]);
     await page.getByRole("tab", { name: "Design", exact: true }).click();
@@ -999,6 +1026,7 @@ test("an adjacent first and last stitch share a seam only in a Full round", asyn
     await page.locator("#edit-rounds").fill("1");
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     const seam = await page.evaluate(() => window.__test_instruction_seam_geometry__);
     expect(seam!.edges).toEqual([[1, 1, 2, 1]]);
     expect(seam!.triangle[0][1]).toBe(1);
@@ -1141,6 +1169,7 @@ test("Crochet renders through the current row and no future rows", async ({ page
     await clickCell(page, 4, 8);
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    await crochetPreviewShown(page);
     expect(await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
             .__test_instruction_guidance__?.filtered)).toBe(true);
@@ -1152,6 +1181,7 @@ test("Crochet renders through the current row and no future rows", async ({ page
     expect(await pixelRGB(page, currentRow1.cx, currentRow1.cy)).not.toEqual([22, 22, 24]);
 
     await page.getByRole("button", { name: "Forward one row" }).click();
+    await crochetPreviewShown(page);
     const currentGuidance = await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: {
             validGlyphCoords: Array<{ x: number; y: number }>;
@@ -1166,13 +1196,39 @@ test("Crochet renders through the current row and no future rows", async ({ page
     expect(await pixelRGB(page, currentRow2.cx, currentRow2.cy)).not.toEqual([22, 22, 24]);
 
     await page.getByRole("button", { name: "Back one row" }).click();
+    await crochetPreviewShown(page);
     const futureAgain = await cellCoord(page, 4, rowCount - 2);
     expect(await pixelRGB(page, futureAgain.cx, futureAgain.cy)).toEqual([22, 22, 24]);
 
     await page.getByRole("button", { name: "Pattern overview", exact: true }).click();
+    await crochetPreviewShown(page);
     expect(await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: { filtered: boolean } })
             .__test_instruction_guidance__?.filtered)).toBe(false);
+});
+
+test("rapid Crochet navigation previews the row it ends on", async ({ page }) => {
+    await bootApp(page);
+    await clickCell(page, 4, 5);
+    await page.locator("#view-crochet").click();
+    await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
+    const rowCount = await page.locator('.instructions-unit[aria-label^="Row"]').count();
+    await page.evaluate(() => {
+        const button = (label: string) => document.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+        for (let step = 0; step < 6; step++) button("Forward one row").click();
+        for (let step = 0; step < 2; step++) button("Back one row").click();
+    });
+    await expect(page.locator('.instructions-unit[aria-label="Row 5, Yarn A"]')).toHaveAttribute("aria-current", "step");
+    await page.getByRole("button", { name: "Fit view" }).click();
+    await crochetPreviewShown(page);
+    const current = rowCount - 5;
+    expect(await page.evaluate(() =>
+        (window as typeof window & { __test_instruction_guidance__?: { validGlyphCoords: Array<{ x: number; y: number }> } })
+            .__test_instruction_guidance__?.validGlyphCoords)).toEqual([{ x: 4, y: current }]);
+    const currentCell = await cellCoord(page, 0, current);
+    const futureCell = await cellCoord(page, 0, current - 1);
+    expect(await pixelRGB(page, currentCell.cx, currentCell.cy)).not.toEqual([22, 22, 24]);
+    expect(await pixelRGB(page, futureCell.cx, futureCell.cy)).toEqual([22, 22, 24]);
 });
 
 test("Crochet shows current-round guidance before the final round", async ({ page }) => {
@@ -1186,6 +1242,7 @@ test("Crochet shows current-round guidance before the final round", async ({ pag
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("button", { name: "Copy instructions" })).toBeEnabled();
     await page.getByRole("button", { name: "Forward one round" }).click();
+    await crochetPreviewShown(page);
 
     const guidance = await page.evaluate(() =>
         (window as typeof window & { __test_instruction_guidance__?: {

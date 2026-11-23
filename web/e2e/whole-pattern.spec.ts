@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { bootApp, cellCoord, clickCell, pixelRGB, storedHistory, storedLiveProgress, storedRecovery } from "./_helpers";
+import { bootApp, cellCoord, clickCell, crochetPreviewShown, pixelRGB, storedHistory, storedLiveProgress, storedRecovery } from "./_helpers";
 
 for (const extent of ["Rows", "Full", "Half", "Quarter"] as const) {
     test(`${extent} Whole reveals warnings outside generated work using project Danger`, async ({ page }) => {
@@ -29,6 +29,7 @@ for (const extent of ["Rows", "Full", "Half", "Quarter"] as const) {
         await expect(page.locator('.instructions-unit[aria-label^="Row"], .instructions-unit[aria-label^="Round"]'))
             .toHaveCount(rows ? height : 3);
         await whole.click();
+        await crochetPreviewShown(page);
         expect(await page.evaluate(() => (window as typeof window & {
             __test_instruction_guidance__?: { invalidGlyphCoords: { x: number; y: number }[] };
         }).__test_instruction_guidance__!.invalidGlyphCoords)).toContainEqual(warning);
@@ -43,6 +44,7 @@ for (const extent of ["Rows", "Full", "Half", "Quarter"] as const) {
         await page.keyboard.press("Escape");
         const last = page.locator('.instructions-unit[aria-label^="Row"], .instructions-unit[aria-label^="Round"]').last();
         await last.click();
+        await crochetPreviewShown(page);
         expect(await page.evaluate(() => (window as typeof window & {
             __test_instruction_guidance__?: { filtered: boolean; invalidGlyphCoords: { x: number; y: number }[] };
         }).__test_instruction_guidance__!)).toMatchObject({ filtered: true, invalidGlyphCoords: [] });
@@ -103,6 +105,7 @@ test("Pattern overview is transient progress and wraps around real rows", async 
     const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await expect(whole).toBeVisible();
     await whole.click();
+    await crochetPreviewShown(page);
     await expect(whole).toHaveAttribute("aria-current", "step");
     await expect(page.locator("#instructions-live-progress")).toHaveText("Pattern overview");
     expect(await storedLiveProgress(page)).toEqual(saved);
@@ -132,6 +135,7 @@ test("the final real row keeps focused guidance and descriptive hover text", asy
     await page.locator("#view-crochet").click();
     const last = page.getByRole("button", { name: "Row 9, Yarn A", exact: true });
     await last.click();
+    await crochetPreviewShown(page);
     const guidance = await page.evaluate(() => (window as typeof window & {
         __test_instruction_guidance__?: { filtered: boolean; validGlyphCoords: { x: number; y: number }[] };
     }).__test_instruction_guidance__!);
@@ -141,6 +145,7 @@ test("the final real row keeps focused guidance and descriptive hover text", asy
     await expect(last).toHaveAttribute("title", "Row 9, Yarn A");
     const whole = page.getByRole("button", { name: "Pattern overview", exact: true });
     await whole.click();
+    await crochetPreviewShown(page);
     const complete = await page.evaluate(() => (window as typeof window & {
         __test_instruction_guidance__?: { filtered: boolean; validGlyphCoords: { x: number; y: number }[] };
     }).__test_instruction_guidance__!);

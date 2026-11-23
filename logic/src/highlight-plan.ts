@@ -66,12 +66,17 @@ export function computeHighlightPlan(pattern: PatternState, visible: Uint8Array)
     return { cells, marked, invalid };
 }
 
+// The cells whose plan can change when the visible pixels of `changed` do.
+export function highlightPlanRegion(changed: CellRect, pattern: PatternState): CellRect {
+    return growRect(changed, REACH, pattern);
+}
+
 // Recomputes the plan of the cells within reach of `changed`, which holds
 // every cell whose visible pixel changed, and returns that region.
 export function updateHighlightPlan(
     plan: MutableHighlightPlan, pattern: PatternState, visible: Uint8Array, changed: CellRect,
 ): CellRect {
-    const region = growRect(changed, REACH, pattern);
+    const region = highlightPlanRegion(changed, pattern);
     const next = planCells(pattern, visible, region);
     const { cells } = plan;
     let { marked, invalid } = plan;

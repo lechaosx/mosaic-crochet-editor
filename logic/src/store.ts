@@ -11,7 +11,7 @@ import { Tool, ToolVariants, PatternState, Float, MirrorCenter, GridRecipe } fro
 import { emptyGridRecipe, normalizeActiveRecipeId } from "./grid-recipes";
 import { samePatternGeometry } from "./pattern";
 import {
-    changedCells, computeHighlightPlan, updateHighlightPlan,
+    changedCells, computeHighlightPlan, highlightPlanRegion, updateHighlightPlan,
     type CellRect, type HighlightPlan, type MutableHighlightPlan,
 } from "./highlight-plan";
 
@@ -46,6 +46,9 @@ export interface CommitOpts {
     render?:    boolean;   // call the registered renderer (default: true)
     history?:   boolean;   // push snapshot to undo stack  (default: false)
     persist?:   boolean;   // write to localStorage        (default: true)
+    // The plan of the committed visible pixels, already computed as
+    // `computeHighlightPlan` computes it, in place of updating the plan.
+    plan?:      MutableHighlightPlan;
 }
 
 export type RenderFn   = (store: Store) => void;
@@ -171,7 +174,7 @@ export class Store {
         this._state.activeRecipeId = normalizeActiveRecipeId(
             this._state.recipes, this._state.activeRecipeId, this._state.float,
         );
-        this.updatePlan();
+        this.updatePlan(opts?.plan);
         if (opts?.history)            this._historyFn?.(this._state);
         if (opts?.render  !== false)  this._renderer?.(this);
         if (opts?.persist !== false)  this._persistFn?.(this._state);
@@ -234,7 +237,7 @@ export class Store {
         this.advanceVersion(null);
     }
 
-    private updatePlan(): void {
+    private updatePlan(plan?: MutableHighlightPlan): void {
         const { pattern, pixels, float } = this._state;
         if (!samePatternGeometry(pattern, this._planSource.pattern)) return this.rebuildPlan();
         if (pixels === this._planSource.pixels && float === this._planSource.float) return;
@@ -242,7 +245,12 @@ export class Store {
         const visible = visiblePixels(this._state);
         const changed = changedCells(this._visible, visible, pattern.canvasWidth);
         this._visible = visible;
-        if (changed) this.advanceVersion(updateHighlightPlan(this._plan, pattern, visible, changed));
+        if (plan) this._plan = plan;
+        if (changed) {
+            this.advanceVersion(plan
+                ? highlightPlanRegion(changed, pattern)
+                : updateHighlightPlan(this._plan, pattern, visible, changed));
+        }
     }
 
     private advanceVersion(change: CellRect | null): void {

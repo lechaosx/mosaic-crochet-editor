@@ -2,6 +2,10 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 23 November 2026
+
+- Large charts freeze far less while moving between Crochet rows or rounds, as each chart preview is computed in the background.
+
 ## 22 November 2026
 
 - Global Mirror is renamed Pattern Mirror, since its mirrors belong to the open pattern rather than to all patterns.

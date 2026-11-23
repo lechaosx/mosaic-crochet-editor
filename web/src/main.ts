@@ -1,8 +1,7 @@
 import { lock_invalid_row, lock_invalid_round, transformed_target_indices,
          overlay_target_available_row, overlay_target_available_round,
          overlay_inward_cell_row, overlay_inward_cell_round,
-         initialize_row_pattern,
-         instruction_wip_row, instruction_wip_round } from "@mosaic/wasm";
+         initialize_row_pattern } from "@mosaic/wasm";
 import { Tool, ToolVariants, defaultToolVariants, PatternState, SymKey, Float, MirrorCenter, GridRecipe } from "@mosaic/logic/types";
 import { resolveToolInput, resolveMoveInput, type PaintAction, type ToolAction } from "@mosaic/logic/tool-input";
 import { makeViewport, makeRendererState, observeCanvasResize, type ViewState,
@@ -23,6 +22,7 @@ import { becomeEditor } from "./editor-lock";
 import { mountUI, UIHandle, SelectionMoveMode, InstructionOverviewUnit } from "./ui";
 import type { InstructionCache, CachedInstructionUnit } from "./instruction-cache";
 import { generateInstructions } from "./instruction-generation";
+import { showPreviews } from "./instruction-preview";
 import { hasUnrepresentedWarning, packInstructionCoordinates } from "./instruction-coordinates";
 import { mountGestures } from "./gesture";
 import { createChartLayer } from "./chart-layer";
@@ -1287,31 +1287,37 @@ function onInstructions() {
     instructionsPreviewStore = store.derive({ ...store.state, mirrors: [], liveMirrors: false });
     renderCanvas();
 
-    dlg.onLivePreview((completedUnits) => {
-        if (!instructionsPreviewStore) return;
-        const { pattern } = store.state;
-        const { canvasWidth: W, canvasHeight: H } = pattern;
-        const pixels = completedUnits === null
-            ? exportPixels
-            : pattern.mode === "row"
-                ? instruction_wip_row(exportPixels, W, H, completedUnits)
-                : instruction_wip_round(
-                    exportPixels, W, H,
-                    pattern.virtualWidth, pattern.virtualHeight,
-                    pattern.offsetX, pattern.offsetY, pattern.rounds,
-                    completedUnits,
-                );
-        instructionsPreviewStore.commit(
-            preview => { preview.pixels = pixels; },
-            { render: false, persist: false },
-        );
-        const selectedUnit = completedUnits === null
-            ? null
-            : previewUnits[completedUnits - 1] ?? null;
-        rs.instructionSeam = selectedUnit?.seam ? { ...selectedUnit.seam, invalid: selectedUnit.invalid } : null;
-        rs.instructionGuidanceCoords = completedUnits !== null
-            ? selectedUnit?.guidanceCoords ?? null : null;
-        renderCanvas();
+    // E2E test hook: whether the chart is yet to show the latest preview requested.
+    const markPreviewPending = (pending: boolean) => {
+        (window as unknown as { __test_crochet_preview_pending__?: boolean }).__test_crochet_preview_pending__ = pending;
+    };
+    const instructionWorker = () => new Worker(new URL("./instruction-worker.ts", import.meta.url), { type: "module" });
+    const previews = showPreviews(instructionWorker(), { pattern: store.state.pattern, pixels: exportPixels },
+        (completedUnits, { pixels, plan }) => {
+            markPreviewPending(false);
+            instructionsPreviewStore!.commit(
+                preview => { preview.pixels = pixels; },
+                { render: false, persist: false, plan },
+            );
+            const selectedUnit = completedUnits === null
+                ? null
+                : previewUnits[completedUnits - 1] ?? null;
+            rs.instructionSeam = selectedUnit?.seam ? { ...selectedUnit.seam, invalid: selectedUnit.invalid } : null;
+            rs.instructionGuidanceCoords = completedUnits !== null
+                ? selectedUnit?.guidanceCoords ?? null : null;
+            renderCanvas();
+        }, error => {
+            console.error(`The Crochet preview could not be computed: ${error}`);
+            markPreviewPending(false);
+            dlg.setFailed();
+        });
+    dlg.onClose(() => {
+        previews.stop();
+        markPreviewPending(false);
+    });
+    dlg.onLivePreview(completedUnits => {
+        markPreviewPending(true);
+        previews.request(completedUnits);
     });
 
     const { pattern } = store.state;
@@ -1391,8 +1397,7 @@ function onInstructions() {
     dlg.setBusy(true);
     dlg.setProgress(0, totalUnits);
     const previous = instructionCache;
-    const workers = Array.from({ length: Math.min(INSTRUCTION_WORKERS, totalUnits) },
-        () => new Worker(new URL("./instruction-worker.ts", import.meta.url), { type: "module" }));
+    const workers = Array.from({ length: Math.min(INSTRUCTION_WORKERS, totalUnits) }, instructionWorker);
     // Laying out the list costs more the longer it grows, so between the first
     // and the last unit it grows a few times a second rather than with each.
     let shown: ReturnType<typeof setTimeout> | null = null;

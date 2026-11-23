@@ -2,9 +2,9 @@ import type { PatternState } from "@mosaic/logic/types";
 import { cachedInstructionUnit, type CachedInstructionUnit, type InstructionCache } from "./instruction-cache";
 import type { InstructionReply, InstructionRequest } from "./instruction-units";
 
-export interface InstructionWorker {
+export interface InstructionWorker<Reply = InstructionReply> {
     postMessage(request: InstructionRequest): void;
-    onmessage: ((event: MessageEvent<InstructionReply>) => void) | null;
+    onmessage: ((event: MessageEvent<Reply>) => void) | null;
     // Called when the worker's script fails to load or throws outside a request.
     onerror: ((event: ErrorEvent) => void) | null;
     terminate(): void;
@@ -61,7 +61,7 @@ export function generateInstructions(
                 : cachedInstructionUnit(previous, shapeFingerprint, reply.index, reply.signature)!);
             if (remaining === 0) stop();
         };
-        worker.postMessage({ kind: "start", ...chart });
+        worker.postMessage({ kind: "start", ...chart, previews: false });
         request(worker);
     }
     return stop;

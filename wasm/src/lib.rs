@@ -395,6 +395,31 @@ impl InstructionSession {
         })
     }
 
+    // The chart as worked through the first `completed_units` units, one
+    // byte per canvas cell: unworked cells are transparent.
+    pub fn wip_pixels(&self, completed_units: usize) -> Vec<u8> {
+        match &self.mode {
+            InstructionMode::Row { canvas_size } => {
+                export::row_wip_pixels(&self.highlights, *canvas_size, completed_units)
+            }
+            InstructionMode::Round {
+                canvas_size,
+                virtual_size,
+                offset,
+                rounds,
+            } => export::round_wip_pixels(
+                &self.highlights,
+                *canvas_size,
+                *virtual_size,
+                *offset,
+                *rounds,
+                completed_units,
+            ),
+        }
+        .into_raw_vec_and_offset()
+        .0
+    }
+
     #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<InstructionUnit> {
         if self.index >= self.total {
@@ -542,51 +567,6 @@ pub fn instruction_start_round(
     }
 }
 
-#[wasm_bindgen]
-pub fn instruction_wip_row(
-    pixels: &[u8],
-    width: i32,
-    height: i32,
-    completed_units: usize,
-) -> Vec<u8> {
-    export::row_wip_pixels(
-        &highlights_row(pixels, width, height),
-        IVec2::new(width, height),
-        completed_units,
-    )
-    .iter()
-    .copied()
-    .collect()
-}
-
-#[wasm_bindgen]
-pub fn instruction_wip_round(
-    pixels: &[u8],
-    canvas_width: i32,
-    canvas_height: i32,
-    virtual_width: i32,
-    virtual_height: i32,
-    offset_x: i32,
-    offset_y: i32,
-    rounds: i32,
-    completed_units: usize,
-) -> Vec<u8> {
-    let canvas_size = IVec2::new(canvas_width, canvas_height);
-    let virtual_size = IVec2::new(virtual_width, virtual_height);
-    let offset = IVec2::new(offset_x, offset_y);
-    export::round_wip_pixels(
-        &highlights_round(pixels, canvas_size, virtual_size, offset, rounds),
-        canvas_size,
-        virtual_size,
-        offset,
-        rounds,
-        completed_units,
-    )
-    .iter()
-    .copied()
-    .collect()
-}
-
 #[cfg(test)]
 mod instruction_session_tests {
     use super::*;
@@ -687,29 +667,27 @@ mod instruction_session_tests {
     }
 
     #[test]
-    fn row_wip_binding_returns_the_completed_prefix() {
+    fn row_session_wip_pixels_are_the_completed_prefix() {
         let mut pixels = initialize_row_pattern(3, 3);
         pixels[2 * 3 + 1] = common::opposite_color(pixels[2 * 3 + 1]);
+        let session = instruction_start_row(&pixels, 3, 3);
 
-        assert_eq!(
-            instruction_wip_row(&pixels, 3, 3, 1),
-            vec![0, 0, 0, 0, 0, 0, 1, 1, 1],
-        );
-        assert_eq!(
-            instruction_wip_row(&pixels, 3, 3, 2),
-            vec![0, 0, 0, 2, 2, 2, 1, 2, 1],
-        );
+        assert_eq!(session.wip_pixels(1), vec![0, 0, 0, 0, 0, 0, 1, 1, 1]);
+        assert_eq!(session.wip_pixels(2), vec![0, 0, 0, 2, 2, 2, 1, 2, 1]);
     }
 
     #[test]
-    fn round_wip_binding_returns_no_authored_cells_before_round_one() {
+    fn round_session_wip_pixels_have_no_authored_cells_before_round_one() {
         let pixels = initialize_round_pattern(7, 7, 7, 7, 0, 0, 3);
+        let session = instruction_start_round(&pixels, 7, 7, 7, 7, 0, 0, 3);
 
         assert!(
-            instruction_wip_round(&pixels, 7, 7, 7, 7, 0, 0, 3, 0)
+            session
+                .wip_pixels(0)
                 .iter()
                 .all(|pixel| *pixel == common::COLOR_TRANSPARENT)
         );
+        assert_eq!(session.wip_pixels(3), pixels);
     }
 }
 

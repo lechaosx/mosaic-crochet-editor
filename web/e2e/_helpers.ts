@@ -42,6 +42,7 @@ export async function selectionHandleCoords(page: Page): Promise<{ cx: number; c
 declare global {
     interface Window {
         __test_matrix__?: DOMMatrix;
+        __test_crochet_preview_pending__?: boolean;
         __test_instruction_seam_geometry__?: {
             edges: number[][];
             triangle: number[][];
@@ -49,6 +50,12 @@ declare global {
             outline: number[][];
         } | null;
     }
+}
+
+// Waits until the Crochet chart shows the preview of the latest row, round or
+// overview selected: it is computed off the main thread.
+export async function crochetPreviewShown(page: Page) {
+    await page.waitForFunction(() => !window.__test_crochet_preview_pending__);
 }
 
 // CSS-px coord of cell (x, y)'s centre on the rendered canvas.
