@@ -150,16 +150,14 @@ pub fn row_work_sequence_at(
 }
 
 pub fn row_wip_pixels(
-    finished: &Array2<u8>,
+    highlights: &Array2<u8>,
     canvas_size: IVec2,
     completed_units: usize,
 ) -> Array2<u8> {
-    let mut highlights = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
-    common::compute_row_highlights(canvas_size, finished, &mut highlights);
     let mut wip = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
 
     for row_index in 0..completed_units.min(canvas_size.y as usize) {
-        for step in row_work_at(&highlights, canvas_size, false, row_index) {
+        for step in row_work_at(highlights, canvas_size, false, row_index) {
             wip[[step.worked_coord.y as usize, step.worked_coord.x as usize]] =
                 common::natural_color_row(canvas_size.y, step.worked_coord.y);
             if step.kind == Stitch::Oc {
@@ -312,27 +310,18 @@ pub fn round_work_sequence_at(
 }
 
 pub fn round_wip_pixels(
-    finished: &Array2<u8>,
+    highlights: &Array2<u8>,
     canvas_size: IVec2,
     virtual_size: IVec2,
     offset: IVec2,
     rounds: i32,
     completed_units: usize,
 ) -> Array2<u8> {
-    let mut highlights = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
-    common::compute_round_highlights(
-        canvas_size,
-        virtual_size,
-        offset,
-        rounds,
-        finished,
-        &mut highlights,
-    );
     let mut wip = Array2::zeros((canvas_size.y as usize, canvas_size.x as usize));
 
     for round_index in 0..completed_units.min(rounds.max(0) as usize) {
         for step in round_work_at(
-            &highlights,
+            highlights,
             canvas_size,
             virtual_size,
             offset,
@@ -560,25 +549,27 @@ mod tests {
             Array2::from_shape_fn((3, 3), |(y, _)| common::natural_color_row(size.y, y as i32));
         finished[[2, 1]] = common::opposite_color(common::natural_color_row(size.y, 2));
         finished[[1, 0]] = common::opposite_color(common::natural_color_row(size.y, 1));
+        let mut highlights = no_highlights(3, 3);
+        common::compute_row_highlights(size, &finished, &mut highlights);
 
-        let before_row_1 = row_wip_pixels(&finished, size, 0);
+        let before_row_1 = row_wip_pixels(&highlights, size, 0);
         assert!(
             before_row_1
                 .iter()
                 .all(|pixel| *pixel == common::COLOR_TRANSPARENT)
         );
 
-        let after_row_1 = row_wip_pixels(&finished, size, 1);
+        let after_row_1 = row_wip_pixels(&highlights, size, 1);
         assert_eq!(after_row_1.row(0).to_vec(), [0, 0, 0]);
         assert_eq!(after_row_1.row(1).to_vec(), [0, 0, 0]);
         assert_eq!(after_row_1.row(2).to_vec(), [1, 1, 1]);
 
-        let after_row_2 = row_wip_pixels(&finished, size, 2);
+        let after_row_2 = row_wip_pixels(&highlights, size, 2);
         assert_eq!(after_row_2.row(0).to_vec(), [0, 0, 0]);
         assert_eq!(after_row_2.row(1).to_vec(), [2, 2, 2]);
         assert_eq!(after_row_2.row(2).to_vec(), [1, 2, 1]);
 
-        assert_eq!(row_wip_pixels(&finished, size, 3), finished);
+        assert_eq!(row_wip_pixels(&highlights, size, 3), finished);
     }
 
     #[test]
@@ -588,14 +579,16 @@ mod tests {
             common::natural_color_round(size, v(0, 0), 3, v(x as i32, y as i32))
         });
         finished[[2, 1]] = common::opposite_color(finished[[2, 1]]);
+        let mut highlights = no_highlights(7, 7);
+        common::compute_round_highlights(size, size, v(0, 0), 3, &finished, &mut highlights);
 
         assert!(
-            round_wip_pixels(&finished, size, size, v(0, 0), 3, 0)
+            round_wip_pixels(&highlights, size, size, v(0, 0), 3, 0)
                 .iter()
                 .all(|pixel| *pixel == common::COLOR_TRANSPARENT)
         );
 
-        let after_round_2 = round_wip_pixels(&finished, size, size, v(0, 0), 3, 2);
+        let after_round_2 = round_wip_pixels(&highlights, size, size, v(0, 0), 3, 2);
         assert_eq!(after_round_2[[2, 0]], common::COLOR_TRANSPARENT);
         assert_eq!(
             after_round_2[[2, 1]],
@@ -603,7 +596,7 @@ mod tests {
         );
 
         assert_eq!(
-            round_wip_pixels(&finished, size, size, v(0, 0), 3, 3),
+            round_wip_pixels(&highlights, size, size, v(0, 0), 3, 3),
             finished
         );
     }

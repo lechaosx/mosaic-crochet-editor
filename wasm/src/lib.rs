@@ -550,7 +550,7 @@ pub fn instruction_wip_row(
     completed_units: usize,
 ) -> Vec<u8> {
     export::row_wip_pixels(
-        &to_array2(pixels, width, height),
+        &highlights_row(pixels, width, height),
         IVec2::new(width, height),
         completed_units,
     )
@@ -571,11 +571,14 @@ pub fn instruction_wip_round(
     rounds: i32,
     completed_units: usize,
 ) -> Vec<u8> {
+    let canvas_size = IVec2::new(canvas_width, canvas_height);
+    let virtual_size = IVec2::new(virtual_width, virtual_height);
+    let offset = IVec2::new(offset_x, offset_y);
     export::round_wip_pixels(
-        &to_array2(pixels, canvas_width, canvas_height),
-        IVec2::new(canvas_width, canvas_height),
-        IVec2::new(virtual_width, virtual_height),
-        IVec2::new(offset_x, offset_y),
+        &highlights_round(pixels, canvas_size, virtual_size, offset, rounds),
+        canvas_size,
+        virtual_size,
+        offset,
         rounds,
         completed_units,
     )
