@@ -17,6 +17,7 @@ import { emptyGridRecipe, gridRecipeError, gridRecipesEqual, withRecipeSource, r
          RecipeEvaluations } from "@mosaic/logic/grid-recipes";
 import { sessionFromRecovery, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
 import { packPixels } from "@mosaic/logic/storage";
+import { devAssert } from "@mosaic/logic/dev";
 import { deleteProjectsExcept, loadProjectIndex, newProjectId, openProjectDatabase, readProject, removeRetiredRecords,
          saveProjectIndex, writeHistory, writeRecovery } from "./project-store";
 import { becomeEditor } from "./editor-lock";
@@ -241,6 +242,7 @@ function persistHistory(p: OpenProject) {
 }
 function packedPixels(p: OpenProject, pixels: Uint8Array): string {
     if (p.packed?.pixels !== pixels) p.packed = { pixels, packed: packPixels(pixels) };
+    else devAssert(packPixels(pixels) === p.packed.packed, "committed pixels were written in place");
     return p.packed.packed;
 }
 function persistRecovery(s: Readonly<SessionState>) {
