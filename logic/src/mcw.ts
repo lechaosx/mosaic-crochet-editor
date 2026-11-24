@@ -63,7 +63,7 @@ function readRecipes(value: unknown, legacy = false): GridRecipe[] {
             || item.source.w < 0 || item.source.h < 0
             || (item.source.w === 0) !== (item.source.h === 0)) throw invalidFile();
         return { ...item, id: item.id, source: { ...item.source,
-            mask: Array.from(unpackMask(item.source.mask, item.source.w * item.source.h)) } };
+            mask: unpackMask(item.source.mask, item.source.w * item.source.h) } };
     });
     const recipes = restoreGridRecipes(decoded, legacy);
     if (decoded.some((value, index) => value.id !== recipes[index]?.id)

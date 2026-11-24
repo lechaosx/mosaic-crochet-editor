@@ -2,6 +2,10 @@
 
 New updates appear first. Each section summarizes the lasting changes available to users.
 
+## 24 November 2026
+
+- Patterns with a large saved selection save and open several times faster.
+
 ## 23 November 2026
 
 - Large charts freeze far less while moving between Crochet rows or rounds, as each chart preview is computed in the background.

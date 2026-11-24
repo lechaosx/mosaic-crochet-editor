@@ -200,6 +200,19 @@ describe(".mcw codec", () => {
         expect(decodeMcw(encodeMcw(document)).recipes[0].source.mask).toEqual(new Uint8Array([1, 0, 1]));
     });
 
+    test("stores a saved-recipe mask as base64 of its cells, one bit each, least significant first", () => {
+        const mask = new Uint8Array([1, 0, 1, 1, 0, 0, 1, 1, 1, 1]);
+        const document = {
+            pattern: { mode: "row" as const, canvasWidth: 5, canvasHeight: 2 },
+            pixels: new Uint8Array(10).fill(1),
+            colorA: "#000000", colorB: "#ffffff", mirrors: [],
+            recipes: [gridRecipeFromFloat({ x: 0, y: 0, w: 5, h: 2, pixels: mask })],
+        };
+        const source = encodeMcw(document);
+        expect(JSON.parse(source).recipes[0].source.mask).toBe("zQM=");
+        expect(decodeMcw(source).recipes[0].source.mask).toEqual(mask);
+    });
+
     test("opens a legacy paused saved repeat as live", () => {
         const recipe = gridRecipeFromFloat({
             x: 0, y: 0, w: 1, h: 1, pixels: new Uint8Array([1]),
