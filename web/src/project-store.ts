@@ -165,8 +165,10 @@ function write(database: IDBDatabase, stores: string[], done: (stored: boolean) 
     }
 }
 
-export function writeRecovery(database: IDBDatabase, project: string, s: Readonly<SessionState>, done: (stored: boolean) => void): void {
-    write(database, ["recovery"], done, transaction => transaction.objectStore("recovery").put(recoveryRecord(s), project));
+// `pixels` is `s.pixels` packed.
+export function writeRecovery(database: IDBDatabase, project: string, s: Readonly<SessionState>, pixels: string,
+                              done: (stored: boolean) => void): void {
+    write(database, ["recovery"], done, transaction => transaction.objectStore("recovery").put(recoveryRecord(s, pixels), project));
 }
 
 // Stores `put` and `meta`, and deletes the project's snapshots `meta` doesn't

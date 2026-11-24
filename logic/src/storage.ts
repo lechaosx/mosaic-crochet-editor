@@ -30,8 +30,10 @@ for (let v = 0; v < 256; v++) {
 
 // Start from a fresh natural-colour pattern (which already encodes hole
 // positions as 0) and overwrite non-hole cells with the saved A/B bit.
-export function unpackPixels(s: string, state: PatternState): Uint8Array {
-    const out = state.mode === "row"
+// `layout`, pixels of the same geometry, spares building that pattern: its
+// cells are 0 at the same holes.
+export function unpackPixels(s: string, state: PatternState, layout?: Uint8Array): Uint8Array {
+    const out = layout ? layout.slice() : state.mode === "row"
         ? initialize_row_pattern(state.canvasWidth, state.canvasHeight)
         : initialize_round_pattern(
               state.canvasWidth, state.canvasHeight,

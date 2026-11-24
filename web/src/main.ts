@@ -16,6 +16,7 @@ import { mirrorsToFlat } from "@mosaic/logic/symmetry";
 import { emptyGridRecipe, gridRecipeError, gridRecipesEqual, withRecipeSource, recipesForPattern,
          RecipeEvaluations } from "@mosaic/logic/grid-recipes";
 import { sessionFromRecovery, saveToFile, loadFromFile, LoadedFile } from "./storage-io";
+import { packPixels } from "@mosaic/logic/storage";
 import { deleteProjectsExcept, loadProjectIndex, newProjectId, openProjectDatabase, readProject, removeRetiredRecords,
          saveProjectIndex, writeHistory, writeRecovery } from "./project-store";
 import { becomeEditor } from "./editor-lock";
@@ -181,10 +182,14 @@ interface OpenProject {
     // reload fits each project in Design. Null until first shown.
     view: ViewState | null;
     crochet: boolean;
+    // The pixels last packed for its history or recovery, or restored from
+    // its history, so that each commit packs them at most once. Committed
+    // pixel arrays are never written in place, so the array identifies them.
+    packed: { pixels: Uint8Array; packed: string } | null;
 }
 function newProject(title: string, session: SessionState): OpenProject {
     return { id: newProjectId(), title, session, history: historyMarkClean(historyFrom(session)),
-        historyWritten: null, historyStored: null, historyFailures: 0, view: null, crochet: false };
+        historyWritten: null, historyStored: null, historyFailures: 0, view: null, crochet: false, packed: null };
 }
 const projects: OpenProject[] = database ? listed.flatMap(({ id, title }, i) => {
     const stored = storedProjects![i]!, saved = sessionFromRecovery(stored.recovery);
@@ -193,7 +198,7 @@ const projects: OpenProject[] = database ? listed.flatMap(({ id, title }, i) => 
     // A recovered document that differs from the stored current snapshot
     // becomes a new, unsaved step.
     return [{ id, title, session: saved, history: historySave(storedHistory ?? historyFrom(saved), saved),
-        historyWritten: storedHistory, historyStored: storedHistory, historyFailures: 0, view: null, crochet: false }];
+        historyWritten: storedHistory, historyStored: storedHistory, historyFailures: 0, view: null, crochet: false, packed: null }];
 }) : [];
 // Projects without a valid recovery record can't be shown as they were, so they close.
 const lost = database ? listed.filter(({ id }) => !projects.some(p => p.id === id)).map(({ title }) => title) : [];
@@ -234,8 +239,14 @@ function persistHistory(p: OpenProject) {
         reportStorage("history", written);
     });
 }
+function packedPixels(p: OpenProject, pixels: Uint8Array): string {
+    if (p.packed?.pixels !== pixels) p.packed = { pixels, packed: packPixels(pixels) };
+    return p.packed.packed;
+}
 function persistRecovery(s: Readonly<SessionState>) {
-    if (database && editing) writeRecovery(database, project!.id, s, written => reportStorage("recovery", written));
+    if (database && editing) {
+        writeRecovery(database, project!.id, s, packedPixels(project!, s.pixels), written => reportStorage("recovery", written));
+    }
 }
 function persistIndex() {
     if (database && editing) reportStorage("index", saveProjectIndex(projects.map(({ id, title }) => ({ id, title })), project?.id ?? null));
@@ -424,7 +435,7 @@ let savingRecipeHistory = false;
 store.setHistoryFn(s => {
     if (!savingPatternHistory) patternHistorySession = false;
     if (!savingRecipeHistory) recipeHistorySession = false;
-    commitHistory(historySave(project!.history, s));
+    commitHistory(historySave(project!.history, s, packedPixels(project!, s.pixels)));
 });
 store.setPersistFn(persistRecovery);
 
@@ -791,7 +802,8 @@ function onRecipeCommit() {
         savingRecipeHistory = true;
         try {
             if (recipeHistorySession) {
-                const { history: next, replaced } = historyReplaceCurrent(project!.history, store.state);
+                const { history: next, replaced } = historyReplaceCurrent(project!.history, store.state,
+                    packedPixels(project!, store.state.pixels));
                 commitHistory(next);
                 recipeHistorySession = replaced;
             } else {
@@ -1119,7 +1131,8 @@ function onEditCommit(clearDesign = false) {
         } finally {
             applyingPatternPreview = false;
         }
-        const { history: next, replaced } = historyReplaceCurrent(project!.history, store.state);
+        const { history: next, replaced } = historyReplaceCurrent(project!.history, store.state,
+            packedPixels(project!, store.state.pixels));
         commitHistory(next);
         patternHistorySession = replaced;
         ui.setHistory(canUndo(project!.history), canRedo(project!.history));
@@ -1165,6 +1178,7 @@ function onEditRevert() {
 
 // ── Undo / redo ──────────────────────────────────────────────────────────────
 function applyRestored(r: Restored) {
+    project!.packed = { pixels: r.pixels, packed: r.packedPixels };
     const dimsChanged = r.pattern.canvasWidth  !== store.state.pattern.canvasWidth
                      || r.pattern.canvasHeight !== store.state.pattern.canvasHeight;
     if (dimsChanged) {
@@ -1196,7 +1210,7 @@ function undo() {
     if (!previous) return;
     commitHistory(previous);
     instructionsView?.close(false);
-    applyRestored(historyPeek(project!.history));
+    applyRestored(historyPeek(project!.history, store.state));
 }
 function redo() {
     if (document.querySelector("dialog:modal")) return;
@@ -1208,7 +1222,7 @@ function redo() {
     if (!next) return;
     commitHistory(next);
     instructionsView?.close(false);
-    applyRestored(historyPeek(project!.history));
+    applyRestored(historyPeek(project!.history, store.state));
 }
 
 // ── Save / load ──────────────────────────────────────────────────────────────

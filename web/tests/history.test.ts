@@ -11,6 +11,8 @@ import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addMirror } from "@mosaic/logic/symmetry";
 import { gridRecipeFromFloat } from "@mosaic/logic/grid-recipes";
 import { encodeMcw } from "@mosaic/logic/mcw";
+import { initialize_round_pattern } from "@mosaic/wasm";
+import type { PatternState } from "@mosaic/logic/types";
 
 // The history as read back from its stored records.
 function reloaded(h: UndoHistory): UndoHistory | null {
@@ -214,6 +216,27 @@ describe("historyPeek", () => {
         expect(historyPeek(h).colorA).toBe("#aabbcc");
         // Index didn't move:
         expect(canUndo(h)).toBe(false);
+    });
+
+    // A round chart, whose centre cells are holes, and the same chart with every stitch swapped.
+    function roundEdit() {
+        const pattern: PatternState = { mode: "round", canvasWidth: 7, canvasHeight: 7,
+            virtualWidth: 7, virtualHeight: 7, offsetX: 0, offsetY: 0, rounds: 2 };
+        const before = rowSession(7, 7, { pattern, pixels: initialize_round_pattern(7, 7, 7, 7, 0, 0, 2) });
+        return { before, edited: { ...before, pixels: before.pixels.map(value => value === 0 ? 0 : 3 - value) } };
+    }
+
+    test("restores the cells and holes of the snapshot that replaces the shown state", () => {
+        const { before, edited } = roundEdit();
+        const shown = edited.pixels.slice();
+        expect(historyPeek(historyUndo(historySave(historyFrom(before), edited))!, edited).pixels).toEqual(before.pixels);
+        expect(edited.pixels).toEqual(shown);
+    });
+
+    test("restores a snapshot whose geometry differs from the shown state", () => {
+        const { before } = roundEdit();
+        const resized = rowSession(5, 5);
+        expect(historyPeek(historyUndo(historySave(historyFrom(before), resized))!, resized).pixels).toEqual(before.pixels);
     });
 });
 

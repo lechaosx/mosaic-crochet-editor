@@ -7,7 +7,7 @@ import { SessionState } from "@mosaic/logic/store";
 import { packPixels, unpackPixels, packFloat, unpackFloat, PackedFloat } from "@mosaic/logic/storage";
 import { mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
 import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
-import { assertPatternDimensions } from "@mosaic/logic/pattern";
+import { assertPatternDimensions, samePatternGeometry } from "@mosaic/logic/pattern";
 
 const HISTORY_VERSION = 10;
 const MAX             = 64;
@@ -103,11 +103,11 @@ export function historyFromStored(meta: unknown, snapshots: readonly unknown[]):
     } catch { return null; }
 }
 
-function snapshotFrom(s: Readonly<SessionState>, id: number): Snapshot {
+function snapshotFrom(s: Readonly<SessionState>, id: number, pixels = packPixels(s.pixels)): Snapshot {
     return {
         id,
         document: {
-            state: s.pattern, pixels: packPixels(s.pixels),
+            state: s.pattern, pixels,
             colorA: s.colorA, colorB: s.colorB,
             dangerColorOverride: s.dangerColorOverride,
             accentColorOverride: s.accentColorOverride,
@@ -133,9 +133,10 @@ export function historyFrom(s: Readonly<SessionState>): UndoHistory {
 }
 
 // Returns `h` itself when `s` matches the current snapshot, so the owner can
-// skip persisting.
-export function historySave(h: UndoHistory, s: Readonly<SessionState>): UndoHistory {
-    const snap = snapshotFrom(s, h.nextId);
+// skip persisting. `pixels`, here and below, is `s.pixels` packed, when the
+// caller has it already.
+export function historySave(h: UndoHistory, s: Readonly<SessionState>, pixels?: string): UndoHistory {
+    const snap = snapshotFrom(s, h.nextId, pixels);
     if (snapshotsEqual(h.snapshots[h.index], snap)) return h;
     const snapshots = [...h.snapshots.slice(0, h.index + 1), snap];
     if (snapshots.length > MAX) snapshots.shift();
@@ -144,8 +145,8 @@ export function historySave(h: UndoHistory, s: Readonly<SessionState>): UndoHist
 
 // `replaced` is false when the current snapshot was instead dropped for matching
 // the one before it.
-export function historyReplaceCurrent(h: UndoHistory, s: Readonly<SessionState>): { history: UndoHistory; replaced: boolean } {
-    const snap = snapshotFrom(s, h.nextId);
+export function historyReplaceCurrent(h: UndoHistory, s: Readonly<SessionState>, pixels?: string): { history: UndoHistory; replaced: boolean } {
+    const snap = snapshotFrom(s, h.nextId, pixels);
     const kept = h.snapshots.slice(0, h.index);
     if (h.index > 0 && snapshotsEqual(h.snapshots[h.index - 1], snap)) {
         return { history: { ...h, snapshots: kept, index: h.index - 1 }, replaced: false };
@@ -181,6 +182,8 @@ export function historyRedo(h: UndoHistory): UndoHistory | null {
 export interface Restored {
     pattern: PatternState;
     pixels:  Uint8Array;
+    // `pixels` packed.
+    packedPixels: string;
     float:   Float | null;
     mirrors: MirrorCenter[];
     recipes: GridRecipe[];
@@ -191,14 +194,18 @@ export interface Restored {
     accentColorOverride: string | null;
 }
 
-export function historyPeek(h: UndoHistory): Restored {
+// `shown`, the state the restored one replaces, lends its holes when it has
+// the same geometry.
+export function historyPeek(h: UndoHistory, shown?: Pick<SessionState, "pattern" | "pixels">): Restored {
     const s = h.snapshots[h.index];
     const mirrors = readMirrorRecords(s.transforms.mirrors) ?? [];
     const recipes = restoreGridRecipes(s.transforms.recipes, false);
     const float = s.selection ? unpackFloat(s.selection) : null;
     return {
         pattern: s.document.state,
-        pixels:  unpackPixels(s.document.pixels, s.document.state),
+        pixels:  unpackPixels(s.document.pixels, s.document.state,
+            shown && samePatternGeometry(shown.pattern, s.document.state) ? shown.pixels : undefined),
+        packedPixels: s.document.pixels,
         float,
         mirrors: mirrorsForPattern(mirrors, s.document.state),
         recipes,

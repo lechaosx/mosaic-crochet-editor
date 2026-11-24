@@ -43,11 +43,12 @@ export interface Recovery {
     };
 }
 
-export function recoveryRecord(s: Readonly<SessionState>): Recovery {
+// `pixels` is `s.pixels` packed, when the caller has it already.
+export function recoveryRecord(s: Readonly<SessionState>, pixels = packPixels(s.pixels)): Recovery {
     return {
         version: RECOVERY_VERSION,
         document: {
-            state: s.pattern, pixels: packPixels(s.pixels),
+            state: s.pattern, pixels,
             colorA: recoveryYarnColor(s.colorA), colorB: recoveryYarnColor(s.colorB),
             dangerColorOverride: s.dangerColorOverride,
             accentColorOverride: s.accentColorOverride,

@@ -199,6 +199,24 @@ test("reload restores the document with its undo history", async ({ page }) => {
     expect(await cellRGB(page, 1, 1)).toEqual(A);
 });
 
+test("the recovery record holds the chart shown after each edit, undo and redo", async ({ page }) => {
+    await bootApp(page);
+    const shownSnapshot = async () => {
+        const { snapshots, index } = (await storedHistory(page))!;
+        return snapshots[index].document.pixels;
+    };
+    await page.keyboard.press("p");
+    await clickCell(page, 0, 1);
+    expect((await storedRecovery(page)).document.pixels).toBe(await shownSnapshot());
+    await page.keyboard.press("Control+z");
+    expect((await storedRecovery(page)).document.pixels).toBe(await shownSnapshot());
+    await page.keyboard.press("Control+y");
+    expect((await storedRecovery(page)).document.pixels).toBe(await shownSnapshot());
+    await page.keyboard.press("Control+z");
+    await reloadApp(page);
+    expect(await cellRGB(page, 0, 1)).toEqual(B);
+});
+
 test("an edit after undo deletes the stored snapshots it discards from redo", async ({ page }) => {
     await bootApp(page);
     await page.keyboard.press("p");
