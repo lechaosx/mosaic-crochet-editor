@@ -1,6 +1,7 @@
 // History (undo/redo) tests.
 
 import { describe, test, expect } from "vitest";
+import { serialize } from "node:v8";
 import {
     historyFrom, historySave, historyReplaceCurrent, historyChanges, historyFromStored,
     historyUndo, historyRedo, canUndo, canRedo, historyPeek, historyHeadId, historyMarkClean, isClean,
@@ -136,6 +137,18 @@ describe("historyFrom / historySave", () => {
             columnSpacingAlternate: 7,
             rowSpacingAlternate: 8,
         });
+    });
+
+    test("a sparse saved-recipe mask survives a reload of the history", () => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }, { x: 2, y: 0, v: 2 }, { x: 1, y: 3, v: 1 }]));
+        expect(historyPeek(reloaded(historyFrom(rowSession(5, 5, { recipes: [recipe] })))!).recipes).toEqual([recipe]);
+    });
+
+    test("a snapshot stores a saved-recipe mask in well under a byte per cell", () => {
+        const n = 1000;
+        const recipe = gridRecipeFromFloat({ x: 0, y: 0, w: n, h: n, pixels: new Uint8Array(n * n).fill(1) });
+        const { put } = historyChanges(null, historyFrom(rowSession(n, n, { recipes: [recipe] })));
+        expect(serialize(put[0]).length).toBeLessThan(n * n / 2);
     });
 
     test("axis position survives undo: add V, drag to x=0, undo restores canonical", () => {
@@ -291,6 +304,13 @@ describe("stored history", () => {
     test("a future history schema → null", () => {
         const { meta, put } = historyChanges(null, historyFrom(rowSession(3, 3)));
         expect(historyFromStored({ ...meta, version: 999 }, put)).toBeNull();
+    });
+
+    test("a history stored before recipe masks were packed → null", () => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }, { x: 2, y: 0, v: 2 }]));
+        const { meta, put } = structuredClone(historyChanges(null, historyFrom(rowSession(3, 3, { recipes: [recipe] }))));
+        put[0].transforms.recipes = [{ ...put[0].transforms.recipes[0] as object, source: { ...recipe.source, mask: [1, 0, 1] } }];
+        expect(historyFromStored({ ...meta, version: 9 }, put)).toBeNull();
     });
 
     test("a listed snapshot that is missing → null", () => {

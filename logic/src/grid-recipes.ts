@@ -1,5 +1,6 @@
 import { transfer_preserved_row, transfer_preserved_round } from "@mosaic/wasm";
 import { Float, GridRecipe, SymKey, PatternState } from "./types";
+import { packMask, unpackMask } from "./storage";
 import { evaluateCenteredMirrors, evaluatePackedGrid, PackedGridEvaluation, TransformPlacement,
     TransformSourceCell } from "./transform-evaluator";
 
@@ -358,7 +359,7 @@ export function normalizeActiveRecipeId(
 }
 
 export function storedGridRecipes(recipes: ReadonlyArray<GridRecipe>): unknown[] {
-    return recipes.map(recipe => ({ ...recipe, enabled: true, source: { ...recipe.source, mask: Array.from(recipe.source.mask) } }));
+    return recipes.map(recipe => ({ ...recipe, enabled: true, source: { ...recipe.source, mask: packMask(recipe.source.mask) } }));
 }
 
 export function gridRecipesEqual(a: ReadonlyArray<GridRecipe>, b: ReadonlyArray<GridRecipe>): boolean {
@@ -389,7 +390,8 @@ export function restoreGridRecipes(value: unknown, legacy = true): GridRecipe[] 
         const recipe = raw as { columnOrientation?: unknown; rowOrientation?: unknown; mode?: string;
             mirrorHorizontal?: boolean; mirrorVertical?: boolean } & Partial<Omit<GridRecipe, "source" | "mode">> & { source?: Partial<Omit<GridRecipe["source"], "mask">> & { mask?: unknown } };
         const source = recipe.source;
-        if (!source || !(Array.isArray(source.mask) || source.mask instanceof Uint8Array) || typeof recipe.id !== "string" || ids.has(recipe.id)
+        if (!source || !(Array.isArray(source.mask) || source.mask instanceof Uint8Array || typeof source.mask === "string")
+            || typeof recipe.id !== "string" || ids.has(recipe.id)
             || typeof recipe.enabled !== "boolean") continue;
         if ([recipe.rotationCentreX, recipe.rotationCentreY, recipe.mirrorCentreX, recipe.mirrorCentreY]
             .some(value => value !== undefined && typeof value !== "number")
@@ -401,7 +403,9 @@ export function restoreGridRecipes(value: unknown, legacy = true): GridRecipe[] 
             || recipe.rotationTurns === undefined || recipe.columnSpacingAlternate === undefined
             || recipe.rowSpacingAlternate === undefined || mirrorLegacyFields(raw))) continue;
         if (Array.isArray(source.mask) && source.mask.some(value => value !== 0 && value !== 1)) continue;
-        const mask = Uint8Array.from(source.mask as ArrayLike<number>);
+        // Recovery records written before masks were packed hold them as arrays.
+        const mask = typeof source.mask === "string" ? unpackMask(source.mask, Number(source.w) * Number(source.h))
+            : Uint8Array.from(source.mask as ArrayLike<number>);
         const { columnOrientation, rowOrientation, mirrorHorizontal, mirrorVertical, ...current } = recipe;
         if ((mirrorHorizontal !== undefined && typeof mirrorHorizontal !== "boolean")
             || (mirrorVertical !== undefined && typeof mirrorVertical !== "boolean")) continue;

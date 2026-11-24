@@ -9,7 +9,7 @@ import { mirrorsForPattern, readMirrorRecords } from "@mosaic/logic/symmetry";
 import { normalizeActiveRecipeId, restoreGridRecipes, storedGridRecipes } from "@mosaic/logic/grid-recipes";
 import { assertPatternDimensions } from "@mosaic/logic/pattern";
 
-const HISTORY_VERSION = 9;
+const HISTORY_VERSION = 10;
 const MAX             = 64;
 const HEX_COLOR       = /^#[0-9a-f]{6}$/i;
 
@@ -43,7 +43,7 @@ export interface UndoHistory {
 // Stored next to one record per snapshot, so a change rewrites only the
 // snapshots it adds. Ids increase along `ids`.
 export interface HistoryMeta {
-    version: 9;
+    version: 10;
     ids:     number[];
     index:   number;
     nextId:  number;

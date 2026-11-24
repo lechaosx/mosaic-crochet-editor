@@ -2,6 +2,7 @@
 // Recovery record and file IO tests — pure pack/unpack tests live in logic/tests/storage.test.ts.
 
 import { describe, test, expect, afterEach, vi } from "vitest";
+import { serialize } from "node:v8";
 import { recoveryRecord, sessionFromRecovery, saveToFile, loadFromFile } from "../src/storage-io";
 import { rowSession, filledPixels, makeFloat } from "./_helpers";
 import { addMirror } from "@mosaic/logic/symmetry";
@@ -60,6 +61,19 @@ describe("recoveryRecord / sessionFromRecovery", () => {
         expect(loaded!.dangerColorOverride).toBe("#123456");
         expect(loaded!.accentColorOverride).toBe("#abcdef");
         expect(() => contrastingProjectColors(loaded!.colorA, loaded!.colorB)).not.toThrow();
+    });
+
+    test("a recovery record stores a saved-recipe mask in well under a byte per cell", () => {
+        const n = 1000;
+        const recipe = gridRecipeFromFloat({ x: 0, y: 0, w: n, h: n, pixels: new Uint8Array(n * n).fill(1) });
+        expect(serialize(recoveryRecord(rowSession(n, n, { recipes: [recipe] }))).length).toBeLessThan(n * n / 2);
+    });
+
+    test("a recovery record stored with an unpacked recipe mask still loads", () => {
+        const recipe = gridRecipeFromFloat(makeFloat([{ x: 0, y: 0, v: 1 }, { x: 2, y: 0, v: 2 }]));
+        expect(recovered(rowSession(3, 3, { recipes: [recipe] }), record => {
+            record.workspace.recipes[0].source.mask = [1, 0, 1];
+        })?.recipes).toEqual([recipe]);
     });
 
     test("default contrast overrides round-trip as app defaults", () => {

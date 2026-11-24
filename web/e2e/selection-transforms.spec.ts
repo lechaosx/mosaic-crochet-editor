@@ -31,7 +31,7 @@ test("None keeps the source editable while every dormant transform is disabled",
     const source = await cellCoord(page, 3, 3), dormant = await cellCoord(page, 4, 3);
     expect(await pixelRGB(page, source.cx, source.cy)).toEqual([255, 255, 255]);
     expect(await pixelRGB(page, dormant.cx, dormant.cy)).toEqual([255, 255, 255]);
-    expect(await recipe(page)).toMatchObject({ mode: "none", right: 2, source: { x: 3, y: 3, mask: [1] } });
+    expect(await recipe(page)).toMatchObject({ mode: "none", right: 2, source: { x: 3, y: 3, mask: "AQ==" } });
     await page.keyboard.press("Control+c");
     await page.keyboard.press("m");
     await page.keyboard.press("ArrowRight");
@@ -71,7 +71,7 @@ test("Grid inspector spacing and offset place copies and cancel invalid edits", 
         await page.locator(`#recipe-${field}`).press("Enter");
     }
     expect(await recipe(page)).toMatchObject({ columnSpacing: 2, columnSpacingAlternate: 2, columnOffset: 1,
-        source: { x: 3, y: 3, mask: [1] }, right: 1 });
+        source: { x: 3, y: 3, mask: "AQ==" }, right: 1 });
     await page.locator("#recipe-apply").click();
     const copy = await cellCoord(page, 6, 4);
     expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([0, 0, 0]);
@@ -192,7 +192,7 @@ test("a pending overlapping Rectangle is rejected by Stamp without settling its 
     expect({ history: await storedHistory(page), recovery: await storedRecovery(page) }).toEqual(before);
     await expect(page.locator("#recipe-error")).toBeHidden();
     await page.keyboard.press("Escape"); await page.mouse.up();
-    expect(await recipe(page)).toMatchObject({ mode: "mirror", source: { x: 3, y: 3, w: 1, mask: [1] }, mirrorTypes: ["V"] });
+    expect(await recipe(page)).toMatchObject({ mode: "mirror", source: { x: 3, y: 3, w: 1, mask: "AQ==" }, mirrorTypes: ["V"] });
 });
 
 test("accepted Stamp uses the pending Rectangle source and leaves selection and stamp as separate Undo actions", async ({ page }) => {
@@ -206,7 +206,7 @@ test("accepted Stamp uses the pending Rectangle source and leaves selection and 
     await page.mouse.move(end.cx, end.cy, { steps: 5 });
     await page.locator("#recipe-apply").focus(); await page.keyboard.press("Space");
     await page.mouse.up();
-    expect(await recipe(page)).toMatchObject({ source: { x: 5, y: 3, w: 2, mask: [1, 1] } });
+    expect(await recipe(page)).toMatchObject({ source: { x: 5, y: 3, w: 2, mask: "Aw==" } });
     const copy = await cellCoord(page, 7, 3);
     expect(await pixelRGB(page, copy.cx, copy.cy)).toEqual([0, 0, 0]);
     await page.getByRole("button", { name: "Undo", exact: true }).click();
@@ -373,7 +373,7 @@ test.describe("high-DPI phone selection controls", () => {
         await page.locator("#recipe-gap-y").fill("2"); await page.locator("#recipe-gap-y").press("Enter");
         expect(await recipe(page)).toMatchObject({ columnSpacing: 2, columnSpacingAlternate: 2,
             columnOffset: 2, rowSpacing: 2, rowSpacingAlternate: 2, rowOffset: 2, right: 10, down: 10,
-            source: { x: 3, y: 3, mask: [1] } });
+            source: { x: 3, y: 3, mask: "AQ==" } });
         await page.getByRole("button", { name: "Undo", exact: true }).evaluate((button: HTMLButtonElement) => button.click());
         expect(await recipe(page)).toMatchObject({ columnSpacing: 1, rowSpacing: 1 });
     });
@@ -400,7 +400,7 @@ test.describe("high-DPI phone selection controls", () => {
         await page.locator("#accent-color").dispatchEvent("change");
         await page.getByRole("button", { name: "Close inspector", exact: true }).click();
         await page.screenshot({ path: "/tmp/mosaic-selection-phone-black.png" });
-        expect((await recipe(page)).source).toMatchObject({ x: 3, y: 3, mask: [1] });
+        expect((await recipe(page)).source).toMatchObject({ x: 3, y: 3, mask: "AQ==" });
     });
 });
 

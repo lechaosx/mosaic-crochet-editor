@@ -4,7 +4,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 ## 24 November 2026
 
-- Patterns with a large saved selection save and open several times faster.
+- Patterns with a large saved selection save and open several times faster, and their edits and undo history take far less time and memory; undo history from before this update is not carried over.
 
 ## 23 November 2026
 

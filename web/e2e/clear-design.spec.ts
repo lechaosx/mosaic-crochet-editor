@@ -86,7 +86,7 @@ test("Clear design removes drawing and transform context in one recoverable edit
     expect(cleared.workspace.mirrors).toEqual([]);
     expect(cleared.workspace.recipes).toHaveLength(1);
     expect(cleared.workspace.recipes[0]).toMatchObject({
-        source: { x: 0, y: 0, w: 0, h: 0, mask: [] },
+        source: { x: 0, y: 0, w: 0, h: 0, mask: "" },
         mode: "grid", left: 0, right: 0, up: 0, down: 0,
         rotationTurns: [], mirrorTypes: [],
     });
@@ -139,7 +139,7 @@ test("Clear design preserves authored centre-out geometry and compatible Crochet
     const cleared = await storedRecovery(page);
     expect(cleared.document).toEqual(natural.document);
     expect(cleared.workspace.float).toBeNull();
-    expect(cleared.workspace.recipes[0].source.mask).toEqual([]);
+    expect(cleared.workspace.recipes[0].source.mask).toBe("");
     expect(await storedLiveProgress(page)).toEqual(progress);
     await page.locator("#view-crochet").click();
     await expect(page.locator(".instructions-unit").nth(2)).toHaveAttribute("aria-current", "step");

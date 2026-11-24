@@ -125,7 +125,7 @@ test("example is editable and demonstrates overlay, global mirror, and Crochet",
     const recovery = await storedRecovery(page);
     expect(recovery.workspace.mirrors.length).toBeGreaterThan(0);
     expect(recovery.workspace.recipes).toHaveLength(1);
-    expect(recovery.workspace.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: [] });
+    expect(recovery.workspace.recipes[0].source).toMatchObject({ w: 0, h: 0, mask: "" });
 
     await page.locator("#view-crochet").click();
     await expect(page.getByRole("complementary", { name: "Crochet" })).toBeVisible();
