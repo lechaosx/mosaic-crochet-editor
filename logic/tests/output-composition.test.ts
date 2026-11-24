@@ -101,7 +101,7 @@ describe("output composition prototype", () => {
         );
         expect(session.total()).toBe(2);
         for (let round = 1; round <= 2; round++) {
-            const unit = session.next()!;
+            const unit = session.unit_at(round - 1)!;
             const coords = Array.from(unit.worked_coords());
             const inset = pattern.rounds - round;
             let corners = 0;

@@ -213,7 +213,6 @@ impl InstructionUnit {
 pub struct InstructionSession {
     highlights: Array2<u8>,
     mode: InstructionMode,
-    index: usize,
     total: usize,
 }
 
@@ -419,16 +418,6 @@ impl InstructionSession {
         .into_raw_vec_and_offset()
         .0
     }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> Option<InstructionUnit> {
-        if self.index >= self.total {
-            return None;
-        }
-        let unit = self.unit_at(self.index)?;
-        self.index += 1;
-        Some(unit)
-    }
 }
 
 fn to_array2(flat: &[u8], width: i32, height: i32) -> Array2<u8> {
@@ -436,8 +425,8 @@ fn to_array2(flat: &[u8], width: i32, height: i32) -> Array2<u8> {
         .expect("pixel buffer size mismatch")
 }
 
-// Compute highlights once from pixels (used by both render-plan and export
-// paths — they each need it but TS never sees the raw per-cell array).
+// An instruction session's highlights, computed once from pixels; TS never
+// sees the raw per-cell array.
 fn highlights_row(pixels: &[u8], width: i32, height: i32) -> Array2<u8> {
     let pattern = to_array2(pixels, width, height);
     let mut hl = Array2::zeros((height as usize, width as usize));
@@ -535,7 +524,6 @@ pub fn instruction_start_row(pixels: &[u8], width: i32, height: i32) -> Instruct
         mode: InstructionMode::Row {
             canvas_size: IVec2::new(width, height),
         },
-        index: 0,
         total: height.max(0) as usize,
     }
 }
@@ -562,7 +550,6 @@ pub fn instruction_start_round(
             offset,
             rounds,
         },
-        index: 0,
         total: rounds as usize,
     }
 }
@@ -575,17 +562,17 @@ mod instruction_session_tests {
     fn row_session_exposes_unit_metadata_text_and_worked_path() {
         let mut pixels = initialize_row_pattern(3, 3);
         pixels[2 * 3] = common::opposite_color(pixels[2 * 3]);
-        let mut session = instruction_start_row(&pixels, 3, 3);
+        let session = instruction_start_row(&pixels, 3, 3);
 
         assert_eq!(session.total(), 3);
-        let foundation = session.next().expect("foundation row");
+        let foundation = session.unit_at(0).expect("foundation row");
         assert_eq!(foundation.kind() as u8, InstructionUnitKind::Row as u8);
         assert_eq!(foundation.number(), 1);
         assert_eq!(foundation.yarn() as u8, InstructionYarn::A as u8);
         assert_eq!(foundation.text(), "Row 1: sc × 3");
         assert_eq!(foundation.worked_coords(), vec![0, 2, 1, 2, 2, 2]);
 
-        let row_2 = session.next().expect("second row");
+        let row_2 = session.unit_at(1).expect("second row");
         assert_eq!(row_2.number(), 2);
         assert_eq!(row_2.yarn() as u8, InstructionYarn::B as u8);
         assert_eq!(row_2.text(), "Row 2: oc, sc × 2");
@@ -603,7 +590,6 @@ mod instruction_session_tests {
             mode: InstructionMode::Row {
                 canvas_size: IVec2::new(3, 3),
             },
-            index: 0,
             total: 3,
         };
 
@@ -649,10 +635,10 @@ mod instruction_session_tests {
     #[test]
     fn round_session_exposes_the_visible_worked_path() {
         let pixels = initialize_round_pattern(7, 7, 7, 7, 0, 0, 3);
-        let mut session = instruction_start_round(&pixels, 7, 7, 7, 7, 0, 0, 3);
+        let session = instruction_start_round(&pixels, 7, 7, 7, 7, 0, 0, 3);
 
         assert_eq!(session.total(), 3);
-        let unit = session.next().expect("first round");
+        let unit = session.unit_at(0).expect("first round");
         assert_eq!(unit.kind() as u8, InstructionUnitKind::Round as u8);
         assert_eq!(unit.number(), 1);
         assert_eq!(unit.yarn() as u8, InstructionYarn::A as u8);

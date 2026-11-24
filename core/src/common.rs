@@ -227,7 +227,7 @@ pub fn overlay_target_available_round(
 // cell unifies the logic: there's no special case for top row vs middle vs
 // foundation — every wrong cell asks the same question ("is the overlay this
 // would create structurally valid?") and writes V/I at its own position. The
-// renderer's `outwardCell` does the visual displacement.
+// highlight plan's `PLAN_<DIR>` bits carry the visual displacement.
 fn row_highlight(size: IVec2, pixel: impl Fn(IVec2) -> u8, coord: IVec2) -> u8 {
     let color_index = get_color_index(size.y - 1 - coord.y);
     let value = pixel(coord);

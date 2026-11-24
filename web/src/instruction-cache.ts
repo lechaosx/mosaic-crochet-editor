@@ -32,13 +32,3 @@ export function cachedInstructionUnit(
     if (existing.invalidWorkedCoords.join(",") === signature.invalidWorkedCoords.join(",")) return existing;
     return { ...existing, invalidWorkedCoords: signature.invalidWorkedCoords, invalid: signature.invalidWorkedCoords.length > 0 };
 }
-
-export function buildInstructionUnits(
-    previous: Pick<InstructionCache, "shapeFingerprint" | "units"> | null,
-    shapeFingerprint: string,
-    signatures: readonly InstructionUnitSignature[],
-    hydrate: (signature: InstructionUnitSignature, index: number) => CachedInstructionUnit,
-): CachedInstructionUnit[] {
-    return signatures.map((signature, index) =>
-        cachedInstructionUnit(previous, shapeFingerprint, index, signature) ?? hydrate(signature, index));
-}

@@ -4,7 +4,7 @@
 // onto pixels with off-canvas / hole / pixels=0 drops.
 
 import { describe, test, expect } from "vitest";
-import { Store, visiblePixels, outOfBounds, forEachCell, isChartCell } from "../src/store";
+import { Store, visiblePixels, outOfBounds, isChartCell } from "../src/store";
 import type { SessionState } from "../src/store";
 import type { PatternState } from "../src/types";
 import { initialize_round_pattern } from "@mosaic/wasm";
@@ -198,18 +198,6 @@ describe("outOfBounds", () => {
     });
 });
 
-describe("forEachCell", () => {
-    test("visits every cell in a W×H grid exactly once", () => {
-        const W = 3, H = 4;
-        const visited = new Set<string>();
-        forEachCell(W, H, (x, y) => { visited.add(`${x},${y}`); });
-        expect(visited.size).toBe(W * H);
-        for (let y = 0; y < H; y++)
-            for (let x = 0; x < W; x++)
-                expect(visited.has(`${x},${y}`)).toBe(true);
-    });
-});
-
 describe("Store plan changes", () => {
     type Step =
         | { kind: "paint"; x: number; y: number; yarn: 1 | 2 }
@@ -275,13 +263,13 @@ describe("Store plan changes", () => {
                     if (next.kind === "pattern") expect(change).toBeNull();
                     if (change === "all") continue;
                     const after = visiblePixels(s.state);
-                    forEachCell(W, H, (x, y) => {
+                    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
                         const i = y * W + x;
-                        if (after[i] === visible[i] && s.plan.cells[i] === cells[i]) return;
+                        if (after[i] === visible[i] && s.plan.cells[i] === cells[i]) continue;
                         expect(change).not.toBeNull();
                         expect(x >= change!.x && x < change!.x + change!.width
                             && y >= change!.y && y < change!.y + change!.height).toBe(true);
-                    });
+                    }
                 }
             },
         ), { numRuns: 300 });

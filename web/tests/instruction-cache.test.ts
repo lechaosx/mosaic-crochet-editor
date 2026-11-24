@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildInstructionUnits, type CachedInstructionUnit, type InstructionUnitSignature } from "../src/instruction-cache";
+import { cachedInstructionUnit, type CachedInstructionUnit, type InstructionUnitSignature } from "../src/instruction-cache";
 
 function signature(contentKey: string, invalidWorkedCoords: readonly number[] = []): InstructionUnitSignature {
     return {
@@ -20,60 +20,34 @@ function hydrate(sig: InstructionUnitSignature): CachedInstructionUnit {
 }
 
 describe("instruction cache", () => {
-    it("hydrates every unit on a cold generation", () => {
-        let calls = 0;
-        const units = buildInstructionUnits(null, "rows-2", [signature("a"), signature("b")], sig => {
-            calls++;
-            return hydrate(sig);
-        });
-        expect(calls).toBe(2);
-        expect(units).toHaveLength(2);
+    const previous = { shapeFingerprint: "rows-2", units: [hydrate(signature("a")), hydrate(signature("b"))] };
+
+    it("misses on a cold generation", () => {
+        expect(cachedInstructionUnit(null, "rows-2", 0, signature("a"))).toBeNull();
     });
 
-    it("does not hydrate unchanged units", () => {
-        const first = buildInstructionUnits(null, "rows-2", [signature("a"), signature("b")], hydrate);
-        let calls = 0;
-        const next = buildInstructionUnits({ shapeFingerprint: "rows-2", units: first }, "rows-2", [signature("a"), signature("b")], sig => {
-            calls++;
-            return hydrate(sig);
-        });
-        expect(calls).toBe(0);
-        expect(next[0]).toBe(first[0]);
-        expect(next[1]).toBe(first[1]);
+    it("reuses an unchanged unit", () => {
+        expect(cachedInstructionUnit(previous, "rows-2", 0, signature("a"))).toBe(previous.units[0]);
+        expect(cachedInstructionUnit(previous, "rows-2", 1, signature("b"))).toBe(previous.units[1]);
     });
 
-    it("hydrates only a locally changed stitch sequence", () => {
-        const first = buildInstructionUnits(null, "rows-2", [signature("a"), signature("b")], hydrate);
-        let calls = 0;
-        const next = buildInstructionUnits({ shapeFingerprint: "rows-2", units: first }, "rows-2", [signature("a"), signature("changed")], sig => {
-            calls++;
-            return hydrate(sig);
-        });
-        expect(calls).toBe(1);
-        expect(next[0]).toBe(first[0]);
-        expect(next[1]).not.toBe(first[1]);
+    it("misses only a locally changed stitch sequence", () => {
+        expect(cachedInstructionUnit(previous, "rows-2", 0, signature("a"))).toBe(previous.units[0]);
+        expect(cachedInstructionUnit(previous, "rows-2", 1, signature("changed"))).toBeNull();
     });
 
-    it("invalidates every unit when traversal shape changes", () => {
-        const first = buildInstructionUnits(null, "rows-2", [signature("a"), signature("b")], hydrate);
-        let calls = 0;
-        buildInstructionUnits({ shapeFingerprint: "rows-2", units: first }, "rounds-2", [signature("a"), signature("b")], sig => {
-            calls++;
-            return hydrate(sig);
-        });
-        expect(calls).toBe(2);
+    it("misses every unit when traversal shape changes", () => {
+        expect(cachedInstructionUnit(previous, "rounds-2", 0, signature("a"))).toBeNull();
+        expect(cachedInstructionUnit(previous, "rounds-2", 1, signature("b"))).toBeNull();
     });
 
     it("updates invalid metadata without recompressing an unchanged overlay stitch", () => {
-        const first = buildInstructionUnits(null, "rows-1", [signature("oc")], hydrate);
-        let calls = 0;
-        const next = buildInstructionUnits({ shapeFingerprint: "rows-1", units: first }, "rows-1", [signature("oc", [3, 4])], sig => {
-            calls++;
-            return hydrate(sig);
-        });
-        expect(calls).toBe(0);
-        expect(next[0]).not.toBe(first[0]);
-        expect(next[0].invalid).toBe(true);
-        expect(next[0].invalidWorkedCoords).toEqual([3, 4]);
+        const first = hydrate(signature("oc"));
+        const next = cachedInstructionUnit({ shapeFingerprint: "rows-1", units: [first] }, "rows-1", 0, signature("oc", [3, 4]));
+        expect(next).not.toBeNull();
+        expect(next).not.toBe(first);
+        expect(next!.text).toBe(first.text);
+        expect(next!.invalid).toBe(true);
+        expect(next!.invalidWorkedCoords).toEqual([3, 4]);
     });
 });

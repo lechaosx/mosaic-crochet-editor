@@ -68,13 +68,6 @@ export function isChartCell(s: Readonly<SessionState>, x: number, y: number): bo
     return !outOfBounds(x, y, W, H) && s.pixels[y * W + x] !== 0;
 }
 
-// Calls fn(x, y) for every cell in a W×H grid.
-export function forEachCell(W: number, H: number, fn: (x: number, y: number) => void): void {
-    for (let y = 0; y < H; y++)
-        for (let x = 0; x < W; x++)
-            fn(x, y);
-}
-
 // The visible canvas: `pixels` with `float` stamped at its absolute position.
 // Off-canvas float cells and holes are skipped.
 export function visiblePixels(s: Readonly<SessionState>): Uint8Array {
