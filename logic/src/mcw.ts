@@ -1,5 +1,5 @@
 import { assertPatternDimensions } from "./pattern";
-import { packPixels, unpackPixels } from "./storage";
+import { packMask, packPixels, unpackMask, unpackPixels } from "./storage";
 import { axisIsProjectValid, migrateAxes, mirrorIsProjectValid, readMirrorRecords } from "./symmetry";
 import { emptyGridRecipe, legacySelectionBehaviorChanged, restoreGridRecipes } from "./grid-recipes";
 import type { Axis, MirrorCenter, GridRecipe, PatternState } from "./types";
@@ -36,22 +36,6 @@ interface McwV6 extends Omit<McwV2, "version"> {
 }
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
-
-function packMask(mask: Uint8Array): string {
-    const packed = new Uint8Array(Math.ceil(mask.length / 8));
-    for (let i = 0; i < mask.length; i++) {
-        if (mask[i] !== 0) packed[i >> 3] |= 1 << (i & 7);
-    }
-    return packed.toBase64();
-}
-
-function unpackMask(source: string, length: number): Uint8Array {
-    const bytes = Uint8Array.fromBase64(source);
-    if (bytes.length !== Math.ceil(length / 8)) throw invalidFile();
-    const mask = new Uint8Array(length);
-    for (let i = 0; i < length; i++) mask[i] = (bytes[i >> 3] >> (i & 7)) & 1;
-    return mask;
-}
 
 function readRecipes(value: unknown, legacy = false): GridRecipe[] {
     if (value === undefined && legacy) return [emptyGridRecipe()];
