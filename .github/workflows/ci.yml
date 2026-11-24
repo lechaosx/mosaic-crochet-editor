@@ -122,6 +122,12 @@ jobs:
         with:
           name: web-dist
           path: web/dist/
+      - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: actions/configure-pages@v6
+      - if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist/
 
   test-e2e:
     name: E2E tests
@@ -143,20 +149,12 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    needs: [test-tooling, test-rust, test-logic, test-io, test-e2e]
+    needs: [test-tooling, test-rust, test-logic, test-io, build-app, test-e2e]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: web-dist
-          path: web/dist/
-      - uses: actions/configure-pages@v6
-      - uses: actions/upload-pages-artifact@v5
-        with:
-          path: web/dist/
       - id: deployment
         uses: actions/deploy-pages@v5
