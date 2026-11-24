@@ -89,7 +89,7 @@ pub fn get_round_from_edge(virtual_size: IVec2, virtual_coord: IVec2) -> i32 {
 // canvas, per axis. Each component is -1 or +1 depending on which half of
 // `virtual_size` the coord sits in. Callers pick which axis to step along
 // based on min_dist (the closer-edge axis is the one to step along — see
-// `outward_cells_round` / `inward_cell_round`).
+// `round_directions` / `inward_cell_round`).
 pub fn step_toward_center(virtual_size: IVec2, virtual_coord: IVec2) -> IVec2 {
     IVec2::new(
         if virtual_coord.x * 2 >= virtual_size.x {
@@ -133,31 +133,6 @@ pub fn is_always_invalid_round(
         return false;
     }
     always_invalid_at(min_dist)
-}
-
-// One or two cells *outward* from `coord` — where the highlight marker for a
-// wrong cell at `coord` should visually appear. Returns a single cell for
-// non-corners; for round-mode corners (`min_dist.x == min_dist.y`), returns
-// two perpendicular outward cells (one along each axis). Out-of-canvas
-// coordinates are returned as-is; the renderer clips/handles gutters itself.
-pub fn outward_cells_row(coord: IVec2) -> Vec<IVec2> {
-    vec![IVec2::new(coord.x, coord.y - 1)]
-}
-
-pub fn outward_cells_round(virtual_size: IVec2, offset: IVec2, coord: IVec2) -> Vec<IVec2> {
-    let v = coord + offset;
-    let min_dist = min_dist_axes(virtual_size, v);
-    let step = step_toward_center(virtual_size, v);
-    if min_dist.x == min_dist.y {
-        vec![
-            IVec2::new(coord.x - step.x, coord.y),
-            IVec2::new(coord.x, coord.y - step.y),
-        ]
-    } else if min_dist.x < min_dist.y {
-        vec![IVec2::new(coord.x - step.x, coord.y)]
-    } else {
-        vec![IVec2::new(coord.x, coord.y - step.y)]
-    }
 }
 
 // The one cell *inward* from `coord` — the cell that, when painted wrong,
@@ -271,7 +246,7 @@ fn round_highlight(
     // Outermost ring or any diagonal corner: no well-defined outward
     // target. Force INVALID at the wrong cell — renderer handles the
     // visual position (gutter for outermost, two perpendicular
-    // outwards for interior corners via `outward_cells_round`).
+    // outwards for interior corners via `round_directions`).
     if always_invalid_at(min_dist) {
         return HIGHLIGHT_INVALID;
     }
@@ -1197,38 +1172,6 @@ mod tests {
         assert!(!is_always_invalid_round(v(9, 9), v(0, 0), 3, v(2, 4)));
         // Inner hole (rfe ≥ rounds): NOT always invalid (no overlay semantics).
         assert!(!is_always_invalid_round(v(9, 9), v(0, 0), 3, v(4, 4)));
-    }
-
-    // ── outward_cells_* ──────────────────────────────────────────────────────
-
-    #[test]
-    fn outward_cells_row_is_just_above() {
-        assert_eq!(outward_cells_row(v(2, 3)), vec![v(2, 2)]);
-        // y=0 → off-canvas (-1) is intentional: renderer draws in the gutter.
-        assert_eq!(outward_cells_row(v(2, 0)), vec![v(2, -1)]);
-    }
-
-    #[test]
-    fn outward_cells_round_non_corner_returns_one() {
-        // (1, 4) in 9×9: closer-to-x edge → outward LEFT.
-        assert_eq!(
-            outward_cells_round(v(9, 9), v(0, 0), v(1, 4)),
-            vec![v(0, 4)]
-        );
-        // (4, 1): closer-to-y edge (top) → outward UP.
-        assert_eq!(
-            outward_cells_round(v(9, 9), v(0, 0), v(4, 1)),
-            vec![v(4, 0)]
-        );
-    }
-
-    #[test]
-    fn outward_cells_round_corner_returns_two_perpendicular() {
-        // (1, 1) is a diagonal corner → two outwards: LEFT (0, 1) and UP (1, 0).
-        let cells = outward_cells_round(v(9, 9), v(0, 0), v(1, 1));
-        assert_eq!(cells.len(), 2);
-        assert!(cells.contains(&v(0, 1)));
-        assert!(cells.contains(&v(1, 0)));
     }
 
     // ── inward_cell_* ────────────────────────────────────────────────────────
