@@ -61,10 +61,11 @@ export function mountUI(cb: UICallbacks): UIHandle {
         const modeRect = crochetRect ?? authoringRect;
         const modeIsSidePanel = modeRect !== null && modeRect.width < workspaceRect.width;
         const left = modeIsSidePanel ? modeRect.right - workspaceRect.left : 0;
-        const right = wide && inspectorRect ? workspaceRect.right - inspectorRect.left : 0;
+        const inspectorIsSidePanel = inspectorRect !== null && inspectorRect.width < workspaceRect.width;
+        const right = inspectorIsSidePanel ? workspaceRect.right - inspectorRect.left : 0;
         const bottom = wide ? 0 : Math.max(
             modeRect && !modeIsSidePanel ? workspaceRect.bottom - modeRect.top : 0,
-            inspectorRect ? workspaceRect.bottom - inspectorRect.top : 0,
+            inspectorRect && !inspectorIsSidePanel ? workspaceRect.bottom - inspectorRect.top : 0,
         );
         canvasShell.style.setProperty("--canvas-chrome-left", `${Math.max(0, left)}px`);
         canvasShell.style.setProperty("--canvas-chrome-right", `${Math.max(0, right)}px`);

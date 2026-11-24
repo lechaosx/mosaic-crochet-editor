@@ -401,6 +401,52 @@ test("constrained panels overlay the canvas and move status above their visible 
     expect(await page.locator("#document-bar").evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
 });
 
+test("a phone's Pattern sheet leaves at least half the canvas visible above it", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Menu" }).click();
+    await page.getByRole("menuitem", { name: "Pattern" }).click();
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    const canvas = (await page.locator(".canvas-area").boundingBox())!;
+    const inspector = (await page.locator("#inspector-host").boundingBox())!;
+    expect(inspector.y - canvas.y).toBeGreaterThanOrEqual(canvas.height / 2 - 1);
+});
+
+test("a landscape phone opens Pattern beside the chart, above the tools", async ({ page }) => {
+    await page.setViewportSize({ width: 844, height: 390 });
+    await bootApp(page);
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.getByRole("button", { name: "Zoom in" }).click();
+    await page.getByRole("button", { name: "Pattern", exact: true }).click();
+    await expect(page.locator("#edit-pattern-widget")).toBeVisible();
+    await page.getByRole("button", { name: "Fit view", exact: true }).click();
+
+    const canvas = (await page.locator(".canvas-area").boundingBox())!;
+    const inspector = (await page.locator("#inspector-host").boundingBox())!;
+    const dock = (await page.locator("#authoring-dock").boundingBox())!;
+    const controls = (await page.locator(".canvas-controls").boundingBox())!;
+    expect(inspector.x + inspector.width).toBeCloseTo(canvas.x + canvas.width, 0);
+    expect(inspector.width).toBeLessThan(canvas.width / 2);
+    expect(inspector.y + inspector.height).toBeLessThanOrEqual(dock.y + 1);
+    expect(controls.x + controls.width).toBeLessThanOrEqual(inspector.x + 1);
+
+    const chart = await page.evaluate(() => {
+        const bounds = document.getElementById("canvas")!.getBoundingClientRect();
+        const m = window.__test_matrix__!;
+        return [[0, 0], [9, 0], [0, 9], [9, 9], [4.5, 4.5]].map(([x, y]) => {
+            const point = m.transformPoint({ x, y });
+            return { x: bounds.left + point.x / devicePixelRatio, y: bounds.top + point.y / devicePixelRatio };
+        });
+    });
+    for (const corner of chart.slice(0, 4)) {
+        expect(corner.x).toBeGreaterThanOrEqual(canvas.x);
+        expect(corner.x).toBeLessThanOrEqual(inspector.x);
+        expect(corner.y).toBeGreaterThanOrEqual(controls.y + controls.height);
+        expect(corner.y).toBeLessThanOrEqual(dock.y);
+    }
+    expect(await page.evaluate(({ x, y }) => document.elementFromPoint(x, y)?.id, chart[4])).toBe("canvas");
+});
+
 test("wide overlay panels leave canvas geometry stable and anchor its chrome to visible edges", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await bootApp(page);

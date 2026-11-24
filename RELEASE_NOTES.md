@@ -6,6 +6,7 @@ New updates appear first. Each section summarizes the lasting changes available 
 
 - Patterns with a large saved selection save and open several times faster, and their edits and undo history take far less time and memory; undo history from before this update is not carried over.
 - Finishing a stroke and undoing on large charts respond faster.
+- On phones, the Pattern, Selection and Pattern Mirror panels leave at least half of the chart visible, and in landscape they open beside the chart instead of covering it.
 
 ## 23 November 2026
 
